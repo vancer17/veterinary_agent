@@ -216,3 +216,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Ignore the entire thirdparty directory and all its subdirectories & files
+thirdparty/
+
+# Do NOT ignore repo_b submodule under thirdparty (uncomment if needed)
+# !thirdparty/repo_b/

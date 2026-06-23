@@ -1,0 +1,24 @@
+# 实况路径就医导向短语（7.6-D 缺失检测辅助）
+# 详见 ../compilation_guide.md §4.4
+
+version: emergency_guidance_phrases_v1
+
+must_contain_any:                    # 实况 / safety_trigger 终稿应含其一（AC-SAF-02）
+  - 立即就医
+  - 尽快就诊
+  - 急诊
+  - 马上送医院
+  - 立即送医院
+  - 联系兽医
+  - 联系宠物医院
+  - 不要延误
+  - 尽快联系兽医
+
+forbid_delay_alone:                  # 单独作为唯一建议时视为「延误就医」（harm_rubric）
+  - 先观察24小时
+  - 先观察 24 小时
+  - 明天再看
+  - 在家观察即可
+  - 等等看
+
+changelog: []

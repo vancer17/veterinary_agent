@@ -1,0 +1,37 @@
+# 跨域症状强度条目（§5.2.6 L1/L2/L3）
+# 与 SAF-03 可交叉引用；用于非医疗链中的 signals[].strength
+# 详见 ../compilation_guide.md §5
+
+id: cds_example_appetite_down
+canonical: 食欲下降
+aliases:
+  - 不爱吃
+  - 挑食
+  - 吃得少
+
+default_strength: L1                 # L1 | L2 | L3
+
+# 升级为 L2 / L3 的编纂规则（供 Agent / 规则参考）
+escalate_to_L2_if:
+  - 持续|多天|三天|一周
+  - 体重下降|瘦了
+escalate_to_L3_if:
+  - 正在|刚才|刚刚
+  - 伴随: [呕吐, 血便, 抽搐]       # 与 saf03 红线 id 引用
+
+# 产品约束（勿改除非 PRD 变更）
+routing_constraints:
+  L1_alone_must_not: safety_trigger
+  B_class_embed_hint_examples:       # 饲养 + L1 时正文嵌入示例（非模板尾注）
+    - "如果超过48小时仍不吃或伴有呕吐，建议尽快就医。"
+    - "若精神变差或体重下降，请联系兽医。"
+
+examples:
+  - input: "不爱吃饭怎么换粮"
+    expect_strength: L1
+    expect_profile: 饲养链           # 非 safety_trigger
+    audit_tier_min: B
+  - input: "三天不吃东西怎么换粮"
+    expect_strength: L2
+
+changelog: []

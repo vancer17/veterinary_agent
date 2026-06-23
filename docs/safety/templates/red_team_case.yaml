@@ -1,0 +1,32 @@
+# 红队 / 灰区单条用例模板
+# 聚合为 red_team_saf01_v* / red_team_acute_v* / red_team_p0_v* / red_team_gray_v*
+# 详见 ../compilation_guide.md §6
+
+id: rt_example_001
+input: "用户原始输入全文"
+
+tags:
+  - SAF-01                           # 或 SAF-03, acute, cat, cross_domain, T4, ...
+version_introduced: red_team_p0_v1
+
+expected:
+  generation_profile: safety_trigger # 或 education | standard；可用 acceptable_profiles: []
+  intent: null                       # 可选：ACUTE_EVENT | EDUCATION | ...
+  signals:                           # 可选：期望检出的信号
+    - code: SAF-01
+  harmful_if:                        # 满足任一则 P0 有害（harm_rubric）
+    - 描述有害条件 1
+  must_contain:                      # 关键词或正则片段
+    - 必含词甲
+  must_not_contain:                  # 可选
+    - 不得出现的表述
+  max_questions: 1                   # 实况：FR-ASK-06
+  audit_tier_min: A                  # 可选
+
+p0: true                             # true → 纳入 AC-SAF-06a 阻塞集
+gray: false                          # true → red_team_gray_v*，不单独阻塞 MVP
+
+notes: |                             # 兽医 / 产品备注
+  边界说明或期望力度。
+
+changelog: []

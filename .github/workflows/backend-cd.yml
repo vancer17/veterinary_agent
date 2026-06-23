@@ -1,0 +1,178 @@
+# =============================================================================
+# Backend CD — xiaozhua-health-agent 持续部署
+# =============================================================================
+#
+# 【用途】
+#   在 Backend CI 于 main 分支成功后，构建 Docker 镜像并推送到阿里云 ACR。
+#   宿主机落地由 infra-ops Ansible（dev-app.yml / app_deploy）负责，本 workflow
+#   不直接 SSH 改机器。
+#
+# 【触发】
+#   - workflow_run：Backend CI 在 main 上 completed 且 success
+#   - workflow_dispatch：手动发布（可跳过 CI 门禁，仅应急）
+#
+# 【镜像】
+#   Registry : crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com
+#   Namespace: vancer-saas
+#   镜像名   : xiaozhua-health-agent
+#   标签     : dev-<git-sha>（可追溯）、dev-latest（仅 main 浮动标签）
+#
+# 【GitHub Secrets（Repository 或 Environment=dev）】
+#   ACR_USERNAME — 阿里云 ACR 登录用户名
+#   ACR_PASSWORD — 阿里云 ACR 登录密码（非 AccessKey，是镜像仓库独立密码）
+#
+# 【后续衔接 infra-ops】
+#   推送成功后，在 infra-ops 执行 dev-app.yml，传入 app.image.repository / tag，例如：
+#     ansible-playbook ansible/playbooks/dev-app.yml \
+#       -i ansible/inventories/dev/ \
+#       -e app.image.repository=<repository> \
+#       -e app.image.tag=dev-<sha> \
+#       --limit dev-01
+#   待 infra-ops 接通 repository_dispatch / Runner 后，可在此 workflow 追加自动触发步骤。
+#
+# =============================================================================
+
+name: Backend CD
+
+on:
+  workflow_run:
+    workflows:
+      - Backend CI
+    types:
+      - completed
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      skip_ci_gate:
+        description: "跳过 CI 成功门禁（仅应急手动发布）"
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: backend-cd-${{ github.event.workflow_run.head_branch || github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  ACR_REGISTRY: crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com
+  ACR_NAMESPACE: vancer-saas
+  IMAGE_NAME: xiaozhua-health-agent
+
+jobs:
+  gate:
+    name: Gate
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    outputs:
+      should_deploy: ${{ steps.decide.outputs.should_deploy }}
+      git_sha: ${{ steps.meta.outputs.git_sha }}
+      image_repository: ${{ steps.meta.outputs.image_repository }}
+      image_tag: ${{ steps.meta.outputs.image_tag }}
+    steps:
+      - name: Decide deploy
+        id: decide
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ "${{ inputs.skip_ci_gate }}" = "true" ]; then
+              echo "Manual deploy with CI gate skipped."
+            else
+              echo "Manual deploy; ensure Backend CI has passed for this commit."
+            fi
+            echo "should_deploy=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "${{ github.event.workflow_run.conclusion }}" != "success" ]; then
+            echo "Backend CI did not succeed; skip CD."
+            echo "should_deploy=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Backend CI succeeded on main; proceed with CD."
+          echo "should_deploy=true" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve image metadata
+        id: meta
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            SHA="${{ github.sha }}"
+          else
+            SHA="${{ github.event.workflow_run.head_sha }}"
+          fi
+
+          SHORT_SHA="${SHA:0:7}"
+          REPOSITORY="${ACR_REGISTRY}/${ACR_NAMESPACE}/${IMAGE_NAME}"
+
+          echo "git_sha=${SHA}" >> "$GITHUB_OUTPUT"
+          echo "image_repository=${REPOSITORY}" >> "$GITHUB_OUTPUT"
+          echo "image_tag=dev-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+
+  build-push:
+    name: Build and push
+    runs-on: ubuntu-latest
+    needs: gate
+    if: needs.gate.outputs.should_deploy == 'true'
+    environment: dev
+    steps:
+      - name: Checkout triggering commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.sha || github.event.workflow_run.head_sha }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Aliyun ACR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.ACR_REGISTRY }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Build and push image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: |
+            ${{ needs.gate.outputs.image_repository }}:${{ needs.gate.outputs.image_tag }}
+            ${{ needs.gate.outputs.image_repository }}:dev-latest
+          labels: |
+            org.opencontainers.image.source=${{ github.repository }}
+            org.opencontainers.image.revision=${{ needs.gate.outputs.git_sha }}
+            org.opencontainers.image.title=xiaozhua-health-agent
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Deployment summary
+        run: |
+          {
+            echo "## Backend CD Summary"
+            echo ""
+            echo "| Item | Value |"
+            echo "|------|-------|"
+            echo "| Commit | \`${{ needs.gate.outputs.git_sha }}\` |"
+            echo "| Image | \`${{ needs.gate.outputs.image_repository }}:${{ needs.gate.outputs.image_tag }}\` |"
+            echo "| Digest | \`${{ steps.build.outputs.digest }}\` |"
+            echo "| Float tag | \`${{ needs.gate.outputs.image_repository }}:dev-latest\` |"
+            echo ""
+            echo "### Ansible deploy (infra-ops, manual until Runner wired)"
+            echo ""
+            echo '```bash'
+            echo "ansible-playbook ansible/playbooks/dev-app.yml \\"
+            echo "  -i ansible/inventories/dev/ \\"
+            echo "  --limit dev-01 \\"
+            echo "  -e app.image.repository=${{ needs.gate.outputs.image_repository }} \\"
+            echo "  -e app.image.tag=${{ needs.gate.outputs.image_tag }}"
+            echo '```'
+            echo ""
+            echo "> Dev 宿主机落地、网关与 .env 由 **infra-ops** 管理；本 workflow 仅负责镜像构建与推送。"
+          } >> "$GITHUB_STEP_SUMMARY"

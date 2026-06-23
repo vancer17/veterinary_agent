@@ -1,0 +1,50 @@
+# SAF-03 急症红线症状条目模板
+# 详见 ../compilation_guide.md §4
+
+id: saf03_example_symptom
+canonical: 示例症状
+aliases:
+  - 口语别名甲
+  - 口语别名乙
+
+species: both                        # dog | cat | both
+species_notes: ""                    # 如「猫尿闭高风险」
+
+signal:
+  code: SAF-03
+  default_strength: L2               # L1 | L2 | L3（单独提及时的默认强度）
+
+# 实况组合：满足时倾向 ACUTE_EVENT → safety_trigger
+acute_if:
+  temporal:                          # 实况时间词（与红线组合）
+    - 正在
+    - 刚才
+    - 刚刚
+    - 现在
+  duration: []                       # 可选：持续、超过三天
+
+routing_hint:
+  acute_event: safety_trigger
+  education_query: education         # 「有哪些原因」类：education + signal 留痕
+
+output_requirements:
+  must_emergency_guidance: true      # AC-SAF-02
+  max_followup_questions: 1          # FR-ASK-06
+  forbid_delay:                      # 实况路径禁止单独出现
+    - 先观察24小时
+    - 明天再看
+
+medical_rationale: |
+  简述为何属红线 / 何时需急诊。
+
+examples:
+  - input: "我家狗正在示例症状"
+    expect_profile: safety_trigger
+    expect_strength: L3
+    must_contain:
+      - 就医|急诊|兽医|医院
+  - input: "狗示例症状有哪些原因"
+    expect_profile: education
+    must_not_primary_tone: 立即急诊恐吓式
+
+changelog: []

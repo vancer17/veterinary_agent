@@ -1,0 +1,55 @@
+# =============================================================================
+# compose.dev.yml — 本地开发用 Docker Compose（非 Dev 宿主机正式编排）
+# =============================================================================
+#
+# 【用途】
+#   在开发者本机用 Compose 启动 health-agent 容器，验证镜像构建与运行配置。
+#   正式 Dev 环境（dev-01）的 compose 由 infra-ops Ansible app_deploy 渲染，
+#   不在本仓库维护。
+#
+# 【前置】
+#   cp .env.example .env   # 按需填写 OPENAI_API_KEY 等
+#
+# 【常用命令】
+#   docker compose -f compose.dev.yml up --build -d    # 构建并后台启动
+#   docker compose -f compose.dev.yml logs -f        # 查看日志
+#   docker compose -f compose.dev.yml down             # 停止并移除
+#
+# 【约定】
+#   - 绑定 127.0.0.1:8080（与 infra app.listen.port 一致，避免公网误暴露）
+#   - 环境变量以 .env 为准；未建 .env 时使用 environment 中的开发默认值
+#   - ASGI 应用就绪后，取消 command 注释以 uvicorn 启动（可配合 src 卷热重载）
+#
+# =============================================================================
+
+name: xiaozhua-health-agent-dev
+
+services:
+  health-agent:
+    container_name: xiaozhua-health-agent-dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      LOG_LEVEL: DEBUG
+      TRIAGE_CORE_PATH: assets/triage-core/triage-core.v1.json
+      KB_TPL_DIR: assets/kb-tpl/config
+    volumes:
+      - ./assets:/app/assets:ro
+    # ASGI 就绪后替换 Dockerfile 默认 CMD，并启用源码挂载便于热重载：
+    # command:
+    #   - uvicorn
+    #   - xiaozhua_health_agent.app:app
+    #   - --host
+    #   - "0.0.0.0"
+    #   - --port
+    #   - "8080"
+    #   - --reload
+    # volumes:
+    #   - ./src:/app/src:ro

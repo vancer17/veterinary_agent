@@ -1,0 +1,98 @@
+# SAF-01 种子条目（示例，供兽医扩写）
+# 合并入 saf01_blacklist_v1.yaml 前须经主编兽医评审
+# Schema 见 templates/saf01_entry.yaml
+
+- id: saf01_ibuprofen
+  canonical_name: 布洛芬
+  aliases:
+    - 止痛片
+    - 芬必得
+    - 美林
+    - ibuprofen
+  species: both
+  species_notes: 犬猫均不宜自行使用人用药 NSAIDs
+  category: human_drug
+  severity: severe
+  signal: SAF-01
+  routing: safety_trigger
+  output_requirements:
+    must_name_substance: true
+    must_warn_toxic: true
+    must_seek_vet: true
+    forbid_suggest_use: true
+  medical_rationale: 犬猫对人用 NSAIDs 耐受差，可致消化道溃疡、肾损伤等。
+
+- id: saf01_paracetamol
+  canonical_name: 对乙酰氨基酚
+  aliases:
+    - 扑热息痛
+    - 泰诺
+    - 对乙酰氨基酚片
+    - paracetamol
+    - 醋氨酚
+  species: both
+  species_notes: 对猫尤其致命，可致高铁血红蛋白血症、肝损伤
+  category: human_drug
+  severity: fatal
+  signal: SAF-01
+  routing: safety_trigger
+  output_requirements:
+    must_name_substance: true
+    must_warn_toxic: true
+    must_seek_vet: true
+    forbid_suggest_use: true
+  medical_rationale: 猫缺乏充分葡萄糖醛酸化能力，对乙酰氨基酚毒性极高。
+
+- id: saf01_grape
+  canonical_name: 葡萄
+  aliases:
+    - 葡萄干
+    - 提子
+    - 青提
+  species: both
+  category: food
+  severity: severe
+  signal: SAF-01
+  routing: safety_trigger
+  output_requirements:
+    must_name_substance: true
+    must_warn_toxic: true
+    must_seek_vet: true
+    forbid_suggest_use: true
+  medical_rationale: 葡萄/葡萄干可导致犬急性肾损伤，机制未完全明确。
+
+- id: saf01_xylitol
+  canonical_name: 木糖醇
+  aliases:
+    - 木糖醇口香糖
+    - xylitol
+    - 无糖口香糖
+  species: both
+  category: food
+  severity: fatal
+  signal: SAF-01
+  routing: safety_trigger
+  output_requirements:
+    must_name_substance: true
+    must_warn_toxic: true
+    must_seek_vet: true
+    forbid_suggest_use: true
+  medical_rationale: 可致犬胰岛素急剧释放、低血糖及肝损伤。
+
+- id: saf01_chocolate
+  canonical_name: 巧克力
+  aliases:
+    - 可可
+    - 黑巧克力
+    - 牛奶巧克力
+  species: both
+  category: food
+  severity: severe
+  signal: SAF-01
+  routing: safety_trigger
+  output_requirements:
+    must_name_substance: true
+    must_warn_toxic: true
+    must_seek_vet: true
+    forbid_suggest_use: true
+  medical_rationale: 含可可碱，犬猫代谢慢，可致神经、心脏毒性。
