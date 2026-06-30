@@ -22,11 +22,11 @@
 #
 # =============================================================================
 
-name: xiaozhua-health-agent-dev
+name: veterinary_agent-dev
 
 services:
   health-agent:
-    container_name: xiaozhua-health-agent-dev
+    container_name: veterinary_agent-dev
     build:
       context: .
       dockerfile: Dockerfile
