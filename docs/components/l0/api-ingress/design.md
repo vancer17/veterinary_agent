@@ -116,10 +116,10 @@ classDiagram
 ## 3.4 契约与依赖 (Contracts & Dependencies)
 
 * **入向契约 (Inbound APIs)：**
-* 创建一轮 Agent 对话：`POST /agent/turns` -> API 治理平台链接待建立
-* 创建一轮 Agent 对话的 OpenAI Responses 风格兼容入口：`POST /openai/v1/responses` -> API 治理平台链接待建立
-* 存活检查：`GET /health` -> API 治理平台链接待建立
-* 就绪检查：`GET /ready` -> API 治理平台链接待建立
+* 创建一轮 Agent 对话：`POST /agent/turns` -> [`docs/api/external_api.md`](../../../api/external_api.md)
+* 创建一轮 Agent 对话的 OpenAI Responses 风格兼容入口：`POST /openai/v1/responses` -> [`docs/api/external_api.md`](../../../api/external_api.md)
+* 存活检查：`GET /health` -> [`docs/api/external_api.md`](../../../api/external_api.md)
+* 就绪检查：`GET /ready` -> [`docs/api/external_api.md`](../../../api/external_api.md)
 
 接口原则：
 

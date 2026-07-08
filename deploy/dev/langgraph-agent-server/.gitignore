@@ -1,0 +1,16 @@
+# -----------------------------------------------------------------------------
+# 文件: deploy/dev/langgraph-agent-server/.gitignore
+# 作用: 防止 Dev compose 本地 secret、临时覆盖文件和运行产物进入 Git。
+# 说明: .env.example 是可提交模板；真实 .env 只保存在部署主机或 CI Secret。
+# -----------------------------------------------------------------------------
+
+.env
+.env.*
+!.env.example
+
+*.override.yaml
+*.override.yml
+*.local.yaml
+*.local.yml
+
+*.log
