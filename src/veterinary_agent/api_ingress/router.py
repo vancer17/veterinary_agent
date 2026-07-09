@@ -44,6 +44,7 @@ from veterinary_agent.api_ingress.validation import (
     validate_response_mode_availability,
 )
 from veterinary_agent.config import ApiIngressSettings
+from veterinary_agent.observability import ObservabilityProvider
 
 APP_STATE_KEY: Final[str] = "veterinary_agent_state"
 REQUEST_ID_FALLBACK: Final[str] = "req_unavailable"
@@ -95,6 +96,20 @@ def _get_api_ingress_rate_limiter(request: Request) -> ApiIngressRateLimiter:
     if not isinstance(rate_limiter, ApiIngressRateLimiter):
         raise RuntimeError("API 接入组件限流器尚未初始化")
     return rate_limiter
+
+
+def _get_observability_provider(request: Request) -> ObservabilityProvider | None:
+    """从 FastAPI 应用状态读取 Observability provider。
+
+    :param request: 当前 HTTP 请求对象。
+    :return: 已装配且就绪的 Observability provider；未装配或未就绪时返回 None。
+    """
+
+    app_state = getattr(request.app.state, APP_STATE_KEY, None)
+    provider = getattr(app_state, "observability_provider", None)
+    if not isinstance(provider, ObservabilityProvider) or not provider.is_ready():
+        return None
+    return provider
 
 
 def _get_header_value(request: Request, header_name: str, fallback: str) -> str:
@@ -364,6 +379,16 @@ async def _handle_turn_request(
     identity_context = identity_resolution.identity_context
     if identity_context is None:
         raise RuntimeError("请求身份解析未返回可用上下文")
+    observability_provider = _get_observability_provider(request)
+    if observability_provider is not None:
+        observability_provider.bind_request_identity(
+            request_id=identity_context.request_id,
+            trace_id=identity_context.trace_id,
+            safe_attributes={
+                "request_id_source": identity_context.request_id_source,
+                "trace_id_source": identity_context.trace_id_source,
+            },
+        )
     validation_failure = await validate_agent_turn_request(
         request=request,
         turn_request=turn_request,

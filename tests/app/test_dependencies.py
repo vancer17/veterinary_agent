@@ -23,9 +23,12 @@ from veterinary_agent import (
     LangGraphRunnableConfig,
     VeterinaryAgentAppState,
     build_langgraph_thread_config,
+    create_runtime_config_provider,
     get_checkpoint_provider,
     get_checkpoint_store_settings,
     get_langgraph_checkpointer,
+    get_runtime_config_provider,
+    get_runtime_config_snapshot,
 )
 
 
@@ -106,15 +109,23 @@ def _build_app_state(
     """
 
     settings = ApiIngressSettings()
+    checkpoint_store_settings = CheckpointStoreSettings()
+    runtime_config_provider = create_runtime_config_provider(
+        api_ingress_settings=settings,
+        checkpoint_store_settings=checkpoint_store_settings,
+    )
+    runtime_config_snapshot = runtime_config_provider.current_snapshot()
     return VeterinaryAgentAppState(
         settings=settings,
+        runtime_config_provider=runtime_config_provider,
+        runtime_config_snapshot=runtime_config_snapshot,
         started_at=datetime.now(UTC),
         ready=True,
         orchestrator_concurrency_gate=ApiIngressConcurrencyGate(
             max_concurrency=settings.orchestrator.max_concurrency,
         ),
         rate_limiter=ApiIngressRateLimiter.from_settings(settings),
-        checkpoint_store_settings=CheckpointStoreSettings(),
+        checkpoint_store_settings=checkpoint_store_settings,
         checkpoint_provider=checkpoint_provider,
         checkpoint_provider_ready=checkpoint_provider_ready,
         checkpoint_provider_error=None,
@@ -188,6 +199,36 @@ def test_get_checkpoint_store_settings_returns_runtime_config() -> None:
     request = _build_request(app_state)
 
     assert get_checkpoint_store_settings(request) is app_state.checkpoint_store_settings
+
+
+def test_get_runtime_config_provider_returns_provider() -> None:
+    """验证依赖函数可从 app state 读取 RuntimeConfig provider。
+
+    :return: None。
+    """
+
+    app_state = _build_app_state(
+        checkpoint_provider=_DependencyCheckpointProvider(),
+        checkpoint_provider_ready=True,
+    )
+    request = _build_request(app_state)
+
+    assert get_runtime_config_provider(request) is app_state.runtime_config_provider
+
+
+def test_get_runtime_config_snapshot_returns_current_snapshot() -> None:
+    """验证依赖函数可从 app state 读取 RuntimeConfig 快照。
+
+    :return: None。
+    """
+
+    app_state = _build_app_state(
+        checkpoint_provider=_DependencyCheckpointProvider(),
+        checkpoint_provider_ready=True,
+    )
+    request = _build_request(app_state)
+
+    assert get_runtime_config_snapshot(request) is app_state.runtime_config_snapshot
 
 
 @pytest.mark.parametrize(

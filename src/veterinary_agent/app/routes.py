@@ -7,7 +7,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from veterinary_agent.api_ingress import (
     DEPENDENCY_ERROR_SOURCE,
@@ -20,6 +20,7 @@ from veterinary_agent.api_ingress import (
 )
 from veterinary_agent.app.dependencies import get_app_state
 from veterinary_agent.app.state import VeterinaryAgentAppState
+from veterinary_agent.observability import PROMETHEUS_CONTENT_TYPE
 
 
 def _get_header_value(request: Request, header_name: str, fallback: str) -> str:
@@ -60,8 +61,18 @@ async def ready(
     readiness_result = check_api_ingress_readiness(
         settings=state.settings,
         app_ready=state.ready,
+        runtime_config_ready=(
+            state.runtime_config_provider is not None
+            and state.runtime_config_snapshot is not None
+            and state.runtime_config_provider.is_ready()
+        ),
         checkpoint_store_runtime_config_ready=(
             state.checkpoint_store_settings is not None
+        ),
+        observability_ready=(
+            state.observability_provider is not None
+            and state.observability_ready
+            and state.observability_provider.is_ready()
         ),
     )
     if readiness_result.ready:
@@ -85,9 +96,42 @@ async def ready(
     )
 
 
-def create_framework_router() -> APIRouter:
+async def metrics(
+    state: Annotated[VeterinaryAgentAppState, Depends(get_app_state)],
+) -> Response:
+    """返回 Prometheus 文本格式指标。
+
+    :param state: 当前 FastAPI 应用框架级状态。
+    :return: Prometheus 文本响应；provider 缺失或 endpoint 关闭时返回错误状态。
+    """
+
+    provider = state.observability_provider
+    if provider is None or not provider.is_ready():
+        return JSONResponse(
+            status_code=503,
+            content={
+                "code": "OBS_EXPORTER_UNAVAILABLE",
+                "message": "observability provider is unavailable",
+            },
+        )
+    if not provider.metrics_endpoint_enabled():
+        return JSONResponse(
+            status_code=404,
+            content={
+                "code": "OBS_METRICS_ENDPOINT_UNAVAILABLE",
+                "message": "metrics endpoint is disabled",
+            },
+        )
+    return Response(
+        content=provider.render_prometheus_metrics(),
+        media_type=PROMETHEUS_CONTENT_TYPE,
+    )
+
+
+def create_framework_router(metrics_path: str = "/metrics") -> APIRouter:
     """创建 ASGI 框架层基础探针路由。
 
+    :param metrics_path: Observability metrics endpoint 路径。
     :return: 已注册 /health 与 /ready 的 FastAPI 路由器。
     """
 
@@ -102,11 +146,19 @@ def create_framework_router() -> APIRouter:
         response_model=ReadyResponseDto,
         responses={503: {"model": ErrorResponseDto}},
     )
+    router.add_api_route(
+        metrics_path,
+        metrics,
+        methods=["GET"],
+        response_model=None,
+        response_class=Response,
+    )
     return router
 
 
 __all__: tuple[str, ...] = (
     "create_framework_router",
     "health",
+    "metrics",
     "ready",
 )

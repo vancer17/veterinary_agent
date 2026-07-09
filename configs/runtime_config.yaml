@@ -1,0 +1,11 @@
+# RuntimeConfig 组件自身配置。
+# 该文件只承载配置与参数组件的全局版本、安全锁定项等元配置；
+# 具体 ApiIngress 与 CheckpointStore 配置分别由对应组件配置文件维护。
+params_version: params.v1
+config_schema_version: runtime-config.v1
+safety_locks:
+  enforce_pet_session_policy: true
+  require_output_safety_review: true
+  fail_closed_guardrails: true
+  prevent_direct_model_publish: true
+  forbid_sensitive_observability_labels: true

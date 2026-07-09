@@ -18,7 +18,21 @@ from veterinary_agent.checkpoint_store import (
     CheckpointStoreError,
     LangGraphCheckpointer,
 )
-from veterinary_agent.config import ApiIngressSettings, CheckpointStoreSettings
+from veterinary_agent.config import (
+    ApiIngressSettings,
+    CheckpointStoreSettings,
+    RuntimeConfigError,
+    RuntimeConfigErrorCode,
+    RuntimeConfigOperation,
+    RuntimeConfigProvider,
+    RuntimeConfigSnapshot,
+)
+from veterinary_agent.observability import (
+    ObservabilityError,
+    ObservabilityErrorCode,
+    ObservabilityOperation,
+    ObservabilityProvider,
+)
 
 APP_STATE_KEY = "veterinary_agent_state"
 
@@ -44,7 +58,85 @@ def get_api_ingress_settings(request: Request) -> ApiIngressSettings:
     :return: 已加载并通过校验的 API 接入组件配置。
     """
 
-    return get_app_state(request).settings
+    app_state = get_app_state(request)
+    runtime_config_snapshot = app_state.runtime_config_snapshot
+    if runtime_config_snapshot is not None:
+        return runtime_config_snapshot.api_ingress
+    return app_state.settings
+
+
+def get_runtime_config_provider(request: Request) -> RuntimeConfigProvider:
+    """获取已由 FastAPI lifespan 初始化的 RuntimeConfig provider。
+
+    :param request: 当前 HTTP 请求对象。
+    :return: 已初始化并持有当前有效快照的 RuntimeConfig provider。
+    :raises RuntimeError: 当应用状态尚未完成初始化时抛出。
+    :raises RuntimeConfigError: 当 RuntimeConfig provider 未装配或未就绪时抛出。
+    """
+
+    provider = get_app_state(request).runtime_config_provider
+    if provider is None:
+        raise RuntimeConfigError(
+            code=RuntimeConfigErrorCode.CONFIG_SNAPSHOT_NOT_FOUND,
+            operation=RuntimeConfigOperation.GET_CURRENT_CONFIG_SNAPSHOT,
+            message="RuntimeConfig provider 尚未初始化",
+            retryable=True,
+            conflict_with={"reason": "provider_missing"},
+        )
+    if not provider.is_ready():
+        raise RuntimeConfigError(
+            code=RuntimeConfigErrorCode.CONFIG_SNAPSHOT_NOT_FOUND,
+            operation=RuntimeConfigOperation.GET_CURRENT_CONFIG_SNAPSHOT,
+            message="RuntimeConfig provider 尚未就绪",
+            retryable=True,
+            conflict_with={"reason": "provider_not_ready"},
+        )
+    return provider
+
+
+def get_runtime_config_snapshot(request: Request) -> RuntimeConfigSnapshot:
+    """获取当前请求可使用的 RuntimeConfig 快照。
+
+    :param request: 当前 HTTP 请求对象。
+    :return: 当前有效 RuntimeConfig 快照。
+    :raises RuntimeError: 当应用状态尚未完成初始化时抛出。
+    :raises RuntimeConfigError: 当 RuntimeConfig 快照未装配或不可用时抛出。
+    """
+
+    snapshot = get_app_state(request).runtime_config_snapshot
+    if snapshot is not None:
+        return snapshot
+    return get_runtime_config_provider(request).current_snapshot()
+
+
+def get_observability_provider(request: Request) -> ObservabilityProvider:
+    """获取已由 FastAPI lifespan 初始化的 Observability provider。
+
+    :param request: 当前 HTTP 请求对象。
+    :return: 已初始化的 Observability provider。
+    :raises RuntimeError: 当应用状态尚未完成初始化时抛出。
+    :raises ObservabilityError: 当 Observability provider 未装配或未就绪时抛出。
+    """
+
+    app_state = get_app_state(request)
+    provider = app_state.observability_provider
+    if provider is None:
+        raise ObservabilityError(
+            code=ObservabilityErrorCode.OBS_EXPORTER_UNAVAILABLE,
+            operation=ObservabilityOperation.RECORD_EVENT,
+            message="Observability provider 尚未初始化",
+            retryable=True,
+            conflict_with={"reason": "provider_missing"},
+        )
+    if not provider.is_ready():
+        raise ObservabilityError(
+            code=ObservabilityErrorCode.OBS_EXPORTER_UNAVAILABLE,
+            operation=ObservabilityOperation.RECORD_EVENT,
+            message="Observability provider 尚未就绪",
+            retryable=True,
+            conflict_with={"reason": "provider_not_ready"},
+        )
+    return provider
 
 
 def get_checkpoint_store_settings(request: Request) -> CheckpointStoreSettings:
@@ -55,7 +147,11 @@ def get_checkpoint_store_settings(request: Request) -> CheckpointStoreSettings:
     :raises RuntimeError: 当 CheckpointStore RuntimeConfig 尚未初始化时抛出。
     """
 
-    settings = get_app_state(request).checkpoint_store_settings
+    app_state = get_app_state(request)
+    runtime_config_snapshot = app_state.runtime_config_snapshot
+    if runtime_config_snapshot is not None:
+        return runtime_config_snapshot.checkpoint_store
+    settings = app_state.checkpoint_store_settings
     if settings is None:
         raise RuntimeError("CheckpointStore RuntimeConfig 尚未初始化")
     return settings
@@ -120,4 +216,7 @@ __all__: tuple[str, ...] = (
     "get_checkpoint_store_settings",
     "get_checkpoint_provider",
     "get_langgraph_checkpointer",
+    "get_observability_provider",
+    "get_runtime_config_provider",
+    "get_runtime_config_snapshot",
 )
