@@ -1,6 +1,8 @@
+##################################################################################################
 # 文件: src/veterinary_agent/config/__init__.py
-# 作用: 作为配置包的统一出口，向其他包暴露配置模型与加载函数。
+# 作用: 作为配置包的统一出口，向其他包暴露配置模型、RuntimeConfig 快照与加载函数。
 # 边界: 外部包应从本文件导入配置能力，避免跨包直接引用实现模块。
+##################################################################################################
 
 from veterinary_agent.config.api_ingress import (
     ApiIngressSettings,
@@ -26,11 +28,30 @@ from veterinary_agent.config.checkpoint_store import (
     CheckpointStoreSettings,
     load_checkpoint_store_settings,
 )
+from veterinary_agent.config.runtime_config import (
+    DEFAULT_RUNTIME_CONFIG_PATH,
+    RUNTIME_CONFIG_TRACE_SAFE_SCHEMA_VERSION,
+    RuntimeConfigError,
+    RuntimeConfigErrorCode,
+    RuntimeConfigErrorDto,
+    RuntimeConfigNamespace,
+    RuntimeConfigOperation,
+    RuntimeConfigProvider,
+    RuntimeConfigSafetyLockSettings,
+    RuntimeConfigSettings,
+    RuntimeConfigSnapshot,
+    build_runtime_config_error_dto,
+    build_runtime_config_snapshot,
+    create_runtime_config_provider,
+    load_runtime_config_settings,
+    validate_runtime_config_candidate,
+)
 
 __all__: tuple[str, ...] = (
     "ApiIngressSettings",
     "AttachmentLimitConfig",
     "DEFAULT_CHECKPOINT_STORE_CONFIG_PATH",
+    "DEFAULT_RUNTIME_CONFIG_PATH",
     "CheckpointStoreCheckpointConfig",
     "CheckpointStoreHistoryConfig",
     "CheckpointStoreRunLockConfig",
@@ -40,12 +61,27 @@ __all__: tuple[str, ...] = (
     "ErrorResponseConfig",
     "OpenAICompatibilityConfig",
     "OrchestratorClientConfig",
+    "RUNTIME_CONFIG_TRACE_SAFE_SCHEMA_VERSION",
     "RateLimitConfig",
     "ReadinessConfig",
     "RequestIdentityConfig",
     "RequestLimitConfig",
     "ResponseModeConfig",
+    "RuntimeConfigError",
+    "RuntimeConfigErrorCode",
+    "RuntimeConfigErrorDto",
+    "RuntimeConfigNamespace",
+    "RuntimeConfigOperation",
+    "RuntimeConfigProvider",
+    "RuntimeConfigSafetyLockSettings",
+    "RuntimeConfigSettings",
+    "RuntimeConfigSnapshot",
     "SseConfig",
+    "build_runtime_config_error_dto",
+    "build_runtime_config_snapshot",
+    "create_runtime_config_provider",
     "load_api_ingress_settings",
     "load_checkpoint_store_settings",
+    "load_runtime_config_settings",
+    "validate_runtime_config_candidate",
 )

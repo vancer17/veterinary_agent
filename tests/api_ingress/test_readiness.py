@@ -154,3 +154,20 @@ def test_ready_reports_missing_checkpoint_store_runtime_config() -> None:
     assert {detail.field for detail in result.details} == {
         "checkpoint_store.runtime_config"
     }
+
+
+def test_ready_reports_missing_runtime_config_snapshot() -> None:
+    """验证 readiness checker 会报告 RuntimeConfig 快照缺失。
+
+    :return: None。
+    """
+
+    settings = _settings_with_readiness(check_orchestrator=False)
+    result = check_api_ingress_readiness(
+        settings=settings,
+        app_ready=True,
+        runtime_config_ready=False,
+    )
+
+    assert result.ready is False
+    assert {detail.field for detail in result.details} == {"runtime_config.snapshot"}

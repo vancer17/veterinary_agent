@@ -60,6 +60,11 @@ async def ready(
     readiness_result = check_api_ingress_readiness(
         settings=state.settings,
         app_ready=state.ready,
+        runtime_config_ready=(
+            state.runtime_config_provider is not None
+            and state.runtime_config_snapshot is not None
+            and state.runtime_config_provider.is_ready()
+        ),
         checkpoint_store_runtime_config_ready=(
             state.checkpoint_store_settings is not None
         ),

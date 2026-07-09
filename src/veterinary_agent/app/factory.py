@@ -11,18 +11,24 @@ from veterinary_agent.app.exception_handlers import register_exception_handlers
 from veterinary_agent.app.lifespan import CheckpointProviderFactory, create_lifespan
 from veterinary_agent.app.middleware import register_middlewares
 from veterinary_agent.app.routes import create_framework_router
-from veterinary_agent.config import ApiIngressSettings, CheckpointStoreSettings
+from veterinary_agent.config import (
+    ApiIngressSettings,
+    CheckpointStoreSettings,
+    RuntimeConfigSettings,
+)
 
 
 def create_app(
     settings: ApiIngressSettings | None = None,
     checkpoint_store_settings: CheckpointStoreSettings | None = None,
+    runtime_config_settings: RuntimeConfigSettings | None = None,
     checkpoint_provider_factory: CheckpointProviderFactory | None = None,
 ) -> FastAPI:
     """创建 FastAPI ASGI 应用实例。
 
     :param settings: 可选的 API 接入组件配置；未传入时由生命周期函数加载默认配置。
     :param checkpoint_store_settings: 可选 CheckpointStore RuntimeConfig；未传入时由生命周期函数加载默认配置。
+    :param runtime_config_settings: 可选 RuntimeConfig 组件自身配置；未传入时由生命周期函数加载默认配置。
     :param checkpoint_provider_factory: 可选 checkpoint provider 工厂；测试可注入 TODO 空壳避免连接真实数据库。
     :return: 已完成框架层装配的 FastAPI 应用实例。
     """
@@ -34,6 +40,7 @@ def create_app(
         lifespan=create_lifespan(
             settings=settings,
             checkpoint_store_settings=checkpoint_store_settings,
+            runtime_config_settings=runtime_config_settings,
             checkpoint_provider_factory=checkpoint_provider_factory,
         ),
     )

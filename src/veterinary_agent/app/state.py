@@ -19,6 +19,7 @@ from veterinary_agent.checkpoint_store import (
 )
 from veterinary_agent.config import ApiIngressSettings
 from veterinary_agent.config import CheckpointStoreSettings
+from veterinary_agent.config import RuntimeConfigProvider, RuntimeConfigSnapshot
 
 
 class CheckpointProviderLifecycle(Protocol):
@@ -77,6 +78,8 @@ class VeterinaryAgentAppState:
     """兽医 Agent ASGI 应用框架级状态。"""
 
     settings: ApiIngressSettings
+    runtime_config_provider: RuntimeConfigProvider | None
+    runtime_config_snapshot: RuntimeConfigSnapshot | None
     started_at: datetime
     ready: bool
     orchestrator_concurrency_gate: ApiIngressConcurrencyGate

@@ -8,6 +8,8 @@ from veterinary_agent.app.dependencies import (
     get_checkpoint_provider,
     get_checkpoint_store_settings,
     get_langgraph_checkpointer,
+    get_runtime_config_provider,
+    get_runtime_config_snapshot,
 )
 from veterinary_agent.app.factory import create_app
 from veterinary_agent.app.lifespan import (
@@ -28,4 +30,6 @@ __all__: tuple[str, ...] = (
     "get_checkpoint_provider",
     "get_checkpoint_store_settings",
     "get_langgraph_checkpointer",
+    "get_runtime_config_provider",
+    "get_runtime_config_snapshot",
 )
