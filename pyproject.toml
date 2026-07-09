@@ -7,6 +7,7 @@ requires-python = ">=3.13"
 dependencies = [
     "alembic>=1.18.5",
     "fastapi>=0.139.0",
+    "langchain-core>=1.4.8",
     "langgraph>=1.2.8",
     "langgraph-checkpoint-postgres>=3.1.0",
     "psycopg[binary,pool]>=3.3.4",
@@ -37,6 +38,21 @@ filterwarnings = [
 
 [tool.deptry]
 known_first_party = ["veterinary_agent"]
+
+[tool.deptry.per_rule_ignores]
+DEP002 = ["psycopg"]
+
+[tool.pyright]
+include = ["src", "tests", "main.py", "migrations"]
+exclude = ["**/__pycache__"]
+venvPath = "."
+venv = ".venv"
+pythonVersion = "3.13"
+pythonPlatform = "Linux"
+
+[tool.bandit]
+exclude_dirs = ["tests", ".venv"]
+skips = ["B101"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/veterinary_agent"]

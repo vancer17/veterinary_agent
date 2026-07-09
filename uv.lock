@@ -1146,6 +1146,7 @@ source = { editable = "." }
 dependencies = [
     { name = "alembic" },
     { name = "fastapi" },
+    { name = "langchain-core" },
     { name = "langgraph" },
     { name = "langgraph-checkpoint-postgres" },
     { name = "psycopg", extra = ["binary", "pool"] },
@@ -1168,6 +1169,7 @@ dev = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.18.5" },
     { name = "fastapi", specifier = ">=0.139.0" },
+    { name = "langchain-core", specifier = ">=1.4.8" },
     { name = "langgraph", specifier = ">=1.2.8" },
     { name = "langgraph-checkpoint-postgres", specifier = ">=3.1.0" },
     { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.3.4" },

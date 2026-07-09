@@ -176,9 +176,10 @@ def _is_project_managed(
     :return: 若 checkpoint 声明为项目托管则返回 True。
     """
 
-    return metadata.get(CHECKPOINT_METADATA_MANAGED_FLAG) is True or envelope.get(
-        CHECKPOINT_METADATA_MANAGED_FLAG
-    ) is True
+    return (
+        metadata.get(CHECKPOINT_METADATA_MANAGED_FLAG) is True
+        or envelope.get(CHECKPOINT_METADATA_MANAGED_FLAG) is True
+    )
 
 
 def _read_field(
@@ -370,7 +371,9 @@ def _read_state_source(
     source = _as_mapping(channel_values.get(channel_name))
     if source is not None:
         return source
-    source = _as_mapping(_read_field(metadata=metadata, envelope=envelope, field_name=channel_name))
+    source = _as_mapping(
+        _read_field(metadata=metadata, envelope=envelope, field_name=channel_name)
+    )
     if source is not None:
         return source
     raise KeyError(channel_name)
@@ -572,9 +575,7 @@ class CheckpointTupleMapper:
                 graph_state=graph_state,
                 business_state=business_state,
                 metadata=snapshot_metadata,
-                published_segments=_filter_published_segments(
-                    business_state.segments
-                ),
+                published_segments=_filter_published_segments(business_state.segments),
                 state_size_bytes=_read_required_int(
                     metadata=metadata,
                     envelope=envelope,
@@ -753,7 +754,10 @@ class CheckpointTupleMapper:
                     "actual_thread_id": actual_thread_id,
                 },
             )
-        if expected_checkpoint_id is None or actual_checkpoint_id == expected_checkpoint_id:
+        if (
+            expected_checkpoint_id is None
+            or actual_checkpoint_id == expected_checkpoint_id
+        ):
             return
         raise _build_mapping_error(
             code=CheckpointErrorCode.CHECKPOINT_STATE_CORRUPTED,

@@ -50,6 +50,16 @@ from veterinary_agent.checkpoint_store import (
 )
 
 
+def _get_configurable(config: LangGraphRunnableConfig) -> dict[str, str]:
+    """读取测试用 LangGraph config 中的 configurable 字段。
+
+    :param config: LangGraph thread/checkpoint 运行配置。
+    :return: 字符串键值形式的 configurable 配置。
+    """
+
+    return cast(dict[str, str], config.get("configurable", {}))
+
+
 class _ComponentFakeLangGraphBackend:
     """CheckpointStore 组件测试用 LangGraph checkpoint 读写后端。"""
 
@@ -84,16 +94,19 @@ class _ComponentFakeLangGraphBackend:
         """
 
         del new_versions
-        configurable = config["configurable"]
+        configurable = _get_configurable(config)
         checkpoint_id = str(checkpoint["id"])
         returned_checkpoint_id = self.returned_checkpoint_id_override or checkpoint_id
-        tuple_config = {
-            "configurable": {
-                "thread_id": configurable["thread_id"],
-                "checkpoint_ns": configurable.get("checkpoint_ns", ""),
-                "checkpoint_id": checkpoint_id,
-            }
-        }
+        tuple_config = cast(
+            LangGraphRunnableConfig,
+            {
+                "configurable": {
+                    "thread_id": configurable["thread_id"],
+                    "checkpoint_ns": configurable.get("checkpoint_ns", ""),
+                    "checkpoint_id": checkpoint_id,
+                }
+            },
+        )
         self.tuples.insert(
             0,
             CheckpointTuple(
@@ -123,7 +136,7 @@ class _ComponentFakeLangGraphBackend:
         :return: 命中的 checkpoint tuple；不存在时返回 None。
         """
 
-        configurable = config["configurable"]
+        configurable = _get_configurable(config)
         expected_thread_id = configurable["thread_id"]
         expected_checkpoint_id = configurable.get("checkpoint_id")
         for checkpoint_tuple in self.tuples:
@@ -154,10 +167,10 @@ class _ComponentFakeLangGraphBackend:
         """
 
         expected_thread_id = (
-            None if config is None else config["configurable"]["thread_id"]
+            None if config is None else _get_configurable(config)["thread_id"]
         )
         before_checkpoint_id = (
-            None if before is None else before["configurable"]["checkpoint_id"]
+            None if before is None else _get_configurable(before)["checkpoint_id"]
         )
         count = 0
         for checkpoint_tuple in self.tuples:
@@ -370,7 +383,9 @@ def _build_save_checkpoint_command(
                     task_id="task_component",
                     task_type="standard_consultation",
                     generation_profile="standard",
-                    status="running" if status is CheckpointRecordStatus.RECOVERABLE else "done",
+                    status="running"
+                    if status is CheckpointRecordStatus.RECOVERABLE
+                    else "done",
                 )
             ],
             rolling_summary_ref="rolling_summary_component",
@@ -473,10 +488,14 @@ def test_checkpoint_store_component_full_contract_happy_path(
             )
         )
         first_segment_mark = asyncio.run(
-            store.mark_segment_published(_build_mark_segment_command(thread_id=thread_id))
+            store.mark_segment_published(
+                _build_mark_segment_command(thread_id=thread_id)
+            )
         )
         second_segment_mark = asyncio.run(
-            store.mark_segment_published(_build_mark_segment_command(thread_id=thread_id))
+            store.mark_segment_published(
+                _build_mark_segment_command(thread_id=thread_id)
+            )
         )
 
         latest = asyncio.run(

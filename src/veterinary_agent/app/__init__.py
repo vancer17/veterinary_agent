@@ -14,7 +14,10 @@ from veterinary_agent.app.lifespan import (
     CheckpointProviderFactory,
     create_langgraph_postgres_saver_provider,
 )
-from veterinary_agent.app.state import CheckpointProviderLifecycle, VeterinaryAgentAppState
+from veterinary_agent.app.state import (
+    CheckpointProviderLifecycle,
+    VeterinaryAgentAppState,
+)
 
 __all__: tuple[str, ...] = (
     "CheckpointProviderFactory",

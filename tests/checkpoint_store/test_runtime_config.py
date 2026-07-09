@@ -51,6 +51,26 @@ from veterinary_agent.checkpoint_store import (
 from sqlalchemy import create_engine
 
 
+def _get_configurable(config: LangGraphRunnableConfig) -> dict[str, str]:
+    """读取测试用 LangGraph config 中的 configurable 字段。
+
+    :param config: LangGraph thread/checkpoint 运行配置。
+    :return: 字符串键值形式的 configurable 配置。
+    """
+
+    return cast(dict[str, str], config.get("configurable", {}))
+
+
+def _get_tuple_configurable(checkpoint_tuple: CheckpointTuple) -> dict[str, str]:
+    """读取测试用 checkpoint tuple 中的 configurable 字段。
+
+    :param checkpoint_tuple: 测试用 LangGraph checkpoint tuple。
+    :return: 字符串键值形式的 configurable 配置。
+    """
+
+    return cast(dict[str, str], checkpoint_tuple.config.get("configurable", {}))
+
+
 class _RuntimeConfigFakeLangGraphBackend:
     """测试 RuntimeConfig 用 LangGraph checkpoint 读取后端。"""
 
@@ -80,14 +100,17 @@ class _RuntimeConfigFakeLangGraphBackend:
         """
 
         del new_versions
-        configurable = config["configurable"]
-        tuple_config = {
-            "configurable": {
-                "thread_id": configurable["thread_id"],
-                "checkpoint_ns": configurable.get("checkpoint_ns", ""),
-                "checkpoint_id": str(checkpoint["id"]),
-            }
-        }
+        configurable = _get_configurable(config)
+        tuple_config = cast(
+            LangGraphRunnableConfig,
+            {
+                "configurable": {
+                    "thread_id": configurable["thread_id"],
+                    "checkpoint_ns": configurable.get("checkpoint_ns", ""),
+                    "checkpoint_id": str(checkpoint["id"]),
+                }
+            },
+        )
         self._tuples.insert(
             0,
             CheckpointTuple(
@@ -96,7 +119,7 @@ class _RuntimeConfigFakeLangGraphBackend:
                 metadata=metadata,
             ),
         )
-        return cast(LangGraphRunnableConfig, tuple_config)
+        return tuple_config
 
     async def aget_tuple(
         self,
@@ -108,17 +131,17 @@ class _RuntimeConfigFakeLangGraphBackend:
         :return: 命中的 checkpoint tuple；不存在时返回 None。
         """
 
-        configurable = config["configurable"]
+        configurable = _get_configurable(config)
         thread_id = configurable["thread_id"]
         checkpoint_id = configurable.get("checkpoint_id")
         for checkpoint_tuple in self._tuples:
-            tuple_configurable = cast(
-                dict[str, str],
-                checkpoint_tuple.config.get("configurable", {}),
-            )
+            tuple_configurable = _get_tuple_configurable(checkpoint_tuple)
             if tuple_configurable["thread_id"] != thread_id:
                 continue
-            if checkpoint_id is None or tuple_configurable["checkpoint_id"] == checkpoint_id:
+            if (
+                checkpoint_id is None
+                or tuple_configurable["checkpoint_id"] == checkpoint_id
+            ):
                 return checkpoint_tuple
         return None
 
@@ -140,13 +163,10 @@ class _RuntimeConfigFakeLangGraphBackend:
         """
 
         del filter, before
-        thread_id = None if config is None else config["configurable"]["thread_id"]
+        thread_id = None if config is None else _get_configurable(config)["thread_id"]
         count = 0
         for checkpoint_tuple in self._tuples:
-            tuple_configurable = cast(
-                dict[str, str],
-                checkpoint_tuple.config.get("configurable", {}),
-            )
+            tuple_configurable = _get_tuple_configurable(checkpoint_tuple)
             if thread_id is not None and tuple_configurable["thread_id"] != thread_id:
                 continue
             if limit is not None and count >= limit:
