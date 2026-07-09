@@ -1,0 +1,198 @@
+local-deploy@debian:~/veterinaryAgent/deploy/dev/langgraph-agent-server$ docker logs -f a1a0560a0641
+Starting Go Core API gRPC server on localhost:50051
+Starting API server
+time=2026-07-08T08:02:18.443Z level=INFO _msg="Starting Core Server with config" api_revision=89d53f5 api_variant=licensed json_value="{\"CoreApi\":{\"GrpcServer\":{\"Address\":\"localhost:50051\",\"MaxRecvMsgSizeInBytes\":314572800,\"MaxSendMsgSizeInBytes\":314572800},\"EnableAdminAPIs\":true,\"BackgroundJob\":{\"TimeoutSecs\":86400,\"MaxRetries\":3,\"Heartbeat\":120000000000,\"ExecuteTaskHeartbeatTimeoutSeconds\":0,\"ExecuteTaskRetryMaxAttempts\":5,\"Interval\":30000000000,\"MaxConcurrency\":100,\"CheckpointSizeWarnThresholdBytes\":104857600,\"CheckpointSizeErrorThresholdBytes\":1073741824,\"ExecutorAdmitEnableBackpressure\":false,\"ExecutorAdmitRetryInitialInterval\":100000000,\"ExecutorAdmitRetryMaximumInterval\":60000000000},\"Stream\":{\"MaxChunkSizeBytes\":134217728,\"ResumableTTLSeconds\":300,\"PublishTimeoutMs\":2000,\"LogDroppedEvents\":false,\"ChannelBufferSize\":500,\"FFRedisPublish\":false,\"OptimizedStreaming\":false},\"LangserveGraphsJSON\":\"\",\"ThreadTTL\":{\"strategy\":\"delete\",\"default_ttl\":0,\"sweep_interval_minutes\":5,\"sweep_limit\":1000,\"batch_size\":50,\"batch_sleep_ms\":100},\"SlowQueryThreshold\":5000000000,\"CustomEncryption\":\"\",\"CheckpointDelete\":{\"enabled\":false,\"enabledWorkerOnly\":false,\"pollIntervalMs\":5000,\"batchSize\":25,\"batchSleepMs\":500}},\"Engine\":{\"CheckpointType\":\"\",\"GrpcServer\":{\"Address\":\"\",\"MaxRecvMsgSizeInBytes\":0,\"MaxSendMsgSizeInBytes\":0},\"BackgroundJob\":{\"TimeoutSecs\":0,\"MaxRetries\":0,\"Heartbeat\":0,\"ExecuteTaskHeartbeatTimeoutSeconds\":0,\"ExecuteTaskRetryMaxAttempts\":0,\"Interval\":0,\"MaxConcurrency\":0,\"CheckpointSizeWarnThresholdBytes\":0,\"CheckpointSizeErrorThresholdBytes\":0,\"ExecutorAdmitEnableBackpressure\":false,\"ExecutorAdmitRetryInitialInterval\":0,\"ExecutorAdmitRetryMaximumInterval\":0},\"Stream\":{\"MaxChunkSizeBytes\":0,\"ResumableTTLSeconds\":0,\"PublishTimeoutMs\":0,\"LogDroppedEvents\":false,\"ChannelBufferSize\":0,\"FFRedisPublish\":false,\"OptimizedStreaming\":false},\"QueueWorker\":{\"Disabled\":false,\"NJobsPerOrchestrator\":0,\"BGJobShutdownGracePeriodSecs\":0,\"StatsIntervalSecs\":0,\"OrchestratorVersion\":\"\"},\"GCThresholdBytesPerExecuteTask\":0},\"Executor\":{\"GrpcClient\":{\"Address\":\"\",\"ConnectinKeepAliveTime\":0,\"ConnectinKeepAliveTimeout\":0,\"GrpcServiceResolverConfigJSON\":\"\",\"MaxRecvMsgSizeInBytes\":0,\"MaxSendMsgSizeInBytes\":0,\"TLSCertFile\":\"\",\"TLSKeyFile\":\"\",\"TLSCAFile\":\"\",\"TLSInsecure\":false},\"ExecutorApiTimeout\":{\"ApplyBinopReduce\":0,\"GetGraph\":0,\"StateUpdate\":0}},\"Persistence\":{\"Database\":{\"DatabaseType\":\"postgres\",\"URI\":\"***\",\"ConnPool\":{\"MaxOpenConns\":10,\"MaxIdleConns\":20,\"ConnMaxIdleTime\":60000000000},\"StartupPingMaxAttempts\":10,\"StartupPingInitialBackoff\":100000000,\"StartupPingMaxBackoff\":2000000000},\"Redis\":{\"URI\":\"***\",\"MaxConnections\":200,\"ConnectTimeout\":10000000000,\"ReadTimeout\":3000000000,\"WriteTimeout\":3000000000,\"PoolTimeout\":4000000000,\"MaxRetries\":3,\"MinRetryBackoff\":100000000,\"MaxRetryBackoff\":2000000000,\"StartupPingMaxAttempts\":10,\"StartupPingInitialBackoff\":100000000,\"StartupPingMaxBackoff\":2000000000,\"Cluster\":false,\"ClusterUseReadReplicas\":false,\"KeyPrefix\":\"veterinaryAgent:langgraph:\",\"UseRedisQueue\":true,\"TLSCACert\":\"***\",\"GCPServiceAccountJSON\":\"***\"},\"BatchCheckpoint\":{\"MaxBatchWindow\":5000000,\"MaxBatchSize\":1000,\"QueueSize\":10000,\"PeekTimeout\":100000000,\"PruneMaxBatchSize\":100},\"AESJSONKeys\":\"\",\"MongoDBURI\":\"***\"},\"License\":{\"LicenseKey\":\"***\",\"LangSmithAPIKey\":\"***\",\"LangSmithAuthEndpoint\":\"\"},\"Logger\":{\"Stdout\":false,\"Level\":\"INFO\",\"OutputFile\":\"\",\"LevelKey\":\"level\",\"LogJson\":false,\"EnablePreviousPathForLoggingCaller\":false},\"PProfAddr\":\"127.0.0.1:50060\",\"MemoryLimitBytes\":0,\"Metrics\":{\"MetricPrefix\":\"lg_api_\",\"MaxEmittingTier\":2,\"Provider\":\"prometheus\",\"Prometheus\":{},\"Datadog\":{\"APIKey\":\"\",\"Endpoint\":\"\"},\"HostId\":\"a1a0560a0641\",\"DeploymentName\":\"\",\"RevisionID\":\"\",\"APIVersion\":\"\",\"ProjectID\":\"\",\"Env\":\"\",\"DeploymentType\":\"\",\"TenantID\":\"\",\"Variant\":\"licensed\",\"ControlPlaneAPIKey\":\"***\",\"AuthEndpoint\":\"\",\"ExtraAttributes\":{}},\"Webhooks\":{\"env_prefix\":\"\",\"url\":null,\"headers\":null,\"allowed_fields\":null},\"MonitoringEndpointPort\":8000,\"TraceSink\":{\"QueueSize\":2048}}" _log-at=**/core-server/main.go:59
+time=2026-07-08T08:02:18.444Z level=WARN _msg="LangSmith tracing is disabled" _log-at=**/core-server/tracing.go:30
+time=2026-07-08T08:02:18.444Z level=INFO _msg="Connecting to Postgres" uri="postgresql://REDACTED@langgraph-postgres:5432/langgraph_dev?sslmode=disable" _log-at=**/core-server/persistence.go:109
+time=2026-07-08T08:02:18.455Z level=INFO _msg="Starting postgres pool stats logger" component=pool-stats-logger interval_seconds=60 _log-at=**/background/pool_stats.go:54
+time=2026-07-08T08:02:18.455Z level=INFO _msg="Postgres checkpointer started with batching" _log-at=**/persistence/checkpoint/postgres.go:108
+time=2026-07-08T08:02:18.455Z level=INFO _msg="Connecting to Redis" _log-at=**/core-server/persistence.go:224
+time=2026-07-08T08:02:18.456Z level=INFO _msg="Spawning checkpoint batch ingestion loop" _log-at=**/persistence/checkpoint/batch_runner.go:45
+time=2026-07-08T08:02:18.464Z level=INFO _msg="Connected to Redis" _log-at=**/core-server/persistence.go:235
+time=2026-07-08T08:02:18.464Z level=INFO _msg="Starting Core API server" uri=localhost:50051 _log-at=**/core-server/core-api.go:58
+time=2026-07-08T08:02:18.464Z level=INFO _msg="Using Redis pub/sub for Core API" _log-at=**/core-server/core-api.go:115
+time=2026-07-08T08:02:18.465Z level=INFO _msg="Using Redis Queue" _log-at=**/core-server/core-api.go:150
+time=2026-07-08T08:02:18.465Z level=INFO _msg="Starting thread TTL sweeper" component=thread-ttl-sweeper sweep_interval_minutes=5 batch_size=50 sweep_limit=1000 _log-at=**/background/threads_sweep.go:41
+time=2026-07-08T08:02:18.465Z level=INFO _msg="Starting runs sweeper" component=runs-sweeper sweep_interval=2m0s _log-at=**/background/runs_sweep.go:40
+time=2026-07-08T08:02:18.465Z level=INFO _msg="All services started, waiting for shutdown signal" _log-at=**/core-server/main.go:167
+time=2026-07-08T08:02:18.465Z level=INFO _msg="Starting PProf server" uri=REDACTED _log-at=**/core-server/main.go:149
+time=2026-07-08T08:02:18.465Z level=INFO _msg="Core API server listening" uri=localhost:50051 _log-at=**/core-server/core-api.go:240
+time=2026-07-08T08:02:18.467Z level=WARN _msg="Sweep: failed to enqueue pending runs" error="internal: failed to query pending runs; from: ERROR: relation \"run\" does not exist (SQLSTATE 42P01)" _err-at=**/persistence/repos/runs_repo.go:1438 _log-at=**/persistence/repos/runs_repo.go:1066
+time=2026-07-08T08:02:18.469Z level=ERROR _msg="Runs sweep iteration failed" component=runs-sweeper error="internal: sweep: failed to list running runs; from: ERROR: relation \"run\" does not exist (SQLSTATE 42P01)" _err-at=**/persistence/repos/runs_repo.go:1468 _log-at=**/background/runs_sweep.go:84
+time=2026-07-08T08:02:18.480Z level=ERROR _msg="Thread TTL sweep iteration failed" component=thread-ttl-sweeper error="internal: failed to query expired threads; from: ERROR: relation \"thread_ttl\" does not exist (SQLSTATE 42P01)" _err-at=**/persistence/repos/threads_repo.go:2006 _log-at=**/background/threads_sweep.go:90
+2026-07-08T08:02:24.805855Z [info     ] Using langgraph_runtime_postgres [langgraph_runtime] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread
+2026-07-08T08:02:24.851552Z [info     ] Using auth of type=noop        [langgraph_api.auth.middleware] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread
+2026-07-08T08:02:25.029295Z [info     ] Started server process [6]     [uvicorn.error] api_revision=89d53f5 api_variant=licensed color_message='Started server process [\x1b[36m%d\x1b[0m]' langgraph_api_version=0.10.1 thread_name=MainThread
+2026-07-08T08:02:25.029581Z [info     ] Waiting for application startup. [uvicorn.error] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread
+2026-07-08T08:02:25.033049Z [info     ] Starting Postgres runtime with langgraph-api=0.10.1 [langgraph_runtime_postgres.lifespan] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=ThreadPoolExecutor-1_0 version=0.10.1
+2026-07-08T08:02:25.043535Z [info     ] Redis pool stats               [langgraph_runtime_postgres.redis] api_revision=89d53f5 api_variant=licensed idle_connections=1 in_use_connections=0 langgraph_api_version=0.10.1 max_connections=200 thread_name=ThreadPoolExecutor-1_0
+2026-07-08T08:02:25.061291Z [info     ] Attempting to acquire migration lock [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread
+2026-07-08T08:02:25.063895Z [info     ] Migration lock acquired        [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=ThreadPoolExecutor-1_0
+2026-07-08T08:02:25.120231Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=1
+2026-07-08T08:02:25.180035Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=2
+2026-07-08T08:02:25.192857Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=3
+2026-07-08T08:02:25.196476Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=4
+2026-07-08T08:02:25.212943Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=5
+2026-07-08T08:02:25.224486Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=6
+2026-07-08T08:02:25.232620Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=7
+2026-07-08T08:02:25.244128Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=8
+2026-07-08T08:02:25.281300Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=9
+2026-07-08T08:02:25.285389Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=10
+2026-07-08T08:02:25.338195Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=11
+2026-07-08T08:02:25.342169Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=12
+2026-07-08T08:02:25.366352Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=13
+2026-07-08T08:02:25.382894Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=14
+2026-07-08T08:02:25.406582Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=15
+2026-07-08T08:02:25.411015Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=16
+2026-07-08T08:02:25.551497Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=17
+2026-07-08T08:02:25.560016Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=18
+2026-07-08T08:02:25.573178Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=19
+2026-07-08T08:02:25.576679Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=20
+2026-07-08T08:02:25.599486Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=21
+2026-07-08T08:02:25.611183Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=22
+2026-07-08T08:02:25.619125Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=23
+2026-07-08T08:02:25.625425Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=24
+2026-07-08T08:02:25.628551Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=25
+2026-07-08T08:02:25.634795Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=26
+2026-07-08T08:02:25.648787Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=27
+2026-07-08T08:02:25.653760Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=28
+2026-07-08T08:02:25.747765Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=29
+2026-07-08T08:02:25.752057Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=30
+2026-07-08T08:02:25.755439Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=31
+2026-07-08T08:02:25.759095Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=32
+2026-07-08T08:02:25.765764Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=33
+2026-07-08T08:02:25.772581Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=34
+2026-07-08T08:02:25.805413Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=35
+2026-07-08T08:02:25.820194Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=36
+2026-07-08T08:02:25.823720Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=37
+2026-07-08T08:02:25.841917Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=38
+2026-07-08T08:02:25.845259Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=39
+2026-07-08T08:02:25.849857Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=40
+2026-07-08T08:02:25.857057Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=41
+2026-07-08T08:02:25.865041Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=42
+2026-07-08T08:02:25.874346Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=43
+2026-07-08T08:02:25.883454Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=44
+2026-07-08T08:02:25.895191Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=45
+2026-07-08T08:02:25.910517Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=46
+2026-07-08T08:02:25.919402Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=47
+2026-07-08T08:02:25.923742Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=48
+2026-07-08T08:02:25.933655Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=49
+2026-07-08T08:02:25.941979Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=50
+2026-07-08T08:02:25.945623Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=51
+2026-07-08T08:02:25.953403Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=52
+2026-07-08T08:02:25.957939Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=53
+2026-07-08T08:02:25.967943Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=54
+2026-07-08T08:02:25.971980Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=55
+2026-07-08T08:02:25.990383Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=56
+2026-07-08T08:02:25.993493Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=57
+2026-07-08T08:02:26.008905Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=58
+2026-07-08T08:02:26.012612Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=59
+2026-07-08T08:02:26.030496Z [info     ] Applied database migration     [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread version=60
+2026-07-08T08:02:26.033113Z [info     ] Migration lock released        [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=ThreadPoolExecutor-1_0
+2026-07-08T08:02:26.033705Z [error    ] A valid license could not be obtained from the server for the provided license key. Please validate you are using the correct license key and reach out to support@langchain.dev if the error persists. [langgraph_license.validation] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.13/site-packages/jwt/api_jws.py", line 302, in _load
+    signing_input, crypto_segment = jwt.rsplit(b".", 1)
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: not enough values to unpack (expected 2, got 1)
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/api/langgraph_license/validation.py", line 437, in get_license_status
+  File "/api/langgraph_license/validation.py", line 230, in get_or_refresh_license
+  File "/api/langgraph_license/validation.py", line 339, in decode_license_jwt
+  File "/usr/local/lib/python3.13/site-packages/jwt/api_jws.py", line 289, in get_unverified_header
+    headers = self._load(jwt)[2]
+              ~~~~~~~~~~^^^^^
+  File "/usr/local/lib/python3.13/site-packages/jwt/api_jws.py", line 305, in _load
+    raise DecodeError("Not enough segments") from err
+jwt.exceptions.DecodeError: Not enough segments
+2026-07-08T08:02:26.038016Z [error    ] Traceback (most recent call last):
+  File "/usr/local/lib/python3.13/site-packages/starlette/routing.py", line 638, in lifespan
+    async with self.lifespan_context(app) as maybe_state:
+               ~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/usr/local/lib/python3.13/contextlib.py", line 214, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/api/langgraph_api/timing/timer.py", line 227, in combined_lifespan
+  File "/usr/local/lib/python3.13/contextlib.py", line 668, in enter_async_context
+    result = await _enter(cm)
+             ^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.13/contextlib.py", line 214, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/storage/langgraph_runtime_postgres/lifespan.py", line 75, in lifespan
+ValueError: License verification failed. Please ensure proper configuration:
+- For local development, set a valid LANGSMITH_API_KEY for an account with LangGraph Cloud access in the environment defined in your langgraph.json file.
+- For production, configure the LANGGRAPH_CLOUD_LICENSE_KEY environment variable with your LangGraph Cloud license key.
+Review your configuration settings and try again. If issues persist, contact support for assistance.
+ [uvicorn.error] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread
+2026-07-08T08:02:26.038106Z [info     ] Postgres pool stats            [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed connections_ms=17 connections_num=1 langgraph_api_version=0.10.1 pool_available=1 pool_max=10 pool_min=1 pool_size=1 requests_num=1 requests_waiting=0 thread_name=MainThread usage_ms=966
+2026-07-08T08:02:26.038390Z [error    ] Application startup failed. Exiting. [uvicorn.error] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread
+2026-07-08T08:02:26.038598Z [info     ] Starting checkpointer ingestion loop [langgraph_runtime_postgres.checkpoint] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=ThreadPoolExecutor-1_0
+Starting Go Core API gRPC server on localhost:50051
+Starting API server
+time=2026-07-08T08:02:27.133Z level=INFO _msg="Starting Core Server with config" api_revision=89d53f5 api_variant=licensed json_value="{\"CoreApi\":{\"GrpcServer\":{\"Address\":\"localhost:50051\",\"MaxRecvMsgSizeInBytes\":314572800,\"MaxSendMsgSizeInBytes\":314572800},\"EnableAdminAPIs\":true,\"BackgroundJob\":{\"TimeoutSecs\":86400,\"MaxRetries\":3,\"Heartbeat\":120000000000,\"ExecuteTaskHeartbeatTimeoutSeconds\":0,\"ExecuteTaskRetryMaxAttempts\":5,\"Interval\":30000000000,\"MaxConcurrency\":100,\"CheckpointSizeWarnThresholdBytes\":104857600,\"CheckpointSizeErrorThresholdBytes\":1073741824,\"ExecutorAdmitEnableBackpressure\":false,\"ExecutorAdmitRetryInitialInterval\":100000000,\"ExecutorAdmitRetryMaximumInterval\":60000000000},\"Stream\":{\"MaxChunkSizeBytes\":134217728,\"ResumableTTLSeconds\":300,\"PublishTimeoutMs\":2000,\"LogDroppedEvents\":false,\"ChannelBufferSize\":500,\"FFRedisPublish\":false,\"OptimizedStreaming\":false},\"LangserveGraphsJSON\":\"\",\"ThreadTTL\":{\"strategy\":\"delete\",\"default_ttl\":0,\"sweep_interval_minutes\":5,\"sweep_limit\":1000,\"batch_size\":50,\"batch_sleep_ms\":100},\"SlowQueryThreshold\":5000000000,\"CustomEncryption\":\"\",\"CheckpointDelete\":{\"enabled\":false,\"enabledWorkerOnly\":false,\"pollIntervalMs\":5000,\"batchSize\":25,\"batchSleepMs\":500}},\"Engine\":{\"CheckpointType\":\"\",\"GrpcServer\":{\"Address\":\"\",\"MaxRecvMsgSizeInBytes\":0,\"MaxSendMsgSizeInBytes\":0},\"BackgroundJob\":{\"TimeoutSecs\":0,\"MaxRetries\":0,\"Heartbeat\":0,\"ExecuteTaskHeartbeatTimeoutSeconds\":0,\"ExecuteTaskRetryMaxAttempts\":0,\"Interval\":0,\"MaxConcurrency\":0,\"CheckpointSizeWarnThresholdBytes\":0,\"CheckpointSizeErrorThresholdBytes\":0,\"ExecutorAdmitEnableBackpressure\":false,\"ExecutorAdmitRetryInitialInterval\":0,\"ExecutorAdmitRetryMaximumInterval\":0},\"Stream\":{\"MaxChunkSizeBytes\":0,\"ResumableTTLSeconds\":0,\"PublishTimeoutMs\":0,\"LogDroppedEvents\":false,\"ChannelBufferSize\":0,\"FFRedisPublish\":false,\"OptimizedStreaming\":false},\"QueueWorker\":{\"Disabled\":false,\"NJobsPerOrchestrator\":0,\"BGJobShutdownGracePeriodSecs\":0,\"StatsIntervalSecs\":0,\"OrchestratorVersion\":\"\"},\"GCThresholdBytesPerExecuteTask\":0},\"Executor\":{\"GrpcClient\":{\"Address\":\"\",\"ConnectinKeepAliveTime\":0,\"ConnectinKeepAliveTimeout\":0,\"GrpcServiceResolverConfigJSON\":\"\",\"MaxRecvMsgSizeInBytes\":0,\"MaxSendMsgSizeInBytes\":0,\"TLSCertFile\":\"\",\"TLSKeyFile\":\"\",\"TLSCAFile\":\"\",\"TLSInsecure\":false},\"ExecutorApiTimeout\":{\"ApplyBinopReduce\":0,\"GetGraph\":0,\"StateUpdate\":0}},\"Persistence\":{\"Database\":{\"DatabaseType\":\"postgres\",\"URI\":\"***\",\"ConnPool\":{\"MaxOpenConns\":10,\"MaxIdleConns\":20,\"ConnMaxIdleTime\":60000000000},\"StartupPingMaxAttempts\":10,\"StartupPingInitialBackoff\":100000000,\"StartupPingMaxBackoff\":2000000000},\"Redis\":{\"URI\":\"***\",\"MaxConnections\":200,\"ConnectTimeout\":10000000000,\"ReadTimeout\":3000000000,\"WriteTimeout\":3000000000,\"PoolTimeout\":4000000000,\"MaxRetries\":3,\"MinRetryBackoff\":100000000,\"MaxRetryBackoff\":2000000000,\"StartupPingMaxAttempts\":10,\"StartupPingInitialBackoff\":100000000,\"StartupPingMaxBackoff\":2000000000,\"Cluster\":false,\"ClusterUseReadReplicas\":false,\"KeyPrefix\":\"veterinaryAgent:langgraph:\",\"UseRedisQueue\":true,\"TLSCACert\":\"***\",\"GCPServiceAccountJSON\":\"***\"},\"BatchCheckpoint\":{\"MaxBatchWindow\":5000000,\"MaxBatchSize\":1000,\"QueueSize\":10000,\"PeekTimeout\":100000000,\"PruneMaxBatchSize\":100},\"AESJSONKeys\":\"\",\"MongoDBURI\":\"***\"},\"License\":{\"LicenseKey\":\"***\",\"LangSmithAPIKey\":\"***\",\"LangSmithAuthEndpoint\":\"\"},\"Logger\":{\"Stdout\":false,\"Level\":\"INFO\",\"OutputFile\":\"\",\"LevelKey\":\"level\",\"LogJson\":false,\"EnablePreviousPathForLoggingCaller\":false},\"PProfAddr\":\"127.0.0.1:50060\",\"MemoryLimitBytes\":0,\"Metrics\":{\"MetricPrefix\":\"lg_api_\",\"MaxEmittingTier\":2,\"Provider\":\"prometheus\",\"Prometheus\":{},\"Datadog\":{\"APIKey\":\"\",\"Endpoint\":\"\"},\"HostId\":\"a1a0560a0641\",\"DeploymentName\":\"\",\"RevisionID\":\"\",\"APIVersion\":\"\",\"ProjectID\":\"\",\"Env\":\"\",\"DeploymentType\":\"\",\"TenantID\":\"\",\"Variant\":\"licensed\",\"ControlPlaneAPIKey\":\"***\",\"AuthEndpoint\":\"\",\"ExtraAttributes\":{}},\"Webhooks\":{\"env_prefix\":\"\",\"url\":null,\"headers\":null,\"allowed_fields\":null},\"MonitoringEndpointPort\":8000,\"TraceSink\":{\"QueueSize\":2048}}" _log-at=**/core-server/main.go:59
+time=2026-07-08T08:02:27.143Z level=WARN _msg="LangSmith tracing is disabled" _log-at=**/core-server/tracing.go:30
+time=2026-07-08T08:02:27.146Z level=INFO _msg="Connecting to Postgres" uri="postgresql://REDACTED@langgraph-postgres:5432/langgraph_dev?sslmode=disable" _log-at=**/core-server/persistence.go:109
+time=2026-07-08T08:02:27.160Z level=INFO _msg="Starting postgres pool stats logger" component=pool-stats-logger interval_seconds=60 _log-at=**/background/pool_stats.go:54
+time=2026-07-08T08:02:27.161Z level=INFO _msg="Postgres checkpointer started with batching" _log-at=**/persistence/checkpoint/postgres.go:108
+time=2026-07-08T08:02:27.161Z level=INFO _msg="Connecting to Redis" _log-at=**/core-server/persistence.go:224
+time=2026-07-08T08:02:27.161Z level=INFO _msg="Spawning checkpoint batch ingestion loop" _log-at=**/persistence/checkpoint/batch_runner.go:45
+time=2026-07-08T08:02:27.164Z level=INFO _msg="Connected to Redis" _log-at=**/core-server/persistence.go:235
+time=2026-07-08T08:02:27.164Z level=INFO _msg="Starting Core API server" uri=localhost:50051 _log-at=**/core-server/core-api.go:58
+time=2026-07-08T08:02:27.164Z level=INFO _msg="Using Redis pub/sub for Core API" _log-at=**/core-server/core-api.go:115
+time=2026-07-08T08:02:27.164Z level=INFO _msg="Using Redis Queue" _log-at=**/core-server/core-api.go:150
+time=2026-07-08T08:02:27.164Z level=INFO _msg="Starting thread TTL sweeper" component=thread-ttl-sweeper sweep_interval_minutes=5 batch_size=50 sweep_limit=1000 _log-at=**/background/threads_sweep.go:41
+time=2026-07-08T08:02:27.165Z level=INFO _msg="Starting runs sweeper" component=runs-sweeper sweep_interval=2m0s _log-at=**/background/runs_sweep.go:40
+time=2026-07-08T08:02:27.165Z level=INFO _msg="All services started, waiting for shutdown signal" _log-at=**/core-server/main.go:167
+time=2026-07-08T08:02:27.166Z level=INFO _msg="Starting PProf server" uri=REDACTED _log-at=**/core-server/main.go:149
+time=2026-07-08T08:02:27.166Z level=INFO _msg="Core API server listening" uri=localhost:50051 _log-at=**/core-server/core-api.go:240
+2026-07-08T08:02:29.024361Z [info     ] Using langgraph_runtime_postgres [langgraph_runtime] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread
+2026-07-08T08:02:29.056087Z [info     ] Using auth of type=noop        [langgraph_api.auth.middleware] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread
+2026-07-08T08:02:29.099622Z [info     ] Started server process [7]     [uvicorn.error] api_revision=89d53f5 api_variant=licensed color_message='Started server process [\x1b[36m%d\x1b[0m]' langgraph_api_version=0.10.1 thread_name=MainThread
+2026-07-08T08:02:29.100318Z [info     ] Waiting for application startup. [uvicorn.error] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread
+2026-07-08T08:02:29.106752Z [info     ] Starting Postgres runtime with langgraph-api=0.10.1 [langgraph_runtime_postgres.lifespan] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=ThreadPoolExecutor-1_0 version=0.10.1
+2026-07-08T08:02:29.115317Z [info     ] Redis pool stats               [langgraph_runtime_postgres.redis] api_revision=89d53f5 api_variant=licensed idle_connections=1 in_use_connections=0 langgraph_api_version=0.10.1 max_connections=200 thread_name=ThreadPoolExecutor-1_0
+2026-07-08T08:02:29.132760Z [info     ] Attempting to acquire migration lock [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread
+2026-07-08T08:02:29.134862Z [info     ] Migration lock acquired        [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=ThreadPoolExecutor-1_0
+2026-07-08T08:02:29.142616Z [info     ] Migration lock released        [langgraph_runtime_postgres.database] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=ThreadPoolExecutor-1_0
+2026-07-08T08:02:29.143506Z [error    ] A valid license could not be obtained from the server for the provided license key. Please validate you are using the correct license key and reach out to support@langchain.dev if the error persists. [langgraph_license.validation] api_revision=89d53f5 api_variant=licensed langgraph_api_version=0.10.1 thread_name=MainThread
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.13/site-packages/jwt/api_jws.py", line 302, in _load
+    signing_input, crypto_segment = jwt.rsplit(b".", 1)
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: not enough values to unpack (expected 2, got 1)
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/api/langgraph_license/validation.py", line 437, in get_license_status
+  File "/api/langgraph_license/validation.py", line 230, in get_or_refresh_license
+  File "/api/langgraph_license/validation.py", line 339, in decode_license_jwt
+  File "/usr/local/lib/python3.13/site-packages/jwt/api_jws.py", line 289, in get_unverified_header
+    headers = self._load(jwt)[2]
+              ~~~~~~~~~~^^^^^
+  File "/usr/local/lib/python3.13/site-packages/jwt/api_jws.py", line 305, in _load
+    raise DecodeError("Not enough segments") from err
+jwt.exceptions.DecodeError: Not enough segments
+2026-07-08T08:02:29.147716Z [error    ] Traceback (most recent call last):
+  File "/usr/local/lib/python3.13/site-packages/starlette/routing.py", line 638, in lifespan
+    async with self.lifespan_context(app) as maybe_state:
+               ~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/usr/local/lib/python3.13/contextlib.py", line 214, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/api/langgraph_api/timing/timer.py", line 227, in combined_lifespan
+  File "/usr/local/lib/python3.13/contextlib.py", line 668, in enter_async_context
+    result = await _enter(cm)
+             ^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.13/contextlib.py", line 214, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/storage/langgraph_runtime_postgres/lifespan.py", line 75, in lifespan
+ValueError: License verification failed. Please ensure proper configuration:
+- For local development, set a valid LANGSMITH_API_KEY for an account with LangGraph Cloud access in the environment defined in your langgraph.json file.
+- For production, configure the LANGGRAPH_CLOUD_LICENSE_KEY environment variable with your LangGraph Cloud license key.
+Review your configuration settings and try again. If issues persist, contact support for assistance.

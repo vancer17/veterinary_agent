@@ -1,0 +1,102 @@
+# 文件: configs/api_ingress.yaml
+# 作用: 提供 API 接入组件的默认运行配置，供 Pydantic Settings 原生 YAML 源加载。
+# 边界: 仅包含 ApiIngress 运行参数，不包含外部 API DTO、业务路由、安全规则或模型策略。
+
+# 组件基础信息：用于控制 ApiIngress 是否启用，并为日志、指标和排障提供稳定标识。
+enabled: true
+service_name: veterinary-agent-api-ingress
+environment: local
+config_version: api-ingress.v1
+
+# 请求身份配置：仅负责 request_id / trace_id 的接收、生成和格式限制，不代表用户鉴权。
+request_identity:
+  request_id_header: X-Request-ID
+  trace_id_header: X-Trace-ID
+  allow_body_ids: true
+  generate_when_missing: true
+  request_id_prefix: req_
+  trace_id_prefix: trace_
+  max_id_length: 128
+  # ID 合法字符正则：用于入口层快速拒绝异常 ID，避免污染日志和 Trace。
+  allowed_id_pattern: "^[A-Za-z0-9_\\-:.]+$"
+
+# 请求体限制配置：只约束入口 payload 体积和基础结构，不判断医疗意图或业务含义。
+request_limits:
+  max_body_bytes: 1048576
+  max_metadata_bytes: 16384
+  max_input_items: 20
+  max_content_items_per_message: 20
+  max_text_chars_per_item: 10000
+  max_total_text_chars: 40000
+  allow_empty_input_when_attachments_present: true
+  allow_attachment_only_turn: true
+  parse_timeout_seconds: 5.0
+
+# 附件元信息限制配置：当前阶段只接收附件引用，不接收二进制文件。
+attachment_limits:
+  max_attachments: 10
+  max_attachment_metadata_bytes: 8192
+  max_total_attachment_metadata_bytes: 32768
+  # 允许的 MIME 类型列表：仅做入口格式治理，不判断附件是否可作为医学依据。
+  allowed_mime_types:
+    - image/jpeg
+    - image/png
+    - image/webp
+  allow_unknown_mime_type: false
+  max_storage_ref_length: 1024
+  max_attachment_id_length: 128
+  max_purpose_length: 64
+
+# 响应模式配置：决定 stream 缺省行为，以及同步 / SSE 两种模式是否开放。
+response_mode:
+  default_stream: false
+  allow_sync: true
+  allow_stream: true
+  sync_timeout_seconds: 60.0
+
+# SSE 流式配置：控制长连接、心跳、首事件和客户端断开后的入口层行为。
+sse:
+  heartbeat_enabled: true
+  heartbeat_interval_seconds: 15.0
+  idle_timeout_seconds: 60.0
+  first_event_timeout_seconds: 15.0
+  max_stream_duration_seconds: 300.0
+  max_event_bytes: 65536
+  client_cancel_notify_timeout_seconds: 2.0
+
+# 编排层调用配置：ApiIngress 强依赖编排入口，但不在确认接收后自行重试整轮请求。
+orchestrator:
+  target: local
+  connect_timeout_seconds: 3.0
+  request_timeout_seconds: 60.0
+  stream_first_event_timeout_seconds: 15.0
+  stream_total_timeout_seconds: 300.0
+  max_concurrency: 100
+
+# 入口限流配置：第一阶段保持实例级和连接级控制，避免引入用户级鉴权假设。
+rate_limit:
+  enabled: false
+  max_requests_per_minute: 600
+  max_active_streams: 100
+  per_path_enabled: true
+  per_client_source_enabled: false
+
+# 错误响应配置：控制错误信息暴露粒度，错误码本身仍应保持 API 契约稳定。
+error_response:
+  include_details: true
+  max_details: 20
+  detailed_message_enabled: false
+  hide_internal_dependency_details: true
+  default_message: request failed
+
+# 就绪检查配置：/ready 应反映入口配置和编排入口是否具备接收正式流量的条件。
+readiness:
+  check_runtime_config: true
+  check_orchestrator: true
+  validate_required_parameters: true
+  allow_degraded_observability: true
+  orchestrator_check_timeout_seconds: 2.0
+
+# OpenAI Responses 风格兼容入口配置：兼容入口不放宽 vet_context、护栏或工具权限约束。
+openai_compatibility:
+  enabled: true
