@@ -279,8 +279,7 @@ class SqlAlchemyCheckpointVersionRepository:
                 .where(CHECKPOINT_THREAD_TABLE.c.thread_id == command.thread_id)
                 .where(CHECKPOINT_THREAD_TABLE.c.session_id == command.session_id)
                 .where(
-                    CHECKPOINT_THREAD_TABLE.c.latest_version
-                    == command.expected_version
+                    CHECKPOINT_THREAD_TABLE.c.latest_version == command.expected_version
                 )
                 .values(
                     latest_version=new_version,

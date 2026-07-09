@@ -401,6 +401,8 @@ def test_advance_thread_version_rejects_invalid_extra_arguments(
         assert empty_checkpoint_exc_info.value.code is (
             CheckpointErrorCode.CHECKPOINT_INVALID_ARGUMENT
         )
-        assert size_exc_info.value.code is CheckpointErrorCode.CHECKPOINT_INVALID_ARGUMENT
+        assert (
+            size_exc_info.value.code is CheckpointErrorCode.CHECKPOINT_INVALID_ARGUMENT
+        )
     finally:
         engine.dispose()

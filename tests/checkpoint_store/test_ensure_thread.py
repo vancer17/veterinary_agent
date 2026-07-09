@@ -125,15 +125,9 @@ def test_ensure_thread_binds_pet_when_existing_thread_is_unanchored(
     _upgrade_to_head(monkeypatch=monkeypatch, database_url=database_url)
     store = create_sqlalchemy_checkpoint_store(database_url)
     try:
-        first_result = asyncio.run(
-            store.ensure_thread(_build_command(pet_id=None))
-        )
-        second_result = asyncio.run(
-            store.ensure_thread(_build_command(pet_id="pet_1"))
-        )
-        third_result = asyncio.run(
-            store.ensure_thread(_build_command(pet_id=None))
-        )
+        first_result = asyncio.run(store.ensure_thread(_build_command(pet_id=None)))
+        second_result = asyncio.run(store.ensure_thread(_build_command(pet_id="pet_1")))
+        third_result = asyncio.run(store.ensure_thread(_build_command(pet_id=None)))
 
         assert first_result.created_new is True
         assert first_result.thread.pet_id is None

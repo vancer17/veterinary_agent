@@ -10,6 +10,7 @@ from contextlib import AbstractAsyncContextManager
 from types import TracebackType
 from typing import Final, TypeAlias
 
+from langchain_core.runnables.config import RunnableConfig
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
 from veterinary_agent.checkpoint_store.enums import (
@@ -25,7 +26,7 @@ from veterinary_agent.checkpoint_store.langgraph_settings import (
 LANGGRAPH_THREAD_ID_MAX_LENGTH: Final[int] = 255
 
 LangGraphCheckpointer: TypeAlias = AsyncPostgresSaver
-LangGraphRunnableConfig: TypeAlias = dict[str, dict[str, str]]
+LangGraphRunnableConfig: TypeAlias = RunnableConfig
 LangGraphPostgresSaverContextFactory: TypeAlias = Callable[
     [str],
     AbstractAsyncContextManager[LangGraphCheckpointer],
@@ -145,9 +146,9 @@ class LangGraphPostgresSaverProvider:
             if saver_context_factory is None
             else saver_context_factory
         )
-        self._saver_context: AbstractAsyncContextManager[LangGraphCheckpointer] | None = (
-            None
-        )
+        self._saver_context: (
+            AbstractAsyncContextManager[LangGraphCheckpointer] | None
+        ) = None
         self._checkpointer: LangGraphCheckpointer | None = None
         self._ready = False
         self._setup_completed = False

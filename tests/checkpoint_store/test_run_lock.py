@@ -196,10 +196,13 @@ def test_acquire_run_lock_creates_lock_and_marks_thread_running(
         assert result.idempotent is False
         assert result.stale_lock_replaced is False
         assert result.thread_id == thread.thread_id
-        assert _fetch_thread_status(
-            engine=engine,
-            thread_id=thread.thread_id,
-        ) == CheckpointThreadStatus.RUNNING.value
+        assert (
+            _fetch_thread_status(
+                engine=engine,
+                thread_id=thread.thread_id,
+            )
+            == CheckpointThreadStatus.RUNNING.value
+        )
     finally:
         engine.dispose()
         store.dispose()
@@ -254,9 +257,7 @@ def test_acquire_run_lock_rejects_other_active_run(
         asyncio.run(store.acquire_run_lock(_build_acquire_command(run_id="run_1")))
 
         with pytest.raises(CheckpointStoreError) as exc_info:
-            asyncio.run(
-                store.acquire_run_lock(_build_acquire_command(run_id="run_2"))
-            )
+            asyncio.run(store.acquire_run_lock(_build_acquire_command(run_id="run_2")))
 
         error = exc_info.value.to_dto()
         assert error.code is CheckpointErrorCode.CHECKPOINT_LOCKED
@@ -398,9 +399,7 @@ def test_release_run_lock_rejects_owner_mismatch(
         asyncio.run(store.acquire_run_lock(_build_acquire_command(run_id="run_2")))
 
         with pytest.raises(CheckpointStoreError) as exc_info:
-            asyncio.run(
-                store.release_run_lock(_build_release_command(run_id="run_1"))
-            )
+            asyncio.run(store.release_run_lock(_build_release_command(run_id="run_1")))
 
         error = exc_info.value.to_dto()
         assert error.code is CheckpointErrorCode.CHECKPOINT_LOCK_OWNER_MISMATCH

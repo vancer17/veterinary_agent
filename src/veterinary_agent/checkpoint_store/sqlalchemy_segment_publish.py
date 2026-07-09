@@ -9,7 +9,11 @@ from datetime import UTC, datetime
 
 from pydantic import ValidationError
 from sqlalchemy.engine import Connection, Engine, RowMapping
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError, TimeoutError as SqlAlchemyTimeoutError
+from sqlalchemy.exc import (
+    IntegrityError,
+    SQLAlchemyError,
+    TimeoutError as SqlAlchemyTimeoutError,
+)
 
 from veterinary_agent.checkpoint_store.dto import (
     MarkSegmentPublishedCommandDto,

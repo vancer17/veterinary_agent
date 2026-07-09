@@ -51,6 +51,16 @@ def _tuple_configurable(checkpoint_tuple: CheckpointTuple) -> dict[str, str]:
     return cast(dict[str, str], checkpoint_tuple.config.get("configurable", {}))
 
 
+def _get_configurable(config: LangGraphRunnableConfig) -> dict[str, str]:
+    """读取测试用 LangGraph config 中的 configurable 字段。
+
+    :param config: LangGraph thread/checkpoint 运行配置。
+    :return: 字符串键值形式的 configurable 配置。
+    """
+
+    return cast(dict[str, str], config.get("configurable", {}))
+
+
 class _FakeLangGraphBackend:
     """测试用 LangGraph checkpoint 读取后端。"""
 
@@ -75,7 +85,7 @@ class _FakeLangGraphBackend:
         :return: 命中的 checkpoint tuple；不存在时返回 None。
         """
 
-        configurable = config["configurable"]
+        configurable = _get_configurable(config)
         expected_thread_id = configurable["thread_id"]
         expected_checkpoint_id = configurable.get("checkpoint_id")
         for checkpoint_tuple in self._tuples:
@@ -108,10 +118,10 @@ class _FakeLangGraphBackend:
         self.last_filter = filter
         self.last_before = before
         expected_thread_id = (
-            None if config is None else config["configurable"]["thread_id"]
+            None if config is None else _get_configurable(config)["thread_id"]
         )
         before_checkpoint_id = (
-            None if before is None else before["configurable"]["checkpoint_id"]
+            None if before is None else _get_configurable(before)["checkpoint_id"]
         )
         count = 0
         for checkpoint_tuple in self._tuples:
@@ -463,7 +473,9 @@ def test_load_latest_checkpoint_returns_empty_when_thread_has_no_checkpoint(
     database_url = _build_sqlite_database_url(tmp_path / "latest_empty.db")
     _upgrade_to_head(monkeypatch=monkeypatch, database_url=database_url)
     thread_id = _ensure_thread_exists(database_url)
-    store, _backend = _build_store_with_fake_reader(database_url=database_url, tuples=[])
+    store, _backend = _build_store_with_fake_reader(
+        database_url=database_url, tuples=[]
+    )
     try:
         result = asyncio.run(
             store.load_latest_checkpoint(
@@ -605,7 +617,9 @@ def test_get_checkpoint_returns_not_found_for_missing_checkpoint(
     database_url = _build_sqlite_database_url(tmp_path / "missing_checkpoint.db")
     _upgrade_to_head(monkeypatch=monkeypatch, database_url=database_url)
     thread_id = _ensure_thread_exists(database_url)
-    store, _backend = _build_store_with_fake_reader(database_url=database_url, tuples=[])
+    store, _backend = _build_store_with_fake_reader(
+        database_url=database_url, tuples=[]
+    )
     try:
         with pytest.raises(CheckpointStoreError) as exc_info:
             asyncio.run(
@@ -641,9 +655,15 @@ def test_list_checkpoints_returns_summaries_and_cursor(
     _upgrade_to_head(monkeypatch=monkeypatch, database_url=database_url)
     thread_id = _ensure_thread_exists(database_url)
     tuples = [
-        _build_checkpoint_tuple(thread_id=thread_id, checkpoint_id="checkpoint_3", version=3),
-        _build_checkpoint_tuple(thread_id=thread_id, checkpoint_id="checkpoint_2", version=2),
-        _build_checkpoint_tuple(thread_id=thread_id, checkpoint_id="checkpoint_1", version=1),
+        _build_checkpoint_tuple(
+            thread_id=thread_id, checkpoint_id="checkpoint_3", version=3
+        ),
+        _build_checkpoint_tuple(
+            thread_id=thread_id, checkpoint_id="checkpoint_2", version=2
+        ),
+        _build_checkpoint_tuple(
+            thread_id=thread_id, checkpoint_id="checkpoint_1", version=1
+        ),
     ]
     store, backend = _build_store_with_fake_reader(
         database_url=database_url,
@@ -693,7 +713,9 @@ def test_load_latest_checkpoint_detects_missing_langgraph_pointer_as_corrupted(
         checkpoint_id="checkpoint_missing",
         expected_version=0,
     )
-    store, _backend = _build_store_with_fake_reader(database_url=database_url, tuples=[])
+    store, _backend = _build_store_with_fake_reader(
+        database_url=database_url, tuples=[]
+    )
     try:
         with pytest.raises(CheckpointStoreError) as exc_info:
             asyncio.run(
@@ -726,7 +748,9 @@ def test_list_checkpoints_rejects_missing_thread(
 
     database_url = _build_sqlite_database_url(tmp_path / "missing_thread.db")
     _upgrade_to_head(monkeypatch=monkeypatch, database_url=database_url)
-    store, _backend = _build_store_with_fake_reader(database_url=database_url, tuples=[])
+    store, _backend = _build_store_with_fake_reader(
+        database_url=database_url, tuples=[]
+    )
     try:
         with pytest.raises(CheckpointStoreError) as exc_info:
             asyncio.run(
@@ -760,7 +784,9 @@ def test_load_session_state_returns_empty_state_when_thread_has_no_checkpoint(
     database_url = _build_sqlite_database_url(tmp_path / "session_state_empty.db")
     _upgrade_to_head(monkeypatch=monkeypatch, database_url=database_url)
     thread_id = _ensure_thread_exists(database_url)
-    store, _backend = _build_store_with_fake_reader(database_url=database_url, tuples=[])
+    store, _backend = _build_store_with_fake_reader(
+        database_url=database_url, tuples=[]
+    )
     try:
         result = asyncio.run(
             store.load_session_state(
@@ -797,7 +823,9 @@ def test_load_session_state_rejects_session_mismatch(
     database_url = _build_sqlite_database_url(tmp_path / "session_state_mismatch.db")
     _upgrade_to_head(monkeypatch=monkeypatch, database_url=database_url)
     thread_id = _ensure_thread_exists(database_url)
-    store, _backend = _build_store_with_fake_reader(database_url=database_url, tuples=[])
+    store, _backend = _build_store_with_fake_reader(
+        database_url=database_url, tuples=[]
+    )
     try:
         with pytest.raises(CheckpointStoreError) as exc_info:
             asyncio.run(
@@ -924,7 +952,9 @@ def test_load_session_state_rejects_business_pet_conflict(
     :return: None。
     """
 
-    database_url = _build_sqlite_database_url(tmp_path / "session_state_pet_conflict.db")
+    database_url = _build_sqlite_database_url(
+        tmp_path / "session_state_pet_conflict.db"
+    )
     _upgrade_to_head(monkeypatch=monkeypatch, database_url=database_url)
     thread_id = _ensure_thread_exists(database_url)
     _advance_thread_version(

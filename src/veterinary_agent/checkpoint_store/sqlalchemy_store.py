@@ -13,7 +13,11 @@ from typing import Awaitable, NoReturn, TypeVar
 from pydantic import ValidationError
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Connection, Engine, RowMapping
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError, TimeoutError as SqlAlchemyTimeoutError
+from sqlalchemy.exc import (
+    IntegrityError,
+    SQLAlchemyError,
+    TimeoutError as SqlAlchemyTimeoutError,
+)
 
 from veterinary_agent.checkpoint_store.dto import (
     AcquireRunLockCommandDto,
@@ -860,7 +864,11 @@ class SqlAlchemyCheckpointStore(TodoCheckpointStore):
         """
 
         state_pet_id = command.business_state.pet_id
-        if thread.pet_id is None or state_pet_id is None or state_pet_id == thread.pet_id:
+        if (
+            thread.pet_id is None
+            or state_pet_id is None
+            or state_pet_id == thread.pet_id
+        ):
             return
         raise CheckpointStoreError(
             code=CheckpointErrorCode.CHECKPOINT_PET_CONFLICT,
@@ -1015,7 +1023,12 @@ class SqlAlchemyCheckpointStore(TodoCheckpointStore):
                 trace_id=query.trace_id,
                 thread=thread,
             )
-        assert latest_checkpoint_id is not None
+            return LoadLatestCheckpointResultDto(
+                thread_id=query.thread_id,
+                latest_version=thread.latest_version,
+                checkpoint=None,
+                published_segments=published_segments,
+            )
         checkpoint_reader = self._require_checkpoint_reader(
             operation=operation,
             request_id=query.request_id,
@@ -1317,7 +1330,13 @@ class SqlAlchemyCheckpointStore(TodoCheckpointStore):
                 trace_id=query.trace_id,
                 thread=thread,
             )
-        assert latest_checkpoint_id is not None
+            return LoadSessionStateResultDto(
+                thread_id=thread.thread_id,
+                session_id=thread.session_id,
+                latest_checkpoint_id=None,
+                latest_version=thread.latest_version,
+                state=SessionBusinessStateDto(pet_id=thread.pet_id),
+            )
         checkpoint_reader = self._require_checkpoint_reader(
             operation=operation,
             request_id=query.request_id,
@@ -1518,7 +1537,10 @@ class SqlAlchemyCheckpointStore(TodoCheckpointStore):
 
         if query.created_after is not None and summary.created_at < query.created_after:
             return False
-        if query.created_before is not None and summary.created_at > query.created_before:
+        if (
+            query.created_before is not None
+            and summary.created_at > query.created_before
+        ):
             return False
         return True
 

@@ -7,7 +7,11 @@
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.engine import Connection, Engine, RowMapping
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError, TimeoutError as SqlAlchemyTimeoutError
+from sqlalchemy.exc import (
+    IntegrityError,
+    SQLAlchemyError,
+    TimeoutError as SqlAlchemyTimeoutError,
+)
 
 from veterinary_agent.checkpoint_store.dto import (
     AcquireRunLockCommandDto,
@@ -396,7 +400,7 @@ class SqlAlchemyCheckpointRunLockRepository:
                     locked_by_run_id=None,
                     reason="lock_missing",
                 )
-            assert lock_row is not None
+                return
             lock_run_id = str(lock_row["run_id"])
             if lock_run_id != command.run_id:
                 self._raise_save_lock_owner_mismatch(

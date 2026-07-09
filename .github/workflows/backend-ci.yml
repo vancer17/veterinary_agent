@@ -13,7 +13,7 @@
 #
 # 【Jobs】
 #   lint      — Ruff lint + format check（src、tests）
-#   typecheck — mypy（src、tests）
+#   typecheck — Pyright + Bandit + Deptry（src、tests）
 #   test      — uv lock 校验 + uv build + pytest（依赖 lint、typecheck 通过）
 #   docker    — Docker 镜像构建冒烟（不推送）
 #
@@ -90,8 +90,14 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-groups --frozen
 
-      - name: Mypy
-        run: uv run mypy
+      - name: Pyright
+        run: uv run pyright
+
+      - name: Bandit
+        run: uv run bandit -c pyproject.toml -r src tests
+
+      - name: Deptry
+        run: uv run deptry .
 
   test:
     name: Test
