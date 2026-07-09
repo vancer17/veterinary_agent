@@ -27,6 +27,10 @@ from veterinary_agent.config.checkpoint_store import (
     CheckpointStoreSettings,
     load_checkpoint_store_settings,
 )
+from veterinary_agent.config.observability import (
+    ObservabilitySettings,
+    load_observability_settings,
+)
 
 DEFAULT_RUNTIME_CONFIG_PATH = Path("configs/runtime_config.yaml")
 RUNTIME_CONFIG_TRACE_SAFE_SCHEMA_VERSION = "runtime-config.trace-safe.v1"
@@ -86,6 +90,7 @@ class RuntimeConfigNamespace(StrEnum):
     RUNTIME_CONFIG = "runtime_config"
     API_INGRESS = "api_ingress"
     CHECKPOINT_STORE = "checkpoint_store"
+    OBSERVABILITY = "observability"
 
 
 class _RuntimeConfigModel(BaseModel):
@@ -379,6 +384,9 @@ class RuntimeConfigSnapshot(_RuntimeConfigModel):
     checkpoint_store: CheckpointStoreSettings = Field(
         description="CheckpointStore RuntimeConfig。",
     )
+    observability: ObservabilitySettings = Field(
+        description="Observability RuntimeConfig。",
+    )
     trace_safe_summary: JsonMap = Field(
         description="可写入逻辑链的脱敏配置摘要。",
     )
@@ -439,17 +447,42 @@ def _build_checkpoint_store_trace_summary(
     }
 
 
+def _build_observability_trace_summary(settings: ObservabilitySettings) -> JsonMap:
+    """构建 Observability trace-safe 摘要。
+
+    :param settings: Observability RuntimeConfig。
+    :return: Observability trace-safe 摘要。
+    """
+
+    return {
+        "enabled": settings.enabled,
+        "config_version": settings.config_version,
+        "metrics": settings.metrics.model_dump(mode="json"),
+        "logging": settings.logging.model_dump(mode="json"),
+        "tracing": {
+            "enabled": settings.tracing.enabled,
+            "sample_rate": settings.tracing.sample_rate,
+            "service_name": settings.tracing.service_name,
+            "environment": settings.tracing.environment,
+            "exporter_timeout_seconds": settings.tracing.exporter_timeout_seconds,
+        },
+        "label_policy": settings.label_policy.model_dump(mode="json"),
+    }
+
+
 def _build_trace_safe_summary(
     *,
     runtime_config_settings: RuntimeConfigSettings,
     api_ingress_settings: ApiIngressSettings,
     checkpoint_store_settings: CheckpointStoreSettings,
+    observability_settings: ObservabilitySettings,
 ) -> JsonMap:
     """构建完整 trace-safe 配置摘要。
 
     :param runtime_config_settings: RuntimeConfig 组件自身配置。
     :param api_ingress_settings: API 接入组件配置。
     :param checkpoint_store_settings: CheckpointStore RuntimeConfig。
+    :param observability_settings: Observability RuntimeConfig。
     :return: 可写入逻辑链的脱敏配置摘要。
     """
 
@@ -460,6 +493,7 @@ def _build_trace_safe_summary(
         "checkpoint_store": _build_checkpoint_store_trace_summary(
             checkpoint_store_settings
         ),
+        "observability": _build_observability_trace_summary(observability_settings),
     }
 
 
@@ -608,7 +642,12 @@ def _split_config_value_key(key: str) -> tuple[RuntimeConfigNamespace, list[str]
 
 
 def _dump_namespace_for_lookup(
-    settings: RuntimeConfigSettings | ApiIngressSettings | CheckpointStoreSettings,
+    settings: (
+        RuntimeConfigSettings
+        | ApiIngressSettings
+        | CheckpointStoreSettings
+        | ObservabilitySettings
+    ),
 ) -> JsonMap:
     """将配置命名空间转换为可按点路径读取的映射。
 
@@ -743,16 +782,23 @@ def validate_runtime_config_candidate(
     runtime_config_settings: RuntimeConfigSettings,
     api_ingress_settings: ApiIngressSettings,
     checkpoint_store_settings: CheckpointStoreSettings,
+    observability_settings: ObservabilitySettings | None = None,
 ) -> None:
     """校验候选 RuntimeConfig 聚合配置。
 
     :param runtime_config_settings: RuntimeConfig 组件自身配置。
     :param api_ingress_settings: API 接入组件配置。
     :param checkpoint_store_settings: CheckpointStore RuntimeConfig。
+    :param observability_settings: 可选 Observability RuntimeConfig；未传入时从默认配置源加载。
     :return: None。
     :raises RuntimeConfigError: 当候选配置违反安全锁定项、跨组件关系或 trace-safe 约束时抛出。
     """
 
+    resolved_observability_settings = (
+        observability_settings
+        if observability_settings is not None
+        else load_observability_settings()
+    )
     _validate_runtime_config_safety_locks(runtime_config_settings)
     _validate_runtime_config_relations(
         api_ingress_settings=api_ingress_settings,
@@ -762,6 +808,7 @@ def validate_runtime_config_candidate(
         runtime_config_settings=runtime_config_settings,
         api_ingress_settings=api_ingress_settings,
         checkpoint_store_settings=checkpoint_store_settings,
+        observability_settings=resolved_observability_settings,
     )
     _validate_trace_safe_summary(summary)
 
@@ -771,25 +818,34 @@ def build_runtime_config_snapshot(
     runtime_config_settings: RuntimeConfigSettings,
     api_ingress_settings: ApiIngressSettings,
     checkpoint_store_settings: CheckpointStoreSettings,
+    observability_settings: ObservabilitySettings | None = None,
 ) -> RuntimeConfigSnapshot:
     """构建 RuntimeConfig 不可变快照。
 
     :param runtime_config_settings: RuntimeConfig 组件自身配置。
     :param api_ingress_settings: API 接入组件配置。
     :param checkpoint_store_settings: CheckpointStore RuntimeConfig。
+    :param observability_settings: 可选 Observability RuntimeConfig；未传入时从默认配置源加载。
     :return: 已完成校验的 RuntimeConfig 快照。
     :raises RuntimeConfigError: 当配置校验失败或 trace-safe 摘要不安全时抛出。
     """
 
+    resolved_observability_settings = (
+        observability_settings
+        if observability_settings is not None
+        else load_observability_settings()
+    )
     validate_runtime_config_candidate(
         runtime_config_settings=runtime_config_settings,
         api_ingress_settings=api_ingress_settings,
         checkpoint_store_settings=checkpoint_store_settings,
+        observability_settings=resolved_observability_settings,
     )
     trace_safe_summary = _build_trace_safe_summary(
         runtime_config_settings=runtime_config_settings,
         api_ingress_settings=api_ingress_settings,
         checkpoint_store_settings=checkpoint_store_settings,
+        observability_settings=resolved_observability_settings,
     )
     config_snapshot_id = _build_config_snapshot_id(trace_safe_summary)
     summary_with_snapshot_id: JsonMap = {
@@ -806,6 +862,7 @@ def build_runtime_config_snapshot(
         runtime_config=runtime_config_settings,
         api_ingress=api_ingress_settings,
         checkpoint_store=checkpoint_store_settings,
+        observability=resolved_observability_settings,
         trace_safe_summary=summary_with_snapshot_id,
     )
 
@@ -849,7 +906,12 @@ class RuntimeConfigProvider:
     def get_namespace(
         self,
         namespace: RuntimeConfigNamespace,
-    ) -> RuntimeConfigSettings | ApiIngressSettings | CheckpointStoreSettings:
+    ) -> (
+        RuntimeConfigSettings
+        | ApiIngressSettings
+        | CheckpointStoreSettings
+        | ObservabilitySettings
+    ):
         """按命名空间读取配置对象。
 
         :param namespace: 需要读取的配置命名空间。
@@ -864,6 +926,8 @@ class RuntimeConfigProvider:
             return snapshot.api_ingress
         if namespace is RuntimeConfigNamespace.CHECKPOINT_STORE:
             return snapshot.checkpoint_store
+        if namespace is RuntimeConfigNamespace.OBSERVABILITY:
+            return snapshot.observability
         raise RuntimeConfigError(
             code=RuntimeConfigErrorCode.CONFIG_SNAPSHOT_NOT_FOUND,
             operation=RuntimeConfigOperation.GET_CONFIG_NAMESPACE,
@@ -966,12 +1030,14 @@ def create_runtime_config_provider(
     runtime_config_settings: RuntimeConfigSettings | None = None,
     api_ingress_settings: ApiIngressSettings | None = None,
     checkpoint_store_settings: CheckpointStoreSettings | None = None,
+    observability_settings: ObservabilitySettings | None = None,
 ) -> RuntimeConfigProvider:
     """创建应用内 RuntimeConfig provider。
 
     :param runtime_config_settings: 可选 RuntimeConfig 组件自身配置；未传入时从默认配置源加载。
     :param api_ingress_settings: 可选 API 接入组件配置；未传入时从默认配置源加载。
     :param checkpoint_store_settings: 可选 CheckpointStore RuntimeConfig；未传入时从默认配置源加载。
+    :param observability_settings: 可选 Observability RuntimeConfig；未传入时从默认配置源加载。
     :return: 持有当前有效配置快照的 RuntimeConfig provider。
     :raises RuntimeConfigError: 当配置校验失败或 trace-safe 摘要不安全时抛出。
     """
@@ -991,10 +1057,16 @@ def create_runtime_config_provider(
         if checkpoint_store_settings is not None
         else load_checkpoint_store_settings()
     )
+    resolved_observability_settings = (
+        observability_settings
+        if observability_settings is not None
+        else load_observability_settings()
+    )
     snapshot = build_runtime_config_snapshot(
         runtime_config_settings=resolved_runtime_config_settings,
         api_ingress_settings=resolved_api_ingress_settings,
         checkpoint_store_settings=resolved_checkpoint_store_settings,
+        observability_settings=resolved_observability_settings,
     )
     return RuntimeConfigProvider(snapshot)
 

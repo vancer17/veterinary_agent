@@ -1,0 +1,77 @@
+# Observability 组件配置。
+# 当前 MVP 使用应用内 metrics 聚合、Prometheus 文本暴露与 JSON 结构化日志；
+# OpenTelemetry tracing 默认关闭，后续接入 Collector 时可通过环境变量或本文件启用。
+enabled: true
+config_version: observability.v1
+metrics:
+  enabled: true
+  endpoint_enabled: true
+  endpoint_path: /metrics
+  exclude_paths:
+    - /metrics
+    - /health
+    - /ready
+  duration_buckets_seconds:
+    - 0.005
+    - 0.01
+    - 0.025
+    - 0.05
+    - 0.1
+    - 0.25
+    - 0.5
+    - 1.0
+    - 2.5
+    - 5.0
+    - 10.0
+    - 30.0
+    - 60.0
+  max_label_value_length: 128
+logging:
+  enabled: true
+  level: INFO
+  max_field_bytes: 4096
+tracing:
+  enabled: false
+  sample_rate: 0.0
+  service_name: veterinary-agent
+  environment: local
+  otlp_endpoint: null
+  exporter_timeout_seconds: 3.0
+label_policy:
+  allow_unlisted_labels: false
+  allowed_metric_labels:
+    - agent_name
+    - component
+    - endpoint
+    - error_type
+    - exporter_type
+    - fallback_reason_code
+    - generation_profile
+    - graph_name
+    - is_first_segment
+    - method
+    - model_name
+    - model_provider
+    - node_name
+    - rag_mode
+    - segment_type
+    - stage
+    - status
+    - status_code
+    - streaming
+    - tool_name
+  forbidden_metric_labels:
+    - attachment_id
+    - message_id
+    - model_call_id
+    - node_run_id
+    - pet_id
+    - request_id
+    - run_id
+    - segment_id
+    - session_id
+    - span_id
+    - task_id
+    - tool_call_id
+    - trace_id
+    - user_id

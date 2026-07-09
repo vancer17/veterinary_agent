@@ -116,8 +116,8 @@ def test_ready_can_skip_unimplemented_orchestrator_check_by_settings() -> None:
     assert response.json() == {"status": "ready"}
 
 
-def test_ready_reports_observability_todo_when_degraded_mode_is_disabled() -> None:
-    """验证禁止可观测性降级时 /ready 会返回脱敏可观测性 TODO 占位。
+def test_ready_accepts_observability_when_provider_is_ready() -> None:
+    """验证禁止可观测性降级时已就绪 provider 不阻塞 /ready。
 
     :return: 无返回值。
     """
@@ -129,12 +129,29 @@ def test_ready_reports_observability_todo_when_degraded_mode_is_disabled() -> No
 
     with TestClient(create_app(settings)) as client:
         response = client.get("/ready")
-    body = _response_body(response.json())
 
-    assert response.status_code == 503
-    assert body["code"] == "SERVICE_UNAVAILABLE"
-    assert not _detail_fields(body)
-    assert "internal_dependency_details_hidden" in _detail_reasons(body)
+    assert response.status_code == 200
+    assert response.json() == {"status": "ready"}
+
+
+def test_readiness_reports_observability_when_degraded_mode_is_disabled() -> None:
+    """验证禁止可观测性降级时 readiness checker 会报告 provider 不可用。
+
+    :return: None。
+    """
+
+    settings = _settings_with_readiness(
+        check_orchestrator=False,
+        allow_degraded_observability=False,
+    )
+    result = check_api_ingress_readiness(
+        settings=settings,
+        app_ready=True,
+        observability_ready=False,
+    )
+
+    assert result.ready is False
+    assert {detail.field for detail in result.details} == {"observability"}
 
 
 def test_ready_reports_missing_checkpoint_store_runtime_config() -> None:

@@ -20,6 +20,7 @@ from veterinary_agent.checkpoint_store import (
 from veterinary_agent.config import ApiIngressSettings
 from veterinary_agent.config import CheckpointStoreSettings
 from veterinary_agent.config import RuntimeConfigProvider, RuntimeConfigSnapshot
+from veterinary_agent.observability import ObservabilityErrorDto, ObservabilityProvider
 
 
 class CheckpointProviderLifecycle(Protocol):
@@ -88,6 +89,9 @@ class VeterinaryAgentAppState:
     checkpoint_provider: CheckpointProviderLifecycle | None
     checkpoint_provider_ready: bool
     checkpoint_provider_error: CheckpointStoreErrorDto | None
+    observability_provider: ObservabilityProvider | None = None
+    observability_ready: bool = False
+    observability_error: ObservabilityErrorDto | None = None
 
 
 __all__: tuple[str, ...] = (

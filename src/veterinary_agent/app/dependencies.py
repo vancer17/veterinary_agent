@@ -27,6 +27,12 @@ from veterinary_agent.config import (
     RuntimeConfigProvider,
     RuntimeConfigSnapshot,
 )
+from veterinary_agent.observability import (
+    ObservabilityError,
+    ObservabilityErrorCode,
+    ObservabilityOperation,
+    ObservabilityProvider,
+)
 
 APP_STATE_KEY = "veterinary_agent_state"
 
@@ -101,6 +107,36 @@ def get_runtime_config_snapshot(request: Request) -> RuntimeConfigSnapshot:
     if snapshot is not None:
         return snapshot
     return get_runtime_config_provider(request).current_snapshot()
+
+
+def get_observability_provider(request: Request) -> ObservabilityProvider:
+    """获取已由 FastAPI lifespan 初始化的 Observability provider。
+
+    :param request: 当前 HTTP 请求对象。
+    :return: 已初始化的 Observability provider。
+    :raises RuntimeError: 当应用状态尚未完成初始化时抛出。
+    :raises ObservabilityError: 当 Observability provider 未装配或未就绪时抛出。
+    """
+
+    app_state = get_app_state(request)
+    provider = app_state.observability_provider
+    if provider is None:
+        raise ObservabilityError(
+            code=ObservabilityErrorCode.OBS_EXPORTER_UNAVAILABLE,
+            operation=ObservabilityOperation.RECORD_EVENT,
+            message="Observability provider 尚未初始化",
+            retryable=True,
+            conflict_with={"reason": "provider_missing"},
+        )
+    if not provider.is_ready():
+        raise ObservabilityError(
+            code=ObservabilityErrorCode.OBS_EXPORTER_UNAVAILABLE,
+            operation=ObservabilityOperation.RECORD_EVENT,
+            message="Observability provider 尚未就绪",
+            retryable=True,
+            conflict_with={"reason": "provider_not_ready"},
+        )
+    return provider
 
 
 def get_checkpoint_store_settings(request: Request) -> CheckpointStoreSettings:
@@ -180,6 +216,7 @@ __all__: tuple[str, ...] = (
     "get_checkpoint_store_settings",
     "get_checkpoint_provider",
     "get_langgraph_checkpointer",
+    "get_observability_provider",
     "get_runtime_config_provider",
     "get_runtime_config_snapshot",
 )

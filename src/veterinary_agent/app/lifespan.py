@@ -29,11 +29,13 @@ from veterinary_agent.checkpoint_store import (
 from veterinary_agent.config import (
     ApiIngressSettings,
     CheckpointStoreSettings,
+    ObservabilitySettings,
     RuntimeConfigSettings,
     create_runtime_config_provider,
     load_api_ingress_settings,
     load_checkpoint_store_settings,
 )
+from veterinary_agent.observability import create_observability_provider
 
 LifespanHandler = Callable[[FastAPI], AbstractAsyncContextManager[None]]
 CheckpointProviderFactory = Callable[[], CheckpointProviderLifecycle]
@@ -190,6 +192,7 @@ def create_lifespan(
     settings: ApiIngressSettings | None = None,
     checkpoint_store_settings: CheckpointStoreSettings | None = None,
     runtime_config_settings: RuntimeConfigSettings | None = None,
+    observability_settings: ObservabilitySettings | None = None,
     checkpoint_provider_factory: CheckpointProviderFactory | None = None,
 ) -> LifespanHandler:
     """创建 FastAPI lifespan 处理器。
@@ -197,6 +200,7 @@ def create_lifespan(
     :param settings: 可选的 API 接入组件配置；未传入时从默认配置源加载。
     :param checkpoint_store_settings: 可选 CheckpointStore RuntimeConfig；未传入时从默认配置源加载。
     :param runtime_config_settings: 可选 RuntimeConfig 组件自身配置；未传入时从默认配置源加载。
+    :param observability_settings: 可选 Observability RuntimeConfig；未传入时从默认配置源加载。
     :param checkpoint_provider_factory: 可选 checkpoint provider 工厂；未传入时创建真实 LangGraph PostgresSaver provider。
     :return: 可传入 FastAPI 的 lifespan 处理器。
     """
@@ -219,10 +223,15 @@ def create_lifespan(
                 if checkpoint_store_settings is not None
                 else load_checkpoint_store_settings()
             ),
+            observability_settings=observability_settings,
         )
         runtime_config_snapshot = runtime_config_provider.current_snapshot()
         resolved_settings = runtime_config_snapshot.api_ingress
         resolved_checkpoint_store_settings = runtime_config_snapshot.checkpoint_store
+        resolved_observability_settings = runtime_config_snapshot.observability
+        observability_provider = create_observability_provider(
+            settings=resolved_observability_settings,
+        )
         resolved_checkpoint_provider_factory = (
             checkpoint_provider_factory
             if checkpoint_provider_factory is not None
@@ -242,6 +251,9 @@ def create_lifespan(
             checkpoint_provider=None,
             checkpoint_provider_ready=False,
             checkpoint_provider_error=None,
+            observability_provider=observability_provider,
+            observability_ready=observability_provider.is_ready(),
+            observability_error=None,
         )
         setattr(app.state, APP_STATE_KEY, app_state)
         await _start_checkpoint_provider(

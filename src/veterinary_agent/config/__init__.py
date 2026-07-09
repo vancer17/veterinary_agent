@@ -28,6 +28,15 @@ from veterinary_agent.config.checkpoint_store import (
     CheckpointStoreSettings,
     load_checkpoint_store_settings,
 )
+from veterinary_agent.config.observability import (
+    DEFAULT_OBSERVABILITY_CONFIG_PATH,
+    ObservabilityLabelPolicyConfig,
+    ObservabilityLoggingConfig,
+    ObservabilityMetricsConfig,
+    ObservabilitySettings,
+    ObservabilityTracingConfig,
+    load_observability_settings,
+)
 from veterinary_agent.config.runtime_config import (
     DEFAULT_RUNTIME_CONFIG_PATH,
     RUNTIME_CONFIG_TRACE_SAFE_SCHEMA_VERSION,
@@ -51,6 +60,7 @@ __all__: tuple[str, ...] = (
     "ApiIngressSettings",
     "AttachmentLimitConfig",
     "DEFAULT_CHECKPOINT_STORE_CONFIG_PATH",
+    "DEFAULT_OBSERVABILITY_CONFIG_PATH",
     "DEFAULT_RUNTIME_CONFIG_PATH",
     "CheckpointStoreCheckpointConfig",
     "CheckpointStoreHistoryConfig",
@@ -60,6 +70,11 @@ __all__: tuple[str, ...] = (
     "CheckpointStoreSettings",
     "ErrorResponseConfig",
     "OpenAICompatibilityConfig",
+    "ObservabilityLabelPolicyConfig",
+    "ObservabilityLoggingConfig",
+    "ObservabilityMetricsConfig",
+    "ObservabilitySettings",
+    "ObservabilityTracingConfig",
     "OrchestratorClientConfig",
     "RUNTIME_CONFIG_TRACE_SAFE_SCHEMA_VERSION",
     "RateLimitConfig",
@@ -82,6 +97,7 @@ __all__: tuple[str, ...] = (
     "create_runtime_config_provider",
     "load_api_ingress_settings",
     "load_checkpoint_store_settings",
+    "load_observability_settings",
     "load_runtime_config_settings",
     "validate_runtime_config_candidate",
 )
