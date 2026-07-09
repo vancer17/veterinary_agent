@@ -1,5 +1,5 @@
 # =============================================================================
-# Backend CD — xiaozhua-health-agent 持续部署
+# Backend CD — veterinary_agent 持续部署
 # =============================================================================
 #
 # 【用途】
@@ -9,12 +9,12 @@
 #
 # 【触发】
 #   - workflow_run：Backend CI 在 main 上 completed 且 success
-#   - workflow_dispatch：手动发布（可跳过 CI 门禁，仅应急）
+#   - workflow_dispatch：手动发布（默认要求 CI 门禁，仅显式应急可跳过）
 #
 # 【镜像】
 #   Registry : crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com
 #   Namespace: vancer-saas
-#   镜像名   : xiaozhua-health-agent
+#   镜像名   : veterinary_agent
 #   标签     : dev-<git-sha>（可追溯）、dev-latest（仅 main 浮动标签）
 #
 # 【GitHub Secrets（Repository 或 Environment=dev）】
@@ -56,11 +56,12 @@ concurrency:
 
 permissions:
   contents: read
+  actions: read
 
 env:
   ACR_REGISTRY: crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com
   ACR_NAMESPACE: vancer-saas
-  IMAGE_NAME: xiaozhua-health-agent
+  IMAGE_NAME: veterinary_agent
 
 jobs:
   gate:
@@ -77,12 +78,32 @@ jobs:
     steps:
       - name: Decide deploy
         id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             if [ "${{ inputs.skip_ci_gate }}" = "true" ]; then
-              echo "Manual deploy with CI gate skipped."
+              echo "Manual emergency deploy with CI gate skipped."
+              echo "should_deploy=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            CI_CONCLUSION="$(
+              gh run list \
+                --workflow "Backend CI" \
+                --branch "${{ github.ref_name }}" \
+                --commit "${{ github.sha }}" \
+                --status completed \
+                --json conclusion \
+                --jq '.[0].conclusion // ""'
+            )"
+
+            if [ "$CI_CONCLUSION" != "success" ]; then
+              echo "Backend CI has not succeeded for ${{ github.sha }}; skip manual CD."
+              echo "should_deploy=false" >> "$GITHUB_OUTPUT"
+              exit 0
             else
-              echo "Manual deploy; ensure Backend CI has passed for this commit."
+              echo "Backend CI succeeded for manual deploy commit."
             fi
             echo "should_deploy=true" >> "$GITHUB_OUTPUT"
             exit 0
@@ -148,7 +169,7 @@ jobs:
           labels: |
             org.opencontainers.image.source=${{ github.repository }}
             org.opencontainers.image.revision=${{ needs.gate.outputs.git_sha }}
-            org.opencontainers.image.title=xiaozhua-health-agent
+            org.opencontainers.image.title=veterinary_agent
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
