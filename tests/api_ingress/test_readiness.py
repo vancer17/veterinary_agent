@@ -8,7 +8,11 @@ from typing import cast
 
 from fastapi.testclient import TestClient
 
-from veterinary_agent import ApiIngressSettings, create_app
+from veterinary_agent import (
+    ApiIngressSettings,
+    check_api_ingress_readiness,
+    create_app,
+)
 
 
 def _settings_with_readiness(**readiness_updates: object) -> ApiIngressSettings:
@@ -131,3 +135,22 @@ def test_ready_reports_observability_todo_when_degraded_mode_is_disabled() -> No
     assert body["code"] == "SERVICE_UNAVAILABLE"
     assert not _detail_fields(body)
     assert "internal_dependency_details_hidden" in _detail_reasons(body)
+
+
+def test_ready_reports_missing_checkpoint_store_runtime_config() -> None:
+    """验证 /ready 可聚合检查 CheckpointStore RuntimeConfig 是否已装配。
+
+    :return: None。
+    """
+
+    settings = _settings_with_readiness(check_orchestrator=False)
+    result = check_api_ingress_readiness(
+        settings=settings,
+        app_ready=True,
+        checkpoint_store_runtime_config_ready=False,
+    )
+
+    assert result.ready is False
+    assert {detail.field for detail in result.details} == {
+        "checkpoint_store.runtime_config"
+    }

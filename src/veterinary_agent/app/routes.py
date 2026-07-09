@@ -60,6 +60,9 @@ async def ready(
     readiness_result = check_api_ingress_readiness(
         settings=state.settings,
         app_ready=state.ready,
+        checkpoint_store_runtime_config_ready=(
+            state.checkpoint_store_settings is not None
+        ),
     )
     if readiness_result.ready:
         return ReadyResponseDto()

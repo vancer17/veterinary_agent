@@ -4,10 +4,25 @@
 # 边界: 外部包应从本文件导入 ASGI 应用能力，避免跨包直接引用实现模块。
 ##################################################################################################
 
+from veterinary_agent.app.dependencies import (
+    get_checkpoint_provider,
+    get_checkpoint_store_settings,
+    get_langgraph_checkpointer,
+)
 from veterinary_agent.app.factory import create_app
-from veterinary_agent.app.state import VeterinaryAgentAppState
+from veterinary_agent.app.lifespan import (
+    CheckpointProviderFactory,
+    create_langgraph_postgres_saver_provider,
+)
+from veterinary_agent.app.state import CheckpointProviderLifecycle, VeterinaryAgentAppState
 
 __all__: tuple[str, ...] = (
+    "CheckpointProviderFactory",
+    "CheckpointProviderLifecycle",
     "VeterinaryAgentAppState",
     "create_app",
+    "create_langgraph_postgres_saver_provider",
+    "get_checkpoint_provider",
+    "get_checkpoint_store_settings",
+    "get_langgraph_checkpointer",
 )

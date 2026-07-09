@@ -1,0 +1,28 @@
+# 文件: configs/checkpoint_store.yaml
+# 作用: 提供 CheckpointStore 组件默认 RuntimeConfig，供 Pydantic Settings 原生 YAML 源加载。
+# 边界: 仅包含 CheckpointStore 当前已接入的运行参数，不包含 ApiIngress、GraphRuntime 或业务策略配置。
+
+# 单次 CheckpointStore 对外操作超时：用于数据库控制面与 LangGraph checkpoint 读取调用的外层预算。
+operation_timeout_seconds: 10.0
+
+# checkpoint 状态 schema 兼容配置：读取历史 checkpoint 时只接受已登记版本。
+state_schema:
+  supported_state_schema_versions:
+    - checkpoint.v1
+
+# 运行锁配置：调用方仍传入具体 TTL，本配置只约束允许范围。
+run_lock:
+  min_ttl_seconds: 1.0
+  max_ttl_seconds: 900.0
+
+# checkpoint 历史查询配置：不得超过 DTO 的硬上限 100。
+history:
+  max_list_limit: 100
+
+# checkpoint 状态体配置：只允许恢复摘要、引用和哈希，不允许承载完整医疗正文。
+checkpoint:
+  max_state_bytes: 262144
+
+# segment 发布幂等配置：metadata 只允许摘要、引用或哈希，不允许承载完整回复正文。
+segment_publish:
+  max_metadata_bytes: 16384

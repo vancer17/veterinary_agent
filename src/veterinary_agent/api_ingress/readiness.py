@@ -175,11 +175,13 @@ def _check_observability_dependency(
 def check_api_ingress_readiness(
     settings: ApiIngressSettings,
     app_ready: bool,
+    checkpoint_store_runtime_config_ready: bool = True,
 ) -> ApiIngressReadinessResult:
     """检查 API 接入组件是否就绪。
 
     :param settings: 已加载的 API 接入组件配置。
     :param app_ready: ASGI 应用框架级就绪标记。
+    :param checkpoint_store_runtime_config_ready: CheckpointStore RuntimeConfig 是否已装配。
     :return: API 接入组件就绪检查结果。
     """
 
@@ -188,6 +190,13 @@ def check_api_ingress_readiness(
         details.append(_build_detail("app.state.ready", "false"))
     if settings.readiness.check_runtime_config:
         details.extend(_check_runtime_config(settings))
+        if not checkpoint_store_runtime_config_ready:
+            details.append(
+                _build_detail(
+                    "checkpoint_store.runtime_config",
+                    "missing",
+                )
+            )
     if settings.readiness.validate_required_parameters:
         details.extend(_check_required_parameters(settings))
     details.extend(_check_orchestrator_dependency(settings))
