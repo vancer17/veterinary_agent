@@ -488,6 +488,4 @@ class SqlAlchemyConversationSessionRepository:
             ) from exc
 
 
-__all__: tuple[str, ...] = (
-    "SqlAlchemyConversationSessionRepository",
-)
+__all__: tuple[str, ...] = ("SqlAlchemyConversationSessionRepository",)

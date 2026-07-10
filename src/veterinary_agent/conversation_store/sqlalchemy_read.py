@@ -79,8 +79,7 @@ class SqlAlchemyConversationReadRepository:
                 session_row = (
                     connection.execute(
                         CONVERSATION_SESSION_TABLE.select().where(
-                            CONVERSATION_SESSION_TABLE.c.session_id
-                            == query.session_id
+                            CONVERSATION_SESSION_TABLE.c.session_id == query.session_id
                         )
                     )
                     .mappings()
@@ -168,8 +167,7 @@ class SqlAlchemyConversationReadRepository:
                 session_row = (
                     connection.execute(
                         CONVERSATION_SESSION_TABLE.select().where(
-                            CONVERSATION_SESSION_TABLE.c.session_id
-                            == query.session_id
+                            CONVERSATION_SESSION_TABLE.c.session_id == query.session_id
                         )
                     )
                     .mappings()
@@ -195,8 +193,7 @@ class SqlAlchemyConversationReadRepository:
                     connection.execute(
                         CONVERSATION_MESSAGE_TABLE.select()
                         .where(
-                            CONVERSATION_MESSAGE_TABLE.c.session_id
-                            == query.session_id
+                            CONVERSATION_MESSAGE_TABLE.c.session_id == query.session_id
                         )
                         .order_by(CONVERSATION_MESSAGE_TABLE.c.sequence_no.desc())
                         .limit(query.limit)
@@ -310,9 +307,9 @@ class SqlAlchemyConversationReadRepository:
             statement = statement.where(
                 CONVERSATION_MESSAGE_TABLE.c.sequence_no > cursor_sequence_no
             )
-        return statement.order_by(
-            CONVERSATION_MESSAGE_TABLE.c.sequence_no.asc()
-        ).limit(limit)
+        return statement.order_by(CONVERSATION_MESSAGE_TABLE.c.sequence_no.asc()).limit(
+            limit
+        )
 
     def _load_message_dto(
         self,
@@ -364,9 +361,7 @@ class SqlAlchemyConversationReadRepository:
         rows = (
             connection.execute(
                 CONVERSATION_MESSAGE_SEGMENT_TABLE.select()
-                .where(
-                    CONVERSATION_MESSAGE_SEGMENT_TABLE.c.message_id == message_id
-                )
+                .where(CONVERSATION_MESSAGE_SEGMENT_TABLE.c.message_id == message_id)
                 .order_by(CONVERSATION_MESSAGE_SEGMENT_TABLE.c.segment_order.asc())
             )
             .mappings()
@@ -476,6 +471,4 @@ class SqlAlchemyConversationReadRepository:
         )
 
 
-__all__: tuple[str, ...] = (
-    "SqlAlchemyConversationReadRepository",
-)
+__all__: tuple[str, ...] = ("SqlAlchemyConversationReadRepository",)

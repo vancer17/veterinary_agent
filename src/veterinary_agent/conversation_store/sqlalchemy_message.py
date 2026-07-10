@@ -1017,9 +1017,7 @@ class SqlAlchemyConversationMessageRepository:
             connection.execute(
                 CONVERSATION_MESSAGE_TABLE.select()
                 .where(CONVERSATION_MESSAGE_TABLE.c.session_id == session_id)
-                .where(
-                    CONVERSATION_MESSAGE_TABLE.c.idempotency_key == idempotency_key
-                )
+                .where(CONVERSATION_MESSAGE_TABLE.c.idempotency_key == idempotency_key)
             )
             .mappings()
             .one_or_none()
@@ -1098,8 +1096,7 @@ class SqlAlchemyConversationMessageRepository:
                 CONVERSATION_MESSAGE_SEGMENT_TABLE.select()
                 .where(CONVERSATION_MESSAGE_SEGMENT_TABLE.c.message_id == message_id)
                 .where(
-                    CONVERSATION_MESSAGE_SEGMENT_TABLE.c.segment_order
-                    == segment_order
+                    CONVERSATION_MESSAGE_SEGMENT_TABLE.c.segment_order == segment_order
                 )
             )
             .mappings()
@@ -1411,6 +1408,4 @@ class SqlAlchemyConversationMessageRepository:
         return f"{prefix}_{uuid4().hex}"
 
 
-__all__: tuple[str, ...] = (
-    "SqlAlchemyConversationMessageRepository",
-)
+__all__: tuple[str, ...] = ("SqlAlchemyConversationMessageRepository",)
