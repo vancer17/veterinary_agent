@@ -146,16 +146,20 @@ def _check_required_parameters(settings: ApiIngressSettings) -> list[ErrorDetail
 
 def _check_orchestrator_dependency(
     settings: ApiIngressSettings,
+    agent_application_service_ready: bool,
 ) -> list[ErrorDetailDto]:
-    """检查编排层依赖占位状态。
+    """检查 Agent 应用编排服务状态。
 
     :param settings: 已加载的 API 接入组件配置。
-    :return: 就绪检查失败明细列表；当前领域外依赖未实现时返回 TODO 占位明细。
+    :param agent_application_service_ready: AgentApplicationService 是否已装配且就绪。
+    :return: 就绪时返回空列表；不可用时返回依赖明细。
     """
 
     if not settings.readiness.check_orchestrator:
         return []
-    return [_build_detail("orchestrator", "todo_placeholder")]
+    if agent_application_service_ready:
+        return []
+    return [_build_detail("agent_application_service", "unavailable")]
 
 
 def _check_observability_dependency(
@@ -183,6 +187,7 @@ def check_api_ingress_readiness(
     checkpoint_store_runtime_config_ready: bool = True,
     conversation_store_runtime_config_ready: bool = True,
     pet_session_policy_ready: bool = True,
+    agent_application_service_ready: bool = False,
     observability_ready: bool = True,
 ) -> ApiIngressReadinessResult:
     """检查 API 接入组件是否就绪。
@@ -193,6 +198,7 @@ def check_api_ingress_readiness(
     :param checkpoint_store_runtime_config_ready: CheckpointStore RuntimeConfig 是否已装配。
     :param conversation_store_runtime_config_ready: ConversationStore RuntimeConfig 是否已装配。
     :param pet_session_policy_ready: PetSessionPolicy 是否已装配且具备执行条件。
+    :param agent_application_service_ready: AgentApplicationService 是否已装配且具备执行条件。
     :param observability_ready: Observability provider 是否已装配且就绪。
     :return: API 接入组件就绪检查结果。
     """
@@ -232,7 +238,12 @@ def check_api_ingress_readiness(
         )
     if settings.readiness.validate_required_parameters:
         details.extend(_check_required_parameters(settings))
-    details.extend(_check_orchestrator_dependency(settings))
+    details.extend(
+        _check_orchestrator_dependency(
+            settings,
+            agent_application_service_ready,
+        )
+    )
     details.extend(_check_observability_dependency(settings, observability_ready))
     return ApiIngressReadinessResult(ready=not details, details=details)
 

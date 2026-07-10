@@ -8,6 +8,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
+from veterinary_agent.agent_application_service import (
+    AgentApplicationService,
+    AgentGraphRuntime,
+    AgentLogicTraceStore,
+)
 from veterinary_agent.api_ingress import (
     ApiIngressConcurrencyGate,
     ApiIngressRateLimiter,
@@ -101,6 +106,12 @@ class VeterinaryAgentAppState:
     conversation_store_error: ConversationStoreErrorDto | None
     pet_session_policy: PetSessionPolicy | None
     pet_session_policy_ready: bool
+    graph_runtime: AgentGraphRuntime | None = None
+    graph_runtime_ready: bool = False
+    logic_trace_store: AgentLogicTraceStore | None = None
+    logic_trace_store_ready: bool = False
+    agent_application_service: AgentApplicationService | None = None
+    agent_application_service_ready: bool = False
     observability_provider: ObservabilityProvider | None = None
     observability_ready: bool = False
     observability_error: ObservabilityErrorDto | None = None

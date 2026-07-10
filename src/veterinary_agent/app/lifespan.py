@@ -1,7 +1,7 @@
 ##################################################################################################
 # 文件: src/veterinary_agent/app/lifespan.py
-# 作用: 定义 FastAPI 应用生命周期，负责配置加载、应用状态初始化、Checkpoint provider 启停与关闭期状态清理。
-# 边界: 仅装配 ASGI 框架状态与 L0 checkpoint provider；不执行数据库迁移、不创建 GraphRuntime、不调用兽医业务组件。
+# 作用: 定义 FastAPI 应用生命周期，负责配置、基础设施、应用服务与 TODO 领域端口的集中装配和关闭期清理。
+# 边界: 仅执行组件创建与生命周期管理；不执行数据库迁移、不运行 Agent 请求、不实现 GraphRuntime 或 LogicTraceStore。
 ##################################################################################################
 
 from collections.abc import AsyncIterator, Callable
@@ -10,6 +10,14 @@ from datetime import UTC, datetime
 
 from fastapi import FastAPI
 
+from veterinary_agent.agent_application_service import (
+    AgentApplicationService,
+    AgentGraphRuntime,
+    AgentLogicTraceStore,
+    DefaultAgentApplicationService,
+    TodoAgentGraphRuntime,
+    TodoAgentLogicTraceStore,
+)
 from veterinary_agent.api_ingress import (
     ApiIngressConcurrencyGate,
     ApiIngressRateLimiter,
@@ -31,6 +39,7 @@ from veterinary_agent.config import (
     CheckpointStoreSettings,
     ConversationStoreSettings,
     ObservabilitySettings,
+    RuntimeConfigProvider,
     RuntimeConfigSettings,
     create_runtime_config_provider,
     load_api_ingress_settings,
@@ -41,12 +50,31 @@ from veterinary_agent.conversation_store import (
     ConversationStore,
     TodoConversationStore,
 )
-from veterinary_agent.observability import create_observability_provider
-from veterinary_agent.pet_session_policy import DefaultPetSessionPolicy
+from veterinary_agent.observability import (
+    ObservabilityProvider,
+    create_observability_provider,
+)
+from veterinary_agent.pet_session_policy import (
+    DefaultPetSessionPolicy,
+    PetSessionPolicy,
+)
 
 LifespanHandler = Callable[[FastAPI], AbstractAsyncContextManager[None]]
 CheckpointProviderFactory = Callable[[], CheckpointProviderLifecycle]
 ConversationStoreFactory = Callable[[ConversationStoreSettings], ConversationStore]
+AgentGraphRuntimeFactory = Callable[[], AgentGraphRuntime]
+AgentLogicTraceStoreFactory = Callable[[], AgentLogicTraceStore]
+AgentApplicationServiceFactory = Callable[
+    [
+        RuntimeConfigProvider,
+        PetSessionPolicy,
+        ConversationStore,
+        AgentGraphRuntime,
+        AgentLogicTraceStore,
+        ObservabilityProvider,
+    ],
+    AgentApplicationService,
+]
 
 
 def create_langgraph_postgres_saver_provider() -> CheckpointProviderLifecycle:
@@ -72,6 +100,53 @@ def create_todo_conversation_store(
 
     del settings
     return TodoConversationStore()
+
+
+def create_todo_agent_graph_runtime() -> AgentGraphRuntime:
+    """创建默认 GraphRuntime TODO 空壳。
+
+    :return: 显式报告未就绪的 GraphRuntime TODO 空壳。
+    """
+
+    return TodoAgentGraphRuntime()
+
+
+def create_todo_agent_logic_trace_store() -> AgentLogicTraceStore:
+    """创建默认 LogicTraceStore TODO 空壳。
+
+    :return: 显式返回 Trace 降级状态的 LogicTraceStore TODO 空壳。
+    """
+
+    return TodoAgentLogicTraceStore()
+
+
+def create_default_agent_application_service(
+    runtime_config_provider: RuntimeConfigProvider,
+    pet_session_policy: PetSessionPolicy,
+    conversation_store: ConversationStore,
+    graph_runtime: AgentGraphRuntime,
+    logic_trace_store: AgentLogicTraceStore,
+    observability_provider: ObservabilityProvider,
+) -> AgentApplicationService:
+    """创建默认 AgentApplicationService。
+
+    :param runtime_config_provider: RuntimeConfig 当前快照只读 provider。
+    :param pet_session_policy: 已装配的宠物会话策略服务。
+    :param conversation_store: 已装配的对话事实存储服务。
+    :param graph_runtime: 已装配的 GraphRuntime 端口。
+    :param logic_trace_store: 已装配的 LogicTraceStore 端口。
+    :param observability_provider: 已装配的 Observability provider。
+    :return: 默认 AgentApplicationService 胶水层实现。
+    """
+
+    return DefaultAgentApplicationService(
+        runtime_config_provider=runtime_config_provider,
+        pet_session_policy=pet_session_policy,
+        conversation_store=conversation_store,
+        graph_runtime=graph_runtime,
+        logic_trace_store=logic_trace_store,
+        observability_provider=observability_provider,
+    )
 
 
 def _build_checkpoint_provider_start_error(exc: Exception) -> CheckpointStoreError:
@@ -217,6 +292,9 @@ def create_lifespan(
     observability_settings: ObservabilitySettings | None = None,
     checkpoint_provider_factory: CheckpointProviderFactory | None = None,
     conversation_store_factory: ConversationStoreFactory | None = None,
+    graph_runtime_factory: AgentGraphRuntimeFactory | None = None,
+    logic_trace_store_factory: AgentLogicTraceStoreFactory | None = None,
+    agent_application_service_factory: AgentApplicationServiceFactory | None = None,
 ) -> LifespanHandler:
     """创建 FastAPI lifespan 处理器。
 
@@ -227,6 +305,9 @@ def create_lifespan(
     :param observability_settings: 可选 Observability RuntimeConfig；未传入时从默认配置源加载。
     :param checkpoint_provider_factory: 可选 checkpoint provider 工厂；未传入时创建真实 LangGraph PostgresSaver provider。
     :param conversation_store_factory: 可选 ConversationStore 工厂；未传入时创建 TODO 空壳。
+    :param graph_runtime_factory: 可选 GraphRuntime 工厂；未传入时创建 TODO 空壳。
+    :param logic_trace_store_factory: 可选 LogicTraceStore 工厂；未传入时创建 TODO 空壳。
+    :param agent_application_service_factory: 可选 AgentApplicationService 工厂；未传入时创建默认胶水层实现。
     :return: 可传入 FastAPI 的 lifespan 处理器。
     """
 
@@ -278,6 +359,31 @@ def create_lifespan(
             runtime_config_provider=runtime_config_provider,
             observability_provider=observability_provider,
         )
+        resolved_graph_runtime_factory = (
+            graph_runtime_factory
+            if graph_runtime_factory is not None
+            else create_todo_agent_graph_runtime
+        )
+        graph_runtime = resolved_graph_runtime_factory()
+        resolved_logic_trace_store_factory = (
+            logic_trace_store_factory
+            if logic_trace_store_factory is not None
+            else create_todo_agent_logic_trace_store
+        )
+        logic_trace_store = resolved_logic_trace_store_factory()
+        resolved_agent_application_service_factory = (
+            agent_application_service_factory
+            if agent_application_service_factory is not None
+            else create_default_agent_application_service
+        )
+        agent_application_service = resolved_agent_application_service_factory(
+            runtime_config_provider,
+            pet_session_policy,
+            conversation_store,
+            graph_runtime,
+            logic_trace_store,
+            observability_provider,
+        )
         resolved_checkpoint_provider_factory = (
             checkpoint_provider_factory
             if checkpoint_provider_factory is not None
@@ -303,6 +409,12 @@ def create_lifespan(
             conversation_store_error=None,
             pet_session_policy=pet_session_policy,
             pet_session_policy_ready=pet_session_policy.is_ready(),
+            graph_runtime=graph_runtime,
+            graph_runtime_ready=graph_runtime.is_ready(),
+            logic_trace_store=logic_trace_store,
+            logic_trace_store_ready=logic_trace_store.is_ready(),
+            agent_application_service=agent_application_service,
+            agent_application_service_ready=agent_application_service.is_ready(),
             observability_provider=observability_provider,
             observability_ready=observability_provider.is_ready(),
             observability_error=None,
@@ -322,10 +434,16 @@ def create_lifespan(
 
 
 __all__: tuple[str, ...] = (
+    "AgentApplicationServiceFactory",
+    "AgentGraphRuntimeFactory",
+    "AgentLogicTraceStoreFactory",
     "CheckpointProviderFactory",
     "ConversationStoreFactory",
     "LifespanHandler",
+    "create_default_agent_application_service",
     "create_langgraph_postgres_saver_provider",
+    "create_todo_agent_graph_runtime",
+    "create_todo_agent_logic_trace_store",
     "create_todo_conversation_store",
     "create_lifespan",
 )

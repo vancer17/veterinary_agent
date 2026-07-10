@@ -77,6 +77,11 @@ async def ready(
             and state.pet_session_policy_ready
             and state.pet_session_policy.is_ready()
         ),
+        agent_application_service_ready=(
+            state.agent_application_service is not None
+            and state.agent_application_service_ready
+            and state.agent_application_service.is_ready()
+        ),
         observability_ready=(
             state.observability_provider is not None
             and state.observability_ready
