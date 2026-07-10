@@ -21,7 +21,10 @@ from veterinary_agent.api_ingress.dto import (
     ErrorDetailDto,
 )
 from veterinary_agent.api_ingress.error_response import (
+    CLIENT_ERROR_SOURCE,
     DEPENDENCY_ERROR_SOURCE,
+    INTERNAL_ERROR_SOURCE,
+    ApiIngressErrorResponseSource,
     build_api_ingress_json_error_response,
 )
 from veterinary_agent.api_ingress.enums import ApiRouteKind, IngressErrorCode
@@ -45,6 +48,13 @@ from veterinary_agent.api_ingress.validation import (
 )
 from veterinary_agent.config import ApiIngressSettings
 from veterinary_agent.observability import ObservabilityProvider
+from veterinary_agent.pet_session_policy import (
+    PetSessionContextDto,
+    PetSessionPolicy,
+    PetSessionPolicyError,
+    PetSessionPolicyErrorCode,
+    PetSessionRequestContextDto,
+)
 
 APP_STATE_KEY: Final[str] = "veterinary_agent_state"
 REQUEST_ID_FALLBACK: Final[str] = "req_unavailable"
@@ -110,6 +120,22 @@ def _get_observability_provider(request: Request) -> ObservabilityProvider | Non
     if not isinstance(provider, ObservabilityProvider) or not provider.is_ready():
         return None
     return provider
+
+
+def _get_pet_session_policy(request: Request) -> PetSessionPolicy:
+    """从 FastAPI 应用状态读取 PetSessionPolicy。
+
+    :param request: 当前 HTTP 请求对象。
+    :return: 已装配且具备执行条件的 PetSessionPolicy。
+    :raises RuntimeError: 当 PetSessionPolicy 尚未装配或未就绪时抛出。
+    """
+
+    app_state = getattr(request.app.state, APP_STATE_KEY, None)
+    policy = getattr(app_state, "pet_session_policy", None)
+    policy_ready = getattr(app_state, "pet_session_policy_ready", False)
+    if policy is None or not policy_ready or not policy.is_ready():
+        raise RuntimeError("PetSessionPolicy 尚未初始化或未就绪")
+    return policy
 
 
 def _get_header_value(request: Request, header_name: str, fallback: str) -> str:
@@ -351,6 +377,149 @@ def _build_parse_failure_response(
     )
 
 
+def _build_pet_session_request_context(
+    built_request: AgentTurnRequestCommandDto,
+) -> PetSessionRequestContextDto:
+    """从编排请求命令构建 PetSessionPolicy 请求上下文。
+
+    :param built_request: 已完成 AgentTurnRequest Builder 处理的请求命令 DTO。
+    :return: 可传入 PetSessionPolicy 的请求上下文 DTO。
+    """
+
+    request_context = built_request.request_context
+    trusted_identity = built_request.trusted_identity
+    return PetSessionRequestContextDto(
+        request_id=request_context.request_id,
+        trace_id=request_context.trace_id,
+        user_id=trusted_identity.user_id,
+        session_id=trusted_identity.session_id,
+        pet_id=trusted_identity.pet_id,
+        client_pet_snapshot_ref=(
+            dict(trusted_identity.pet_info)
+            if trusted_identity.pet_info is not None
+            else None
+        ),
+    )
+
+
+def _resolve_pet_session_error_response_mapping(
+    error: PetSessionPolicyError,
+) -> tuple[
+    int,
+    IngressErrorCode,
+    str,
+    ApiIngressErrorResponseSource,
+]:
+    """解析 PetSessionPolicy 领域错误的 HTTP 与入口错误映射。
+
+    :param error: PetSessionPolicy 领域异常。
+    :return: HTTP 状态码、入口错误码、稳定公开消息与错误来源分类。
+    """
+
+    if error.code is PetSessionPolicyErrorCode.REQUIRED_FIELD_MISSING:
+        return (
+            422,
+            IngressErrorCode.MISSING_REQUIRED_CONTEXT,
+            "required pet session context is missing",
+            CLIENT_ERROR_SOURCE,
+        )
+    if error.code is PetSessionPolicyErrorCode.PET_MISMATCH:
+        return (
+            409,
+            IngressErrorCode.INVALID_REQUEST,
+            "session is bound to another pet; create a new session",
+            CLIENT_ERROR_SOURCE,
+        )
+    if error.code is PetSessionPolicyErrorCode.USER_MISMATCH:
+        return (
+            409,
+            IngressErrorCode.INVALID_REQUEST,
+            "session identity does not match the request",
+            CLIENT_ERROR_SOURCE,
+        )
+    if error.code is PetSessionPolicyErrorCode.SESSION_CLOSED:
+        return (
+            409,
+            IngressErrorCode.INVALID_REQUEST,
+            "session is closed",
+            CLIENT_ERROR_SOURCE,
+        )
+    if error.code is PetSessionPolicyErrorCode.SESSION_ARCHIVED:
+        return (
+            409,
+            IngressErrorCode.INVALID_REQUEST,
+            "session is archived",
+            CLIENT_ERROR_SOURCE,
+        )
+    if error.code in {
+        PetSessionPolicyErrorCode.STORE_UNAVAILABLE,
+        PetSessionPolicyErrorCode.RUNTIME_CONFIG_UNAVAILABLE,
+        PetSessionPolicyErrorCode.POLICY_DISABLED,
+    }:
+        return (
+            503,
+            IngressErrorCode.SERVICE_UNAVAILABLE,
+            "pet session policy is unavailable",
+            DEPENDENCY_ERROR_SOURCE,
+        )
+    return (
+        500,
+        IngressErrorCode.INTERNAL_ERROR,
+        "pet session policy failed",
+        INTERNAL_ERROR_SOURCE,
+    )
+
+
+def _build_pet_session_policy_error_response(
+    *,
+    error: PetSessionPolicyError,
+    settings: ApiIngressSettings,
+) -> JSONResponse:
+    """构建 PetSessionPolicy 阻断结果对应的统一 JSON 错误响应。
+
+    :param error: PetSessionPolicy 领域异常。
+    :param settings: API 接入组件配置。
+    :return: 已按入口层错误策略裁剪与脱敏的 JSON 错误响应。
+    """
+
+    status_code, ingress_code, public_message, source = (
+        _resolve_pet_session_error_response_mapping(error)
+    )
+    error_dto = error.to_dto()
+    details = [
+        ErrorDetailDto(
+            field="pet_session_policy.error_code",
+            reason=error_dto.code.value,
+        ),
+        ErrorDetailDto(
+            field="pet_session_policy.decision",
+            reason=error_dto.decision.decision.value,
+        ),
+        ErrorDetailDto(
+            field="pet_session_policy.trace_delivery",
+            reason=error_dto.trace_delivery_status.value,
+        ),
+    ]
+    if error_dto.decision.missing_field is not None:
+        details.append(
+            ErrorDetailDto(
+                field=f"vet_context.{error_dto.decision.missing_field}",
+                reason="missing",
+            )
+        )
+    return build_api_ingress_json_error_response(
+        settings=settings,
+        status_code=status_code,
+        code=ingress_code,
+        request_id=error_dto.request_id,
+        trace_id=error_dto.trace_id,
+        public_message=public_message,
+        diagnostic_message=error_dto.message,
+        details=details,
+        source=source,
+    )
+
+
 async def _handle_turn_request(
     request: Request,
     route_kind: ApiRouteKind,
@@ -429,6 +598,18 @@ async def _handle_turn_request(
             normalized_request=normalized_request,
             settings=settings,
         )
+        pet_session_policy = _get_pet_session_policy(request)
+        try:
+            pet_session_context: PetSessionContextDto = (
+                await pet_session_policy.ensure_context(
+                    _build_pet_session_request_context(built_request)
+                )
+            )
+        except PetSessionPolicyError as exc:
+            return _build_pet_session_policy_error_response(
+                error=exc,
+                settings=settings,
+            )
         concurrency_gate = _get_orchestrator_concurrency_gate(request)
         concurrency_lease = await concurrency_gate.try_acquire()
         if concurrency_lease is None:
@@ -437,6 +618,7 @@ async def _handle_turn_request(
                 settings=settings,
             )
         try:
+            del pet_session_context
             return _build_todo_dependency_response(
                 built_request=built_request,
                 settings=settings,

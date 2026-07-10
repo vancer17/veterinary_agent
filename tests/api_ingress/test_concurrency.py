@@ -5,6 +5,7 @@
 ##################################################################################################
 
 import asyncio
+from datetime import UTC, datetime
 from typing import cast
 
 from fastapi import FastAPI
@@ -14,6 +15,12 @@ from veterinary_agent import (
     ApiIngressConcurrencyGate,
     ApiIngressConcurrencyLease,
     ApiIngressSettings,
+    ConversationSessionDto,
+    ConversationSessionStatus,
+    ConversationStoreSettings,
+    EnsureSessionCommandDto,
+    EnsureSessionResultDto,
+    TodoConversationStore,
     VeterinaryAgentAppState,
     create_app,
 )
@@ -37,6 +44,47 @@ class _ExhaustedConcurrencyGate(ApiIngressConcurrencyGate):
         """
 
         return None
+
+
+class _AvailableConversationStore(TodoConversationStore):
+    """允许 PetSessionPolicy 通过的测试 ConversationStore。"""
+
+    async def ensure_session(
+        self,
+        command: EnsureSessionCommandDto,
+    ) -> EnsureSessionResultDto:
+        """返回与请求锚点一致的 active session。
+
+        :param command: PetSessionPolicy 传入的 EnsureSession 命令。
+        :return: 允许继续的既有 session 结果。
+        """
+
+        now = datetime.now(UTC)
+        return EnsureSessionResultDto(
+            session=ConversationSessionDto(
+                session_id=command.session_id,
+                user_id=command.user_id,
+                pet_id=command.pet_id,
+                status=ConversationSessionStatus.ACTIVE,
+                created_at=now,
+                updated_at=now,
+                next_sequence_no=1,
+            ),
+            created_new=False,
+        )
+
+
+def _create_available_conversation_store(
+    settings: ConversationStoreSettings,
+) -> _AvailableConversationStore:
+    """创建允许 PetSessionPolicy 通过的测试 ConversationStore。
+
+    :param settings: ConversationStore RuntimeConfig；测试替身不读取具体字段。
+    :return: 测试用可用 ConversationStore。
+    """
+
+    del settings
+    return _AvailableConversationStore()
 
 
 def _valid_payload() -> dict[str, object]:
@@ -184,7 +232,12 @@ def test_router_rejects_when_orchestrator_concurrency_gate_is_full() -> None:
 
     settings = _settings_with_max_concurrency(max_concurrency=1)
 
-    with TestClient(create_app(settings)) as client:
+    with TestClient(
+        create_app(
+            settings,
+            conversation_store_factory=_create_available_conversation_store,
+        )
+    ) as client:
         app_state = _app_state(client)
         app_state.orchestrator_concurrency_gate = _ExhaustedConcurrencyGate()
         response = client.post("/agent/turns", json=_valid_payload())

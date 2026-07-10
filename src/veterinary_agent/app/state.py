@@ -26,6 +26,7 @@ from veterinary_agent.conversation_store import (
     ConversationStoreErrorDto,
 )
 from veterinary_agent.observability import ObservabilityErrorDto, ObservabilityProvider
+from veterinary_agent.pet_session_policy import PetSessionPolicy
 
 
 class CheckpointProviderLifecycle(Protocol):
@@ -98,6 +99,8 @@ class VeterinaryAgentAppState:
     conversation_store: ConversationStore | None
     conversation_store_ready: bool
     conversation_store_error: ConversationStoreErrorDto | None
+    pet_session_policy: PetSessionPolicy | None
+    pet_session_policy_ready: bool
     observability_provider: ObservabilityProvider | None = None
     observability_ready: bool = False
     observability_error: ObservabilityErrorDto | None = None

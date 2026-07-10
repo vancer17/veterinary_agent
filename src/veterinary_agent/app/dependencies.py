@@ -40,6 +40,15 @@ from veterinary_agent.observability import (
     ObservabilityOperation,
     ObservabilityProvider,
 )
+from veterinary_agent.pet_session_policy import (
+    PetSessionDecision,
+    PetSessionPolicy,
+    PetSessionPolicyAction,
+    PetSessionPolicyDecisionDto,
+    PetSessionPolicyError,
+    PetSessionPolicyErrorCode,
+    PetSessionTraceWriteStatus,
+)
 
 APP_STATE_KEY = "veterinary_agent_state"
 
@@ -212,6 +221,58 @@ def get_conversation_store(request: Request) -> ConversationStore:
     return conversation_store
 
 
+def get_pet_session_policy(request: Request) -> PetSessionPolicy:
+    """获取已由 FastAPI lifespan 初始化的 PetSessionPolicy。
+
+    :param request: 当前 HTTP 请求对象。
+    :return: 已装配且具备执行条件的 PetSessionPolicy。
+    :raises RuntimeError: 当应用状态尚未完成初始化时抛出。
+    :raises PetSessionPolicyError: 当 PetSessionPolicy 未装配或未就绪时抛出。
+    """
+
+    app_state = get_app_state(request)
+    policy = app_state.pet_session_policy
+    if policy is None:
+        decision = PetSessionPolicyDecisionDto(
+            decision=PetSessionDecision.BLOCK_INTERNAL_ERROR,
+            policy_action=PetSessionPolicyAction.BLOCK_REQUEST,
+            allow_continue=False,
+            error_code=PetSessionPolicyErrorCode.INTERNAL_ERROR,
+            retryable=True,
+            reason="PetSessionPolicy 尚未初始化",
+        )
+        raise PetSessionPolicyError(
+            code=PetSessionPolicyErrorCode.INTERNAL_ERROR,
+            message=decision.reason,
+            request_id="req_unavailable",
+            trace_id="trace_unavailable",
+            decision=decision,
+            trace_delivery_status=PetSessionTraceWriteStatus.DEGRADED,
+            retryable=True,
+            conflict_with={"reason": "policy_missing"},
+        )
+    if not app_state.pet_session_policy_ready or not policy.is_ready():
+        decision = PetSessionPolicyDecisionDto(
+            decision=PetSessionDecision.BLOCK_RUNTIME_CONFIG_UNAVAILABLE,
+            policy_action=PetSessionPolicyAction.BLOCK_REQUEST,
+            allow_continue=False,
+            error_code=PetSessionPolicyErrorCode.RUNTIME_CONFIG_UNAVAILABLE,
+            retryable=True,
+            reason="PetSessionPolicy 尚未就绪",
+        )
+        raise PetSessionPolicyError(
+            code=PetSessionPolicyErrorCode.RUNTIME_CONFIG_UNAVAILABLE,
+            message=decision.reason,
+            request_id="req_unavailable",
+            trace_id="trace_unavailable",
+            decision=decision,
+            trace_delivery_status=PetSessionTraceWriteStatus.DEGRADED,
+            retryable=True,
+            conflict_with={"reason": "policy_not_ready"},
+        )
+    return policy
+
+
 def _raise_checkpoint_provider_unavailable(
     *,
     reason: str,
@@ -274,6 +335,7 @@ __all__: tuple[str, ...] = (
     "get_conversation_store_settings",
     "get_langgraph_checkpointer",
     "get_observability_provider",
+    "get_pet_session_policy",
     "get_runtime_config_provider",
     "get_runtime_config_snapshot",
 )

@@ -20,6 +20,7 @@ from veterinary_agent import (
     CheckpointProviderLifecycle,
     CheckpointStoreError,
     ConversationStoreSettings,
+    DefaultPetSessionPolicy,
     LangGraphCheckpointer,
     LangGraphRunnableConfig,
     TodoConversationStore,
@@ -31,6 +32,7 @@ from veterinary_agent import (
     get_conversation_store,
     get_conversation_store_settings,
     get_langgraph_checkpointer,
+    get_pet_session_policy,
     get_runtime_config_provider,
     get_runtime_config_snapshot,
 )
@@ -121,6 +123,11 @@ def _build_app_state(
         conversation_store_settings=conversation_store_settings,
     )
     runtime_config_snapshot = runtime_config_provider.current_snapshot()
+    conversation_store = TodoConversationStore()
+    pet_session_policy = DefaultPetSessionPolicy(
+        conversation_store=conversation_store,
+        runtime_config_provider=runtime_config_provider,
+    )
     return VeterinaryAgentAppState(
         settings=settings,
         runtime_config_provider=runtime_config_provider,
@@ -136,9 +143,11 @@ def _build_app_state(
         checkpoint_provider_ready=checkpoint_provider_ready,
         checkpoint_provider_error=None,
         conversation_store_settings=conversation_store_settings,
-        conversation_store=TodoConversationStore(),
+        conversation_store=conversation_store,
         conversation_store_ready=True,
         conversation_store_error=None,
+        pet_session_policy=pet_session_policy,
+        pet_session_policy_ready=True,
     )
 
 
@@ -242,6 +251,21 @@ def test_get_conversation_store_returns_store() -> None:
     request = _build_request(app_state)
 
     assert get_conversation_store(request) is app_state.conversation_store
+
+
+def test_get_pet_session_policy_returns_policy() -> None:
+    """验证依赖函数可从 app state 读取 PetSessionPolicy。
+
+    :return: None。
+    """
+
+    app_state = _build_app_state(
+        checkpoint_provider=_DependencyCheckpointProvider(),
+        checkpoint_provider_ready=True,
+    )
+    request = _build_request(app_state)
+
+    assert get_pet_session_policy(request) is app_state.pet_session_policy
 
 
 def test_get_runtime_config_provider_returns_provider() -> None:
