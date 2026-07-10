@@ -181,6 +181,7 @@ def check_api_ingress_readiness(
     app_ready: bool,
     runtime_config_ready: bool = True,
     checkpoint_store_runtime_config_ready: bool = True,
+    conversation_store_runtime_config_ready: bool = True,
     observability_ready: bool = True,
 ) -> ApiIngressReadinessResult:
     """检查 API 接入组件是否就绪。
@@ -189,6 +190,7 @@ def check_api_ingress_readiness(
     :param app_ready: ASGI 应用框架级就绪标记。
     :param runtime_config_ready: RuntimeConfig provider 与当前配置快照是否已装配。
     :param checkpoint_store_runtime_config_ready: CheckpointStore RuntimeConfig 是否已装配。
+    :param conversation_store_runtime_config_ready: ConversationStore RuntimeConfig 是否已装配。
     :param observability_ready: Observability provider 是否已装配且就绪。
     :return: API 接入组件就绪检查结果。
     """
@@ -209,6 +211,13 @@ def check_api_ingress_readiness(
             details.append(
                 _build_detail(
                     "checkpoint_store.runtime_config",
+                    "missing",
+                )
+            )
+        if not conversation_store_runtime_config_ready:
+            details.append(
+                _build_detail(
+                    "conversation_store.runtime_config",
                     "missing",
                 )
             )

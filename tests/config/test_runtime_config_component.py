@@ -13,6 +13,7 @@ import pytest
 from veterinary_agent import (
     ApiIngressSettings,
     CheckpointStoreSettings,
+    ConversationStoreSettings,
     ObservabilitySettings,
     ObservabilityTracingConfig,
     RUNTIME_CONFIG_TRACE_SAFE_SCHEMA_VERSION,
@@ -324,6 +325,9 @@ def test_runtime_config_provider_reads_namespaces() -> None:
     assert provider.get_namespace(RuntimeConfigNamespace.CHECKPOINT_STORE) is (
         provider.current_snapshot().checkpoint_store
     )
+    assert provider.get_namespace(RuntimeConfigNamespace.CONVERSATION_STORE) is (
+        provider.current_snapshot().conversation_store
+    )
     assert provider.get_namespace(RuntimeConfigNamespace.OBSERVABILITY) is (
         provider.current_snapshot().observability
     )
@@ -354,9 +358,39 @@ def test_runtime_config_provider_reads_value_by_key() -> None:
     assert provider.get_value(key="checkpoint_store.history.max_list_limit") == (
         snapshot.checkpoint_store.history.max_list_limit
     )
+    assert provider.get_value(key="conversation_store.history.max_list_limit") == (
+        snapshot.conversation_store.history.max_list_limit
+    )
     assert provider.get_value(key="observability.metrics.endpoint_path") == (
         snapshot.observability.metrics.endpoint_path
     )
+
+
+def test_runtime_config_rejects_recent_messages_above_list_limit() -> None:
+    """验证 RuntimeConfig 会拒绝最近消息上限大于历史分页上限。
+
+    :return: None。
+    """
+
+    conversation_settings = ConversationStoreSettings()
+    conversation_settings = conversation_settings.model_copy(
+        update={
+            "history": conversation_settings.history.model_copy(
+                update={"max_list_limit": 10, "max_recent_messages": 11}
+            )
+        }
+    )
+
+    with pytest.raises(RuntimeConfigError) as exc_info:
+        validate_runtime_config_candidate(
+            runtime_config_settings=RuntimeConfigSettings(),
+            api_ingress_settings=ApiIngressSettings(),
+            checkpoint_store_settings=CheckpointStoreSettings(),
+            conversation_store_settings=conversation_settings,
+            observability_settings=ObservabilitySettings(),
+        )
+
+    assert exc_info.value.code is RuntimeConfigErrorCode.CONFIG_RELATION_INVALID
 
 
 def test_runtime_config_provider_get_value_rejects_unknown_snapshot_id() -> None:
