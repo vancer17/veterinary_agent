@@ -11,6 +11,7 @@ from veterinary_agent.app.dependencies import (
     get_conversation_store_settings,
     get_langgraph_checkpointer,
     get_observability_provider,
+    get_pet_session_policy,
     get_runtime_config_provider,
     get_runtime_config_snapshot,
 )
@@ -40,6 +41,7 @@ __all__: tuple[str, ...] = (
     "get_conversation_store_settings",
     "get_langgraph_checkpointer",
     "get_observability_provider",
+    "get_pet_session_policy",
     "get_runtime_config_provider",
     "get_runtime_config_snapshot",
 )

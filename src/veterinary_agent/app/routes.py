@@ -72,6 +72,11 @@ async def ready(
         conversation_store_runtime_config_ready=(
             state.conversation_store_settings is not None
         ),
+        pet_session_policy_ready=(
+            state.pet_session_policy is not None
+            and state.pet_session_policy_ready
+            and state.pet_session_policy.is_ready()
+        ),
         observability_ready=(
             state.observability_provider is not None
             and state.observability_ready

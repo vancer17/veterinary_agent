@@ -42,6 +42,7 @@ from veterinary_agent.conversation_store import (
     TodoConversationStore,
 )
 from veterinary_agent.observability import create_observability_provider
+from veterinary_agent.pet_session_policy import DefaultPetSessionPolicy
 
 LifespanHandler = Callable[[FastAPI], AbstractAsyncContextManager[None]]
 CheckpointProviderFactory = Callable[[], CheckpointProviderLifecycle]
@@ -272,6 +273,11 @@ def create_lifespan(
         conversation_store = resolved_conversation_store_factory(
             resolved_conversation_store_settings
         )
+        pet_session_policy = DefaultPetSessionPolicy(
+            conversation_store=conversation_store,
+            runtime_config_provider=runtime_config_provider,
+            observability_provider=observability_provider,
+        )
         resolved_checkpoint_provider_factory = (
             checkpoint_provider_factory
             if checkpoint_provider_factory is not None
@@ -295,6 +301,8 @@ def create_lifespan(
             conversation_store=conversation_store,
             conversation_store_ready=resolved_conversation_store_settings.enabled,
             conversation_store_error=None,
+            pet_session_policy=pet_session_policy,
+            pet_session_policy_ready=pet_session_policy.is_ready(),
             observability_provider=observability_provider,
             observability_ready=observability_provider.is_ready(),
             observability_error=None,
