@@ -1,0 +1,153 @@
+##################################################################################################
+# 文件: src/veterinary_agent/llm_gateway/__init__.py
+# 作用: 作为 LlmGateway 组件包统一出口，集中暴露配置、DTO、枚举、端口、适配器与默认实现。
+# 边界: 外部包应从本文件导入 LlmGateway 公共契约，避免跨包直接引用内部实现模块。
+##################################################################################################
+
+from veterinary_agent.config import (
+    DEFAULT_LLM_GATEWAY_CONFIG_PATH,
+    LlmGatewaySettings,
+    LlmModelCapabilityConfig,
+    LlmModelProfileConfig,
+    LlmProviderRouteConfig,
+    LlmRequiredCapabilityConfig,
+    LlmRetryPolicyConfig,
+    LlmTimeoutPolicyConfig,
+    LlmTokenEstimationConfig,
+    LlmTracePolicyConfig,
+    load_llm_gateway_settings,
+)
+from veterinary_agent.llm_gateway.concurrency import (
+    LlmConcurrencyController,
+    LlmConcurrencyLease,
+)
+from veterinary_agent.llm_gateway.dto import (
+    JsonMap,
+    LlmCallSummaryDto,
+    LlmContentPartDto,
+    LlmErrorDto,
+    LlmFunctionCallDto,
+    LlmGatewayDto,
+    LlmImageContentPartDto,
+    LlmImageUrlDto,
+    LlmInvocationRequestDto,
+    LlmInvocationResultDto,
+    LlmJsonSchemaDto,
+    LlmMessageDto,
+    LlmModelProfileStatusDto,
+    LlmProviderRouteHealthDto,
+    LlmResponseFormatDto,
+    LlmStreamEventDto,
+    LlmTextContentPartDto,
+    LlmTokenEstimateDto,
+    LlmToolCallDeltaDto,
+    LlmToolCallDto,
+    LlmToolFunctionSchemaDto,
+    LlmToolSchemaDto,
+    LlmTraceWriteResultDto,
+    LlmUsageSummaryDto,
+    ProviderInvocationRequestDto,
+    ProviderInvocationResponseDto,
+    ProviderStreamEventDto,
+)
+from veterinary_agent.llm_gateway.enums import (
+    LlmContentPartType,
+    LlmFinishReason,
+    LlmGatewayErrorCode,
+    LlmGatewayOperation,
+    LlmMessageRole,
+    LlmResponseFormatType,
+    LlmStreamEventType,
+    LlmTraceWriteStatus,
+    ProviderStreamEventType,
+)
+from veterinary_agent.llm_gateway.errors import (
+    LlmGatewayError,
+    build_llm_gateway_error_dto,
+    is_llm_gateway_error_retryable_by_default,
+)
+from veterinary_agent.llm_gateway.gateway import (
+    DefaultLlmGateway,
+    create_default_llm_gateway,
+)
+from veterinary_agent.llm_gateway.openai_compatible import (
+    OpenAICompatibleAdapter,
+    OpenAICompatibleAdapterFactory,
+)
+from veterinary_agent.llm_gateway.ports import (
+    LlmCallTraceStore,
+    LlmGateway,
+    ProviderAdapter,
+)
+from veterinary_agent.llm_gateway.profile_registry import (
+    LlmProfileRegistry,
+    ResolvedModelProfile,
+)
+from veterinary_agent.llm_gateway.token_estimator import ConservativeTokenEstimator
+from veterinary_agent.llm_gateway.trace import TodoLlmCallTraceStore
+
+__all__: tuple[str, ...] = (
+    "ConservativeTokenEstimator",
+    "DEFAULT_LLM_GATEWAY_CONFIG_PATH",
+    "DefaultLlmGateway",
+    "JsonMap",
+    "LlmCallSummaryDto",
+    "LlmCallTraceStore",
+    "LlmConcurrencyController",
+    "LlmConcurrencyLease",
+    "LlmContentPartDto",
+    "LlmContentPartType",
+    "LlmErrorDto",
+    "LlmFinishReason",
+    "LlmFunctionCallDto",
+    "LlmGateway",
+    "LlmGatewayDto",
+    "LlmGatewayError",
+    "LlmGatewayErrorCode",
+    "LlmGatewayOperation",
+    "LlmGatewaySettings",
+    "LlmImageContentPartDto",
+    "LlmImageUrlDto",
+    "LlmInvocationRequestDto",
+    "LlmInvocationResultDto",
+    "LlmJsonSchemaDto",
+    "LlmMessageDto",
+    "LlmMessageRole",
+    "LlmModelCapabilityConfig",
+    "LlmModelProfileConfig",
+    "LlmModelProfileStatusDto",
+    "LlmProfileRegistry",
+    "LlmProviderRouteConfig",
+    "LlmProviderRouteHealthDto",
+    "LlmRequiredCapabilityConfig",
+    "LlmResponseFormatDto",
+    "LlmResponseFormatType",
+    "LlmRetryPolicyConfig",
+    "LlmStreamEventDto",
+    "LlmStreamEventType",
+    "LlmTextContentPartDto",
+    "LlmTimeoutPolicyConfig",
+    "LlmTokenEstimateDto",
+    "LlmTokenEstimationConfig",
+    "LlmToolCallDeltaDto",
+    "LlmToolCallDto",
+    "LlmToolFunctionSchemaDto",
+    "LlmToolSchemaDto",
+    "LlmTracePolicyConfig",
+    "LlmTraceWriteResultDto",
+    "LlmTraceWriteStatus",
+    "LlmUsageSummaryDto",
+    "OpenAICompatibleAdapter",
+    "OpenAICompatibleAdapterFactory",
+    "ProviderAdapter",
+    "ProviderInvocationRequestDto",
+    "ProviderInvocationResponseDto",
+    "ProviderStreamEventDto",
+    "ProviderStreamEventType",
+    "ResolvedModelProfile",
+    "TodoLlmCallTraceStore",
+    "build_llm_gateway_error_dto",
+    "create_default_llm_gateway",
+    "is_llm_gateway_error_retryable_by_default",
+    "load_llm_gateway_settings",
+)

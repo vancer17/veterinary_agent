@@ -47,6 +47,13 @@ from veterinary_agent.observability import (
     ObservabilityOperation,
     ObservabilityProvider,
 )
+from veterinary_agent.llm_gateway import (
+    LlmGateway,
+    LlmGatewayError,
+    LlmGatewayErrorCode,
+    LlmGatewayOperation,
+    LlmGatewaySettings,
+)
 from veterinary_agent.pet_session_policy import (
     PetSessionDecision,
     PetSessionPolicy,
@@ -228,6 +235,49 @@ def get_conversation_store(request: Request) -> ConversationStore:
     return conversation_store
 
 
+def get_llm_gateway_settings(request: Request) -> LlmGatewaySettings:
+    """获取 LlmGateway RuntimeConfig。
+
+    :param request: 当前 HTTP 请求对象。
+    :return: 已加载并通过校验的 LlmGateway RuntimeConfig。
+    :raises RuntimeError: 当 LlmGateway RuntimeConfig 尚未初始化时抛出。
+    """
+
+    app_state = get_app_state(request)
+    runtime_config_snapshot = app_state.runtime_config_snapshot
+    if runtime_config_snapshot is not None:
+        return runtime_config_snapshot.llm_gateway
+    settings = app_state.llm_gateway_settings
+    if settings is None:
+        raise RuntimeError("LlmGateway RuntimeConfig 尚未初始化")
+    return settings
+
+
+def get_llm_gateway(request: Request) -> LlmGateway:
+    """获取已由 FastAPI lifespan 初始化的 LlmGateway。
+
+    :param request: 当前 HTTP 请求对象。
+    :return: 已装配且具备执行条件的 LlmGateway。
+    :raises LlmGatewayError: 当 LlmGateway 未装配或未就绪时抛出。
+    """
+
+    app_state = get_app_state(request)
+    gateway = app_state.llm_gateway
+    if gateway is None:
+        raise LlmGatewayError(
+            code=LlmGatewayErrorCode.LLM_GATEWAY_NOT_READY,
+            operation=LlmGatewayOperation.CHECK_MODEL_PROFILE,
+            message="LlmGateway 尚未初始化",
+        )
+    if not app_state.llm_gateway_ready or not gateway.is_ready():
+        raise LlmGatewayError(
+            code=LlmGatewayErrorCode.LLM_GATEWAY_NOT_READY,
+            operation=LlmGatewayOperation.CHECK_MODEL_PROFILE,
+            message="LlmGateway 尚未就绪",
+        )
+    return gateway
+
+
 def get_pet_session_policy(request: Request) -> PetSessionPolicy:
     """获取已由 FastAPI lifespan 初始化的 PetSessionPolicy。
 
@@ -367,6 +417,8 @@ __all__: tuple[str, ...] = (
     "get_conversation_store",
     "get_conversation_store_settings",
     "get_langgraph_checkpointer",
+    "get_llm_gateway",
+    "get_llm_gateway_settings",
     "get_observability_provider",
     "get_pet_session_policy",
     "get_runtime_config_provider",

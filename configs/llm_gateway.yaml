@@ -1,0 +1,15 @@
+# LlmGateway 组件配置。
+# 当前 AgentRunner 尚未装配，因此默认关闭真实模型调用；启用时必须显式配置模型代理路由和 profile。
+enabled: false
+config_version: llm-gateway.v1
+max_total_attempts: 4
+max_call_duration_seconds: 120.0
+global_max_concurrency: 32
+concurrency_acquire_timeout_seconds: 2.0
+token_estimation:
+  chars_per_token: 2.0
+  message_overhead_tokens: 4
+  tool_overhead_tokens: 16
+  response_format_overhead_tokens: 16
+provider_routes: []
+model_profiles: []

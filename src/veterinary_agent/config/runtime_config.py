@@ -35,6 +35,10 @@ from veterinary_agent.config.observability import (
     ObservabilitySettings,
     load_observability_settings,
 )
+from veterinary_agent.config.llm_gateway import (
+    LlmGatewaySettings,
+    load_llm_gateway_settings,
+)
 
 DEFAULT_RUNTIME_CONFIG_PATH = Path("configs/runtime_config.yaml")
 RUNTIME_CONFIG_TRACE_SAFE_SCHEMA_VERSION = "runtime-config.trace-safe.v1"
@@ -95,6 +99,7 @@ class RuntimeConfigNamespace(StrEnum):
     API_INGRESS = "api_ingress"
     CHECKPOINT_STORE = "checkpoint_store"
     CONVERSATION_STORE = "conversation_store"
+    LLM_GATEWAY = "llm_gateway"
     OBSERVABILITY = "observability"
 
 
@@ -392,6 +397,9 @@ class RuntimeConfigSnapshot(_RuntimeConfigModel):
     conversation_store: ConversationStoreSettings = Field(
         description="ConversationStore RuntimeConfig。",
     )
+    llm_gateway: LlmGatewaySettings = Field(
+        description="LlmGateway RuntimeConfig。",
+    )
     observability: ObservabilitySettings = Field(
         description="Observability RuntimeConfig。",
     )
@@ -495,12 +503,87 @@ def _build_observability_trace_summary(settings: ObservabilitySettings) -> JsonM
     }
 
 
+def _build_llm_gateway_trace_summary(settings: LlmGatewaySettings) -> JsonMap:
+    """构建 LlmGateway trace-safe 配置摘要。
+
+    :param settings: LlmGateway RuntimeConfig。
+    :return: 不包含代理地址、令牌环境变量名或密钥的配置摘要。
+    """
+
+    routes = [
+        {
+            "provider_route_id": route.provider_route_id,
+            "adapter_type": route.adapter_type,
+            "provider_name": route.provider_name,
+            "model_alias": route.model_alias,
+            "include_stream_usage": route.include_stream_usage,
+            "max_concurrency": route.max_concurrency,
+            "capability": {
+                "max_context_size": route.capability.max_context_tokens,
+                "supports_streaming": route.capability.supports_streaming,
+                "supports_structured_output": (
+                    route.capability.supports_structured_output
+                ),
+                "supports_tools": route.capability.supports_tools,
+                "supports_vision": route.capability.supports_vision,
+            },
+        }
+        for route in settings.provider_routes
+    ]
+    profiles = [
+        {
+            "model_profile_id": profile.model_profile_id,
+            "profile_version": profile.profile_version,
+            "provider_route_id": profile.provider_route_id,
+            "required_capability": profile.required_capability.model_dump(mode="json"),
+            "timeout_policy": {
+                "connect_timeout_seconds": (
+                    profile.timeout_policy.connect_timeout_seconds
+                ),
+                "first_event_timeout_seconds": (
+                    profile.timeout_policy.first_token_timeout_seconds
+                ),
+                "read_timeout_seconds": profile.timeout_policy.read_timeout_seconds,
+                "total_timeout_seconds": (profile.timeout_policy.total_timeout_seconds),
+            },
+            "retry_policy": profile.retry_policy.model_dump(mode="json"),
+            "fallback_profile_ids": profile.fallback_profile_ids,
+            "fallback_on_error_codes": profile.fallback_on_error_codes,
+            "reserved_output_size": profile.reserved_output_tokens,
+            "max_concurrency": profile.max_concurrency,
+            "trace_policy": profile.trace_policy.model_dump(mode="json"),
+        }
+        for profile in settings.model_profiles
+    ]
+    return {
+        "enabled": settings.enabled,
+        "config_version": settings.config_version,
+        "max_total_attempts": settings.max_total_attempts,
+        "max_call_duration_seconds": settings.max_call_duration_seconds,
+        "global_max_concurrency": settings.global_max_concurrency,
+        "concurrency_acquire_timeout_seconds": (
+            settings.concurrency_acquire_timeout_seconds
+        ),
+        "budget_estimation": {
+            "chars_per_unit": settings.token_estimation.chars_per_token,
+            "message_overhead": (settings.token_estimation.message_overhead_tokens),
+            "tool_overhead": settings.token_estimation.tool_overhead_tokens,
+            "response_format_overhead": (
+                settings.token_estimation.response_format_overhead_tokens
+            ),
+        },
+        "provider_routes": routes,
+        "model_profiles": profiles,
+    }
+
+
 def _build_trace_safe_summary(
     *,
     runtime_config_settings: RuntimeConfigSettings,
     api_ingress_settings: ApiIngressSettings,
     checkpoint_store_settings: CheckpointStoreSettings,
     conversation_store_settings: ConversationStoreSettings,
+    llm_gateway_settings: LlmGatewaySettings,
     observability_settings: ObservabilitySettings,
 ) -> JsonMap:
     """构建完整 trace-safe 配置摘要。
@@ -509,6 +592,7 @@ def _build_trace_safe_summary(
     :param api_ingress_settings: API 接入组件配置。
     :param checkpoint_store_settings: CheckpointStore RuntimeConfig。
     :param conversation_store_settings: ConversationStore RuntimeConfig。
+    :param llm_gateway_settings: LlmGateway RuntimeConfig。
     :param observability_settings: Observability RuntimeConfig。
     :return: 可写入逻辑链的脱敏配置摘要。
     """
@@ -523,6 +607,7 @@ def _build_trace_safe_summary(
         "conversation_store": _build_conversation_store_trace_summary(
             conversation_store_settings
         ),
+        "llm_gateway": _build_llm_gateway_trace_summary(llm_gateway_settings),
         "observability": _build_observability_trace_summary(observability_settings),
     }
 
@@ -677,6 +762,7 @@ def _dump_namespace_for_lookup(
         | ApiIngressSettings
         | CheckpointStoreSettings
         | ConversationStoreSettings
+        | LlmGatewaySettings
         | ObservabilitySettings
     ),
 ) -> JsonMap:
@@ -834,6 +920,7 @@ def validate_runtime_config_candidate(
     api_ingress_settings: ApiIngressSettings,
     checkpoint_store_settings: CheckpointStoreSettings,
     conversation_store_settings: ConversationStoreSettings | None = None,
+    llm_gateway_settings: LlmGatewaySettings | None = None,
     observability_settings: ObservabilitySettings | None = None,
 ) -> None:
     """校验候选 RuntimeConfig 聚合配置。
@@ -842,6 +929,7 @@ def validate_runtime_config_candidate(
     :param api_ingress_settings: API 接入组件配置。
     :param checkpoint_store_settings: CheckpointStore RuntimeConfig。
     :param conversation_store_settings: 可选 ConversationStore RuntimeConfig；未传入时从默认配置源加载。
+    :param llm_gateway_settings: 可选 LlmGateway RuntimeConfig；未传入时从默认配置源加载。
     :param observability_settings: 可选 Observability RuntimeConfig；未传入时从默认配置源加载。
     :return: None。
     :raises RuntimeConfigError: 当候选配置违反安全锁定项、跨组件关系或 trace-safe 约束时抛出。
@@ -857,6 +945,11 @@ def validate_runtime_config_candidate(
         if conversation_store_settings is not None
         else load_conversation_store_settings()
     )
+    resolved_llm_gateway_settings = (
+        llm_gateway_settings
+        if llm_gateway_settings is not None
+        else load_llm_gateway_settings()
+    )
     _validate_runtime_config_safety_locks(runtime_config_settings)
     _validate_runtime_config_relations(
         api_ingress_settings=api_ingress_settings,
@@ -868,6 +961,7 @@ def validate_runtime_config_candidate(
         api_ingress_settings=api_ingress_settings,
         checkpoint_store_settings=checkpoint_store_settings,
         conversation_store_settings=resolved_conversation_store_settings,
+        llm_gateway_settings=resolved_llm_gateway_settings,
         observability_settings=resolved_observability_settings,
     )
     _validate_trace_safe_summary(summary)
@@ -879,6 +973,7 @@ def build_runtime_config_snapshot(
     api_ingress_settings: ApiIngressSettings,
     checkpoint_store_settings: CheckpointStoreSettings,
     conversation_store_settings: ConversationStoreSettings | None = None,
+    llm_gateway_settings: LlmGatewaySettings | None = None,
     observability_settings: ObservabilitySettings | None = None,
 ) -> RuntimeConfigSnapshot:
     """构建 RuntimeConfig 不可变快照。
@@ -887,6 +982,7 @@ def build_runtime_config_snapshot(
     :param api_ingress_settings: API 接入组件配置。
     :param checkpoint_store_settings: CheckpointStore RuntimeConfig。
     :param conversation_store_settings: 可选 ConversationStore RuntimeConfig；未传入时从默认配置源加载。
+    :param llm_gateway_settings: 可选 LlmGateway RuntimeConfig；未传入时从默认配置源加载。
     :param observability_settings: 可选 Observability RuntimeConfig；未传入时从默认配置源加载。
     :return: 已完成校验的 RuntimeConfig 快照。
     :raises RuntimeConfigError: 当配置校验失败或 trace-safe 摘要不安全时抛出。
@@ -902,11 +998,17 @@ def build_runtime_config_snapshot(
         if conversation_store_settings is not None
         else load_conversation_store_settings()
     )
+    resolved_llm_gateway_settings = (
+        llm_gateway_settings
+        if llm_gateway_settings is not None
+        else load_llm_gateway_settings()
+    )
     validate_runtime_config_candidate(
         runtime_config_settings=runtime_config_settings,
         api_ingress_settings=api_ingress_settings,
         checkpoint_store_settings=checkpoint_store_settings,
         conversation_store_settings=resolved_conversation_store_settings,
+        llm_gateway_settings=resolved_llm_gateway_settings,
         observability_settings=resolved_observability_settings,
     )
     trace_safe_summary = _build_trace_safe_summary(
@@ -914,6 +1016,7 @@ def build_runtime_config_snapshot(
         api_ingress_settings=api_ingress_settings,
         checkpoint_store_settings=checkpoint_store_settings,
         conversation_store_settings=resolved_conversation_store_settings,
+        llm_gateway_settings=resolved_llm_gateway_settings,
         observability_settings=resolved_observability_settings,
     )
     config_snapshot_id = _build_config_snapshot_id(trace_safe_summary)
@@ -932,6 +1035,7 @@ def build_runtime_config_snapshot(
         api_ingress=api_ingress_settings,
         checkpoint_store=checkpoint_store_settings,
         conversation_store=resolved_conversation_store_settings,
+        llm_gateway=resolved_llm_gateway_settings,
         observability=resolved_observability_settings,
         trace_safe_summary=summary_with_snapshot_id,
     )
@@ -981,6 +1085,7 @@ class RuntimeConfigProvider:
         | ApiIngressSettings
         | CheckpointStoreSettings
         | ConversationStoreSettings
+        | LlmGatewaySettings
         | ObservabilitySettings
     ):
         """按命名空间读取配置对象。
@@ -999,6 +1104,8 @@ class RuntimeConfigProvider:
             return snapshot.checkpoint_store
         if namespace is RuntimeConfigNamespace.CONVERSATION_STORE:
             return snapshot.conversation_store
+        if namespace is RuntimeConfigNamespace.LLM_GATEWAY:
+            return snapshot.llm_gateway
         if namespace is RuntimeConfigNamespace.OBSERVABILITY:
             return snapshot.observability
         raise RuntimeConfigError(
@@ -1104,6 +1211,7 @@ def create_runtime_config_provider(
     api_ingress_settings: ApiIngressSettings | None = None,
     checkpoint_store_settings: CheckpointStoreSettings | None = None,
     conversation_store_settings: ConversationStoreSettings | None = None,
+    llm_gateway_settings: LlmGatewaySettings | None = None,
     observability_settings: ObservabilitySettings | None = None,
 ) -> RuntimeConfigProvider:
     """创建应用内 RuntimeConfig provider。
@@ -1112,6 +1220,7 @@ def create_runtime_config_provider(
     :param api_ingress_settings: 可选 API 接入组件配置；未传入时从默认配置源加载。
     :param checkpoint_store_settings: 可选 CheckpointStore RuntimeConfig；未传入时从默认配置源加载。
     :param conversation_store_settings: 可选 ConversationStore RuntimeConfig；未传入时从默认配置源加载。
+    :param llm_gateway_settings: 可选 LlmGateway RuntimeConfig；未传入时从默认配置源加载。
     :param observability_settings: 可选 Observability RuntimeConfig；未传入时从默认配置源加载。
     :return: 持有当前有效配置快照的 RuntimeConfig provider。
     :raises RuntimeConfigError: 当配置校验失败或 trace-safe 摘要不安全时抛出。
@@ -1142,11 +1251,17 @@ def create_runtime_config_provider(
         if observability_settings is not None
         else load_observability_settings()
     )
+    resolved_llm_gateway_settings = (
+        llm_gateway_settings
+        if llm_gateway_settings is not None
+        else load_llm_gateway_settings()
+    )
     snapshot = build_runtime_config_snapshot(
         runtime_config_settings=resolved_runtime_config_settings,
         api_ingress_settings=resolved_api_ingress_settings,
         checkpoint_store_settings=resolved_checkpoint_store_settings,
         conversation_store_settings=resolved_conversation_store_settings,
+        llm_gateway_settings=resolved_llm_gateway_settings,
         observability_settings=resolved_observability_settings,
     )
     return RuntimeConfigProvider(snapshot)

@@ -72,6 +72,16 @@ async def ready(
         conversation_store_runtime_config_ready=(
             state.conversation_store_settings is not None
         ),
+        llm_gateway_runtime_config_ready=(state.llm_gateway_settings is not None),
+        llm_gateway_required=(
+            state.llm_gateway_settings is not None
+            and state.llm_gateway_settings.enabled
+        ),
+        llm_gateway_ready=(
+            state.llm_gateway is not None
+            and state.llm_gateway_ready
+            and state.llm_gateway.is_ready()
+        ),
         pet_session_policy_ready=(
             state.pet_session_policy is not None
             and state.pet_session_policy_ready
