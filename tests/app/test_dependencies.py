@@ -19,13 +19,17 @@ from veterinary_agent import (
     CheckpointOperation,
     CheckpointProviderLifecycle,
     CheckpointStoreError,
+    ConversationStoreSettings,
     LangGraphCheckpointer,
     LangGraphRunnableConfig,
+    TodoConversationStore,
     VeterinaryAgentAppState,
     build_langgraph_thread_config,
     create_runtime_config_provider,
     get_checkpoint_provider,
     get_checkpoint_store_settings,
+    get_conversation_store,
+    get_conversation_store_settings,
     get_langgraph_checkpointer,
     get_runtime_config_provider,
     get_runtime_config_snapshot,
@@ -110,9 +114,11 @@ def _build_app_state(
 
     settings = ApiIngressSettings()
     checkpoint_store_settings = CheckpointStoreSettings()
+    conversation_store_settings = ConversationStoreSettings()
     runtime_config_provider = create_runtime_config_provider(
         api_ingress_settings=settings,
         checkpoint_store_settings=checkpoint_store_settings,
+        conversation_store_settings=conversation_store_settings,
     )
     runtime_config_snapshot = runtime_config_provider.current_snapshot()
     return VeterinaryAgentAppState(
@@ -129,6 +135,10 @@ def _build_app_state(
         checkpoint_provider=checkpoint_provider,
         checkpoint_provider_ready=checkpoint_provider_ready,
         checkpoint_provider_error=None,
+        conversation_store_settings=conversation_store_settings,
+        conversation_store=TodoConversationStore(),
+        conversation_store_ready=True,
+        conversation_store_error=None,
     )
 
 
@@ -199,6 +209,39 @@ def test_get_checkpoint_store_settings_returns_runtime_config() -> None:
     request = _build_request(app_state)
 
     assert get_checkpoint_store_settings(request) is app_state.checkpoint_store_settings
+
+
+def test_get_conversation_store_settings_returns_runtime_config() -> None:
+    """验证依赖函数可从 app state 读取 ConversationStore RuntimeConfig。
+
+    :return: None。
+    """
+
+    app_state = _build_app_state(
+        checkpoint_provider=_DependencyCheckpointProvider(),
+        checkpoint_provider_ready=True,
+    )
+    request = _build_request(app_state)
+
+    assert (
+        get_conversation_store_settings(request)
+        is app_state.conversation_store_settings
+    )
+
+
+def test_get_conversation_store_returns_store() -> None:
+    """验证依赖函数可从 app state 读取 ConversationStore。
+
+    :return: None。
+    """
+
+    app_state = _build_app_state(
+        checkpoint_provider=_DependencyCheckpointProvider(),
+        checkpoint_provider_ready=True,
+    )
+    request = _build_request(app_state)
+
+    assert get_conversation_store(request) is app_state.conversation_store
 
 
 def test_get_runtime_config_provider_returns_provider() -> None:

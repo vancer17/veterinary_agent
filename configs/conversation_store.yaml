@@ -1,0 +1,20 @@
+# 文件: configs/conversation_store.yaml
+# 作用: 提供 ConversationStore 组件默认 RuntimeConfig，供 Pydantic Settings 原生 YAML 源加载。
+# 边界: 仅包含 ConversationStore 当前已接入的运行参数，不包含 ApiIngress、GraphRuntime 或业务策略配置。
+
+enabled: true
+
+# 单次 ConversationStore 对外操作超时：用于数据库 session/message/segment 读写调用的外层预算。
+operation_timeout_seconds: 10.0
+
+# 消息写入配置：ConversationStore 只保存对话事实和轻量 metadata，不保存逻辑链或长期记忆。
+message:
+  max_message_bytes: 65536
+  max_segment_bytes: 16384
+  max_metadata_bytes: 16384
+  max_attachment_refs_per_message: 20
+
+# 消息读取配置：禁止无界读取全量历史。
+history:
+  max_list_limit: 100
+  max_recent_messages: 50

@@ -69,6 +69,9 @@ async def ready(
         checkpoint_store_runtime_config_ready=(
             state.checkpoint_store_settings is not None
         ),
+        conversation_store_runtime_config_ready=(
+            state.conversation_store_settings is not None
+        ),
         observability_ready=(
             state.observability_provider is not None
             and state.observability_ready

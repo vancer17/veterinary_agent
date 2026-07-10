@@ -27,6 +27,10 @@ from veterinary_agent.config.checkpoint_store import (
     CheckpointStoreSettings,
     load_checkpoint_store_settings,
 )
+from veterinary_agent.config.conversation_store import (
+    ConversationStoreSettings,
+    load_conversation_store_settings,
+)
 from veterinary_agent.config.observability import (
     ObservabilitySettings,
     load_observability_settings,
@@ -90,6 +94,7 @@ class RuntimeConfigNamespace(StrEnum):
     RUNTIME_CONFIG = "runtime_config"
     API_INGRESS = "api_ingress"
     CHECKPOINT_STORE = "checkpoint_store"
+    CONVERSATION_STORE = "conversation_store"
     OBSERVABILITY = "observability"
 
 
@@ -384,6 +389,9 @@ class RuntimeConfigSnapshot(_RuntimeConfigModel):
     checkpoint_store: CheckpointStoreSettings = Field(
         description="CheckpointStore RuntimeConfig。",
     )
+    conversation_store: ConversationStoreSettings = Field(
+        description="ConversationStore RuntimeConfig。",
+    )
     observability: ObservabilitySettings = Field(
         description="Observability RuntimeConfig。",
     )
@@ -447,6 +455,23 @@ def _build_checkpoint_store_trace_summary(
     }
 
 
+def _build_conversation_store_trace_summary(
+    settings: ConversationStoreSettings,
+) -> JsonMap:
+    """构建 ConversationStore trace-safe 摘要。
+
+    :param settings: ConversationStore RuntimeConfig。
+    :return: ConversationStore trace-safe 摘要。
+    """
+
+    return {
+        "enabled": settings.enabled,
+        "operation_timeout_seconds": settings.operation_timeout_seconds,
+        "message": settings.message.model_dump(mode="json"),
+        "history": settings.history.model_dump(mode="json"),
+    }
+
+
 def _build_observability_trace_summary(settings: ObservabilitySettings) -> JsonMap:
     """构建 Observability trace-safe 摘要。
 
@@ -475,6 +500,7 @@ def _build_trace_safe_summary(
     runtime_config_settings: RuntimeConfigSettings,
     api_ingress_settings: ApiIngressSettings,
     checkpoint_store_settings: CheckpointStoreSettings,
+    conversation_store_settings: ConversationStoreSettings,
     observability_settings: ObservabilitySettings,
 ) -> JsonMap:
     """构建完整 trace-safe 配置摘要。
@@ -482,6 +508,7 @@ def _build_trace_safe_summary(
     :param runtime_config_settings: RuntimeConfig 组件自身配置。
     :param api_ingress_settings: API 接入组件配置。
     :param checkpoint_store_settings: CheckpointStore RuntimeConfig。
+    :param conversation_store_settings: ConversationStore RuntimeConfig。
     :param observability_settings: Observability RuntimeConfig。
     :return: 可写入逻辑链的脱敏配置摘要。
     """
@@ -492,6 +519,9 @@ def _build_trace_safe_summary(
         "api_ingress": _build_api_ingress_trace_summary(api_ingress_settings),
         "checkpoint_store": _build_checkpoint_store_trace_summary(
             checkpoint_store_settings
+        ),
+        "conversation_store": _build_conversation_store_trace_summary(
+            conversation_store_settings
         ),
         "observability": _build_observability_trace_summary(observability_settings),
     }
@@ -646,6 +676,7 @@ def _dump_namespace_for_lookup(
         RuntimeConfigSettings
         | ApiIngressSettings
         | CheckpointStoreSettings
+        | ConversationStoreSettings
         | ObservabilitySettings
     ),
 ) -> JsonMap:
@@ -729,11 +760,13 @@ def _validate_runtime_config_relations(
     *,
     api_ingress_settings: ApiIngressSettings,
     checkpoint_store_settings: CheckpointStoreSettings,
+    conversation_store_settings: ConversationStoreSettings,
 ) -> None:
     """校验跨组件配置关系。
 
     :param api_ingress_settings: API 接入组件配置。
     :param checkpoint_store_settings: CheckpointStore RuntimeConfig。
+    :param conversation_store_settings: ConversationStore RuntimeConfig。
     :return: None。
     :raises RuntimeConfigError: 当跨组件配置关系非法时抛出。
     """
@@ -753,6 +786,24 @@ def _validate_runtime_config_relations(
                 ),
                 "run_lock.max_ttl_seconds": (
                     checkpoint_store_settings.run_lock.max_ttl_seconds
+                ),
+            },
+        )
+    if (
+        conversation_store_settings.history.max_recent_messages
+        > conversation_store_settings.history.max_list_limit
+    ):
+        raise RuntimeConfigError(
+            code=RuntimeConfigErrorCode.CONFIG_RELATION_INVALID,
+            operation=RuntimeConfigOperation.VALIDATE_CANDIDATE_CONFIG,
+            message="ConversationStore 最近消息上限不得大于历史分页上限",
+            retryable=False,
+            conflict_with={
+                "conversation_store.history.max_recent_messages": (
+                    conversation_store_settings.history.max_recent_messages
+                ),
+                "conversation_store.history.max_list_limit": (
+                    conversation_store_settings.history.max_list_limit
                 ),
             },
         )
@@ -782,6 +833,7 @@ def validate_runtime_config_candidate(
     runtime_config_settings: RuntimeConfigSettings,
     api_ingress_settings: ApiIngressSettings,
     checkpoint_store_settings: CheckpointStoreSettings,
+    conversation_store_settings: ConversationStoreSettings | None = None,
     observability_settings: ObservabilitySettings | None = None,
 ) -> None:
     """校验候选 RuntimeConfig 聚合配置。
@@ -789,6 +841,7 @@ def validate_runtime_config_candidate(
     :param runtime_config_settings: RuntimeConfig 组件自身配置。
     :param api_ingress_settings: API 接入组件配置。
     :param checkpoint_store_settings: CheckpointStore RuntimeConfig。
+    :param conversation_store_settings: 可选 ConversationStore RuntimeConfig；未传入时从默认配置源加载。
     :param observability_settings: 可选 Observability RuntimeConfig；未传入时从默认配置源加载。
     :return: None。
     :raises RuntimeConfigError: 当候选配置违反安全锁定项、跨组件关系或 trace-safe 约束时抛出。
@@ -799,15 +852,22 @@ def validate_runtime_config_candidate(
         if observability_settings is not None
         else load_observability_settings()
     )
+    resolved_conversation_store_settings = (
+        conversation_store_settings
+        if conversation_store_settings is not None
+        else load_conversation_store_settings()
+    )
     _validate_runtime_config_safety_locks(runtime_config_settings)
     _validate_runtime_config_relations(
         api_ingress_settings=api_ingress_settings,
         checkpoint_store_settings=checkpoint_store_settings,
+        conversation_store_settings=resolved_conversation_store_settings,
     )
     summary = _build_trace_safe_summary(
         runtime_config_settings=runtime_config_settings,
         api_ingress_settings=api_ingress_settings,
         checkpoint_store_settings=checkpoint_store_settings,
+        conversation_store_settings=resolved_conversation_store_settings,
         observability_settings=resolved_observability_settings,
     )
     _validate_trace_safe_summary(summary)
@@ -818,6 +878,7 @@ def build_runtime_config_snapshot(
     runtime_config_settings: RuntimeConfigSettings,
     api_ingress_settings: ApiIngressSettings,
     checkpoint_store_settings: CheckpointStoreSettings,
+    conversation_store_settings: ConversationStoreSettings | None = None,
     observability_settings: ObservabilitySettings | None = None,
 ) -> RuntimeConfigSnapshot:
     """构建 RuntimeConfig 不可变快照。
@@ -825,6 +886,7 @@ def build_runtime_config_snapshot(
     :param runtime_config_settings: RuntimeConfig 组件自身配置。
     :param api_ingress_settings: API 接入组件配置。
     :param checkpoint_store_settings: CheckpointStore RuntimeConfig。
+    :param conversation_store_settings: 可选 ConversationStore RuntimeConfig；未传入时从默认配置源加载。
     :param observability_settings: 可选 Observability RuntimeConfig；未传入时从默认配置源加载。
     :return: 已完成校验的 RuntimeConfig 快照。
     :raises RuntimeConfigError: 当配置校验失败或 trace-safe 摘要不安全时抛出。
@@ -835,16 +897,23 @@ def build_runtime_config_snapshot(
         if observability_settings is not None
         else load_observability_settings()
     )
+    resolved_conversation_store_settings = (
+        conversation_store_settings
+        if conversation_store_settings is not None
+        else load_conversation_store_settings()
+    )
     validate_runtime_config_candidate(
         runtime_config_settings=runtime_config_settings,
         api_ingress_settings=api_ingress_settings,
         checkpoint_store_settings=checkpoint_store_settings,
+        conversation_store_settings=resolved_conversation_store_settings,
         observability_settings=resolved_observability_settings,
     )
     trace_safe_summary = _build_trace_safe_summary(
         runtime_config_settings=runtime_config_settings,
         api_ingress_settings=api_ingress_settings,
         checkpoint_store_settings=checkpoint_store_settings,
+        conversation_store_settings=resolved_conversation_store_settings,
         observability_settings=resolved_observability_settings,
     )
     config_snapshot_id = _build_config_snapshot_id(trace_safe_summary)
@@ -862,6 +931,7 @@ def build_runtime_config_snapshot(
         runtime_config=runtime_config_settings,
         api_ingress=api_ingress_settings,
         checkpoint_store=checkpoint_store_settings,
+        conversation_store=resolved_conversation_store_settings,
         observability=resolved_observability_settings,
         trace_safe_summary=summary_with_snapshot_id,
     )
@@ -910,6 +980,7 @@ class RuntimeConfigProvider:
         RuntimeConfigSettings
         | ApiIngressSettings
         | CheckpointStoreSettings
+        | ConversationStoreSettings
         | ObservabilitySettings
     ):
         """按命名空间读取配置对象。
@@ -926,6 +997,8 @@ class RuntimeConfigProvider:
             return snapshot.api_ingress
         if namespace is RuntimeConfigNamespace.CHECKPOINT_STORE:
             return snapshot.checkpoint_store
+        if namespace is RuntimeConfigNamespace.CONVERSATION_STORE:
+            return snapshot.conversation_store
         if namespace is RuntimeConfigNamespace.OBSERVABILITY:
             return snapshot.observability
         raise RuntimeConfigError(
@@ -1030,6 +1103,7 @@ def create_runtime_config_provider(
     runtime_config_settings: RuntimeConfigSettings | None = None,
     api_ingress_settings: ApiIngressSettings | None = None,
     checkpoint_store_settings: CheckpointStoreSettings | None = None,
+    conversation_store_settings: ConversationStoreSettings | None = None,
     observability_settings: ObservabilitySettings | None = None,
 ) -> RuntimeConfigProvider:
     """创建应用内 RuntimeConfig provider。
@@ -1037,6 +1111,7 @@ def create_runtime_config_provider(
     :param runtime_config_settings: 可选 RuntimeConfig 组件自身配置；未传入时从默认配置源加载。
     :param api_ingress_settings: 可选 API 接入组件配置；未传入时从默认配置源加载。
     :param checkpoint_store_settings: 可选 CheckpointStore RuntimeConfig；未传入时从默认配置源加载。
+    :param conversation_store_settings: 可选 ConversationStore RuntimeConfig；未传入时从默认配置源加载。
     :param observability_settings: 可选 Observability RuntimeConfig；未传入时从默认配置源加载。
     :return: 持有当前有效配置快照的 RuntimeConfig provider。
     :raises RuntimeConfigError: 当配置校验失败或 trace-safe 摘要不安全时抛出。
@@ -1057,6 +1132,11 @@ def create_runtime_config_provider(
         if checkpoint_store_settings is not None
         else load_checkpoint_store_settings()
     )
+    resolved_conversation_store_settings = (
+        conversation_store_settings
+        if conversation_store_settings is not None
+        else load_conversation_store_settings()
+    )
     resolved_observability_settings = (
         observability_settings
         if observability_settings is not None
@@ -1066,6 +1146,7 @@ def create_runtime_config_provider(
         runtime_config_settings=resolved_runtime_config_settings,
         api_ingress_settings=resolved_api_ingress_settings,
         checkpoint_store_settings=resolved_checkpoint_store_settings,
+        conversation_store_settings=resolved_conversation_store_settings,
         observability_settings=resolved_observability_settings,
     )
     return RuntimeConfigProvider(snapshot)

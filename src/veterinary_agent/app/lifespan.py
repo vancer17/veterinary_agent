@@ -29,16 +29,23 @@ from veterinary_agent.checkpoint_store import (
 from veterinary_agent.config import (
     ApiIngressSettings,
     CheckpointStoreSettings,
+    ConversationStoreSettings,
     ObservabilitySettings,
     RuntimeConfigSettings,
     create_runtime_config_provider,
     load_api_ingress_settings,
     load_checkpoint_store_settings,
+    load_conversation_store_settings,
+)
+from veterinary_agent.conversation_store import (
+    ConversationStore,
+    TodoConversationStore,
 )
 from veterinary_agent.observability import create_observability_provider
 
 LifespanHandler = Callable[[FastAPI], AbstractAsyncContextManager[None]]
 CheckpointProviderFactory = Callable[[], CheckpointProviderLifecycle]
+ConversationStoreFactory = Callable[[ConversationStoreSettings], ConversationStore]
 
 
 def create_langgraph_postgres_saver_provider() -> CheckpointProviderLifecycle:
@@ -51,6 +58,19 @@ def create_langgraph_postgres_saver_provider() -> CheckpointProviderLifecycle:
     return LangGraphPostgresSaverProvider(
         settings=load_langgraph_postgres_saver_settings()
     )
+
+
+def create_todo_conversation_store(
+    settings: ConversationStoreSettings,
+) -> ConversationStore:
+    """创建默认 ConversationStore TODO 空壳。
+
+    :param settings: ConversationStore RuntimeConfig；当前 TODO 空壳不读取具体字段。
+    :return: ConversationStore TODO 空壳。
+    """
+
+    del settings
+    return TodoConversationStore()
 
 
 def _build_checkpoint_provider_start_error(exc: Exception) -> CheckpointStoreError:
@@ -191,17 +211,21 @@ async def _stop_checkpoint_provider(app_state: VeterinaryAgentAppState) -> None:
 def create_lifespan(
     settings: ApiIngressSettings | None = None,
     checkpoint_store_settings: CheckpointStoreSettings | None = None,
+    conversation_store_settings: ConversationStoreSettings | None = None,
     runtime_config_settings: RuntimeConfigSettings | None = None,
     observability_settings: ObservabilitySettings | None = None,
     checkpoint_provider_factory: CheckpointProviderFactory | None = None,
+    conversation_store_factory: ConversationStoreFactory | None = None,
 ) -> LifespanHandler:
     """创建 FastAPI lifespan 处理器。
 
     :param settings: 可选的 API 接入组件配置；未传入时从默认配置源加载。
     :param checkpoint_store_settings: 可选 CheckpointStore RuntimeConfig；未传入时从默认配置源加载。
+    :param conversation_store_settings: 可选 ConversationStore RuntimeConfig；未传入时从默认配置源加载。
     :param runtime_config_settings: 可选 RuntimeConfig 组件自身配置；未传入时从默认配置源加载。
     :param observability_settings: 可选 Observability RuntimeConfig；未传入时从默认配置源加载。
     :param checkpoint_provider_factory: 可选 checkpoint provider 工厂；未传入时创建真实 LangGraph PostgresSaver provider。
+    :param conversation_store_factory: 可选 ConversationStore 工厂；未传入时创建 TODO 空壳。
     :return: 可传入 FastAPI 的 lifespan 处理器。
     """
 
@@ -223,14 +247,30 @@ def create_lifespan(
                 if checkpoint_store_settings is not None
                 else load_checkpoint_store_settings()
             ),
+            conversation_store_settings=(
+                conversation_store_settings
+                if conversation_store_settings is not None
+                else load_conversation_store_settings()
+            ),
             observability_settings=observability_settings,
         )
         runtime_config_snapshot = runtime_config_provider.current_snapshot()
         resolved_settings = runtime_config_snapshot.api_ingress
         resolved_checkpoint_store_settings = runtime_config_snapshot.checkpoint_store
+        resolved_conversation_store_settings = (
+            runtime_config_snapshot.conversation_store
+        )
         resolved_observability_settings = runtime_config_snapshot.observability
         observability_provider = create_observability_provider(
             settings=resolved_observability_settings,
+        )
+        resolved_conversation_store_factory = (
+            conversation_store_factory
+            if conversation_store_factory is not None
+            else create_todo_conversation_store
+        )
+        conversation_store = resolved_conversation_store_factory(
+            resolved_conversation_store_settings
         )
         resolved_checkpoint_provider_factory = (
             checkpoint_provider_factory
@@ -251,6 +291,10 @@ def create_lifespan(
             checkpoint_provider=None,
             checkpoint_provider_ready=False,
             checkpoint_provider_error=None,
+            conversation_store_settings=resolved_conversation_store_settings,
+            conversation_store=conversation_store,
+            conversation_store_ready=resolved_conversation_store_settings.enabled,
+            conversation_store_error=None,
             observability_provider=observability_provider,
             observability_ready=observability_provider.is_ready(),
             observability_error=None,
@@ -271,7 +315,9 @@ def create_lifespan(
 
 __all__: tuple[str, ...] = (
     "CheckpointProviderFactory",
+    "ConversationStoreFactory",
     "LifespanHandler",
     "create_langgraph_postgres_saver_provider",
+    "create_todo_conversation_store",
     "create_lifespan",
 )

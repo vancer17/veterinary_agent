@@ -21,11 +21,18 @@ from veterinary_agent.checkpoint_store import (
 from veterinary_agent.config import (
     ApiIngressSettings,
     CheckpointStoreSettings,
+    ConversationStoreSettings,
     RuntimeConfigError,
     RuntimeConfigErrorCode,
     RuntimeConfigOperation,
     RuntimeConfigProvider,
     RuntimeConfigSnapshot,
+)
+from veterinary_agent.conversation_store import (
+    ConversationErrorCode,
+    ConversationOperation,
+    ConversationStore,
+    ConversationStoreError,
 )
 from veterinary_agent.observability import (
     ObservabilityError,
@@ -157,6 +164,54 @@ def get_checkpoint_store_settings(request: Request) -> CheckpointStoreSettings:
     return settings
 
 
+def get_conversation_store_settings(request: Request) -> ConversationStoreSettings:
+    """获取 ConversationStore RuntimeConfig。
+
+    :param request: 当前 HTTP 请求对象。
+    :return: 已加载并通过校验的 ConversationStore RuntimeConfig。
+    :raises RuntimeError: 当 ConversationStore RuntimeConfig 尚未初始化时抛出。
+    """
+
+    app_state = get_app_state(request)
+    runtime_config_snapshot = app_state.runtime_config_snapshot
+    if runtime_config_snapshot is not None:
+        return runtime_config_snapshot.conversation_store
+    settings = app_state.conversation_store_settings
+    if settings is None:
+        raise RuntimeError("ConversationStore RuntimeConfig 尚未初始化")
+    return settings
+
+
+def get_conversation_store(request: Request) -> ConversationStore:
+    """获取已由 FastAPI lifespan 初始化的 ConversationStore。
+
+    :param request: 当前 HTTP 请求对象。
+    :return: 已装配的 ConversationStore。
+    :raises RuntimeError: 当应用状态尚未完成初始化时抛出。
+    :raises ConversationStoreError: 当 ConversationStore 未装配或未就绪时抛出。
+    """
+
+    app_state = get_app_state(request)
+    conversation_store = app_state.conversation_store
+    if conversation_store is None:
+        raise ConversationStoreError(
+            code=ConversationErrorCode.STORE_UNAVAILABLE,
+            operation=ConversationOperation.GET_SESSION,
+            message="ConversationStore 尚未初始化",
+            retryable=True,
+            conflict_with={"reason": "store_missing"},
+        )
+    if not app_state.conversation_store_ready:
+        raise ConversationStoreError(
+            code=ConversationErrorCode.STORE_UNAVAILABLE,
+            operation=ConversationOperation.GET_SESSION,
+            message="ConversationStore 尚未就绪",
+            retryable=True,
+            conflict_with={"reason": "store_not_ready"},
+        )
+    return conversation_store
+
+
 def _raise_checkpoint_provider_unavailable(
     *,
     reason: str,
@@ -215,6 +270,8 @@ __all__: tuple[str, ...] = (
     "get_app_state",
     "get_checkpoint_store_settings",
     "get_checkpoint_provider",
+    "get_conversation_store",
+    "get_conversation_store_settings",
     "get_langgraph_checkpointer",
     "get_observability_provider",
     "get_runtime_config_provider",

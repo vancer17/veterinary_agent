@@ -19,7 +19,12 @@ from veterinary_agent.checkpoint_store import (
 )
 from veterinary_agent.config import ApiIngressSettings
 from veterinary_agent.config import CheckpointStoreSettings
+from veterinary_agent.config import ConversationStoreSettings
 from veterinary_agent.config import RuntimeConfigProvider, RuntimeConfigSnapshot
+from veterinary_agent.conversation_store import (
+    ConversationStore,
+    ConversationStoreErrorDto,
+)
 from veterinary_agent.observability import ObservabilityErrorDto, ObservabilityProvider
 
 
@@ -89,6 +94,10 @@ class VeterinaryAgentAppState:
     checkpoint_provider: CheckpointProviderLifecycle | None
     checkpoint_provider_ready: bool
     checkpoint_provider_error: CheckpointStoreErrorDto | None
+    conversation_store_settings: ConversationStoreSettings | None
+    conversation_store: ConversationStore | None
+    conversation_store_ready: bool
+    conversation_store_error: ConversationStoreErrorDto | None
     observability_provider: ObservabilityProvider | None = None
     observability_ready: bool = False
     observability_error: ObservabilityErrorDto | None = None

@@ -7,6 +7,8 @@
 from veterinary_agent.app.dependencies import (
     get_checkpoint_provider,
     get_checkpoint_store_settings,
+    get_conversation_store,
+    get_conversation_store_settings,
     get_langgraph_checkpointer,
     get_observability_provider,
     get_runtime_config_provider,
@@ -15,7 +17,9 @@ from veterinary_agent.app.dependencies import (
 from veterinary_agent.app.factory import create_app
 from veterinary_agent.app.lifespan import (
     CheckpointProviderFactory,
+    ConversationStoreFactory,
     create_langgraph_postgres_saver_provider,
+    create_todo_conversation_store,
 )
 from veterinary_agent.app.state import (
     CheckpointProviderLifecycle,
@@ -25,11 +29,15 @@ from veterinary_agent.app.state import (
 __all__: tuple[str, ...] = (
     "CheckpointProviderFactory",
     "CheckpointProviderLifecycle",
+    "ConversationStoreFactory",
     "VeterinaryAgentAppState",
     "create_app",
     "create_langgraph_postgres_saver_provider",
+    "create_todo_conversation_store",
     "get_checkpoint_provider",
     "get_checkpoint_store_settings",
+    "get_conversation_store",
+    "get_conversation_store_settings",
     "get_langgraph_checkpointer",
     "get_observability_provider",
     "get_runtime_config_provider",
