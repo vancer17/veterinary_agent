@@ -14,6 +14,7 @@ from veterinary_agent.app.lifespan import (
     AgentLogicTraceStoreFactory,
     CheckpointProviderFactory,
     ConversationStoreFactory,
+    LlmGatewayFactory,
     create_lifespan,
 )
 from veterinary_agent.app.middleware import register_middlewares
@@ -22,6 +23,7 @@ from veterinary_agent.config import (
     ApiIngressSettings,
     CheckpointStoreSettings,
     ConversationStoreSettings,
+    LlmGatewaySettings,
     ObservabilitySettings,
     RuntimeConfigSettings,
     load_observability_settings,
@@ -32,10 +34,12 @@ def create_app(
     settings: ApiIngressSettings | None = None,
     checkpoint_store_settings: CheckpointStoreSettings | None = None,
     conversation_store_settings: ConversationStoreSettings | None = None,
+    llm_gateway_settings: LlmGatewaySettings | None = None,
     runtime_config_settings: RuntimeConfigSettings | None = None,
     observability_settings: ObservabilitySettings | None = None,
     checkpoint_provider_factory: CheckpointProviderFactory | None = None,
     conversation_store_factory: ConversationStoreFactory | None = None,
+    llm_gateway_factory: LlmGatewayFactory | None = None,
     graph_runtime_factory: AgentGraphRuntimeFactory | None = None,
     logic_trace_store_factory: AgentLogicTraceStoreFactory | None = None,
     agent_application_service_factory: AgentApplicationServiceFactory | None = None,
@@ -45,10 +49,12 @@ def create_app(
     :param settings: 可选的 API 接入组件配置；未传入时由生命周期函数加载默认配置。
     :param checkpoint_store_settings: 可选 CheckpointStore RuntimeConfig；未传入时由生命周期函数加载默认配置。
     :param conversation_store_settings: 可选 ConversationStore RuntimeConfig；未传入时由生命周期函数加载默认配置。
+    :param llm_gateway_settings: 可选 LlmGateway RuntimeConfig；未传入时由生命周期函数加载默认配置。
     :param runtime_config_settings: 可选 RuntimeConfig 组件自身配置；未传入时由生命周期函数加载默认配置。
     :param observability_settings: 可选 Observability RuntimeConfig；未传入时由生命周期函数加载默认配置。
     :param checkpoint_provider_factory: 可选 checkpoint provider 工厂；测试可注入 TODO 空壳避免连接真实数据库。
     :param conversation_store_factory: 可选 ConversationStore 工厂；测试或业务装配可注入真实实现。
+    :param llm_gateway_factory: 可选 LlmGateway 工厂；测试可注入 fake 实现。
     :param graph_runtime_factory: 可选 GraphRuntime 工厂；测试或后续业务装配可注入真实实现。
     :param logic_trace_store_factory: 可选 LogicTraceStore 工厂；测试或后续业务装配可注入真实实现。
     :param agent_application_service_factory: 可选 AgentApplicationService 工厂；未传入时使用默认胶水层实现。
@@ -68,10 +74,12 @@ def create_app(
             settings=settings,
             checkpoint_store_settings=checkpoint_store_settings,
             conversation_store_settings=conversation_store_settings,
+            llm_gateway_settings=llm_gateway_settings,
             runtime_config_settings=runtime_config_settings,
             observability_settings=resolved_observability_settings,
             checkpoint_provider_factory=checkpoint_provider_factory,
             conversation_store_factory=conversation_store_factory,
+            llm_gateway_factory=llm_gateway_factory,
             graph_runtime_factory=graph_runtime_factory,
             logic_trace_store_factory=logic_trace_store_factory,
             agent_application_service_factory=agent_application_service_factory,

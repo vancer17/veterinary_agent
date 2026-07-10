@@ -186,6 +186,9 @@ def check_api_ingress_readiness(
     runtime_config_ready: bool = True,
     checkpoint_store_runtime_config_ready: bool = True,
     conversation_store_runtime_config_ready: bool = True,
+    llm_gateway_runtime_config_ready: bool = True,
+    llm_gateway_required: bool = False,
+    llm_gateway_ready: bool = True,
     pet_session_policy_ready: bool = True,
     agent_application_service_ready: bool = False,
     observability_ready: bool = True,
@@ -197,6 +200,9 @@ def check_api_ingress_readiness(
     :param runtime_config_ready: RuntimeConfig provider 与当前配置快照是否已装配。
     :param checkpoint_store_runtime_config_ready: CheckpointStore RuntimeConfig 是否已装配。
     :param conversation_store_runtime_config_ready: ConversationStore RuntimeConfig 是否已装配。
+    :param llm_gateway_runtime_config_ready: LlmGateway RuntimeConfig 是否已装配。
+    :param llm_gateway_required: 当前部署是否要求 LlmGateway 具备真实模型调用能力。
+    :param llm_gateway_ready: LlmGateway 是否已装配且具备执行条件。
     :param pet_session_policy_ready: PetSessionPolicy 是否已装配且具备执行条件。
     :param agent_application_service_ready: AgentApplicationService 是否已装配且具备执行条件。
     :param observability_ready: Observability provider 是否已装配且就绪。
@@ -229,6 +235,20 @@ def check_api_ingress_readiness(
                     "missing",
                 )
             )
+        if not llm_gateway_runtime_config_ready:
+            details.append(
+                _build_detail(
+                    "llm_gateway.runtime_config",
+                    "missing",
+                )
+            )
+    if llm_gateway_required and not llm_gateway_ready:
+        details.append(
+            _build_detail(
+                "llm_gateway",
+                "unavailable",
+            )
+        )
     if not pet_session_policy_ready:
         details.append(
             _build_detail(

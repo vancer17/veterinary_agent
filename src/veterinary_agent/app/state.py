@@ -25,12 +25,14 @@ from veterinary_agent.checkpoint_store import (
 from veterinary_agent.config import ApiIngressSettings
 from veterinary_agent.config import CheckpointStoreSettings
 from veterinary_agent.config import ConversationStoreSettings
+from veterinary_agent.config import LlmGatewaySettings
 from veterinary_agent.config import RuntimeConfigProvider, RuntimeConfigSnapshot
 from veterinary_agent.conversation_store import (
     ConversationStore,
     ConversationStoreErrorDto,
 )
 from veterinary_agent.observability import ObservabilityErrorDto, ObservabilityProvider
+from veterinary_agent.llm_gateway import LlmGateway, LlmErrorDto
 from veterinary_agent.pet_session_policy import PetSessionPolicy
 
 
@@ -106,6 +108,10 @@ class VeterinaryAgentAppState:
     conversation_store_error: ConversationStoreErrorDto | None
     pet_session_policy: PetSessionPolicy | None
     pet_session_policy_ready: bool
+    llm_gateway_settings: LlmGatewaySettings | None = None
+    llm_gateway: LlmGateway | None = None
+    llm_gateway_ready: bool = False
+    llm_gateway_error: LlmErrorDto | None = None
     graph_runtime: AgentGraphRuntime | None = None
     graph_runtime_ready: bool = False
     logic_trace_store: AgentLogicTraceStore | None = None

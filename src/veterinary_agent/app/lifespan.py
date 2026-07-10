@@ -38,6 +38,7 @@ from veterinary_agent.config import (
     ApiIngressSettings,
     CheckpointStoreSettings,
     ConversationStoreSettings,
+    LlmGatewaySettings,
     ObservabilitySettings,
     RuntimeConfigProvider,
     RuntimeConfigSettings,
@@ -45,6 +46,7 @@ from veterinary_agent.config import (
     load_api_ingress_settings,
     load_checkpoint_store_settings,
     load_conversation_store_settings,
+    load_llm_gateway_settings,
 )
 from veterinary_agent.conversation_store import (
     ConversationStore,
@@ -54,6 +56,10 @@ from veterinary_agent.observability import (
     ObservabilityProvider,
     create_observability_provider,
 )
+from veterinary_agent.llm_gateway import (
+    LlmGateway,
+    create_default_llm_gateway,
+)
 from veterinary_agent.pet_session_policy import (
     DefaultPetSessionPolicy,
     PetSessionPolicy,
@@ -62,6 +68,10 @@ from veterinary_agent.pet_session_policy import (
 LifespanHandler = Callable[[FastAPI], AbstractAsyncContextManager[None]]
 CheckpointProviderFactory = Callable[[], CheckpointProviderLifecycle]
 ConversationStoreFactory = Callable[[ConversationStoreSettings], ConversationStore]
+LlmGatewayFactory = Callable[
+    [LlmGatewaySettings, ObservabilityProvider, str],
+    LlmGateway,
+]
 AgentGraphRuntimeFactory = Callable[[], AgentGraphRuntime]
 AgentLogicTraceStoreFactory = Callable[[], AgentLogicTraceStore]
 AgentApplicationServiceFactory = Callable[
@@ -118,6 +128,26 @@ def create_todo_agent_logic_trace_store() -> AgentLogicTraceStore:
     """
 
     return TodoAgentLogicTraceStore()
+
+
+def create_runtime_llm_gateway(
+    settings: LlmGatewaySettings,
+    observability_provider: ObservabilityProvider,
+    config_snapshot_id: str,
+) -> LlmGateway:
+    """创建默认应用内 LlmGateway。
+
+    :param settings: 已校验的 LlmGateway RuntimeConfig。
+    :param observability_provider: 已装配的 Observability provider。
+    :param config_snapshot_id: 当前 RuntimeConfig 快照 ID。
+    :return: 已完成 OpenAI-compatible 适配器装配的 LlmGateway。
+    """
+
+    return create_default_llm_gateway(
+        settings=settings,
+        observability_provider=observability_provider,
+        config_snapshot_id=config_snapshot_id,
+    )
 
 
 def create_default_agent_application_service(
@@ -288,10 +318,12 @@ def create_lifespan(
     settings: ApiIngressSettings | None = None,
     checkpoint_store_settings: CheckpointStoreSettings | None = None,
     conversation_store_settings: ConversationStoreSettings | None = None,
+    llm_gateway_settings: LlmGatewaySettings | None = None,
     runtime_config_settings: RuntimeConfigSettings | None = None,
     observability_settings: ObservabilitySettings | None = None,
     checkpoint_provider_factory: CheckpointProviderFactory | None = None,
     conversation_store_factory: ConversationStoreFactory | None = None,
+    llm_gateway_factory: LlmGatewayFactory | None = None,
     graph_runtime_factory: AgentGraphRuntimeFactory | None = None,
     logic_trace_store_factory: AgentLogicTraceStoreFactory | None = None,
     agent_application_service_factory: AgentApplicationServiceFactory | None = None,
@@ -301,10 +333,12 @@ def create_lifespan(
     :param settings: 可选的 API 接入组件配置；未传入时从默认配置源加载。
     :param checkpoint_store_settings: 可选 CheckpointStore RuntimeConfig；未传入时从默认配置源加载。
     :param conversation_store_settings: 可选 ConversationStore RuntimeConfig；未传入时从默认配置源加载。
+    :param llm_gateway_settings: 可选 LlmGateway RuntimeConfig；未传入时从默认配置源加载。
     :param runtime_config_settings: 可选 RuntimeConfig 组件自身配置；未传入时从默认配置源加载。
     :param observability_settings: 可选 Observability RuntimeConfig；未传入时从默认配置源加载。
     :param checkpoint_provider_factory: 可选 checkpoint provider 工厂；未传入时创建真实 LangGraph PostgresSaver provider。
     :param conversation_store_factory: 可选 ConversationStore 工厂；未传入时创建 TODO 空壳。
+    :param llm_gateway_factory: 可选 LlmGateway 工厂；未传入时创建默认 OpenAI-compatible 实现。
     :param graph_runtime_factory: 可选 GraphRuntime 工厂；未传入时创建 TODO 空壳。
     :param logic_trace_store_factory: 可选 LogicTraceStore 工厂；未传入时创建 TODO 空壳。
     :param agent_application_service_factory: 可选 AgentApplicationService 工厂；未传入时创建默认胶水层实现。
@@ -334,6 +368,11 @@ def create_lifespan(
                 if conversation_store_settings is not None
                 else load_conversation_store_settings()
             ),
+            llm_gateway_settings=(
+                llm_gateway_settings
+                if llm_gateway_settings is not None
+                else load_llm_gateway_settings()
+            ),
             observability_settings=observability_settings,
         )
         runtime_config_snapshot = runtime_config_provider.current_snapshot()
@@ -343,8 +382,19 @@ def create_lifespan(
             runtime_config_snapshot.conversation_store
         )
         resolved_observability_settings = runtime_config_snapshot.observability
+        resolved_llm_gateway_settings = runtime_config_snapshot.llm_gateway
         observability_provider = create_observability_provider(
             settings=resolved_observability_settings,
+        )
+        resolved_llm_gateway_factory = (
+            llm_gateway_factory
+            if llm_gateway_factory is not None
+            else create_runtime_llm_gateway
+        )
+        llm_gateway = resolved_llm_gateway_factory(
+            resolved_llm_gateway_settings,
+            observability_provider,
+            runtime_config_snapshot.config_snapshot_id,
         )
         resolved_conversation_store_factory = (
             conversation_store_factory
@@ -409,6 +459,10 @@ def create_lifespan(
             conversation_store_error=None,
             pet_session_policy=pet_session_policy,
             pet_session_policy_ready=pet_session_policy.is_ready(),
+            llm_gateway_settings=resolved_llm_gateway_settings,
+            llm_gateway=llm_gateway,
+            llm_gateway_ready=llm_gateway.is_ready(),
+            llm_gateway_error=None,
             graph_runtime=graph_runtime,
             graph_runtime_ready=graph_runtime.is_ready(),
             logic_trace_store=logic_trace_store,
@@ -428,6 +482,7 @@ def create_lifespan(
         try:
             yield
         finally:
+            await llm_gateway.close()
             await _stop_checkpoint_provider(app_state)
 
     return lifespan
@@ -439,9 +494,11 @@ __all__: tuple[str, ...] = (
     "AgentLogicTraceStoreFactory",
     "CheckpointProviderFactory",
     "ConversationStoreFactory",
+    "LlmGatewayFactory",
     "LifespanHandler",
     "create_default_agent_application_service",
     "create_langgraph_postgres_saver_provider",
+    "create_runtime_llm_gateway",
     "create_todo_agent_graph_runtime",
     "create_todo_agent_logic_trace_store",
     "create_todo_conversation_store",
