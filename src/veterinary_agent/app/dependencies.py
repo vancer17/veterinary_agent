@@ -8,6 +8,13 @@ from typing import NoReturn, cast
 
 from fastapi import Request
 
+from veterinary_agent.agent_application_service import (
+    AgentApplicationErrorCode,
+    AgentApplicationOperation,
+    AgentApplicationPhase,
+    AgentApplicationService,
+    AgentApplicationServiceError,
+)
 from veterinary_agent.app.state import (
     CheckpointProviderLifecycle,
     VeterinaryAgentAppState,
@@ -273,6 +280,31 @@ def get_pet_session_policy(request: Request) -> PetSessionPolicy:
     return policy
 
 
+def get_agent_application_service(request: Request) -> AgentApplicationService:
+    """获取已由 FastAPI lifespan 初始化的 AgentApplicationService。
+
+    :param request: 当前 HTTP 请求对象。
+    :return: 已装配的 AgentApplicationService。
+    :raises RuntimeError: 当应用状态尚未初始化时抛出。
+    :raises AgentApplicationServiceError: 当应用服务未装配时抛出。
+    """
+
+    app_state = get_app_state(request)
+    service = app_state.agent_application_service
+    if service is None:
+        raise AgentApplicationServiceError(
+            code=AgentApplicationErrorCode.APPLICATION_NOT_READY,
+            operation=AgentApplicationOperation.EXECUTE_TURN,
+            phase=AgentApplicationPhase.PREPARING,
+            message="AgentApplicationService 尚未初始化",
+            request_id="req_unavailable",
+            trace_id="trace_unavailable",
+            dependency="AgentApplicationService",
+            dependency_error_code="service_missing",
+        )
+    return service
+
+
 def _raise_checkpoint_provider_unavailable(
     *,
     reason: str,
@@ -327,6 +359,7 @@ def get_langgraph_checkpointer(request: Request) -> LangGraphCheckpointer:
 
 __all__: tuple[str, ...] = (
     "APP_STATE_KEY",
+    "get_agent_application_service",
     "get_api_ingress_settings",
     "get_app_state",
     "get_checkpoint_store_settings",

@@ -10,7 +10,11 @@ from typing import cast
 from fastapi.testclient import TestClient
 
 from veterinary_agent import (
+    AppendMessageCommandDto,
+    AppendMessageResultDto,
     ConversationErrorCode,
+    ConversationMessageDto,
+    ConversationMessageStatus,
     ConversationOperation,
     ConversationSessionDto,
     ConversationSessionStatus,
@@ -35,6 +39,8 @@ class _StatefulConversationStore(TodoConversationStore):
 
         self.sessions: dict[str, ConversationSessionDto] = {}
         self.ensure_calls: list[EnsureSessionCommandDto] = []
+        self.append_calls: list[AppendMessageCommandDto] = []
+        self.messages_by_idempotency_key: dict[str, ConversationMessageDto] = {}
 
     async def ensure_session(
         self,
@@ -86,6 +92,46 @@ class _StatefulConversationStore(TodoConversationStore):
             session=session,
             created_new=True,
         )
+
+    async def append_message(
+        self,
+        command: AppendMessageCommandDto,
+    ) -> AppendMessageResultDto:
+        """幂等追加测试用户消息。
+
+        :param command: AgentApplicationService 传入的追加消息命令。
+        :return: 已写入或幂等命中的测试消息结果。
+        """
+
+        self.append_calls.append(command)
+        if command.idempotency_key is not None:
+            existing_message = self.messages_by_idempotency_key.get(
+                command.idempotency_key
+            )
+            if existing_message is not None:
+                return AppendMessageResultDto(
+                    message=existing_message,
+                    idempotent=True,
+                )
+        now = datetime.now(UTC)
+        message = ConversationMessageDto(
+            message_id=f"msg_{len(self.append_calls)}",
+            session_id=command.session_id,
+            user_id=command.user_id,
+            pet_id=command.pet_id,
+            role=command.role,
+            content_type=command.content_type,
+            content=command.content,
+            sequence_no=len(self.append_calls),
+            status=ConversationMessageStatus.FINALIZED,
+            idempotency_key=command.idempotency_key,
+            metadata=dict(command.metadata),
+            created_at=now,
+            finalized_at=now,
+        )
+        if command.idempotency_key is not None:
+            self.messages_by_idempotency_key[command.idempotency_key] = message
+        return AppendMessageResultDto(message=message, idempotent=False)
 
 
 class _ConversationStoreFactory:

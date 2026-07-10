@@ -151,7 +151,7 @@ def test_builder_preserves_payload_and_identity_context() -> None:
 
     assert built_request.trusted_identity.pet_id == "pet_001"
     assert built_request.trusted_identity.pet_info == {"species": "dog"}
-    assert built_request.input[0].role.value == "user"
+    assert built_request.input[0].role == "user"
     assert built_request.attachments[0].attachment_id == "attachment_001"
     assert built_request.metadata == {"client": "pytest"}
     assert built_request.model_hint == "vet-agent-default"

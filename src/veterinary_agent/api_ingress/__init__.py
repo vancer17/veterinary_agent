@@ -1,6 +1,8 @@
+##################################################################################################
 # 文件: src/veterinary_agent/api_ingress/__init__.py
 # 作用: 作为 API 接入组件包的统一出口，集中暴露入口层公共模型、解析器与路由工厂。
 # 边界: 外部包应从本文件导入 API 接入组件公共模型，避免跨包直接引用实现模块。
+##################################################################################################
 
 from veterinary_agent.api_ingress.dto import (
     AgentTurnInternalRequestDto,
@@ -85,6 +87,7 @@ from veterinary_agent.api_ingress.rate_limit import (
     ApiIngressRateLimitStreamLease,
     ApiIngressRateLimiter,
 )
+from veterinary_agent.api_ingress.response_mapper import map_agent_turn_result
 from veterinary_agent.api_ingress.readiness import (
     ApiIngressReadinessResult,
     check_api_ingress_readiness,
@@ -182,6 +185,7 @@ __all__: tuple[str, ...] = (
     "create_api_ingress_router",
     "handle_agent_turns",
     "handle_openai_responses",
+    "map_agent_turn_result",
     "normalize_agent_turn_request",
     "parse_agent_turn_request",
     "resolve_request_identity",
