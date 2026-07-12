@@ -1,11 +1,14 @@
 ##################################################################################################
 # 文件: src/veterinary_agent/llm_gateway/token_estimator.py
-# 作用: 提供不依赖供应商 tokenizer 的保守 token 估算与上下文预算检查。
+# 作用: 基于 LangChain 消息计数能力提供 LlmGateway token 估算与上下文预算检查。
 # 边界: 不裁剪或压缩业务上下文；估算超限时由 LlmGateway 返回稳定错误，由上游显式重构输入。
 ##################################################################################################
 
-from math import ceil
 import json
+from typing import Any, cast
+
+from langchain_core.messages.utils import count_tokens_approximately
+from langchain_core.tools import BaseTool
 
 from veterinary_agent.config import (
     LlmModelProfileConfig,
@@ -13,30 +16,39 @@ from veterinary_agent.config import (
     LlmTokenEstimationConfig,
 )
 from veterinary_agent.llm_gateway.dto import (
-    LlmImageContentPartDto,
     LlmInvocationRequestDto,
     LlmTokenEstimateDto,
 )
 from veterinary_agent.llm_gateway.enums import (
     LlmGatewayErrorCode,
     LlmGatewayOperation,
+    LlmResponseFormatType,
 )
 from veterinary_agent.llm_gateway.errors import LlmGatewayError
+from veterinary_agent.llm_gateway.messages import LangChainLlmMessageAdapter
+
 
 _IMAGE_ESTIMATE_TOKENS = 512
 
 
-class ConservativeTokenEstimator:
-    """基于字符数和协议固定开销的保守 token 估算器。"""
+class LangChainTokenEstimator:
+    """基于 LangChain 消息计数能力的 LlmGateway token 估算器。"""
 
-    def __init__(self, *, settings: LlmTokenEstimationConfig) -> None:
-        """初始化保守 token 估算器。
+    def __init__(
+        self,
+        *,
+        settings: LlmTokenEstimationConfig,
+        message_adapter: LangChainLlmMessageAdapter | None = None,
+    ) -> None:
+        """初始化 LangChain token 估算器。
 
         :param settings: 字符换算与协议开销配置。
+        :param message_adapter: 可选 LangChain 消息适配器；未传入时创建默认实例。
         :return: None。
         """
 
         self._settings = settings
+        self._message_adapter = message_adapter or LangChainLlmMessageAdapter()
 
     def estimate(
         self,
@@ -50,20 +62,26 @@ class ConservativeTokenEstimator:
         :param request: 协议无关模型调用请求。
         :param profile: 当前候选模型 profile。
         :param route: 当前候选供应商路由。
-        :return: 本地估算的 token 预算。
+        :return: 基于 LangChain 近似计数与本地协议开销补偿得到的 token 预算。
         :raises LlmGatewayError: 当输出上限参数非法时抛出。
         """
 
-        input_tokens = sum(
-            self._estimate_message(message=request_message)
-            for request_message in request.messages
+        langchain_messages = self._message_adapter.to_langchain_messages(
+            request.messages
         )
-        input_tokens += sum(
-            self._estimate_json(tool.model_dump(mode="json", by_alias=True))
-            + self._settings.tool_overhead_tokens
+        tools: list[dict[str, Any]] = [
+            tool.model_dump(mode="json", by_alias=True, exclude_none=True)
             for tool in request.tool_schemas
+        ]
+        input_tokens = count_tokens_approximately(
+            langchain_messages,
+            chars_per_token=self._settings.chars_per_token,
+            extra_tokens_per_message=self._settings.message_overhead_tokens,
+            tokens_per_image=_IMAGE_ESTIMATE_TOKENS,
+            tools=cast(list[BaseTool | dict[str, Any]], tools),
         )
-        if request.response_format.type.value != "text":
+        input_tokens += self._estimate_tool_overhead(tools=tools)
+        if request.response_format.type is not LlmResponseFormatType.TEXT:
             input_tokens += self._estimate_json(
                 request.response_format.model_dump(
                     mode="json",
@@ -130,39 +148,6 @@ class ConservativeTokenEstimator:
             },
         )
 
-    def _estimate_message(self, *, message: object) -> int:
-        """估算一条模型消息的 token 数。
-
-        :param message: LlmMessageDto 消息对象。
-        :return: 消息文本、多模态内容与协议开销的估算 token 数。
-        """
-
-        from veterinary_agent.llm_gateway.dto import LlmMessageDto
-
-        if not isinstance(message, LlmMessageDto):
-            raise TypeError("message 必须是 LlmMessageDto")
-        estimated = self._settings.message_overhead_tokens
-        if isinstance(message.content, str):
-            estimated += self._estimate_text(message.content)
-        elif isinstance(message.content, list):
-            for content_part in message.content:
-                if isinstance(content_part, LlmImageContentPartDto):
-                    estimated += _IMAGE_ESTIMATE_TOKENS
-                else:
-                    estimated += self._estimate_text(content_part.text)
-        if message.name is not None:
-            estimated += self._estimate_text(message.name)
-        if message.tool_call_id is not None:
-            estimated += self._estimate_text(message.tool_call_id)
-        if message.tool_calls:
-            estimated += self._estimate_json(
-                [
-                    tool_call.model_dump(mode="json", by_alias=True)
-                    for tool_call in message.tool_calls
-                ]
-            )
-        return estimated
-
     def _resolve_output_reserve(
         self,
         *,
@@ -199,16 +184,14 @@ class ConservativeTokenEstimator:
             )
         return value
 
-    def _estimate_text(self, value: str) -> int:
-        """按字符换算比例估算文本 token 数。
+    def _estimate_tool_overhead(self, *, tools: list[dict[str, Any]]) -> int:
+        """估算工具 schema 的额外协议开销。
 
-        :param value: 待估算文本。
-        :return: 向上取整后的估算 token 数。
+        :param tools: OpenAI-compatible 工具 schema 列表。
+        :return: 工具 schema 附加协议开销。
         """
 
-        if not value:
-            return 0
-        return ceil(len(value) / self._settings.chars_per_token)
+        return len(tools) * self._settings.tool_overhead_tokens
 
     def _estimate_json(self, value: object) -> int:
         """序列化结构化值并估算 token 数。
@@ -224,7 +207,21 @@ class ConservativeTokenEstimator:
             separators=(",", ":"),
             default=str,
         )
-        return self._estimate_text(serialized)
+        return count_tokens_approximately(
+            [serialized],
+            chars_per_token=self._settings.chars_per_token,
+            extra_tokens_per_message=0,
+        )
 
 
-__all__: tuple[str, ...] = ("ConservativeTokenEstimator",)
+class ConservativeTokenEstimator(LangChainTokenEstimator):
+    """兼容旧导出名称的 LangChain token 估算器。
+
+    当前实现已经迁移到 LangChain 近似计数能力；保留本类名用于兼容既有导入。
+    """
+
+
+__all__: tuple[str, ...] = (
+    "ConservativeTokenEstimator",
+    "LangChainTokenEstimator",
+)

@@ -15,6 +15,12 @@ from veterinary_agent.agent_application_service import (
     AgentApplicationService,
     AgentApplicationServiceError,
 )
+from veterinary_agent.agent_runner import (
+    AgentRunner,
+    AgentRunnerError,
+    AgentRunnerErrorCode,
+    AgentRunnerOperation,
+)
 from veterinary_agent.app.state import (
     CheckpointProviderLifecycle,
     VeterinaryAgentAppState,
@@ -278,6 +284,31 @@ def get_llm_gateway(request: Request) -> LlmGateway:
     return gateway
 
 
+def get_agent_runner(request: Request) -> AgentRunner:
+    """获取已由 FastAPI lifespan 初始化的 AgentRunner。
+
+    :param request: 当前 HTTP 请求对象。
+    :return: 已装配且具备执行条件的 AgentRunner。
+    :raises AgentRunnerError: 当 AgentRunner 未装配或未就绪时抛出。
+    """
+
+    app_state = get_app_state(request)
+    runner = app_state.agent_runner
+    if runner is None:
+        raise AgentRunnerError(
+            code=AgentRunnerErrorCode.AGENT_RUNNER_NOT_READY,
+            operation=AgentRunnerOperation.RUN_AGENT,
+            message="AgentRunner 尚未初始化",
+        )
+    if not app_state.agent_runner_ready or not runner.is_ready():
+        raise AgentRunnerError(
+            code=AgentRunnerErrorCode.AGENT_RUNNER_NOT_READY,
+            operation=AgentRunnerOperation.RUN_AGENT,
+            message="AgentRunner 尚未就绪",
+        )
+    return runner
+
+
 def get_pet_session_policy(request: Request) -> PetSessionPolicy:
     """获取已由 FastAPI lifespan 初始化的 PetSessionPolicy。
 
@@ -410,6 +441,7 @@ def get_langgraph_checkpointer(request: Request) -> LangGraphCheckpointer:
 __all__: tuple[str, ...] = (
     "APP_STATE_KEY",
     "get_agent_application_service",
+    "get_agent_runner",
     "get_api_ingress_settings",
     "get_app_state",
     "get_checkpoint_store_settings",

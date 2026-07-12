@@ -13,6 +13,7 @@ from veterinary_agent.agent_application_service import (
     AgentGraphRuntime,
     AgentLogicTraceStore,
 )
+from veterinary_agent.agent_runner import AgentRunner, AgentRunnerErrorDto
 from veterinary_agent.api_ingress import (
     ApiIngressConcurrencyGate,
     ApiIngressRateLimiter,
@@ -112,6 +113,9 @@ class VeterinaryAgentAppState:
     llm_gateway: LlmGateway | None = None
     llm_gateway_ready: bool = False
     llm_gateway_error: LlmErrorDto | None = None
+    agent_runner: AgentRunner | None = None
+    agent_runner_ready: bool = False
+    agent_runner_error: AgentRunnerErrorDto | None = None
     graph_runtime: AgentGraphRuntime | None = None
     graph_runtime_ready: bool = False
     logic_trace_store: AgentLogicTraceStore | None = None

@@ -70,6 +70,7 @@ from veterinary_agent.llm_gateway.gateway import (
     DefaultLlmGateway,
     create_default_llm_gateway,
 )
+from veterinary_agent.llm_gateway.messages import LangChainLlmMessageAdapter
 from veterinary_agent.llm_gateway.openai_compatible import (
     OpenAICompatibleAdapter,
     OpenAICompatibleAdapterFactory,
@@ -83,7 +84,15 @@ from veterinary_agent.llm_gateway.profile_registry import (
     LlmProfileRegistry,
     ResolvedModelProfile,
 )
-from veterinary_agent.llm_gateway.token_estimator import ConservativeTokenEstimator
+from veterinary_agent.llm_gateway.retry import (
+    LlmGatewayRetryController,
+    LlmGatewayRetryPredicate,
+    RetryBudgetState,
+)
+from veterinary_agent.llm_gateway.token_estimator import (
+    ConservativeTokenEstimator,
+    LangChainTokenEstimator,
+)
 from veterinary_agent.llm_gateway.trace import TodoLlmCallTraceStore
 
 __all__: tuple[str, ...] = (
@@ -91,6 +100,8 @@ __all__: tuple[str, ...] = (
     "DEFAULT_LLM_GATEWAY_CONFIG_PATH",
     "DefaultLlmGateway",
     "JsonMap",
+    "LangChainLlmMessageAdapter",
+    "LangChainTokenEstimator",
     "LlmCallSummaryDto",
     "LlmCallTraceStore",
     "LlmConcurrencyController",
@@ -105,6 +116,8 @@ __all__: tuple[str, ...] = (
     "LlmGatewayError",
     "LlmGatewayErrorCode",
     "LlmGatewayOperation",
+    "LlmGatewayRetryController",
+    "LlmGatewayRetryPredicate",
     "LlmGatewaySettings",
     "LlmImageContentPartDto",
     "LlmImageUrlDto",
@@ -144,6 +157,7 @@ __all__: tuple[str, ...] = (
     "ProviderInvocationResponseDto",
     "ProviderStreamEventDto",
     "ProviderStreamEventType",
+    "RetryBudgetState",
     "ResolvedModelProfile",
     "TodoLlmCallTraceStore",
     "build_llm_gateway_error_dto",
