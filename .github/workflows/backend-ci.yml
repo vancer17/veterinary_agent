@@ -12,10 +12,11 @@
 #   - push 到 main（PR merge 会产生 push 事件）
 #
 # 【Jobs】
-#   lint      — Ruff lint + format check（src、tests）
-#   typecheck — Pyright + Bandit + Deptry（src、tests）
-#   test      — uv lock 校验 + uv build + pytest（依赖 lint、typecheck 通过）
-#   docker    — Docker 镜像构建冒烟（不推送）
+#   lint         — Ruff lint + format check（src、tests、tools）
+#   typecheck    — Pyright + Bandit + Deptry（src、tests）
+#   architecture — 架构压制门禁：体积预算、导出预算、导入边界、import smoke
+#   test         — uv lock 校验 + uv build + pytest（依赖前置门禁通过）
+#   docker       — Docker 镜像构建冒烟（不推送）
 #
 # 【与 CD 的关系】
 #   Backend CI 全部成功后，Backend CD 通过 workflow_run 自动触发镜像构建与推送。
@@ -99,12 +100,38 @@ jobs:
       - name: Deptry
         run: uv run deptry .
 
+  architecture:
+    name: Architecture guard
+    runs-on: ubuntu-latest
+    env:
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Install dependencies
+        run: uv sync --all-groups --frozen
+
+      - name: Architecture fitness checks
+        run: uv run python tools/ci/architecture_guard.py
+
   test:
     name: Test
     runs-on: ubuntu-latest
     needs:
       - lint
       - typecheck
+      - architecture
     env:
       PYTHONUNBUFFERED: "1"
       PYTHONDONTWRITEBYTECODE: "1"
