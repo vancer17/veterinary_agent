@@ -1,0 +1,135 @@
+# =============================================================================
+# Architecture Guard 配置 — veterinary_agent 架构压制门禁
+# =============================================================================
+#
+# 【文件信息】
+#   路径：tools/ci/architecture_guard.toml
+#   类型：CI 架构门禁配置
+#
+# 【作用】
+#   为 tools/ci/architecture_guard.py 提供可调整的结构预算、导入边界、
+#   import smoke 入口、文件头注释检查范围等规则。当前阈值以“现状基线
+#   附近压制增长”为目标；每完成一轮分层整改后，应主动下调对应预算。
+#
+# 【维护原则】
+#   1. CI workflow 只负责编排，本文件负责规则。
+#   2. 不在这里表达业务逻辑，只表达结构边界和工程预算。
+#   3. 放宽 hard gate 必须有明确迁移原因；整改完成后要及时收紧。
+#
+# =============================================================================
+
+[paths]
+source_root = "src/veterinary_agent"
+test_root = "tests"
+
+[budgets]
+max_source_physical_lines = 44000
+max_test_physical_lines = 22500
+max_source_python_files = 130
+max_test_python_files = 100
+warn_file_physical_lines = 800
+max_file_physical_lines = 2200
+max_root_init_physical_lines = 1100
+max_total_all_exports = 1726
+max_root_all_exports = 495
+max_model_dump_calls = 85
+max_model_validate_calls = 30
+max_dto_classes = 188
+max_error_status_todo_classes = 170
+max_template_files = 65
+max_dependency_cycles = 3
+max_direct_root_imports = 0
+
+[module_budgets]
+agent_application_service = 2500
+agent_runner = 3300
+api_ingress = 4500
+app = 1800
+checkpoint_store = 7000
+config = 3900
+conversation_store = 5000
+graph_runtime = 3400
+llm_gateway = 5200
+logic_trace_store = 3500
+observability = 2100
+pet_session_policy = 1500
+vet_conversation_graph = 250
+
+[class_patterns]
+dto_suffixes = ["Dto", "DTO"]
+error_status_todo_suffixes = [
+  "Error",
+  "Errors",
+  "Exception",
+  "Status",
+  "Statuses",
+  "Todo",
+  "TODO",
+]
+
+[template_files]
+names = [
+  "dto.py",
+  "dtos.py",
+  "enums.py",
+  "errors.py",
+  "ports.py",
+  "status.py",
+  "statuses.py",
+  "trace.py",
+]
+
+[header_comments]
+min_comment_lines = 4
+required_files = [
+  ".github/workflows/backend-ci.yml",
+  ".github/workflows/backend-cd.yml",
+  "tools/ci/architecture_guard.py",
+  "tools/ci/architecture_guard.toml",
+]
+
+[import_smoke]
+enabled = true
+modules = [
+  "veterinary_agent",
+  "veterinary_agent.app",
+  "veterinary_agent.api_ingress",
+  "veterinary_agent.agent_application_service",
+  "veterinary_agent.agent_runner",
+  "veterinary_agent.graph_runtime",
+  "veterinary_agent.llm_gateway",
+  "veterinary_agent.pet_session_policy",
+]
+
+[[import_rules]]
+name = "FastAPI/Starlette 只能出现在 API 边界层"
+severity = "error"
+from_modules = ["*"]
+except_modules = ["api_ingress", "app"]
+blocked_imports = ["fastapi", "starlette"]
+
+[[import_rules]]
+name = "领域模块不能反向依赖 API 层"
+severity = "error"
+from_modules = ["pet_session_policy", "vet_conversation_graph"]
+blocked_imports = [
+  "veterinary_agent.api_ingress",
+  "veterinary_agent.app",
+  "fastapi",
+  "starlette",
+]
+
+[[import_rules]]
+name = "持久化模块不能反向依赖 API 层"
+severity = "error"
+from_modules = [
+  "checkpoint_store",
+  "conversation_store",
+  "logic_trace_store",
+]
+blocked_imports = [
+  "veterinary_agent.api_ingress",
+  "veterinary_agent.app",
+  "fastapi",
+  "starlette",
+]
