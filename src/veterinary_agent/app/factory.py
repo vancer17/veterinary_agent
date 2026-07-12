@@ -12,6 +12,7 @@ from veterinary_agent.app.lifespan import (
     AgentApplicationServiceFactory,
     AgentGraphRuntimeFactory,
     AgentLogicTraceStoreFactory,
+    AgentRunnerFactory,
     CheckpointProviderFactory,
     ConversationStoreFactory,
     LlmGatewayFactory,
@@ -40,6 +41,7 @@ def create_app(
     checkpoint_provider_factory: CheckpointProviderFactory | None = None,
     conversation_store_factory: ConversationStoreFactory | None = None,
     llm_gateway_factory: LlmGatewayFactory | None = None,
+    agent_runner_factory: AgentRunnerFactory | None = None,
     graph_runtime_factory: AgentGraphRuntimeFactory | None = None,
     logic_trace_store_factory: AgentLogicTraceStoreFactory | None = None,
     agent_application_service_factory: AgentApplicationServiceFactory | None = None,
@@ -55,6 +57,7 @@ def create_app(
     :param checkpoint_provider_factory: 可选 checkpoint provider 工厂；测试可注入 TODO 空壳避免连接真实数据库。
     :param conversation_store_factory: 可选 ConversationStore 工厂；测试或业务装配可注入真实实现。
     :param llm_gateway_factory: 可选 LlmGateway 工厂；测试可注入 fake 实现。
+    :param agent_runner_factory: 可选 AgentRunner 工厂；测试或业务装配可注入真实实现。
     :param graph_runtime_factory: 可选 GraphRuntime 工厂；测试或后续业务装配可注入真实实现。
     :param logic_trace_store_factory: 可选 LogicTraceStore 工厂；测试或后续业务装配可注入真实实现。
     :param agent_application_service_factory: 可选 AgentApplicationService 工厂；未传入时使用默认胶水层实现。
@@ -80,6 +83,7 @@ def create_app(
             checkpoint_provider_factory=checkpoint_provider_factory,
             conversation_store_factory=conversation_store_factory,
             llm_gateway_factory=llm_gateway_factory,
+            agent_runner_factory=agent_runner_factory,
             graph_runtime_factory=graph_runtime_factory,
             logic_trace_store_factory=logic_trace_store_factory,
             agent_application_service_factory=agent_application_service_factory,

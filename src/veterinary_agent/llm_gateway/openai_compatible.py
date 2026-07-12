@@ -10,6 +10,7 @@ import os
 from time import perf_counter
 
 import httpx
+from httpx_sse import SSEError, aconnect_sse
 from pydantic import ValidationError
 
 from veterinary_agent.config import (
@@ -36,6 +37,7 @@ from veterinary_agent.llm_gateway.enums import (
     ProviderStreamEventType,
 )
 from veterinary_agent.llm_gateway.errors import LlmGatewayError
+from veterinary_agent.llm_gateway.messages import LangChainLlmMessageAdapter
 
 _SSE_DONE = "[DONE]"
 
@@ -233,21 +235,20 @@ def _render_request_payload(
     *,
     request: ProviderInvocationRequestDto,
     include_stream_usage: bool,
+    message_adapter: LangChainLlmMessageAdapter,
 ) -> JsonMap:
     """转换归一化物理调用请求为 OpenAI-compatible 请求体。
 
     :param request: ProviderAdapter 物理调用请求。
     :param include_stream_usage: 流式请求是否要求代理返回 usage。
+    :param message_adapter: LangChain 消息适配器。
     :return: 可直接作为 JSON 发送的 OpenAI-compatible 请求体。
     """
 
     payload: JsonMap = {
         **request.generation_params,
         "model": request.model_alias,
-        "messages": [
-            message.model_dump(mode="json", by_alias=True, exclude_none=True)
-            for message in request.messages
-        ],
+        "messages": message_adapter.to_openai_messages(request.messages),
         "stream": request.stream,
     }
     if request.response_format.type is not LlmResponseFormatType.TEXT:
@@ -344,6 +345,27 @@ def _error_from_http_response(
     )
 
 
+def _error_from_sse_error(
+    *,
+    exc: SSEError,
+    provider_route_id: str,
+) -> LlmGatewayError:
+    """将 SSE 协议解析错误转换为 LlmGateway 错误。
+
+    :param exc: httpx-sse 抛出的协议解析异常。
+    :param provider_route_id: 当前供应商路由 ID。
+    :return: 不暴露响应正文的 LlmGateway 领域异常。
+    """
+
+    return LlmGatewayError(
+        code=LlmGatewayErrorCode.LLM_MALFORMED_RESPONSE,
+        operation=LlmGatewayOperation.STREAM_LLM,
+        message="模型代理流式响应不是合法 SSE 事件流",
+        provider_route_id=provider_route_id,
+        conflict_with={"sse_error": exc.__class__.__name__},
+    )
+
+
 class OpenAICompatibleAdapter:
     """OpenAI-compatible 模型代理适配器。"""
 
@@ -353,12 +375,14 @@ class OpenAICompatibleAdapter:
         route: LlmProviderRouteConfig,
         timeout_policy: LlmTimeoutPolicyConfig,
         client: httpx.AsyncClient | None = None,
+        message_adapter: LangChainLlmMessageAdapter | None = None,
     ) -> None:
         """初始化 OpenAI-compatible 适配器。
 
         :param route: 当前供应商路由配置。
         :param timeout_policy: 物理请求超时策略。
         :param client: 可选外部 AsyncClient；测试或共享连接池场景可注入。
+        :param message_adapter: 可选 LangChain 消息适配器；未传入时创建默认实例。
         :return: None。
         """
 
@@ -372,6 +396,7 @@ class OpenAICompatibleAdapter:
             follow_redirects=False,
             trust_env=False,
         )
+        self._message_adapter = message_adapter or LangChainLlmMessageAdapter()
 
     def is_ready(self) -> bool:
         """判断适配器本地配置是否完整。
@@ -467,6 +492,7 @@ class OpenAICompatibleAdapter:
                 json=_render_request_payload(
                     request=request,
                     include_stream_usage=self._route.include_stream_usage,
+                    message_adapter=self._message_adapter,
                 ),
                 timeout=self._timeout(),
             )
@@ -570,16 +596,19 @@ class OpenAICompatibleAdapter:
                 provider_route_id=self._route.provider_route_id,
             )
         try:
-            async with self._client.stream(
+            async with aconnect_sse(
+                self._client,
                 "POST",
                 _join_url(self._route.base_url, self._route.request_path),
                 headers=self._headers(request=request),
                 json=_render_request_payload(
                     request=request,
                     include_stream_usage=self._route.include_stream_usage,
+                    message_adapter=self._message_adapter,
                 ),
                 timeout=self._timeout(),
-            ) as response:
+            ) as event_source:
+                response = event_source.response
                 if response.is_error:
                     await response.aread()
                     raise _error_from_http_response(
@@ -587,42 +616,22 @@ class OpenAICompatibleAdapter:
                         operation=LlmGatewayOperation.STREAM_LLM,
                         provider_route_id=self._route.provider_route_id,
                     )
-                async for data in self._iter_sse_data(response=response):
-                    if data == _SSE_DONE:
+                async for event in event_source.aiter_sse():
+                    if event.data == _SSE_DONE:
                         break
-                    yield self._parse_stream_payload(data=data)
+                    yield self._parse_stream_payload(data=event.data)
         except LlmGatewayError:
             raise
+        except SSEError as exc:
+            raise _error_from_sse_error(
+                exc=exc,
+                provider_route_id=self._route.provider_route_id,
+            ) from exc
         except httpx.HTTPError as exc:
             raise self._build_network_error(
                 operation=LlmGatewayOperation.STREAM_LLM,
                 exc=exc,
             ) from exc
-
-    async def _iter_sse_data(
-        self,
-        *,
-        response: httpx.Response,
-    ) -> AsyncIterator[str]:
-        """按 SSE 空行边界解析 ``data`` 字段。
-
-        :param response: 已建立的流式 HTTP 响应。
-        :return: 每个完整 SSE 事件拼接后的 data 文本。
-        """
-
-        data_lines: list[str] = []
-        async for line in response.aiter_lines():
-            if line == "":
-                if data_lines:
-                    yield "\n".join(data_lines)
-                    data_lines.clear()
-                continue
-            if line.startswith(":"):
-                continue
-            if line.startswith("data:"):
-                data_lines.append(line[5:].lstrip())
-        if data_lines:
-            yield "\n".join(data_lines)
 
     def _parse_stream_payload(self, *, data: str) -> ProviderStreamEventDto:
         """解析单个 OpenAI-compatible SSE data 事件。

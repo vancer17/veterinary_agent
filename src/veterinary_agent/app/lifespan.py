@@ -18,6 +18,10 @@ from veterinary_agent.agent_application_service import (
     TodoAgentGraphRuntime,
     TodoAgentLogicTraceStore,
 )
+from veterinary_agent.agent_runner import (
+    AgentRunner,
+    create_default_agent_runner,
+)
 from veterinary_agent.api_ingress import (
     ApiIngressConcurrencyGate,
     ApiIngressRateLimiter,
@@ -72,6 +76,7 @@ LlmGatewayFactory = Callable[
     [LlmGatewaySettings, ObservabilityProvider, str],
     LlmGateway,
 ]
+AgentRunnerFactory = Callable[[LlmGateway, ObservabilityProvider], AgentRunner]
 AgentGraphRuntimeFactory = Callable[[], AgentGraphRuntime]
 AgentLogicTraceStoreFactory = Callable[[], AgentLogicTraceStore]
 AgentApplicationServiceFactory = Callable[
@@ -147,6 +152,23 @@ def create_runtime_llm_gateway(
         settings=settings,
         observability_provider=observability_provider,
         config_snapshot_id=config_snapshot_id,
+    )
+
+
+def create_runtime_agent_runner(
+    llm_gateway: LlmGateway,
+    observability_provider: ObservabilityProvider,
+) -> AgentRunner:
+    """创建默认 AgentRunner。
+
+    :param llm_gateway: 已装配的 LlmGateway。
+    :param observability_provider: 已装配的 Observability provider。
+    :return: 已装配但可能未就绪的默认 AgentRunner。
+    """
+
+    return create_default_agent_runner(
+        llm_gateway=llm_gateway,
+        observability_provider=observability_provider,
     )
 
 
@@ -324,6 +346,7 @@ def create_lifespan(
     checkpoint_provider_factory: CheckpointProviderFactory | None = None,
     conversation_store_factory: ConversationStoreFactory | None = None,
     llm_gateway_factory: LlmGatewayFactory | None = None,
+    agent_runner_factory: AgentRunnerFactory | None = None,
     graph_runtime_factory: AgentGraphRuntimeFactory | None = None,
     logic_trace_store_factory: AgentLogicTraceStoreFactory | None = None,
     agent_application_service_factory: AgentApplicationServiceFactory | None = None,
@@ -339,6 +362,7 @@ def create_lifespan(
     :param checkpoint_provider_factory: 可选 checkpoint provider 工厂；未传入时创建真实 LangGraph PostgresSaver provider。
     :param conversation_store_factory: 可选 ConversationStore 工厂；未传入时创建 TODO 空壳。
     :param llm_gateway_factory: 可选 LlmGateway 工厂；未传入时创建默认 OpenAI-compatible 实现。
+    :param agent_runner_factory: 可选 AgentRunner 工厂；未传入时创建默认 AgentRunner。
     :param graph_runtime_factory: 可选 GraphRuntime 工厂；未传入时创建 TODO 空壳。
     :param logic_trace_store_factory: 可选 LogicTraceStore 工厂；未传入时创建 TODO 空壳。
     :param agent_application_service_factory: 可选 AgentApplicationService 工厂；未传入时创建默认胶水层实现。
@@ -395,6 +419,15 @@ def create_lifespan(
             resolved_llm_gateway_settings,
             observability_provider,
             runtime_config_snapshot.config_snapshot_id,
+        )
+        resolved_agent_runner_factory = (
+            agent_runner_factory
+            if agent_runner_factory is not None
+            else create_runtime_agent_runner
+        )
+        agent_runner = resolved_agent_runner_factory(
+            llm_gateway,
+            observability_provider,
         )
         resolved_conversation_store_factory = (
             conversation_store_factory
@@ -463,6 +496,9 @@ def create_lifespan(
             llm_gateway=llm_gateway,
             llm_gateway_ready=llm_gateway.is_ready(),
             llm_gateway_error=None,
+            agent_runner=agent_runner,
+            agent_runner_ready=agent_runner.is_ready(),
+            agent_runner_error=None,
             graph_runtime=graph_runtime,
             graph_runtime_ready=graph_runtime.is_ready(),
             logic_trace_store=logic_trace_store,
@@ -483,6 +519,7 @@ def create_lifespan(
             yield
         finally:
             await llm_gateway.close()
+            await agent_runner.close()
             await _stop_checkpoint_provider(app_state)
 
     return lifespan
@@ -494,9 +531,11 @@ __all__: tuple[str, ...] = (
     "AgentLogicTraceStoreFactory",
     "CheckpointProviderFactory",
     "ConversationStoreFactory",
+    "AgentRunnerFactory",
     "LlmGatewayFactory",
     "LifespanHandler",
     "create_default_agent_application_service",
+    "create_runtime_agent_runner",
     "create_langgraph_postgres_saver_provider",
     "create_runtime_llm_gateway",
     "create_todo_agent_graph_runtime",

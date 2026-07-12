@@ -60,7 +60,8 @@ from veterinary_agent.llm_gateway.profile_registry import (
     LlmProfileRegistry,
     ResolvedModelProfile,
 )
-from veterinary_agent.llm_gateway.token_estimator import ConservativeTokenEstimator
+from veterinary_agent.llm_gateway.retry import LlmGatewayRetryController
+from veterinary_agent.llm_gateway.token_estimator import LangChainTokenEstimator
 from veterinary_agent.llm_gateway.trace import TodoLlmCallTraceStore
 from veterinary_agent.observability import (
     MetricType,
@@ -155,8 +156,11 @@ class DefaultLlmGateway:
         self._observability = observability_provider
         self._trace_store = trace_store or TodoLlmCallTraceStore()
         self._config_snapshot_id = config_snapshot_id
-        self._token_estimator = ConservativeTokenEstimator(
+        self._token_estimator = LangChainTokenEstimator(
             settings=settings.token_estimation
+        )
+        self._retry_controller = LlmGatewayRetryController(
+            max_total_attempts=settings.max_total_attempts
         )
         self._concurrency = LlmConcurrencyController(settings=settings)
         self._closed = False
@@ -399,42 +403,34 @@ class DefaultLlmGateway:
             model_profile_id=resolved.profile.model_profile_id,
             operation=LlmGatewayOperation.INVOKE_LLM,
         )
-        last_error: LlmGatewayError | None = None
         attempts_for_profile = 0
-        while (
-            attempts_for_profile < resolved.profile.retry_policy.max_attempts
-            and state.total_attempts < self._settings.max_total_attempts
-        ):
-            attempts_for_profile += 1
-            state.total_attempts += 1
-            try:
-                response = await self._invoke_physical(
-                    adapter=adapter,
-                    request=request,
-                    resolved=resolved,
-                    state=state,
-                )
-                return response
-            except LlmGatewayError as error:
-                contextual_error = self._with_profile_context(
-                    error=error,
-                    request=request,
-                    resolved=resolved,
-                    state=state,
-                )
-                last_error = contextual_error
-                if not self._can_retry_profile(
-                    profile=resolved.profile,
-                    error=contextual_error,
-                    attempts_for_profile=attempts_for_profile,
-                    state=state,
-                ):
-                    break
-                await self._sleep_before_retry(
-                    profile=resolved.profile,
-                    attempts_for_profile=attempts_for_profile,
-                    state=state,
-                )
+        last_error: LlmGatewayError | None = None
+        try:
+            async for attempt in self._retry_controller.build_retrying(
+                profile=resolved.profile,
+                state=state,
+            ):
+                attempts_for_profile = attempt.retry_state.attempt_number
+                with attempt:
+                    state.total_attempts += 1
+                    try:
+                        return await self._invoke_physical(
+                            adapter=adapter,
+                            request=request,
+                            resolved=resolved,
+                            state=state,
+                        )
+                    except LlmGatewayError as error:
+                        contextual_error = self._with_profile_context(
+                            error=error,
+                            request=request,
+                            resolved=resolved,
+                            state=state,
+                        )
+                        last_error = contextual_error
+                        raise contextual_error from error
+        except LlmGatewayError as error:
+            last_error = error
         if last_error is None:
             raise LlmGatewayError(
                 code=LlmGatewayErrorCode.LLM_PROFILE_UNAVAILABLE,
