@@ -7,17 +7,19 @@
 import pytest
 from pydantic import ValidationError
 
-from veterinary_agent import (
+from veterinary_agent.llm_gateway import (
     LlmGatewayError,
     LlmGatewayErrorCode,
+    LlmProfileRegistry,
+    create_default_llm_gateway,
+)
+from veterinary_agent.config import (
     LlmGatewaySettings,
     LlmModelCapabilityConfig,
     LlmModelProfileConfig,
-    LlmProfileRegistry,
     LlmProviderRouteConfig,
     LlmRequiredCapabilityConfig,
     LlmRetryPolicyConfig,
-    create_default_llm_gateway,
 )
 
 from . import (

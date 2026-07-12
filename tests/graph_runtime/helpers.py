@@ -11,17 +11,11 @@ from datetime import UTC, datetime, timedelta
 
 from langgraph.checkpoint.memory import InMemorySaver
 
-from veterinary_agent import (
+from veterinary_agent.checkpoint_store import (
     AcquireRunLockCommandDto,
     AcquireRunLockResultDto,
-    AgentGraphEventDto,
-    AgentGraphTurnRequestDto,
-    AgentTurnExecutionContextDto,
-    AgentTurnExecutionOptionsDto,
-    AgentTurnPublishCapabilitiesDto,
     CheckpointThreadDto,
     CheckpointThreadStatus,
-    DefaultGraphRuntime,
     EnsureThreadCommandDto,
     EnsureThreadResultDto,
     GetCheckpointQueryDto,
@@ -40,8 +34,18 @@ from veterinary_agent import (
     SegmentPublishStateDto,
     SegmentPublishStatus,
     SessionBusinessStateDto,
-    build_default_graph_registry,
 )
+from veterinary_agent.agent_application_service import (
+    AgentGraphEventDto,
+    AgentGraphTurnRequestDto,
+    AgentTurnExecutionContextDto,
+)
+from veterinary_agent.api_ingress import (
+    AgentTurnExecutionOptionsDto,
+    AgentTurnPublishCapabilitiesDto,
+)
+from veterinary_agent.graph_runtime import DefaultGraphRuntime
+from veterinary_agent.vet_conversation_graph import build_default_graph_registry
 
 
 class CapturingCheckpointStore:

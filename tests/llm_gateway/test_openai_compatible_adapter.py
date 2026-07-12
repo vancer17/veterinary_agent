@@ -10,18 +10,20 @@ import json
 import httpx
 import pytest
 
-from veterinary_agent import (
+from veterinary_agent.llm_gateway import (
     LlmGatewayError,
     LlmGatewayErrorCode,
     LlmMessageDto,
     LlmMessageRole,
-    LlmProviderRouteConfig,
     LlmResponseFormatDto,
-    LlmTimeoutPolicyConfig,
     OpenAICompatibleAdapter,
     ProviderInvocationRequestDto,
     ProviderStreamEventDto,
     ProviderStreamEventType,
+)
+from veterinary_agent.config import (
+    LlmProviderRouteConfig,
+    LlmTimeoutPolicyConfig,
 )
 
 

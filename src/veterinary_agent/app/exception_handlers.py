@@ -18,7 +18,7 @@ from veterinary_agent.api_ingress import (
     IngressErrorCode,
     build_api_ingress_error_response,
 )
-from veterinary_agent.app.dependencies import APP_STATE_KEY
+from veterinary_agent.core import APP_STATE_KEY
 from veterinary_agent.config import ApiIngressSettings
 
 REQUIRED_CONTEXT_FIELDS = frozenset(("user_id", "session_id", "pet_id"))

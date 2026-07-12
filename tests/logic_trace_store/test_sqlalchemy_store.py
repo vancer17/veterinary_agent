@@ -1,6 +1,6 @@
 ##################################################################################################
 # 文件: tests/logic_trace_store/test_sqlalchemy_store.py
-# 作用: 验证 LogicTraceStore SQLAlchemy 实现的核心写入、查询、投影和现有 trace 端口适配。
+# 作用: 验证 LogicTraceStore SQLAlchemy 实现的核心写入、查询、投影和消费侧 trace 适配器。
 # 边界: 使用临时 SQLite 数据库和 Alembic 迁移；不连接真实 PostgreSQL、不实现 VetTraceSchema 或业务图。
 ##################################################################################################
 
@@ -18,12 +18,14 @@ from veterinary_agent.agent_application_service import (
     AgentTraceFinalStatus,
     AgentTraceFinalizeCommandDto,
     AgentTraceStartCommandDto,
+    LogicTraceAgentTraceStore,
 )
 from veterinary_agent.agent_runner import (
     AgentRunStatus,
     AgentRunSummaryDto,
     AgentRunnerTraceWriteStatus,
     AgentUsageSummaryDto,
+    LogicTraceAgentRunnerTraceSink,
 )
 from veterinary_agent.checkpoint_store import DATABASE_URL_ENV_NAME
 from veterinary_agent.llm_gateway import (
@@ -31,6 +33,7 @@ from veterinary_agent.llm_gateway import (
     LlmFinishReason,
     LlmTraceWriteStatus,
     LlmUsageSummaryDto,
+    LogicTraceLlmCallTraceStore,
 )
 from veterinary_agent.logic_trace_store import (
     AppendTraceEventCommandDto,
@@ -46,6 +49,7 @@ from veterinary_agent.logic_trace_store import (
 )
 from veterinary_agent.pet_session_policy import (
     PetSessionDecision,
+    LogicTracePetSessionTraceSink,
     PetSessionPolicyAction,
     PetSessionTraceRecordDto,
     PetSessionTraceWriteStatus,
@@ -230,7 +234,7 @@ def test_sqlalchemy_logic_trace_store_adapts_existing_trace_ports(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """验证真实存储可适配应用层、LLM、AgentRunner 与 PetSessionPolicy trace 端口。
+    """验证消费侧适配器可将四类追踪契约写入通用存储。
 
     :param tmp_path: pytest 临时目录夹具。
     :param monkeypatch: pytest 环境变量修改夹具。
@@ -240,9 +244,13 @@ def test_sqlalchemy_logic_trace_store_adapts_existing_trace_ports(
     database_url = _build_sqlite_database_url(tmp_path / "adapters.db")
     _upgrade_to_head(monkeypatch=monkeypatch, database_url=database_url)
     store = create_sqlalchemy_logic_trace_store(database_url)
+    agent_trace_store = LogicTraceAgentTraceStore(store)
+    llm_trace_store = LogicTraceLlmCallTraceStore(store)
+    runner_trace_sink = LogicTraceAgentRunnerTraceSink(store)
+    policy_trace_sink = LogicTracePetSessionTraceSink(store)
     try:
         start_result = asyncio.run(
-            store.start_trace(
+            agent_trace_store.start_trace(
                 AgentTraceStartCommandDto(
                     request_id="req_2",
                     trace_id="trace_2",
@@ -258,7 +266,7 @@ def test_sqlalchemy_logic_trace_store_adapts_existing_trace_ports(
             )
         )
         llm_result = asyncio.run(
-            store.write_summary(
+            llm_trace_store.write_summary(
                 LlmCallSummaryDto(
                     call_id="llm_1",
                     trace_id="trace_2",
@@ -279,7 +287,7 @@ def test_sqlalchemy_logic_trace_store_adapts_existing_trace_ports(
             )
         )
         agent_result = asyncio.run(
-            store.write_run_summary(
+            runner_trace_sink.write_run_summary(
                 AgentRunSummaryDto(
                     run_id="agent_run_1",
                     trace_id="trace_2",
@@ -297,7 +305,7 @@ def test_sqlalchemy_logic_trace_store_adapts_existing_trace_ports(
             )
         )
         policy_result = asyncio.run(
-            store.write_decision(
+            policy_trace_sink.write_decision(
                 PetSessionTraceRecordDto(
                     request_id="req_2",
                     trace_id="trace_2",
@@ -316,7 +324,7 @@ def test_sqlalchemy_logic_trace_store_adapts_existing_trace_ports(
             )
         )
         final_result = asyncio.run(
-            store.finalize_trace(
+            agent_trace_store.finalize_trace(
                 AgentTraceFinalizeCommandDto(
                     request_id="req_2",
                     trace_id="trace_2",

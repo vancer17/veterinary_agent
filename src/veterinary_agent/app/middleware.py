@@ -9,7 +9,7 @@ from typing import Awaitable, Callable, Final
 
 from fastapi import FastAPI, Request, Response
 
-from veterinary_agent.app.dependencies import APP_STATE_KEY
+from veterinary_agent.core import APP_STATE_KEY
 from veterinary_agent.app.state import VeterinaryAgentAppState
 from veterinary_agent.observability import (
     ObservabilityProvider,

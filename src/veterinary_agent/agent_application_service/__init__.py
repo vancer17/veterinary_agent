@@ -63,6 +63,9 @@ from veterinary_agent.agent_application_service.service import (
     AgentApplicationService,
     DefaultAgentApplicationService,
 )
+from veterinary_agent.agent_application_service.trace import (
+    LogicTraceAgentTraceStore,
+)
 
 __all__: tuple[str, ...] = (
     "TODO_GRAPH_RUNTIME_ERROR_CODE",
@@ -110,6 +113,7 @@ __all__: tuple[str, ...] = (
     "AgentVetResultDto",
     "DefaultAgentApplicationService",
     "JsonMap",
+    "LogicTraceAgentTraceStore",
     "TodoAgentGraphRuntime",
     "TodoAgentLogicTraceStore",
     "build_agent_application_error_dto",

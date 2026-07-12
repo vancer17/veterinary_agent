@@ -17,23 +17,6 @@ from sqlalchemy import create_engine, func, insert, select, update
 from sqlalchemy.engine import Connection, Engine, RowMapping
 from sqlalchemy.exc import SQLAlchemyError
 
-from veterinary_agent.agent_application_service import (
-    AgentTraceDeliveryStatus,
-    AgentTraceFinalizeCommandDto,
-    AgentTraceStartCommandDto,
-    AgentTraceWriteResultDto,
-)
-from veterinary_agent.agent_runner import (
-    AgentRunStatus,
-    AgentRunSummaryDto,
-    AgentRunnerTraceWriteResultDto,
-    AgentRunnerTraceWriteStatus,
-)
-from veterinary_agent.llm_gateway import (
-    LlmCallSummaryDto,
-    LlmTraceWriteResultDto,
-    LlmTraceWriteStatus,
-)
 from veterinary_agent.logic_trace_store.dto import (
     AppendTraceEventCommandDto,
     BuildTraceProjectionCommandDto,
@@ -49,7 +32,6 @@ from veterinary_agent.logic_trace_store.dto import (
     RecordTraceArtifactCommandDto,
     StartTraceCommandDto,
     TraceArtifactDto,
-    TraceCallStatus,
     TraceCallSummaryDto,
     TraceDetailDto,
     TraceDto,
@@ -59,11 +41,9 @@ from veterinary_agent.logic_trace_store.dto import (
 )
 from veterinary_agent.logic_trace_store.enums import (
     LogicTraceErrorCode,
-    LogicTraceFinalStatus,
     LogicTraceOperation,
     LogicTraceStatus,
     LogicTraceWriteStatus,
-    TraceCallType,
     TraceProjectionType,
 )
 from veterinary_agent.logic_trace_store.errors import LogicTraceStoreError
@@ -79,12 +59,6 @@ from veterinary_agent.logic_trace_store.sqlalchemy_tables import (
     LOGIC_TRACE_PROJECTION_TABLE,
     LOGIC_TRACE_STORE_METADATA,
     LOGIC_TRACE_TABLE,
-)
-from veterinary_agent.logic_trace_store.store import TodoLogicTraceStore
-from veterinary_agent.pet_session_policy import (
-    PetSessionTraceRecordDto,
-    PetSessionTraceWriteResultDto,
-    PetSessionTraceWriteStatus,
 )
 
 _T = TypeVar("_T")
@@ -255,66 +229,6 @@ def _logic_error_to_write_result(
     )
 
 
-def _map_write_status_for_agent(
-    status: LogicTraceWriteStatus,
-) -> AgentTraceDeliveryStatus:
-    """将 LogicTraceStore 写入状态映射为 AgentTraceDeliveryStatus。
-
-    :param status: LogicTraceStore 通用写入状态。
-    :return: 应用层逻辑链交付状态。
-    """
-
-    if status is LogicTraceWriteStatus.WRITTEN:
-        return AgentTraceDeliveryStatus.WRITTEN
-    return AgentTraceDeliveryStatus.DEGRADED
-
-
-def _map_write_status_for_llm(
-    status: LogicTraceWriteStatus,
-) -> LlmTraceWriteStatus:
-    """将 LogicTraceStore 写入状态映射为 LlmTraceWriteStatus。
-
-    :param status: LogicTraceStore 通用写入状态。
-    :return: LlmGateway 模型调用摘要写入状态。
-    """
-
-    if status is LogicTraceWriteStatus.WRITTEN:
-        return LlmTraceWriteStatus.DELIVERED
-    if status is LogicTraceWriteStatus.SKIPPED:
-        return LlmTraceWriteStatus.SKIPPED
-    return LlmTraceWriteStatus.DEGRADED
-
-
-def _map_write_status_for_agent_runner(
-    status: LogicTraceWriteStatus,
-) -> AgentRunnerTraceWriteStatus:
-    """将 LogicTraceStore 写入状态映射为 AgentRunnerTraceWriteStatus。
-
-    :param status: LogicTraceStore 通用写入状态。
-    :return: AgentRunner 运行摘要写入状态。
-    """
-
-    if status is LogicTraceWriteStatus.WRITTEN:
-        return AgentRunnerTraceWriteStatus.DELIVERED
-    if status is LogicTraceWriteStatus.SKIPPED:
-        return AgentRunnerTraceWriteStatus.SKIPPED
-    return AgentRunnerTraceWriteStatus.DEGRADED
-
-
-def _map_write_status_for_pet_session(
-    status: LogicTraceWriteStatus,
-) -> PetSessionTraceWriteStatus:
-    """将 LogicTraceStore 写入状态映射为 PetSessionTraceWriteStatus。
-
-    :param status: LogicTraceStore 通用写入状态。
-    :return: PetSessionPolicy 策略摘要写入状态。
-    """
-
-    if status is LogicTraceWriteStatus.WRITTEN:
-        return PetSessionTraceWriteStatus.RECORDED
-    return PetSessionTraceWriteStatus.DEGRADED
-
-
 def _row_to_trace_dto(row: RowMapping) -> TraceDto:
     """将 logic_trace 数据库行转换为公共 DTO。
 
@@ -403,7 +317,7 @@ def _trace_summary_base(trace: TraceDto) -> JsonMap:
     return summary
 
 
-class SqlAlchemyLogicTraceStore(TodoLogicTraceStore):
+class SqlAlchemyLogicTraceStore:
     """基于 SQLAlchemy 仓储的 LogicTraceStore 实现。"""
 
     def __init__(
@@ -436,6 +350,14 @@ class SqlAlchemyLogicTraceStore(TodoLogicTraceStore):
         """
 
         self._engine.dispose()
+
+    async def close(self) -> None:
+        """关闭 LogicTraceStore 持有的数据库引擎。
+
+        :return: None。
+        """
+
+        self.dispose()
 
     def is_ready(self) -> bool:
         """判断 LogicTraceStore 是否具备基础写入能力。
@@ -1607,7 +1529,7 @@ class SqlAlchemyLogicTraceStore(TodoLogicTraceStore):
                 total=total,
             )
 
-    async def start_logic_trace(
+    async def start_trace(
         self,
         command: StartTraceCommandDto,
     ) -> LogicTraceWriteResultDto:
@@ -1623,39 +1545,6 @@ class SqlAlchemyLogicTraceStore(TodoLogicTraceStore):
             trace_id=command.trace_id,
             awaitable=asyncio.to_thread(self._start_trace_sync, command),
         )
-
-    async def start_trace(
-        self,
-        command: StartTraceCommandDto | AgentTraceStartCommandDto,
-    ) -> LogicTraceWriteResultDto | AgentTraceWriteResultDto:
-        """启动一轮逻辑链。
-
-        :param command: 启动逻辑链的命令 DTO。
-        :return: 启动写入结果；若输入为 Agent 语义 DTO，则返回 Agent 语义写入结果。
-        """
-
-        if isinstance(command, AgentTraceStartCommandDto):
-            result = await self.start_logic_trace(
-                StartTraceCommandDto(
-                    request_id=command.request_id,
-                    trace_id=command.trace_id,
-                    turn_id=command.turn_id,
-                    run_id=command.run_id,
-                    session_id=command.session_id,
-                    user_id=command.user_id,
-                    pet_id=command.pet_id,
-                    params_version=command.params_version,
-                    config_snapshot_id=command.config_snapshot_id,
-                    idempotency_key=command.idempotency_key,
-                )
-            )
-            return AgentTraceWriteResultDto(
-                status=_map_write_status_for_agent(result.status),
-                error_code=result.error_code,
-                retryable=result.retryable,
-                detail=result.detail,
-            )
-        return await self.start_logic_trace(command)
 
     async def append_trace_event(
         self,
@@ -1727,7 +1616,7 @@ class SqlAlchemyLogicTraceStore(TodoLogicTraceStore):
             awaitable=asyncio.to_thread(self._record_trace_artifact_sync, command),
         )
 
-    async def finalize_logic_trace(
+    async def finalize_trace(
         self,
         command: FinalizeTraceCommandDto,
     ) -> LogicTraceWriteResultDto:
@@ -1743,38 +1632,6 @@ class SqlAlchemyLogicTraceStore(TodoLogicTraceStore):
             trace_id=command.trace_id,
             awaitable=asyncio.to_thread(self._finalize_trace_sync, command),
         )
-
-    async def finalize_trace(
-        self,
-        command: FinalizeTraceCommandDto | AgentTraceFinalizeCommandDto,
-    ) -> LogicTraceWriteResultDto | AgentTraceWriteResultDto:
-        """完成一轮逻辑链。
-
-        :param command: 完成逻辑链的命令 DTO。
-        :return: 完成写入结果；若输入为 Agent 语义 DTO，则返回 Agent 语义写入结果。
-        """
-
-        if isinstance(command, AgentTraceFinalizeCommandDto):
-            result = await self.finalize_logic_trace(
-                FinalizeTraceCommandDto(
-                    request_id=command.request_id,
-                    trace_id=command.trace_id,
-                    turn_id=command.turn_id,
-                    run_id=command.run_id,
-                    final_status=LogicTraceFinalStatus(command.final_status.value),
-                    user_message_id=command.user_message_id,
-                    error_code=command.error_code,
-                    summary=dict(command.summary),
-                    finalized_at=_now_utc(),
-                )
-            )
-            return AgentTraceWriteResultDto(
-                status=_map_write_status_for_agent(result.status),
-                error_code=result.error_code,
-                retryable=result.retryable,
-                detail=result.detail,
-            )
-        return await self.finalize_logic_trace(command)
 
     async def build_trace_projection(
         self,
@@ -1825,168 +1682,6 @@ class SqlAlchemyLogicTraceStore(TodoLogicTraceStore):
             request_id=query.request_id,
             trace_id=None,
             awaitable=asyncio.to_thread(self._list_traces_sync, query),
-        )
-
-    async def write_summary(
-        self,
-        summary: LlmCallSummaryDto,
-    ) -> LlmTraceWriteResultDto:
-        """记录一次模型调用摘要。
-
-        :param summary: 脱敏模型调用摘要。
-        :return: 模型调用摘要写入结果。
-        """
-
-        result = await self.record_call_summary(
-            RecordCallSummaryCommandDto(
-                call_id=summary.call_id,
-                trace_id=summary.trace_id,
-                request_id=summary.request_id,
-                call_type=TraceCallType.MODEL,
-                source_component=summary.caller_component,
-                provider_ref=summary.provider_route_id,
-                input_ref=summary.requested_profile_id,
-                output_ref=summary.actual_model,
-                usage=summary.usage.model_dump(mode="json"),
-                status=(
-                    TraceCallStatus.SUCCEEDED
-                    if summary.status == "succeeded"
-                    else TraceCallStatus.CANCELLED
-                    if summary.status == "cancelled"
-                    else TraceCallStatus.FAILED
-                ),
-                summary={
-                    "requested_profile_id": summary.requested_profile_id,
-                    "actual_profile_id": summary.actual_profile_id,
-                    "actual_model": summary.actual_model,
-                    "finish_reason": summary.finish_reason.value
-                    if summary.finish_reason is not None
-                    else None,
-                    "latency_ms": summary.latency_ms,
-                    "first_token_latency_ms": summary.first_token_latency_ms,
-                    "retry_count": summary.retry_count,
-                    "fallback_chain": list(summary.fallback_chain),
-                    "error_code": summary.error_code.value
-                    if summary.error_code is not None
-                    else None,
-                    "config_snapshot_id": summary.config_snapshot_id,
-                },
-                created_at=_now_utc(),
-            )
-        )
-        return LlmTraceWriteResultDto(
-            status=_map_write_status_for_llm(result.status),
-            reason=result.detail,
-        )
-
-    async def write_run_summary(
-        self,
-        summary: AgentRunSummaryDto,
-    ) -> AgentRunnerTraceWriteResultDto:
-        """记录一次 AgentRunner 运行摘要。
-
-        :param summary: AgentRunner 脱敏运行摘要。
-        :return: AgentRunner 运行摘要写入结果。
-        """
-
-        result = await self.record_call_summary(
-            RecordCallSummaryCommandDto(
-                call_id=summary.run_id,
-                trace_id=summary.trace_id,
-                request_id=summary.request_id,
-                call_type=TraceCallType.AGENT_RUN,
-                source_component="AgentRunner",
-                provider_ref=summary.actual_model,
-                input_ref=summary.model_profile,
-                output_ref=summary.actual_model,
-                usage=summary.usage.model_dump(mode="json"),
-                status=(
-                    TraceCallStatus.SUCCEEDED
-                    if summary.status is AgentRunStatus.SUCCEEDED
-                    else TraceCallStatus.FAILED
-                ),
-                summary={
-                    "agent_id": summary.agent_id,
-                    "agent_version": summary.agent_version,
-                    "model_profile": summary.model_profile,
-                    "actual_model": summary.actual_model,
-                    "status": summary.status.value,
-                    "schema_valid": summary.schema_valid,
-                    "latency_ms": summary.latency_ms,
-                    "retry_count": summary.retry_count,
-                    "error_code": summary.error_code.value
-                    if summary.error_code is not None
-                    else None,
-                    "metadata": dict(summary.metadata),
-                },
-                created_at=_now_utc(),
-            )
-        )
-        return AgentRunnerTraceWriteResultDto(
-            status=_map_write_status_for_agent_runner(result.status),
-            error_code=result.error_code,
-            retryable=result.retryable,
-            detail=result.detail,
-        )
-
-    async def write_decision(
-        self,
-        record: PetSessionTraceRecordDto,
-    ) -> PetSessionTraceWriteResultDto:
-        """记录一次宠物会话策略判定摘要。
-
-        :param record: 宠物会话策略判定摘要。
-        :return: 宠物会话策略摘要写入结果。
-        """
-
-        result = await self.record_call_summary(
-            RecordCallSummaryCommandDto(
-                call_id=f"{record.trace_id}:pet_session",
-                trace_id=record.trace_id,
-                request_id=record.request_id,
-                call_type=TraceCallType.POLICY_DECISION,
-                source_component="PetSessionPolicy",
-                provider_ref=record.session_id,
-                input_ref=record.requested_pet_id,
-                output_ref=record.current_pet_id,
-                usage={},
-                status=(
-                    TraceCallStatus.SUCCEEDED
-                    if record.allow_continue
-                    else TraceCallStatus.FAILED
-                ),
-                summary={
-                    "schema_version": record.schema_version,
-                    "user_id": record.user_id,
-                    "session_id": record.session_id,
-                    "requested_pet_id": record.requested_pet_id,
-                    "current_pet_id": record.current_pet_id,
-                    "decision": record.decision.value,
-                    "policy_action": record.policy_action.value,
-                    "allow_continue": record.allow_continue,
-                    "error_code": record.error_code.value
-                    if record.error_code is not None
-                    else None,
-                    "retryable": record.retryable,
-                    "missing_field": record.missing_field,
-                    "is_new_session": record.is_new_session,
-                    "session_status": record.session_status.value
-                    if record.session_status is not None
-                    else None,
-                    "store_error_code": record.store_error_code.value
-                    if record.store_error_code is not None
-                    else None,
-                    "params_version": record.params_version,
-                    "config_snapshot_id": record.config_snapshot_id,
-                },
-                created_at=_now_utc(),
-            )
-        )
-        return PetSessionTraceWriteResultDto(
-            status=_map_write_status_for_pet_session(result.status),
-            error_code=result.error_code,
-            retryable=result.retryable,
-            detail=result.detail,
         )
 
 

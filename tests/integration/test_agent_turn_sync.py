@@ -81,6 +81,7 @@ def test_agent_turns_sync_success_uses_full_application_chain() -> None:
     assert graph_context.config_snapshot_id
     assert len(harness.trace_store.starts) == 1
     assert len(harness.trace_store.finalizes) == 1
+    assert harness.trace_store.closed is True
     assert harness.checkpoint_provider.stopped is True
 
 

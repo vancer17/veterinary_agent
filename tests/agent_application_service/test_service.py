@@ -8,15 +8,15 @@ import asyncio
 
 import pytest
 
-from veterinary_agent import (
+from veterinary_agent.agent_application_service import (
     AgentApplicationErrorCode,
     AgentApplicationPhase,
     AgentApplicationServiceError,
     AgentTraceDeliveryStatus,
     AgentTraceFinalStatus,
     AgentTurnStatus,
-    ConversationSessionStatus,
 )
+from veterinary_agent.conversation_store import ConversationSessionStatus
 
 from .helpers import (
     CapturingTraceStore,

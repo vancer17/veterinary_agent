@@ -31,6 +31,7 @@ from veterinary_agent.pet_session_policy.service import (
 )
 from veterinary_agent.pet_session_policy.trace import (
     TODO_TRACE_ERROR_CODE,
+    LogicTracePetSessionTraceSink,
     PetSessionTraceSink,
     TodoPetSessionTraceSink,
 )
@@ -39,6 +40,7 @@ __all__: tuple[str, ...] = (
     "TODO_TRACE_ERROR_CODE",
     "DefaultPetSessionPolicy",
     "JsonMap",
+    "LogicTracePetSessionTraceSink",
     "PetSessionContextDto",
     "PetSessionDecision",
     "PetSessionPolicy",

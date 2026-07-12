@@ -15,29 +15,32 @@ from logging.handlers import BufferingHandler
 from pathlib import Path
 from typing import cast
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 import pytest
 
-from veterinary_agent import (
+from veterinary_agent.config import (
     ApiIngressSettings,
-    MetricType,
-    ObservabilityErrorCode,
     ObservabilityLabelPolicyConfig,
     ObservabilityMetricsConfig,
     ObservabilitySettings,
     ObservabilityTracingConfig,
-    PROMETHEUS_CONTENT_TYPE,
     RuntimeConfigNamespace,
+    create_runtime_config_provider,
+    load_observability_settings,
+)
+from veterinary_agent.observability import (
+    MetricType,
+    ObservabilityErrorCode,
+    PROMETHEUS_CONTENT_TYPE,
     SpanStatus,
     StructuredLogLevel,
+    create_observability_provider,
+)
+from veterinary_agent.app import (
     VeterinaryAgentAppState,
     create_app,
-    create_observability_provider,
-    create_runtime_config_provider,
-    get_observability_provider,
-    load_observability_settings,
 )
 
 
@@ -107,24 +110,6 @@ def _state_from_app(app: FastAPI) -> VeterinaryAgentAppState:
     state = getattr(app.state, "veterinary_agent_state")
     assert isinstance(state, VeterinaryAgentAppState)
     return state
-
-
-def _request_for_app(app: FastAPI) -> Request:
-    """构建绑定指定 FastAPI app 的测试 Request。
-
-    :param app: FastAPI 应用实例。
-    :return: 可传给依赖函数的 Request 对象。
-    """
-
-    return Request(
-        {
-            "type": "http",
-            "method": "GET",
-            "path": "/",
-            "headers": [],
-            "app": app,
-        }
-    )
 
 
 @contextmanager
@@ -588,8 +573,8 @@ def test_observability_tracing_degrades_without_blocking() -> None:
     assert provider.is_ready() is True
 
 
-def test_app_mounts_observability_provider_and_dependency() -> None:
-    """验证 FastAPI lifespan 会装配 Observability provider 并可通过依赖读取。
+def test_app_mounts_observability_provider() -> None:
+    """验证 FastAPI lifespan 会装配 Observability provider。
 
     :return: None。
     """
@@ -598,11 +583,9 @@ def test_app_mounts_observability_provider_and_dependency() -> None:
 
     with TestClient(app) as client:
         state = _state_from_app(cast(FastAPI, client.app))
-        request = _request_for_app(cast(FastAPI, client.app))
 
         assert state.observability_provider is not None
         assert state.observability_ready is True
-        assert get_observability_provider(request) is state.observability_provider
 
 
 def test_app_exposes_metrics_endpoint() -> None:

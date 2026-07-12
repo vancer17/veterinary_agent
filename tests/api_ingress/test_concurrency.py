@@ -11,16 +11,20 @@ from typing import cast
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from veterinary_agent import (
+from veterinary_agent.api_ingress import (
     ApiIngressConcurrencyGate,
     ApiIngressConcurrencyLease,
-    ApiIngressSettings,
+)
+from veterinary_agent.config import ApiIngressSettings
+from veterinary_agent.conversation_store import (
     ConversationSessionDto,
     ConversationSessionStatus,
     ConversationStoreSettings,
     EnsureSessionCommandDto,
     EnsureSessionResultDto,
     TodoConversationStore,
+)
+from veterinary_agent.app import (
     VeterinaryAgentAppState,
     create_app,
 )

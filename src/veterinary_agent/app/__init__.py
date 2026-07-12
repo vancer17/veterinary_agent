@@ -4,36 +4,22 @@
 # 边界: 外部包应从本文件导入 ASGI 应用能力，避免跨包直接引用实现模块。
 ##################################################################################################
 
-from veterinary_agent.app.dependencies import (
-    get_agent_application_service,
-    get_agent_runner,
-    get_checkpoint_provider,
-    get_checkpoint_store_settings,
-    get_conversation_store,
-    get_conversation_store_settings,
-    get_langgraph_checkpointer,
-    get_llm_gateway,
-    get_llm_gateway_settings,
-    get_observability_provider,
-    get_pet_session_policy,
-    get_runtime_config_provider,
-    get_runtime_config_snapshot,
-)
+from veterinary_agent.app.dependencies import get_app_state
 from veterinary_agent.app.factory import create_app
-from veterinary_agent.app.lifespan import (
+from veterinary_agent.app.bootstrap import (
     AgentApplicationServiceFactory,
     AgentGraphRuntimeFactory,
-    AgentLogicTraceStoreFactory,
     AgentRunnerFactory,
     CheckpointProviderFactory,
     ConversationStoreFactory,
     LlmGatewayFactory,
+    LogicTraceStoreFactory,
     create_default_agent_application_service,
     create_langgraph_postgres_saver_provider,
     create_runtime_agent_runner,
     create_runtime_llm_gateway,
     create_todo_agent_graph_runtime,
-    create_todo_agent_logic_trace_store,
+    create_todo_logic_trace_store,
     create_todo_conversation_store,
 )
 from veterinary_agent.app.state import (
@@ -44,12 +30,12 @@ from veterinary_agent.app.state import (
 __all__: tuple[str, ...] = (
     "AgentApplicationServiceFactory",
     "AgentGraphRuntimeFactory",
-    "AgentLogicTraceStoreFactory",
     "AgentRunnerFactory",
     "CheckpointProviderFactory",
     "CheckpointProviderLifecycle",
     "ConversationStoreFactory",
     "LlmGatewayFactory",
+    "LogicTraceStoreFactory",
     "VeterinaryAgentAppState",
     "create_app",
     "create_default_agent_application_service",
@@ -57,19 +43,7 @@ __all__: tuple[str, ...] = (
     "create_runtime_agent_runner",
     "create_runtime_llm_gateway",
     "create_todo_agent_graph_runtime",
-    "create_todo_agent_logic_trace_store",
+    "create_todo_logic_trace_store",
     "create_todo_conversation_store",
-    "get_agent_application_service",
-    "get_agent_runner",
-    "get_checkpoint_provider",
-    "get_checkpoint_store_settings",
-    "get_conversation_store",
-    "get_conversation_store_settings",
-    "get_langgraph_checkpointer",
-    "get_llm_gateway",
-    "get_llm_gateway_settings",
-    "get_observability_provider",
-    "get_pet_session_policy",
-    "get_runtime_config_provider",
-    "get_runtime_config_snapshot",
+    "get_app_state",
 )

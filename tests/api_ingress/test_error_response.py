@@ -4,14 +4,14 @@
 # 边界: 仅测试 ApiIngress 内部错误响应构造器；不接入编排层、可观测性或业务安全审查。
 ##################################################################################################
 
-from veterinary_agent import (
+from veterinary_agent.api_ingress import (
     DEPENDENCY_ERROR_SOURCE,
     INTERNAL_ERROR_SOURCE,
-    ApiIngressSettings,
     ErrorDetailDto,
     IngressErrorCode,
     build_api_ingress_error_response,
 )
+from veterinary_agent.config import ApiIngressSettings
 
 
 def _settings_with_error_response(

@@ -6,7 +6,7 @@
 
 from fastapi.testclient import TestClient
 
-from veterinary_agent import TodoAgentGraphRuntime
+from veterinary_agent.agent_application_service import TodoAgentGraphRuntime
 
 from .helpers import (
     FakeGraphRuntime,

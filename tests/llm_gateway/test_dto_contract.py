@@ -7,7 +7,7 @@
 import pytest
 from pydantic import ValidationError
 
-from veterinary_agent import (
+from veterinary_agent.llm_gateway import (
     LlmFunctionCallDto,
     LlmImageContentPartDto,
     LlmImageUrlDto,

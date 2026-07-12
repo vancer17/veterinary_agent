@@ -14,8 +14,8 @@ from .helpers import (
     build_graph_request,
     collect_events,
 )
-from veterinary_agent import (
-    AgentResponseSegmentDto,
+from veterinary_agent.agent_application_service import AgentResponseSegmentDto
+from veterinary_agent.graph_runtime import (
     DefaultGraphRuntime,
     GraphDefinition,
     GraphEdgeSpec,

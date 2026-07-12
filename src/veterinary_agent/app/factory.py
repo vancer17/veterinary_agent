@@ -7,17 +7,17 @@
 from fastapi import FastAPI
 
 from veterinary_agent.api_ingress import create_api_ingress_router
-from veterinary_agent.app.exception_handlers import register_exception_handlers
-from veterinary_agent.app.lifespan import (
+from veterinary_agent.app.bootstrap import (
     AgentApplicationServiceFactory,
     AgentGraphRuntimeFactory,
-    AgentLogicTraceStoreFactory,
     AgentRunnerFactory,
     CheckpointProviderFactory,
     ConversationStoreFactory,
     LlmGatewayFactory,
-    create_lifespan,
+    LogicTraceStoreFactory,
 )
+from veterinary_agent.app.exception_handlers import register_exception_handlers
+from veterinary_agent.app.lifespan import create_lifespan
 from veterinary_agent.app.middleware import register_middlewares
 from veterinary_agent.app.routes import create_framework_router
 from veterinary_agent.config import (
@@ -43,7 +43,7 @@ def create_app(
     llm_gateway_factory: LlmGatewayFactory | None = None,
     agent_runner_factory: AgentRunnerFactory | None = None,
     graph_runtime_factory: AgentGraphRuntimeFactory | None = None,
-    logic_trace_store_factory: AgentLogicTraceStoreFactory | None = None,
+    logic_trace_store_factory: LogicTraceStoreFactory | None = None,
     agent_application_service_factory: AgentApplicationServiceFactory | None = None,
 ) -> FastAPI:
     """创建 FastAPI ASGI 应用实例。

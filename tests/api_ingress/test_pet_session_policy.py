@@ -9,7 +9,7 @@ from typing import cast
 
 from fastapi.testclient import TestClient
 
-from veterinary_agent import (
+from veterinary_agent.conversation_store import (
     AppendMessageCommandDto,
     AppendMessageResultDto,
     ConversationErrorCode,
@@ -24,8 +24,8 @@ from veterinary_agent import (
     EnsureSessionCommandDto,
     EnsureSessionResultDto,
     TodoConversationStore,
-    create_app,
 )
+from veterinary_agent.app import create_app
 
 
 class _StatefulConversationStore(TodoConversationStore):

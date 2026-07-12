@@ -23,37 +23,38 @@ source_root = "src/veterinary_agent"
 test_root = "tests"
 
 [budgets]
-max_source_physical_lines = 44000
-max_test_physical_lines = 22500
+max_source_physical_lines = 42000
+max_test_physical_lines = 21800
 max_source_python_files = 130
-max_test_python_files = 100
+max_test_python_files = 95
 warn_file_physical_lines = 800
-max_file_physical_lines = 2200
-max_root_init_physical_lines = 1100
-max_total_all_exports = 1726
-max_root_all_exports = 495
-max_model_dump_calls = 85
-max_model_validate_calls = 30
+max_file_physical_lines = 1800
+max_root_init_physical_lines = 50
+max_total_all_exports = 1250
+max_root_all_exports = 5
+max_model_dump_calls = 80
+max_model_validate_calls = 28
 max_dto_classes = 188
-max_error_status_todo_classes = 170
-max_template_files = 65
-max_dependency_cycles = 3
+max_error_status_todo_classes = 45
+max_template_files = 40
+max_dependency_cycles = 0
 max_direct_root_imports = 0
 
 [module_budgets]
-agent_application_service = 2500
+agent_application_service = 2525
 agent_runner = 3300
-api_ingress = 4500
-app = 1909
-checkpoint_store = 7000
-config = 3900
-conversation_store = 5000
-graph_runtime = 3400
-llm_gateway = 5200
-logic_trace_store = 3500
-observability = 2100
-pet_session_policy = 1500
-vet_conversation_graph = 250
+api_ingress = 4200
+app = 1600
+checkpoint_store = 6900
+config = 3800
+conversation_store = 4900
+core = 50
+graph_runtime = 3250
+llm_gateway = 5100
+logic_trace_store = 3100
+observability = 2050
+pet_session_policy = 1450
+vet_conversation_graph = 200
 
 [class_patterns]
 dto_suffixes = ["Dto", "DTO"]
@@ -132,4 +133,15 @@ blocked_imports = [
   "veterinary_agent.app",
   "fastapi",
   "starlette",
+]
+
+[[import_rules]]
+name = "LogicTraceStore 不能反向依赖追踪消费领域"
+severity = "error"
+from_modules = ["logic_trace_store"]
+blocked_imports = [
+  "veterinary_agent.agent_application_service",
+  "veterinary_agent.agent_runner",
+  "veterinary_agent.llm_gateway",
+  "veterinary_agent.pet_session_policy",
 ]
