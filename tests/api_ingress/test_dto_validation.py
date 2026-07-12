@@ -11,7 +11,8 @@ from uuid import UUID
 import pytest
 from fastapi.testclient import TestClient
 
-from veterinary_agent import ApiIngressSettings, create_app
+from veterinary_agent.config import ApiIngressSettings
+from veterinary_agent.app import create_app
 
 
 @pytest.fixture

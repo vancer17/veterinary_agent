@@ -7,7 +7,7 @@
 import pytest
 from langgraph.checkpoint.memory import InMemorySaver
 
-from veterinary_agent import (
+from veterinary_agent.graph_runtime import (
     GraphDefinition,
     GraphEdgeSpec,
     GraphNodeExecutionContext,

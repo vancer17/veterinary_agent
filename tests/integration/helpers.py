@@ -10,24 +10,21 @@ from typing import Literal, Self, cast
 
 from fastapi import FastAPI
 
-from veterinary_agent import (
+from veterinary_agent.agent_application_service import (
     AgentCancelTurnCommandDto,
     AgentCancelTurnResultDto,
     AgentGraphEventDto,
     AgentGraphRuntimeUnavailableError,
     AgentGraphTurnRequestDto,
     AgentGraphTurnResultDto,
-    AgentLogicTraceStore,
     AgentResponseSegmentDto,
     AgentResumeTurnCommandDto,
-    AgentTraceDeliveryStatus,
-    AgentTraceFinalizeCommandDto,
-    AgentTraceStartCommandDto,
-    AgentTraceWriteResultDto,
-    ApiIngressSettings,
+    TodoAgentGraphRuntime,
+)
+from veterinary_agent.config import ApiIngressSettings
+from veterinary_agent.conversation_store import (
     AppendMessageCommandDto,
     AppendMessageResultDto,
-    CheckpointStoreSettings,
     ConversationErrorCode,
     ConversationMessageDto,
     ConversationMessageStatus,
@@ -39,13 +36,25 @@ from veterinary_agent import (
     ConversationStoreSettings,
     EnsureSessionCommandDto,
     EnsureSessionResultDto,
+    TodoConversationStore,
+)
+from veterinary_agent.checkpoint_store import (
+    CheckpointStoreSettings,
     LangGraphCheckpointer,
     LangGraphRunnableConfig,
-    TodoAgentGraphRuntime,
-    TodoConversationStore,
-    VeterinaryAgentAppState,
     build_langgraph_thread_config,
+)
+from veterinary_agent.app import (
+    VeterinaryAgentAppState,
     create_app,
+)
+from veterinary_agent.logic_trace_store import (
+    FinalizeTraceCommandDto,
+    LogicTraceStore,
+    LogicTraceWriteResultDto,
+    LogicTraceWriteStatus,
+    StartTraceCommandDto,
+    TodoLogicTraceStore,
 )
 
 GraphFailureMode = Literal["unavailable", "timeout", "exception"]
@@ -447,14 +456,14 @@ class FakeGraphRuntimeFactory:
         return self.runtime
 
 
-class FakeLogicTraceStore:
+class FakeLogicTraceStore(TodoLogicTraceStore):
     """应用集成测试用 LogicTraceStore。"""
 
     def __init__(
         self,
         *,
-        start_status: AgentTraceDeliveryStatus = AgentTraceDeliveryStatus.WRITTEN,
-        finalize_status: AgentTraceDeliveryStatus = AgentTraceDeliveryStatus.WRITTEN,
+        start_status: LogicTraceWriteStatus = LogicTraceWriteStatus.WRITTEN,
+        finalize_status: LogicTraceWriteStatus = LogicTraceWriteStatus.WRITTEN,
     ) -> None:
         """初始化测试 LogicTraceStore。
 
@@ -463,10 +472,11 @@ class FakeLogicTraceStore:
         :return: None。
         """
 
-        self.starts: list[AgentTraceStartCommandDto] = []
-        self.finalizes: list[AgentTraceFinalizeCommandDto] = []
+        self.starts: list[StartTraceCommandDto] = []
+        self.finalizes: list[FinalizeTraceCommandDto] = []
         self._start_status = start_status
         self._finalize_status = finalize_status
+        self.closed = False
 
     def is_ready(self) -> bool:
         """判断测试 LogicTraceStore 是否就绪。
@@ -478,8 +488,8 @@ class FakeLogicTraceStore:
 
     async def start_trace(
         self,
-        command: AgentTraceStartCommandDto,
-    ) -> AgentTraceWriteResultDto:
+        command: StartTraceCommandDto,
+    ) -> LogicTraceWriteResultDto:
         """记录 Trace 启动命令。
 
         :param command: Trace 启动命令。
@@ -487,12 +497,12 @@ class FakeLogicTraceStore:
         """
 
         self.starts.append(command)
-        return AgentTraceWriteResultDto(status=self._start_status)
+        return LogicTraceWriteResultDto(status=self._start_status)
 
     async def finalize_trace(
         self,
-        command: AgentTraceFinalizeCommandDto,
-    ) -> AgentTraceWriteResultDto:
+        command: FinalizeTraceCommandDto,
+    ) -> LogicTraceWriteResultDto:
         """记录 Trace 完成命令。
 
         :param command: Trace 完成命令。
@@ -500,13 +510,21 @@ class FakeLogicTraceStore:
         """
 
         self.finalizes.append(command)
-        return AgentTraceWriteResultDto(status=self._finalize_status)
+        return LogicTraceWriteResultDto(status=self._finalize_status)
+
+    async def close(self) -> None:
+        """记录通用 LogicTraceStore 已进入关闭阶段。
+
+        :return: None。
+        """
+
+        self.closed = True
 
 
 class FakeLogicTraceStoreFactory:
     """向 FastAPI lifespan 注入固定 LogicTraceStore 的测试工厂。"""
 
-    def __init__(self, store: AgentLogicTraceStore) -> None:
+    def __init__(self, store: LogicTraceStore) -> None:
         """初始化 LogicTraceStore 测试工厂。
 
         :param store: 需要注入应用生命周期的 LogicTraceStore。
@@ -515,7 +533,7 @@ class FakeLogicTraceStoreFactory:
 
         self.store = store
 
-    def __call__(self) -> AgentLogicTraceStore:
+    def __call__(self) -> LogicTraceStore:
         """返回固定 LogicTraceStore。
 
         :return: 测试用 LogicTraceStore。

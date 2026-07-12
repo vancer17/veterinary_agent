@@ -8,28 +8,30 @@ import asyncio
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 
-from veterinary_agent import (
+from veterinary_agent.llm_gateway import (
     LlmCallSummaryDto,
     LlmFinishReason,
     LlmGatewayError,
-    LlmGatewaySettings,
     LlmInvocationRequestDto,
     LlmMessageDto,
     LlmMessageRole,
-    LlmModelCapabilityConfig,
-    LlmModelProfileConfig,
-    LlmProviderRouteConfig,
     LlmProviderRouteHealthDto,
-    LlmRequiredCapabilityConfig,
-    LlmRetryPolicyConfig,
     LlmStreamEventDto,
-    LlmTimeoutPolicyConfig,
     LlmTraceWriteResultDto,
     LlmTraceWriteStatus,
     LlmUsageSummaryDto,
     ProviderInvocationRequestDto,
     ProviderInvocationResponseDto,
     ProviderStreamEventDto,
+)
+from veterinary_agent.config import (
+    LlmGatewaySettings,
+    LlmModelCapabilityConfig,
+    LlmModelProfileConfig,
+    LlmProviderRouteConfig,
+    LlmRequiredCapabilityConfig,
+    LlmRetryPolicyConfig,
+    LlmTimeoutPolicyConfig,
 )
 
 

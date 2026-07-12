@@ -11,7 +11,6 @@ from typing import Protocol
 from veterinary_agent.agent_application_service import (
     AgentApplicationService,
     AgentGraphRuntime,
-    AgentLogicTraceStore,
 )
 from veterinary_agent.agent_runner import AgentRunner, AgentRunnerErrorDto
 from veterinary_agent.api_ingress import (
@@ -34,6 +33,7 @@ from veterinary_agent.conversation_store import (
 )
 from veterinary_agent.observability import ObservabilityErrorDto, ObservabilityProvider
 from veterinary_agent.llm_gateway import LlmGateway, LlmErrorDto
+from veterinary_agent.logic_trace_store import LogicTraceStore
 from veterinary_agent.pet_session_policy import PetSessionPolicy
 
 
@@ -118,7 +118,7 @@ class VeterinaryAgentAppState:
     agent_runner_error: AgentRunnerErrorDto | None = None
     graph_runtime: AgentGraphRuntime | None = None
     graph_runtime_ready: bool = False
-    logic_trace_store: AgentLogicTraceStore | None = None
+    logic_trace_store: LogicTraceStore | None = None
     logic_trace_store_ready: bool = False
     agent_application_service: AgentApplicationService | None = None
     agent_application_service_ready: bool = False

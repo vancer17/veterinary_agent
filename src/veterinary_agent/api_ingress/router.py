@@ -17,14 +17,10 @@ from veterinary_agent.agent_application_service import (
     AgentApplicationPhase,
     AgentApplicationService,
     AgentApplicationServiceError,
-)
-from veterinary_agent.api_ingress.builder import (
     AgentTurnRequestCommandDto,
-    build_agent_turn_request,
 )
 from veterinary_agent.api_ingress.concurrency import ApiIngressConcurrencyGate
 from veterinary_agent.api_ingress.dto import (
-    AgentTurnInternalRequestDto,
     ErrorDetailDto,
 )
 from veterinary_agent.api_ingress.error_response import (
@@ -43,11 +39,11 @@ from veterinary_agent.api_ingress.identity import (
     RequestIdentityResolutionFailure,
     resolve_request_identity,
 )
-from veterinary_agent.api_ingress.normalizer import normalize_agent_turn_request
 from veterinary_agent.api_ingress.rate_limit import (
     ApiIngressRateLimitDecision,
     ApiIngressRateLimiter,
 )
+from veterinary_agent.api_ingress.request_mapper import map_agent_turn_request
 from veterinary_agent.api_ingress.request_parser import (
     ApiIngressRequestParseFailure,
     parse_agent_turn_request,
@@ -60,8 +56,8 @@ from veterinary_agent.api_ingress.validation import (
 )
 from veterinary_agent.config import ApiIngressSettings
 from veterinary_agent.observability import ObservabilityProvider
+from veterinary_agent.core import APP_STATE_KEY
 
-APP_STATE_KEY: Final[str] = "veterinary_agent_state"
 REQUEST_ID_FALLBACK: Final[str] = "req_unavailable"
 TRACE_ID_FALLBACK: Final[str] = "trace_unavailable"
 
@@ -482,19 +478,19 @@ def _build_agent_application_error_response(
 
 
 def _build_rate_limit_response(
-    normalized_request: AgentTurnInternalRequestDto,
+    command: AgentTurnRequestCommandDto,
     decision: ApiIngressRateLimitDecision,
     settings: ApiIngressSettings,
 ) -> JSONResponse:
     """构建 API 接入限流命中时的统一错误响应。
 
-    :param normalized_request: 已完成 Ingress Normalizer 处理的内部请求 DTO。
+    :param command: 已完成入口映射的应用层请求命令。
     :param decision: API 接入组件限流判定结果。
     :param settings: API 接入组件配置。
     :return: 表示当前请求已被入口限流的 JSON 响应。
     """
 
-    request_context = normalized_request.request_context
+    request_context = command.request_context
     headers: dict[str, str] = {}
     if decision.retry_after_seconds is not None:
         headers["Retry-After"] = str(decision.retry_after_seconds)
@@ -627,15 +623,14 @@ async def _handle_turn_request(
     )
     if validation_failure is not None:
         return _build_validation_failure_response(validation_failure)
-    normalized_request = normalize_agent_turn_request(
-        request=request,
+    built_request = map_agent_turn_request(
         turn_request=turn_request,
         settings=settings,
         route_kind=route_kind,
         identity_context=identity_context,
     )
     response_mode_failure = validate_response_mode_availability(
-        normalized_request=normalized_request,
+        command=built_request,
         settings=settings,
     )
     if response_mode_failure is not None:
@@ -644,20 +639,16 @@ async def _handle_turn_request(
     rate_limiter = _get_api_ingress_rate_limiter(request)
     rate_limit_decision = await rate_limiter.try_acquire(
         request=request,
-        response_mode=normalized_request.request_context.response_mode,
+        response_mode=ResponseMode(built_request.request_context.response_mode),
     )
     if not rate_limit_decision.allowed:
         return _build_rate_limit_response(
-            normalized_request=normalized_request,
+            command=built_request,
             decision=rate_limit_decision,
             settings=settings,
         )
     stream_lease = rate_limit_decision.stream_lease
     try:
-        built_request = build_agent_turn_request(
-            normalized_request=normalized_request,
-            settings=settings,
-        )
         if built_request.request_context.response_mode == ResponseMode.STREAM.value:
             return _build_streaming_adapter_unavailable_response(
                 built_request=built_request,

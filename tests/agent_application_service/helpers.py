@@ -8,7 +8,7 @@ from collections.abc import AsyncIterator, Sequence
 from datetime import UTC, datetime
 from typing import Literal, Self, TypeVar
 
-from veterinary_agent import (
+from veterinary_agent.agent_application_service import (
     AgentCancelTurnCommandDto,
     AgentCancelTurnResultDto,
     AgentGraphEventDto,
@@ -23,18 +23,32 @@ from veterinary_agent import (
     AgentTraceFinalizeCommandDto,
     AgentTraceStartCommandDto,
     AgentTraceWriteResultDto,
-    AgentTurnDiagnosticsDto,
-    AgentTurnExecutionOptionsDto,
     AgentTurnInputItemDto,
     AgentTurnInputTextDto,
-    AgentTurnPublishCapabilitiesDto,
-    AgentTurnRequestCommandDto,
     AgentTurnRequestContextDto,
     AgentTurnTrustedIdentityDto,
+    DefaultAgentApplicationService,
+    JsonMap,
+)
+from veterinary_agent.api_ingress import (
+    AgentTurnDiagnosticsDto,
+    AgentTurnExecutionOptionsDto,
+    AgentTurnPublishCapabilitiesDto,
+    AgentTurnRequestCommandDto,
+)
+from veterinary_agent.config import (
     ApiIngressSettings,
+    ObservabilitySettings,
+    RuntimeConfigError,
+    RuntimeConfigErrorCode,
+    RuntimeConfigOperation,
+    RuntimeConfigProvider,
+    RuntimeConfigSnapshot,
+    create_runtime_config_provider,
+)
+from veterinary_agent.conversation_store import (
     AppendMessageCommandDto,
     AppendMessageResultDto,
-    CheckpointStoreSettings,
     ConversationErrorCode,
     ConversationMessageDto,
     ConversationMessageStatus,
@@ -43,20 +57,12 @@ from veterinary_agent import (
     ConversationSessionStatus,
     ConversationStoreError,
     ConversationStoreSettings,
-    DefaultAgentApplicationService,
-    DefaultPetSessionPolicy,
     EnsureSessionCommandDto,
     EnsureSessionResultDto,
-    JsonMap,
-    ObservabilitySettings,
-    RuntimeConfigError,
-    RuntimeConfigErrorCode,
-    RuntimeConfigOperation,
-    RuntimeConfigProvider,
-    RuntimeConfigSnapshot,
     TodoConversationStore,
-    create_runtime_config_provider,
 )
+from veterinary_agent.checkpoint_store import CheckpointStoreSettings
+from veterinary_agent.pet_session_policy import DefaultPetSessionPolicy
 
 _AsyncItem = TypeVar("_AsyncItem")
 GraphExecuteFailureMode = Literal["unavailable", "timeout", "exception"]

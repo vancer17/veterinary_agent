@@ -7,13 +7,17 @@
 import asyncio
 from typing import cast
 
-from veterinary_agent import (
+from veterinary_agent.config import (
     LlmTracePolicyConfig,
-    LlmTraceWriteStatus,
-    ObservabilityProvider,
     ObservabilitySettings,
+)
+from veterinary_agent.llm_gateway import (
+    LlmTraceWriteStatus,
     TodoLlmCallTraceStore,
     create_default_llm_gateway,
+)
+from veterinary_agent.observability import (
+    ObservabilityProvider,
     create_observability_provider,
 )
 

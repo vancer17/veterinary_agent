@@ -8,11 +8,9 @@ from typing import cast
 
 from fastapi.testclient import TestClient
 
-from veterinary_agent import (
-    ApiIngressSettings,
-    check_api_ingress_readiness,
-    create_app,
-)
+from veterinary_agent.config import ApiIngressSettings
+from veterinary_agent.api_ingress import check_api_ingress_readiness
+from veterinary_agent.app import create_app
 
 
 def _settings_with_readiness(**readiness_updates: object) -> ApiIngressSettings:

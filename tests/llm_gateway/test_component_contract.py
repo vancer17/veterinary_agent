@@ -9,20 +9,22 @@ import asyncio
 import pytest
 from pydantic import ValidationError
 
-from veterinary_agent import (
-    CheckpointStoreSettings,
+from veterinary_agent.checkpoint_store import CheckpointStoreSettings
+from veterinary_agent.config import (
     DEFAULT_LLM_GATEWAY_CONFIG_PATH,
-    LlmGatewayError,
-    LlmGatewayErrorCode,
     LlmGatewaySettings,
     LlmModelCapabilityConfig,
     LlmModelProfileConfig,
     LlmProviderRouteConfig,
     LlmRequiredCapabilityConfig,
     RuntimeConfigNamespace,
-    create_default_llm_gateway,
     create_runtime_config_provider,
     load_llm_gateway_settings,
+)
+from veterinary_agent.llm_gateway import (
+    LlmGatewayError,
+    LlmGatewayErrorCode,
+    create_default_llm_gateway,
 )
 
 from . import (

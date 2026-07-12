@@ -9,8 +9,8 @@ from typing import cast
 
 import pytest
 
-from veterinary_agent import (
-    CheckpointProviderLifecycle,
+from veterinary_agent.app import CheckpointProviderLifecycle
+from veterinary_agent.checkpoint_store import (
     LangGraphCheckpointer,
     LangGraphRunnableConfig,
     build_langgraph_thread_config,
@@ -100,7 +100,7 @@ def _patch_default_checkpoint_provider_factory(
     """
 
     monkeypatch.setattr(
-        "veterinary_agent.app.lifespan.create_langgraph_postgres_saver_provider",
+        "veterinary_agent.app.bootstrap.create_langgraph_postgres_saver_provider",
         _create_todo_checkpoint_provider,
     )
     yield

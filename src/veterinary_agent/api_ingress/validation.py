@@ -11,7 +11,6 @@ from typing import Final
 from fastapi import Request
 
 from veterinary_agent.api_ingress.dto import (
-    AgentTurnInternalRequestDto,
     AgentTurnRequestDto,
     AttachmentRefDto,
     ErrorDetailDto,
@@ -19,6 +18,7 @@ from veterinary_agent.api_ingress.dto import (
     InputAttachmentContentDto,
     InputItemDto,
 )
+from veterinary_agent.agent_application_service import AgentTurnRequestCommandDto
 from veterinary_agent.api_ingress.error_response import (
     build_api_ingress_error_response,
 )
@@ -396,19 +396,19 @@ def _build_invalid_request_failure(
 
 
 def _build_response_mode_availability_failure(
-    normalized_request: AgentTurnInternalRequestDto,
+    command: AgentTurnRequestCommandDto,
     settings: ApiIngressSettings,
     reason: str,
 ) -> ApiIngressValidationFailure:
     """构建响应模式不可用的校验失败结果。
 
-    :param normalized_request: 已完成 Ingress Normalizer 处理的内部请求 DTO。
+    :param command: 已完成入口映射的应用层请求命令。
     :param settings: API 接入组件配置。
     :param reason: 响应模式不可用的原因。
     :return: 响应模式不可用的校验失败结果。
     """
 
-    request_context = normalized_request.request_context
+    request_context = command.request_context
     return _build_failure(
         settings=settings,
         status_code=400,
@@ -421,26 +421,32 @@ def _build_response_mode_availability_failure(
 
 
 def validate_response_mode_availability(
-    normalized_request: AgentTurnInternalRequestDto,
+    command: AgentTurnRequestCommandDto,
     settings: ApiIngressSettings,
 ) -> ApiIngressValidationFailure | None:
     """校验归一化后的响应模式是否被当前入口配置允许。
 
-    :param normalized_request: 已完成 Ingress Normalizer 处理的内部请求 DTO。
+    :param command: 已完成入口映射的应用层请求命令。
     :param settings: API 接入组件配置。
     :return: 校验失败结果；当前响应模式被允许时返回 None。
     """
 
-    response_mode = normalized_request.request_context.response_mode
-    if response_mode is ResponseMode.SYNC and not settings.response_mode.allow_sync:
+    response_mode = command.request_context.response_mode
+    if (
+        response_mode == ResponseMode.SYNC.value
+        and not settings.response_mode.allow_sync
+    ):
         return _build_response_mode_availability_failure(
-            normalized_request=normalized_request,
+            command=command,
             settings=settings,
             reason="sync_not_allowed",
         )
-    if response_mode is ResponseMode.STREAM and not settings.response_mode.allow_stream:
+    if (
+        response_mode == ResponseMode.STREAM.value
+        and not settings.response_mode.allow_stream
+    ):
         return _build_response_mode_availability_failure(
-            normalized_request=normalized_request,
+            command=command,
             settings=settings,
             reason="stream_not_allowed",
         )
@@ -448,20 +454,20 @@ def validate_response_mode_availability(
 
 
 def validate_sync_response_mode_availability(
-    normalized_request: AgentTurnInternalRequestDto,
+    command: AgentTurnRequestCommandDto,
     settings: ApiIngressSettings,
 ) -> ApiIngressValidationFailure | None:
     """校验同步响应模式是否被当前入口配置允许。
 
-    :param normalized_request: 已完成 Ingress Normalizer 处理的内部请求 DTO。
+    :param command: 已完成入口映射的应用层请求命令。
     :param settings: API 接入组件配置。
     :return: 校验失败结果；同步模式被允许或当前请求非同步模式时返回 None。
     """
 
-    if normalized_request.request_context.response_mode is not ResponseMode.SYNC:
+    if command.request_context.response_mode != ResponseMode.SYNC.value:
         return None
     return validate_response_mode_availability(
-        normalized_request=normalized_request,
+        command=command,
         settings=settings,
     )
 

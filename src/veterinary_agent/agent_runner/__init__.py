@@ -62,6 +62,7 @@ from veterinary_agent.agent_runner.runner import (
     DefaultAgentRunner,
     create_default_agent_runner,
 )
+from veterinary_agent.agent_runner.trace import LogicTraceAgentRunnerTraceSink
 
 __all__: tuple[str, ...] = (
     "AgentPromptEstimateDto",
@@ -98,6 +99,7 @@ __all__: tuple[str, ...] = (
     "InMemoryAgentSpecRegistry",
     "JsonMap",
     "LangChainMessageComposer",
+    "LogicTraceAgentRunnerTraceSink",
     "PromptBlockDto",
     "PromptRenderResult",
     "StructuredOutputParseResult",

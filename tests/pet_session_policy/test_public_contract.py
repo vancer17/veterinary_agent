@@ -17,6 +17,7 @@ def test_pet_session_policy_package_exposes_public_contract() -> None:
         "TODO_TRACE_ERROR_CODE",
         "DefaultPetSessionPolicy",
         "JsonMap",
+        "LogicTracePetSessionTraceSink",
         "PetSessionContextDto",
         "PetSessionDecision",
         "PetSessionPolicy",

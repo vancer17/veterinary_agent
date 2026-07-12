@@ -5,7 +5,6 @@
 ##################################################################################################
 
 from veterinary_agent.api_ingress.dto import (
-    AgentTurnInternalRequestDto,
     AgentTurnRequestDto,
     AgentTurnResponseDto,
     ApiIngressDto,
@@ -28,13 +27,11 @@ from veterinary_agent.api_ingress.dto import (
     ReasoningDisplayDeltaEventDataDto,
     ReasoningDisplayDto,
     ReasoningDisplayStartedEventDataDto,
-    RequestContextDto,
     SegmentCompletedEventDataDto,
     SegmentDeltaEventDataDto,
     SegmentDto,
     SegmentStartedEventDataDto,
     SseEventDto,
-    TrustedIdentityDto,
     TurnCompletedEventDataDto,
     TurnFailedEventDataDto,
     TurnOptionsDto,
@@ -42,13 +39,13 @@ from veterinary_agent.api_ingress.dto import (
     VetContextDto,
     VetResultDto,
 )
-from veterinary_agent.api_ingress.builder import (
+from veterinary_agent.agent_application_service import (
     AgentTurnDiagnosticsDto,
     AgentTurnExecutionOptionsDto,
     AgentTurnPublishCapabilitiesDto,
     AgentTurnRequestCommandDto,
-    build_agent_turn_request,
 )
+from veterinary_agent.api_ingress.request_mapper import map_agent_turn_request
 from veterinary_agent.api_ingress.concurrency import (
     ApiIngressConcurrencyGate,
     ApiIngressConcurrencyLease,
@@ -80,7 +77,6 @@ from veterinary_agent.api_ingress.identity import (
     RequestIdentityResolutionFailure,
     resolve_request_identity,
 )
-from veterinary_agent.api_ingress.normalizer import normalize_agent_turn_request
 from veterinary_agent.api_ingress.rate_limit import (
     ApiIngressRateLimitDecision,
     ApiIngressRateLimitKey,
@@ -110,7 +106,6 @@ from veterinary_agent.api_ingress.validation import (
 )
 
 __all__: tuple[str, ...] = (
-    "AgentTurnInternalRequestDto",
     "AgentTurnDiagnosticsDto",
     "AgentTurnExecutionOptionsDto",
     "AgentTurnPublishCapabilitiesDto",
@@ -158,7 +153,6 @@ __all__: tuple[str, ...] = (
     "ReasoningDisplayDeltaEventDataDto",
     "ReasoningDisplayDto",
     "ReasoningDisplayStartedEventDataDto",
-    "RequestContextDto",
     "RequestIdentityContext",
     "RequestIdentityResolution",
     "RequestIdentityResolutionFailure",
@@ -170,7 +164,6 @@ __all__: tuple[str, ...] = (
     "SegmentStatus",
     "SseEventDto",
     "SseEventType",
-    "TrustedIdentityDto",
     "TurnCompletedEventDataDto",
     "TurnFailedEventDataDto",
     "TurnOptionsDto",
@@ -180,13 +173,12 @@ __all__: tuple[str, ...] = (
     "VetResultDto",
     "build_api_ingress_error_response",
     "build_api_ingress_json_error_response",
-    "build_agent_turn_request",
     "check_api_ingress_readiness",
     "create_api_ingress_router",
     "handle_agent_turns",
     "handle_openai_responses",
     "map_agent_turn_result",
-    "normalize_agent_turn_request",
+    "map_agent_turn_request",
     "parse_agent_turn_request",
     "resolve_request_identity",
     "validate_agent_turn_request",

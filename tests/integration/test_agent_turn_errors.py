@@ -6,13 +6,11 @@
 
 from fastapi.testclient import TestClient
 
-from veterinary_agent import (
-    AgentTraceDeliveryStatus,
-    CheckpointStoreSettings,
-    ConversationStoreSettings,
-    TodoAgentGraphRuntime,
-    create_app,
-)
+from veterinary_agent.agent_application_service import TodoAgentGraphRuntime
+from veterinary_agent.checkpoint_store import CheckpointStoreSettings
+from veterinary_agent.conversation_store import ConversationStoreSettings
+from veterinary_agent.app import create_app
+from veterinary_agent.logic_trace_store import LogicTraceWriteStatus
 
 from .helpers import (
     FakeCheckpointProvider,
@@ -150,7 +148,7 @@ def test_trace_degraded_keeps_sync_response_successful() -> None:
     :return: None。
     """
 
-    trace_store = FakeLogicTraceStore(finalize_status=AgentTraceDeliveryStatus.DEGRADED)
+    trace_store = FakeLogicTraceStore(finalize_status=LogicTraceWriteStatus.DEGRADED)
     harness = build_harness(trace_store=trace_store)
 
     with TestClient(harness.app) as client:

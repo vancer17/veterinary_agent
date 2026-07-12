@@ -1,165 +1,28 @@
 ##################################################################################################
 # 文件: tests/app/test_dependencies.py
-# 作用: 验证 ASGI app 依赖层可以安全暴露 checkpoint provider 与 LangGraph checkpointer。
-# 边界: 仅测试 FastAPI request/app.state 依赖访问，不连接数据库、不编译真实 LangGraph 图、不执行 Agent 编排。
+# 作用: 验证 FastAPI 依赖层只负责读取统一应用状态容器。
+# 边界: 不为各个组件复制透传 getter，不连接数据库，不执行 Agent 编排。
 ##################################################################################################
 
-from datetime import UTC, datetime
 from typing import cast
 
 import pytest
 from fastapi import FastAPI, Request
 
-from veterinary_agent import (
-    ApiIngressConcurrencyGate,
-    ApiIngressRateLimiter,
-    ApiIngressSettings,
-    CheckpointStoreSettings,
-    CheckpointErrorCode,
-    CheckpointOperation,
-    CheckpointProviderLifecycle,
-    CheckpointStoreError,
-    ConversationStoreSettings,
-    DefaultPetSessionPolicy,
-    LangGraphCheckpointer,
-    LangGraphRunnableConfig,
-    TodoConversationStore,
-    VeterinaryAgentAppState,
-    build_langgraph_thread_config,
-    create_runtime_config_provider,
-    get_checkpoint_provider,
-    get_checkpoint_store_settings,
-    get_conversation_store,
-    get_conversation_store_settings,
-    get_langgraph_checkpointer,
-    get_pet_session_policy,
-    get_runtime_config_provider,
-    get_runtime_config_snapshot,
-)
+from veterinary_agent.app import VeterinaryAgentAppState
+from veterinary_agent.app.dependencies import APP_STATE_KEY, get_app_state
 
 
-class _DependencyCheckpointProvider:
-    """测试用 checkpoint provider。"""
+def _build_request(state: VeterinaryAgentAppState | None) -> Request:
+    """构建带有可选应用状态的测试请求。
 
-    def __init__(self, *, ready: bool = True) -> None:
-        """初始化测试用 checkpoint provider。
-
-        :param ready: provider 是否报告自身就绪。
-        :return: None。
-        """
-
-        self.ready = ready
-        self.checkpointer = cast(LangGraphCheckpointer, object())
-
-    async def start(self) -> None:
-        """启动测试用 checkpoint provider。
-
-        :return: None。
-        """
-
-        self.ready = True
-
-    async def stop(self) -> None:
-        """停止测试用 checkpoint provider。
-
-        :return: None。
-        """
-
-        self.ready = False
-
-    def is_ready(self) -> bool:
-        """判断测试用 checkpoint provider 是否就绪。
-
-        :return: 若 provider 当前报告就绪，则返回 True。
-        """
-
-        return self.ready
-
-    def get_checkpointer(self) -> LangGraphCheckpointer:
-        """读取测试用 LangGraph checkpointer 空壳。
-
-        :return: 测试用 LangGraph checkpointer 空壳。
-        """
-
-        return self.checkpointer
-
-    def build_config(
-        self,
-        *,
-        thread_id: str,
-        checkpoint_id: str | None = None,
-    ) -> LangGraphRunnableConfig:
-        """构建测试用 LangGraph thread 运行配置。
-
-        :param thread_id: LangGraph checkpointer 使用的 thread ID。
-        :param checkpoint_id: 可选 checkpoint ID。
-        :return: 可传递给 LangGraph 的运行配置。
-        """
-
-        return build_langgraph_thread_config(
-            thread_id=thread_id,
-            checkpoint_id=checkpoint_id,
-        )
-
-
-def _build_app_state(
-    *,
-    checkpoint_provider: CheckpointProviderLifecycle | None,
-    checkpoint_provider_ready: bool,
-) -> VeterinaryAgentAppState:
-    """构建测试用 ASGI 应用状态。
-
-    :param checkpoint_provider: 需要挂载到 app state 的 checkpoint provider。
-    :param checkpoint_provider_ready: app state 记录的 checkpoint provider 就绪标记。
-    :return: 测试用兽医 Agent 应用状态。
-    """
-
-    settings = ApiIngressSettings()
-    checkpoint_store_settings = CheckpointStoreSettings()
-    conversation_store_settings = ConversationStoreSettings()
-    runtime_config_provider = create_runtime_config_provider(
-        api_ingress_settings=settings,
-        checkpoint_store_settings=checkpoint_store_settings,
-        conversation_store_settings=conversation_store_settings,
-    )
-    runtime_config_snapshot = runtime_config_provider.current_snapshot()
-    conversation_store = TodoConversationStore()
-    pet_session_policy = DefaultPetSessionPolicy(
-        conversation_store=conversation_store,
-        runtime_config_provider=runtime_config_provider,
-    )
-    return VeterinaryAgentAppState(
-        settings=settings,
-        runtime_config_provider=runtime_config_provider,
-        runtime_config_snapshot=runtime_config_snapshot,
-        started_at=datetime.now(UTC),
-        ready=True,
-        orchestrator_concurrency_gate=ApiIngressConcurrencyGate(
-            max_concurrency=settings.orchestrator.max_concurrency,
-        ),
-        rate_limiter=ApiIngressRateLimiter.from_settings(settings),
-        checkpoint_store_settings=checkpoint_store_settings,
-        checkpoint_provider=checkpoint_provider,
-        checkpoint_provider_ready=checkpoint_provider_ready,
-        checkpoint_provider_error=None,
-        conversation_store_settings=conversation_store_settings,
-        conversation_store=conversation_store,
-        conversation_store_ready=True,
-        conversation_store_error=None,
-        pet_session_policy=pet_session_policy,
-        pet_session_policy_ready=True,
-    )
-
-
-def _build_request(app_state: VeterinaryAgentAppState) -> Request:
-    """构建带有兽医 Agent app state 的 FastAPI 请求对象。
-
-    :param app_state: 需要挂载到 app.state 的兽医 Agent 应用状态。
-    :return: 可传入依赖函数的 FastAPI Request。
+    :param state: 需要挂载到 FastAPI app.state 的状态对象。
+    :return: 可传入应用依赖函数的请求对象。
     """
 
     app = FastAPI()
-    setattr(app.state, "veterinary_agent_state", app_state)
+    if state is not None:
+        setattr(app.state, APP_STATE_KEY, state)
     return Request(
         {
             "type": "http",
@@ -171,162 +34,23 @@ def _build_request(app_state: VeterinaryAgentAppState) -> Request:
     )
 
 
-def test_get_checkpoint_provider_returns_ready_provider() -> None:
-    """验证 provider 已就绪时依赖函数返回同一 provider。
+def test_get_app_state_returns_mounted_state() -> None:
+    """验证依赖函数返回组合根挂载的同一状态对象。
 
     :return: None。
     """
 
-    provider = _DependencyCheckpointProvider()
-    request = _build_request(
-        _build_app_state(
-            checkpoint_provider=provider,
-            checkpoint_provider_ready=True,
-        )
-    )
+    state = cast(VeterinaryAgentAppState, object())
 
-    assert get_checkpoint_provider(request) is provider
+    assert get_app_state(_build_request(state)) is state
 
 
-def test_get_langgraph_checkpointer_returns_provider_checkpointer() -> None:
-    """验证可从依赖函数读取 provider 暴露的 LangGraph checkpointer。
+def test_get_app_state_rejects_missing_state() -> None:
+    """验证应用状态缺失时依赖函数明确失败。
 
     :return: None。
+    :raises RuntimeError: 由 get_app_state 抛出并被测试捕获。
     """
 
-    provider = _DependencyCheckpointProvider()
-    request = _build_request(
-        _build_app_state(
-            checkpoint_provider=provider,
-            checkpoint_provider_ready=True,
-        )
-    )
-
-    assert get_langgraph_checkpointer(request) is provider.checkpointer
-
-
-def test_get_checkpoint_store_settings_returns_runtime_config() -> None:
-    """验证依赖函数可从 app state 读取 CheckpointStore RuntimeConfig。
-
-    :return: None。
-    """
-
-    app_state = _build_app_state(
-        checkpoint_provider=_DependencyCheckpointProvider(),
-        checkpoint_provider_ready=True,
-    )
-    request = _build_request(app_state)
-
-    assert get_checkpoint_store_settings(request) is app_state.checkpoint_store_settings
-
-
-def test_get_conversation_store_settings_returns_runtime_config() -> None:
-    """验证依赖函数可从 app state 读取 ConversationStore RuntimeConfig。
-
-    :return: None。
-    """
-
-    app_state = _build_app_state(
-        checkpoint_provider=_DependencyCheckpointProvider(),
-        checkpoint_provider_ready=True,
-    )
-    request = _build_request(app_state)
-
-    assert (
-        get_conversation_store_settings(request)
-        is app_state.conversation_store_settings
-    )
-
-
-def test_get_conversation_store_returns_store() -> None:
-    """验证依赖函数可从 app state 读取 ConversationStore。
-
-    :return: None。
-    """
-
-    app_state = _build_app_state(
-        checkpoint_provider=_DependencyCheckpointProvider(),
-        checkpoint_provider_ready=True,
-    )
-    request = _build_request(app_state)
-
-    assert get_conversation_store(request) is app_state.conversation_store
-
-
-def test_get_pet_session_policy_returns_policy() -> None:
-    """验证依赖函数可从 app state 读取 PetSessionPolicy。
-
-    :return: None。
-    """
-
-    app_state = _build_app_state(
-        checkpoint_provider=_DependencyCheckpointProvider(),
-        checkpoint_provider_ready=True,
-    )
-    request = _build_request(app_state)
-
-    assert get_pet_session_policy(request) is app_state.pet_session_policy
-
-
-def test_get_runtime_config_provider_returns_provider() -> None:
-    """验证依赖函数可从 app state 读取 RuntimeConfig provider。
-
-    :return: None。
-    """
-
-    app_state = _build_app_state(
-        checkpoint_provider=_DependencyCheckpointProvider(),
-        checkpoint_provider_ready=True,
-    )
-    request = _build_request(app_state)
-
-    assert get_runtime_config_provider(request) is app_state.runtime_config_provider
-
-
-def test_get_runtime_config_snapshot_returns_current_snapshot() -> None:
-    """验证依赖函数可从 app state 读取 RuntimeConfig 快照。
-
-    :return: None。
-    """
-
-    app_state = _build_app_state(
-        checkpoint_provider=_DependencyCheckpointProvider(),
-        checkpoint_provider_ready=True,
-    )
-    request = _build_request(app_state)
-
-    assert get_runtime_config_snapshot(request) is app_state.runtime_config_snapshot
-
-
-@pytest.mark.parametrize(
-    ("provider", "provider_ready"),
-    [
-        (None, False),
-        (_DependencyCheckpointProvider(), False),
-        (_DependencyCheckpointProvider(ready=False), True),
-    ],
-)
-def test_get_checkpoint_provider_rejects_unavailable_provider(
-    provider: CheckpointProviderLifecycle | None,
-    provider_ready: bool,
-) -> None:
-    """验证 provider 缺失或未就绪时依赖函数抛出领域错误。
-
-    :param provider: 测试用 checkpoint provider。
-    :param provider_ready: app state 记录的 checkpoint provider 就绪标记。
-    :return: None。
-    """
-
-    request = _build_request(
-        _build_app_state(
-            checkpoint_provider=provider,
-            checkpoint_provider_ready=provider_ready,
-        )
-    )
-
-    with pytest.raises(CheckpointStoreError) as exc_info:
-        get_checkpoint_provider(request)
-
-    error = exc_info.value.to_dto()
-    assert error.code is CheckpointErrorCode.CHECKPOINT_STORE_UNAVAILABLE
-    assert error.operation is CheckpointOperation.LANGGRAPH_POSTGRES_SAVER_GET
+    with pytest.raises(RuntimeError, match="应用状态尚未初始化"):
+        get_app_state(_build_request(None))

@@ -9,7 +9,8 @@ import asyncio
 from fastapi import Request
 from starlette.types import Message, Scope
 
-from veterinary_agent import ApiIngressSettings, parse_agent_turn_request
+from veterinary_agent.config import ApiIngressSettings
+from veterinary_agent.api_ingress import parse_agent_turn_request
 
 
 def _settings_with_parse_timeout(parse_timeout_seconds: float) -> ApiIngressSettings:

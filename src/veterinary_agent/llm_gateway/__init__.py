@@ -93,7 +93,10 @@ from veterinary_agent.llm_gateway.token_estimator import (
     ConservativeTokenEstimator,
     LangChainTokenEstimator,
 )
-from veterinary_agent.llm_gateway.trace import TodoLlmCallTraceStore
+from veterinary_agent.llm_gateway.trace import (
+    LogicTraceLlmCallTraceStore,
+    TodoLlmCallTraceStore,
+)
 
 __all__: tuple[str, ...] = (
     "ConservativeTokenEstimator",
@@ -124,6 +127,7 @@ __all__: tuple[str, ...] = (
     "LlmInvocationRequestDto",
     "LlmInvocationResultDto",
     "LlmJsonSchemaDto",
+    "LogicTraceLlmCallTraceStore",
     "LlmMessageDto",
     "LlmMessageRole",
     "LlmModelCapabilityConfig",

@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from veterinary_agent import (
+from veterinary_agent.agent_application_service import (
     TODO_GRAPH_RUNTIME_ERROR_CODE,
     TODO_TRACE_STORE_ERROR_CODE,
     AgentGraphEventDto,

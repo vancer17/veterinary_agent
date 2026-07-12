@@ -13,19 +13,21 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
-from veterinary_agent import (
-    ApiIngressSettings,
+from veterinary_agent.config import ApiIngressSettings
+from veterinary_agent.checkpoint_store import (
     CheckpointErrorCode,
     CheckpointOperation,
-    CheckpointProviderLifecycle,
     CheckpointStoreSettings,
     CheckpointStoreError,
     LangGraphCheckpointer,
     LangGraphPostgresSaverProvider,
     LangGraphPostgresSaverSettings,
     LangGraphRunnableConfig,
-    VeterinaryAgentAppState,
     build_langgraph_thread_config,
+)
+from veterinary_agent.app import (
+    CheckpointProviderLifecycle,
+    VeterinaryAgentAppState,
     create_app,
 )
 

@@ -15,9 +15,11 @@ from .helpers import (
     build_todo_runtime,
     collect_events,
 )
-from veterinary_agent import (
+from veterinary_agent.agent_application_service import (
     AgentGraphRuntimeUnavailableError,
     AgentResumeTurnCommandDto,
+)
+from veterinary_agent.graph_runtime import (
     DefaultGraphRuntime,
     GraphDefinition,
     GraphEdgeSpec,

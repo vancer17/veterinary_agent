@@ -10,10 +10,8 @@ from pathlib import Path
 from pydantic import ValidationError
 import pytest
 
-from veterinary_agent import (
+from veterinary_agent.config import (
     ApiIngressSettings,
-    CheckpointStoreSettings,
-    ConversationStoreSettings,
     ObservabilitySettings,
     ObservabilityTracingConfig,
     RUNTIME_CONFIG_TRACE_SAFE_SCHEMA_VERSION,
@@ -28,6 +26,8 @@ from veterinary_agent import (
     load_runtime_config_settings,
     validate_runtime_config_candidate,
 )
+from veterinary_agent.checkpoint_store import CheckpointStoreSettings
+from veterinary_agent.conversation_store import ConversationStoreSettings
 
 
 def _runtime_config_settings(**updates: object) -> RuntimeConfigSettings:

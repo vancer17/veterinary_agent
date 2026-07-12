@@ -10,7 +10,6 @@ from typing import Annotated, Literal, Self, TypeAlias
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
 
 from veterinary_agent.api_ingress.enums import (
-    ApiRouteKind,
     IngressErrorCode,
     InputContentType,
     InputItemType,
@@ -215,81 +214,6 @@ class AgentTurnRequestDto(ApiIngressDto):
         if len(attachment_ids) != len(set(attachment_ids)):
             raise ValueError("attachments 中的 attachment_id 不得重复")
         return self
-
-
-class RequestContextDto(ApiIngressDto):
-    """入口请求上下文 DTO。"""
-
-    request_id: str = Field(
-        min_length=1,
-        description="本次入口请求 ID。",
-    )
-    trace_id: str = Field(
-        min_length=1,
-        description="本次全链路追踪 ID。",
-    )
-    response_mode: ResponseMode = Field(
-        description="入口层归一化后的响应模式。",
-    )
-    received_at: datetime = Field(
-        description="入口层接收请求的服务端时间。",
-    )
-    route_kind: ApiRouteKind = Field(
-        description="入口层归一化后的路由类型。",
-    )
-
-
-class TrustedIdentityDto(ApiIngressDto):
-    """上游可信身份上下文 DTO。"""
-
-    user_id: str = Field(
-        min_length=1,
-        description="上游可信传入的用户 ID。",
-    )
-    session_id: str = Field(
-        min_length=1,
-        description="上游可信传入的会话 ID。",
-    )
-    pet_id: str = Field(
-        min_length=1,
-        description="上游可信传入的宠物 ID。",
-    )
-    pet_info: JsonMap | None = Field(
-        default=None,
-        description="客户端透传的宠物基础信息。",
-    )
-
-
-class AgentTurnInternalRequestDto(ApiIngressDto):
-    """ApiIngress 转发给编排层的内部归一化请求 DTO。"""
-
-    request_context: RequestContextDto = Field(
-        description="入口请求上下文。",
-    )
-    trusted_identity: TrustedIdentityDto = Field(
-        description="上游可信身份上下文。",
-    )
-    input: list[InputItemDto] = Field(
-        default_factory=list,
-        description="归一化后的输入内容列表。",
-    )
-    attachments: list[AttachmentRefDto] = Field(
-        default_factory=list,
-        description="归一化后的附件引用元信息列表。",
-    )
-    metadata: JsonMap = Field(
-        default_factory=dict,
-        description="归一化后的普通透传元信息。",
-    )
-    model: str | None = Field(
-        default=None,
-        min_length=1,
-        description="模型或模型策略提示。",
-    )
-    turn_options: TurnOptionsDto | None = Field(
-        default=None,
-        description="本轮入口选项。",
-    )
 
 
 class OutputTextContentDto(ApiIngressDto):
@@ -716,7 +640,6 @@ class ReadyResponseDto(ApiIngressDto):
 
 
 __all__: tuple[str, ...] = (
-    "AgentTurnInternalRequestDto",
     "AgentTurnRequestDto",
     "AgentTurnResponseDto",
     "ApiIngressDto",
@@ -739,13 +662,11 @@ __all__: tuple[str, ...] = (
     "ReasoningDisplayDeltaEventDataDto",
     "ReasoningDisplayDto",
     "ReasoningDisplayStartedEventDataDto",
-    "RequestContextDto",
     "SegmentCompletedEventDataDto",
     "SegmentDeltaEventDataDto",
     "SegmentDto",
     "SegmentStartedEventDataDto",
     "SseEventDto",
-    "TrustedIdentityDto",
     "TurnCompletedEventDataDto",
     "TurnFailedEventDataDto",
     "TurnOptionsDto",

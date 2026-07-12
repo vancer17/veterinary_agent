@@ -8,7 +8,7 @@ import asyncio
 
 import pytest
 
-from veterinary_agent import (
+from veterinary_agent.llm_gateway import (
     LlmConcurrencyController,
     LlmGatewayError,
     LlmGatewayErrorCode,
