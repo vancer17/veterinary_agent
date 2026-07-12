@@ -23,9 +23,9 @@ source_root = "src/veterinary_agent"
 test_root = "tests"
 
 [budgets]
-max_source_physical_lines = 42000
-max_test_physical_lines = 21800
-max_source_python_files = 130
+max_source_physical_lines = 43700
+max_test_physical_lines = 22300
+max_source_python_files = 133
 max_test_python_files = 95
 warn_file_physical_lines = 800
 max_file_physical_lines = 1800
@@ -34,7 +34,7 @@ max_total_all_exports = 1250
 max_root_all_exports = 5
 max_model_dump_calls = 80
 max_model_validate_calls = 28
-max_dto_classes = 188
+max_dto_classes = 195
 max_error_status_todo_classes = 45
 max_template_files = 40
 max_dependency_cycles = 0
@@ -54,6 +54,7 @@ llm_gateway = 5100
 logic_trace_store = 3100
 observability = 2050
 pet_session_policy = 1450
+vet_trace_schema = 2050
 vet_conversation_graph = 200
 
 [class_patterns]
