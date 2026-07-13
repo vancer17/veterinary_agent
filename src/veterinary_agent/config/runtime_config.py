@@ -39,6 +39,10 @@ from veterinary_agent.config.vet_context_builder import (
     VetContextBuilderSettings,
     load_vet_context_builder_settings,
 )
+from veterinary_agent.config.vet_standard_consultation import (
+    StandardConsultationAgentSettings,
+    load_standard_consultation_agent_settings,
+)
 from veterinary_agent.config.vet_task_decomposer import (
     VetTaskDecomposerSettings,
     load_vet_task_decomposer_settings,
@@ -111,6 +115,7 @@ class RuntimeConfigNamespace(StrEnum):
     OBSERVABILITY = "observability"
     VET_TASK_DECOMPOSER = "vet_task_decomposer"
     VET_CONTEXT_BUILDER = "vet_context_builder"
+    STANDARD_CONSULTATION = "standard_consultation"
 
 
 class _RuntimeConfigModel(BaseModel):
@@ -419,6 +424,9 @@ class RuntimeConfigSnapshot(_RuntimeConfigModel):
     vet_context_builder: VetContextBuilderSettings = Field(
         description="VetContextBuilder RuntimeConfig。",
     )
+    standard_consultation: StandardConsultationAgentSettings = Field(
+        description="StandardConsultationAgent RuntimeConfig。",
+    )
     trace_safe_summary: JsonMap = Field(
         description="可写入逻辑链的脱敏配置摘要。",
     )
@@ -574,6 +582,45 @@ def _build_vet_task_decomposer_trace_summary(
     }
 
 
+def _build_standard_consultation_trace_summary(
+    settings: StandardConsultationAgentSettings,
+) -> JsonMap:
+    """构建 StandardConsultationAgent trace-safe 配置摘要。
+
+    :param settings: StandardConsultationAgent RuntimeConfig。
+    :return: 不含 prompt、业务正文或敏感凭据的配置摘要。
+    """
+
+    return {
+        "enabled": settings.enabled,
+        "config_version": settings.config_version,
+        "standard_agent_version": settings.standard_agent_version,
+        "orchestrator_version": settings.orchestrator_version,
+        "sub_agents": {
+            "question_collector": (
+                f"{settings.question_collector_agent_id}:"
+                f"{settings.question_collector_agent_version}"
+            ),
+            "triage": f"{settings.triage_agent_id}:{settings.triage_agent_version}",
+            "direction": (
+                f"{settings.direction_agent_id}:{settings.direction_agent_version}"
+            ),
+            "differential": (
+                f"{settings.differential_agent_id}:"
+                f"{settings.differential_agent_version}"
+            ),
+            "care": f"{settings.care_agent_id}:{settings.care_agent_version}",
+            "synthesizer": (
+                f"{settings.synthesizer_agent_id}:{settings.synthesizer_agent_version}"
+            ),
+        },
+        "timeouts": settings.timeouts.model_dump(mode="json"),
+        "question_budget": settings.question_budget.model_dump(mode="json"),
+        "readiness": settings.readiness.model_dump(mode="json"),
+        "rag": settings.rag.model_dump(mode="json"),
+    }
+
+
 def _build_llm_gateway_trace_summary(settings: LlmGatewaySettings) -> JsonMap:
     """构建 LlmGateway trace-safe 配置摘要。
 
@@ -658,6 +705,7 @@ def _build_trace_safe_summary(
     observability_settings: ObservabilitySettings,
     vet_task_decomposer_settings: VetTaskDecomposerSettings,
     vet_context_builder_settings: VetContextBuilderSettings,
+    standard_consultation_settings: StandardConsultationAgentSettings,
 ) -> JsonMap:
     """构建完整 trace-safe 配置摘要。
 
@@ -669,6 +717,7 @@ def _build_trace_safe_summary(
     :param observability_settings: Observability RuntimeConfig。
     :param vet_task_decomposer_settings: VetTaskDecomposer RuntimeConfig。
     :param vet_context_builder_settings: VetContextBuilder RuntimeConfig。
+    :param standard_consultation_settings: StandardConsultationAgent RuntimeConfig。
     :return: 可写入逻辑链的脱敏配置摘要。
     """
 
@@ -689,6 +738,9 @@ def _build_trace_safe_summary(
         ),
         "vet_context_builder": _build_vet_context_builder_trace_summary(
             vet_context_builder_settings
+        ),
+        "standard_consultation": _build_standard_consultation_trace_summary(
+            standard_consultation_settings
         ),
     }
 
@@ -847,6 +899,7 @@ def _dump_namespace_for_lookup(
         | ObservabilitySettings
         | VetTaskDecomposerSettings
         | VetContextBuilderSettings
+        | StandardConsultationAgentSettings
     ),
 ) -> JsonMap:
     """将配置命名空间转换为可按点路径读取的映射。
@@ -1007,6 +1060,7 @@ def validate_runtime_config_candidate(
     observability_settings: ObservabilitySettings | None = None,
     vet_task_decomposer_settings: VetTaskDecomposerSettings | None = None,
     vet_context_builder_settings: VetContextBuilderSettings | None = None,
+    standard_consultation_settings: StandardConsultationAgentSettings | None = None,
 ) -> None:
     """校验候选 RuntimeConfig 聚合配置。
 
@@ -1018,6 +1072,7 @@ def validate_runtime_config_candidate(
     :param observability_settings: 可选 Observability RuntimeConfig；未传入时从默认配置源加载。
     :param vet_task_decomposer_settings: 可选 VetTaskDecomposer RuntimeConfig；未传入时从默认配置源加载。
     :param vet_context_builder_settings: 可选 VetContextBuilder RuntimeConfig；未传入时从默认配置源加载。
+    :param standard_consultation_settings: 可选 StandardConsultationAgent RuntimeConfig；未传入时从默认配置源加载。
     :return: None。
     :raises RuntimeConfigError: 当候选配置违反安全锁定项、跨组件关系或 trace-safe 约束时抛出。
     """
@@ -1047,6 +1102,11 @@ def validate_runtime_config_candidate(
         if vet_context_builder_settings is not None
         else load_vet_context_builder_settings()
     )
+    resolved_standard_consultation_settings = (
+        standard_consultation_settings
+        if standard_consultation_settings is not None
+        else load_standard_consultation_agent_settings()
+    )
     _validate_runtime_config_safety_locks(runtime_config_settings)
     _validate_runtime_config_relations(
         api_ingress_settings=api_ingress_settings,
@@ -1062,6 +1122,7 @@ def validate_runtime_config_candidate(
         observability_settings=resolved_observability_settings,
         vet_task_decomposer_settings=resolved_vet_task_decomposer_settings,
         vet_context_builder_settings=resolved_vet_context_builder_settings,
+        standard_consultation_settings=resolved_standard_consultation_settings,
     )
     _validate_trace_safe_summary(summary)
 
@@ -1076,6 +1137,7 @@ def build_runtime_config_snapshot(
     observability_settings: ObservabilitySettings | None = None,
     vet_task_decomposer_settings: VetTaskDecomposerSettings | None = None,
     vet_context_builder_settings: VetContextBuilderSettings | None = None,
+    standard_consultation_settings: StandardConsultationAgentSettings | None = None,
 ) -> RuntimeConfigSnapshot:
     """构建 RuntimeConfig 不可变快照。
 
@@ -1087,6 +1149,7 @@ def build_runtime_config_snapshot(
     :param observability_settings: 可选 Observability RuntimeConfig；未传入时从默认配置源加载。
     :param vet_task_decomposer_settings: 可选 VetTaskDecomposer RuntimeConfig；未传入时从默认配置源加载。
     :param vet_context_builder_settings: 可选 VetContextBuilder RuntimeConfig；未传入时从默认配置源加载。
+    :param standard_consultation_settings: 可选 StandardConsultationAgent RuntimeConfig；未传入时从默认配置源加载。
     :return: 已完成校验的 RuntimeConfig 快照。
     :raises RuntimeConfigError: 当配置校验失败或 trace-safe 摘要不安全时抛出。
     """
@@ -1116,6 +1179,11 @@ def build_runtime_config_snapshot(
         if vet_context_builder_settings is not None
         else load_vet_context_builder_settings()
     )
+    resolved_standard_consultation_settings = (
+        standard_consultation_settings
+        if standard_consultation_settings is not None
+        else load_standard_consultation_agent_settings()
+    )
     validate_runtime_config_candidate(
         runtime_config_settings=runtime_config_settings,
         api_ingress_settings=api_ingress_settings,
@@ -1125,6 +1193,7 @@ def build_runtime_config_snapshot(
         observability_settings=resolved_observability_settings,
         vet_task_decomposer_settings=resolved_vet_task_decomposer_settings,
         vet_context_builder_settings=resolved_vet_context_builder_settings,
+        standard_consultation_settings=resolved_standard_consultation_settings,
     )
     trace_safe_summary = _build_trace_safe_summary(
         runtime_config_settings=runtime_config_settings,
@@ -1135,6 +1204,7 @@ def build_runtime_config_snapshot(
         observability_settings=resolved_observability_settings,
         vet_task_decomposer_settings=resolved_vet_task_decomposer_settings,
         vet_context_builder_settings=resolved_vet_context_builder_settings,
+        standard_consultation_settings=resolved_standard_consultation_settings,
     )
     config_snapshot_id = _build_config_snapshot_id(trace_safe_summary)
     summary_with_snapshot_id: JsonMap = {
@@ -1156,6 +1226,7 @@ def build_runtime_config_snapshot(
         observability=resolved_observability_settings,
         vet_task_decomposer=resolved_vet_task_decomposer_settings,
         vet_context_builder=resolved_vet_context_builder_settings,
+        standard_consultation=resolved_standard_consultation_settings,
         trace_safe_summary=summary_with_snapshot_id,
     )
 
@@ -1208,6 +1279,7 @@ class RuntimeConfigProvider:
         | ObservabilitySettings
         | VetTaskDecomposerSettings
         | VetContextBuilderSettings
+        | StandardConsultationAgentSettings
     ):
         """按命名空间读取配置对象。
 
@@ -1233,6 +1305,8 @@ class RuntimeConfigProvider:
             return snapshot.vet_task_decomposer
         if namespace is RuntimeConfigNamespace.VET_CONTEXT_BUILDER:
             return snapshot.vet_context_builder
+        if namespace is RuntimeConfigNamespace.STANDARD_CONSULTATION:
+            return snapshot.standard_consultation
         raise RuntimeConfigError(
             code=RuntimeConfigErrorCode.CONFIG_SNAPSHOT_NOT_FOUND,
             operation=RuntimeConfigOperation.GET_CONFIG_NAMESPACE,
@@ -1340,6 +1414,7 @@ def create_runtime_config_provider(
     observability_settings: ObservabilitySettings | None = None,
     vet_task_decomposer_settings: VetTaskDecomposerSettings | None = None,
     vet_context_builder_settings: VetContextBuilderSettings | None = None,
+    standard_consultation_settings: StandardConsultationAgentSettings | None = None,
 ) -> RuntimeConfigProvider:
     """创建应用内 RuntimeConfig provider。
 
@@ -1351,6 +1426,7 @@ def create_runtime_config_provider(
     :param observability_settings: 可选 Observability RuntimeConfig；未传入时从默认配置源加载。
     :param vet_task_decomposer_settings: 可选 VetTaskDecomposer RuntimeConfig；未传入时从默认配置源加载。
     :param vet_context_builder_settings: 可选 VetContextBuilder RuntimeConfig；未传入时从默认配置源加载。
+    :param standard_consultation_settings: 可选 StandardConsultationAgent RuntimeConfig；未传入时从默认配置源加载。
     :return: 持有当前有效配置快照的 RuntimeConfig provider。
     :raises RuntimeConfigError: 当配置校验失败或 trace-safe 摘要不安全时抛出。
     """
@@ -1395,6 +1471,11 @@ def create_runtime_config_provider(
         if vet_context_builder_settings is not None
         else load_vet_context_builder_settings()
     )
+    resolved_standard_consultation_settings = (
+        standard_consultation_settings
+        if standard_consultation_settings is not None
+        else load_standard_consultation_agent_settings()
+    )
     snapshot = build_runtime_config_snapshot(
         runtime_config_settings=resolved_runtime_config_settings,
         api_ingress_settings=resolved_api_ingress_settings,
@@ -1404,6 +1485,7 @@ def create_runtime_config_provider(
         observability_settings=resolved_observability_settings,
         vet_task_decomposer_settings=resolved_vet_task_decomposer_settings,
         vet_context_builder_settings=resolved_vet_context_builder_settings,
+        standard_consultation_settings=resolved_standard_consultation_settings,
     )
     return RuntimeConfigProvider(snapshot)
 
@@ -1421,11 +1503,13 @@ __all__: tuple[str, ...] = (
     "RuntimeConfigSafetyLockSettings",
     "RuntimeConfigSettings",
     "RuntimeConfigSnapshot",
+    "StandardConsultationAgentSettings",
     "VetContextBuilderSettings",
     "VetTaskDecomposerSettings",
     "build_runtime_config_error_dto",
     "build_runtime_config_snapshot",
     "create_runtime_config_provider",
+    "load_standard_consultation_agent_settings",
     "load_runtime_config_settings",
     "load_vet_task_decomposer_settings",
     "load_vet_context_builder_settings",

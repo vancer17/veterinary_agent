@@ -1,0 +1,34 @@
+enabled: true
+config_version: standard-consultation-config.v1
+standard_agent_version: standard-consultation-agent.v1
+orchestrator_version: standard-consultation-orchestrator.v1
+question_collector_agent_id: standard_question_collector
+question_collector_agent_version: v1
+triage_agent_id: standard_triage_urgency
+triage_agent_version: v1
+direction_agent_id: standard_direction_hint
+direction_agent_version: v1
+differential_agent_id: standard_differential_diagnosis
+differential_agent_version: v1
+care_agent_id: standard_care_plan
+care_agent_version: v1
+synthesizer_agent_id: standard_draft_synthesizer
+synthesizer_agent_version: v1
+timeouts:
+  total_seconds: 12.0
+  sub_agent_seconds: 4.0
+  rag_seconds: 1.5
+question_budget:
+  default_max_questions: 3
+  absolute_max_questions: 3
+readiness:
+  direction_known_slot_ratio: 0.35
+  differential_known_slot_ratio: 0.6
+  care_known_slot_ratio: 0.8
+  contraindication_completeness_ratio: 0.8
+rag:
+  enabled: true
+  presearch_enabled: true
+  required_for_l3: true
+  required_for_l4: true
+  top_k: 5
