@@ -57,7 +57,7 @@ pet_session_policy = 1450
 vet_trace_schema = 2050
 vet_conversation_graph = 200
 vet_context_builder = 3850
-vet_task_decomposer = 2380
+vet_task_decomposer = 2382
 
 [class_patterns]
 dto_suffixes = ["Dto", "DTO"]
