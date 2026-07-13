@@ -1,0 +1,21 @@
+# VetTaskDecomposer 组件配置。
+# 该文件只承载任务拆解策略、LLM 审查修复、本地占位降级与输出归一化限制。
+enabled: true
+config_version: vet-task-decomposer-config.v1
+decomposer_version: vet-task-decomposer.v1
+llm_enabled: true
+review_repair_enabled: true
+local_fallback_enabled: true
+decompose_agent_id: vet_task_decomposer
+decompose_agent_version: v1
+review_agent_id: vet_task_decomposer_review
+review_agent_version: v1
+timeouts:
+  llm_seconds: 4.0
+  review_seconds: 2.0
+  local_fallback_seconds: 0.5
+confidence:
+  min_llm_confidence: 0.45
+  min_local_fallback_confidence: 0.6
+max_tasks_per_turn: 8
+max_user_message_chars: 12000

@@ -75,6 +75,13 @@ from veterinary_agent.config.runtime_config import (
     load_runtime_config_settings,
     validate_runtime_config_candidate,
 )
+from veterinary_agent.config.vet_task_decomposer import (
+    DEFAULT_VET_TASK_DECOMPOSER_CONFIG_PATH,
+    VetTaskDecomposerConfidenceConfig,
+    VetTaskDecomposerSettings,
+    VetTaskDecomposerTimeoutConfig,
+    load_vet_task_decomposer_settings,
+)
 from veterinary_agent.config.vet_context_builder import (
     DEFAULT_VET_CONTEXT_BUILDER_CONFIG_PATH,
     VetContextBudgetConfig,
@@ -91,6 +98,7 @@ __all__: tuple[str, ...] = (
     "DEFAULT_LLM_GATEWAY_CONFIG_PATH",
     "DEFAULT_OBSERVABILITY_CONFIG_PATH",
     "DEFAULT_RUNTIME_CONFIG_PATH",
+    "DEFAULT_VET_TASK_DECOMPOSER_CONFIG_PATH",
     "DEFAULT_VET_CONTEXT_BUILDER_CONFIG_PATH",
     "CheckpointStoreCheckpointConfig",
     "CheckpointStoreHistoryConfig",
@@ -136,6 +144,9 @@ __all__: tuple[str, ...] = (
     "VetContextBudgetConfig",
     "VetContextBuilderSettings",
     "VetContextTimeoutConfig",
+    "VetTaskDecomposerConfidenceConfig",
+    "VetTaskDecomposerSettings",
+    "VetTaskDecomposerTimeoutConfig",
     "SseConfig",
     "build_runtime_config_error_dto",
     "build_runtime_config_snapshot",
@@ -146,6 +157,7 @@ __all__: tuple[str, ...] = (
     "load_llm_gateway_settings",
     "load_observability_settings",
     "load_runtime_config_settings",
+    "load_vet_task_decomposer_settings",
     "load_vet_context_builder_settings",
     "validate_runtime_config_candidate",
 )
