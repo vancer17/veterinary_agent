@@ -75,6 +75,13 @@ from veterinary_agent.config.runtime_config import (
     load_runtime_config_settings,
     validate_runtime_config_candidate,
 )
+from veterinary_agent.config.vet_education import (
+    DEFAULT_EDUCATION_AGENT_CONFIG_PATH,
+    EducationAgentSettings,
+    EducationRagConfig,
+    EducationTimeoutConfig,
+    load_education_agent_settings,
+)
 from veterinary_agent.config.vet_safety_trigger import (
     DEFAULT_SAFETY_TRIGGER_CONFIG_PATH,
     SafetyTriggerAgentSettings,
@@ -111,6 +118,7 @@ __all__: tuple[str, ...] = (
     "AttachmentLimitConfig",
     "DEFAULT_CHECKPOINT_STORE_CONFIG_PATH",
     "DEFAULT_CONVERSATION_STORE_CONFIG_PATH",
+    "DEFAULT_EDUCATION_AGENT_CONFIG_PATH",
     "DEFAULT_LLM_GATEWAY_CONFIG_PATH",
     "DEFAULT_OBSERVABILITY_CONFIG_PATH",
     "DEFAULT_RUNTIME_CONFIG_PATH",
@@ -128,6 +136,9 @@ __all__: tuple[str, ...] = (
     "ConversationStoreMessageConfig",
     "ConversationStoreSettings",
     "ErrorResponseConfig",
+    "EducationAgentSettings",
+    "EducationRagConfig",
+    "EducationTimeoutConfig",
     "LlmGatewaySettings",
     "LlmModelCapabilityConfig",
     "LlmModelProfileConfig",
@@ -180,6 +191,7 @@ __all__: tuple[str, ...] = (
     "load_api_ingress_settings",
     "load_checkpoint_store_settings",
     "load_conversation_store_settings",
+    "load_education_agent_settings",
     "load_llm_gateway_settings",
     "load_observability_settings",
     "load_runtime_config_settings",

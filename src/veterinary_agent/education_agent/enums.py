@@ -1,0 +1,104 @@
+##################################################################################################
+# 文件: src/veterinary_agent/education_agent/enums.py
+# 作用: 定义 EducationAgent 的解释维度、检索用途、草稿状态、错误码、操作名与 trace 写入状态。
+# 边界: 仅承载稳定枚举值，不执行科普规划、RAG 检索、写作生成或输出安全审查。
+##################################################################################################
+
+from enum import StrEnum
+
+
+class ExplanationDimensionCode(StrEnum):
+    """科普解释维度稳定代码。"""
+
+    DEFINITION = "DEFINITION"
+    MECHANISM = "MECHANISM"
+    COMMON_DIRECTIONS = "COMMON_DIRECTIONS"
+    RED_FLAGS = "RED_FLAGS"
+    DIAGNOSTIC_LIMITS = "DIAGNOSTIC_LIMITS"
+    CHECKUP_PRINCIPLES = "CHECKUP_PRINCIPLES"
+    CARE_PRINCIPLES = "CARE_PRINCIPLES"
+    MEDICATION_BOUNDARY = "MEDICATION_BOUNDARY"
+    PREVENTION_MANAGEMENT = "PREVENTION_MANAGEMENT"
+    MISCONCEPTION_CLARIFICATION = "MISCONCEPTION_CLARIFICATION"
+    COMPARISON = "COMPARISON"
+
+
+class EducationDraftStatus(StrEnum):
+    """EducationAgent 草稿状态。"""
+
+    DRAFT_READY = "DRAFT_READY"
+    RAG_DEGRADED_CONSERVATIVE = "RAG_DEGRADED_CONSERVATIVE"
+    INSUFFICIENT_EVIDENCE = "INSUFFICIENT_EVIDENCE"
+    NEEDS_SAFETY_REVIEW = "NEEDS_SAFETY_REVIEW"
+    SCHEMA_INVALID = "SCHEMA_INVALID"
+    FAILED = "FAILED"
+
+
+class EvidenceSufficiencyStatus(StrEnum):
+    """科普证据充分性状态。"""
+
+    SUFFICIENT = "SUFFICIENT"
+    PARTIAL = "PARTIAL"
+    INSUFFICIENT = "INSUFFICIENT"
+
+
+class EducationRetrievalPurpose(StrEnum):
+    """科普 RAG 检索用途。"""
+
+    EDUCATION_EXPLANATION = "EDUCATION_EXPLANATION"
+    EDUCATION_RED_FLAG_BOUNDARY = "EDUCATION_RED_FLAG_BOUNDARY"
+    EDUCATION_MEDICATION_BOUNDARY = "EDUCATION_MEDICATION_BOUNDARY"
+    EDUCATION_LAB_INTERPRETATION = "EDUCATION_LAB_INTERPRETATION"
+    EDUCATION_EVIDENCE_CHECK = "EDUCATION_EVIDENCE_CHECK"
+
+
+class EducationTraceWriteStatus(StrEnum):
+    """EducationAgent trace patch 写入状态。"""
+
+    RECORDED = "recorded"
+    DEGRADED = "degraded"
+    SKIPPED = "skipped"
+
+
+class EducationAgentOperation(StrEnum):
+    """EducationAgent 对外和内部稳定操作名。"""
+
+    GENERATE_DRAFT = "GenerateEducationDraft"
+    PLAN_EXPLANATION = "PlanEducationExplanation"
+    BUILD_RETRIEVAL_PLAN = "BuildEducationRetrievalPlan"
+    RETRIEVE_EVIDENCE = "RetrieveEducationEvidence"
+    VALIDATE_DRAFT = "ValidateEducationDraft"
+    WRITE_TRACE = "WriteEducationTrace"
+
+
+class EducationAgentErrorCode(StrEnum):
+    """EducationAgent 稳定错误码。"""
+
+    EDUCATION_NOT_READY = "EDUCATION_NOT_READY"
+    EDUCATION_PROFILE_MISMATCH = "EDUCATION_PROFILE_MISMATCH"
+    EDUCATION_MISSING_CURRENT_PET_ID = "EDUCATION_MISSING_CURRENT_PET_ID"
+    EDUCATION_CONTEXT_MISSING = "EDUCATION_CONTEXT_MISSING"
+    EDUCATION_PET_CONTEXT_INVALID = "EDUCATION_PET_CONTEXT_INVALID"
+    EDUCATION_PLAN_FAILED = "EDUCATION_PLAN_FAILED"
+    EDUCATION_RETRIEVAL_PLAN_INVALID = "EDUCATION_RETRIEVAL_PLAN_INVALID"
+    EDUCATION_RAG_REQUIRED_MISSING = "EDUCATION_RAG_REQUIRED_MISSING"
+    EDUCATION_RAG_DEGRADED = "EDUCATION_RAG_DEGRADED"
+    EDUCATION_EVIDENCE_REFERENCE_INVALID = "EDUCATION_EVIDENCE_REFERENCE_INVALID"
+    EDUCATION_INSUFFICIENT_EVIDENCE = "EDUCATION_INSUFFICIENT_EVIDENCE"
+    EDUCATION_WRITER_TIMEOUT = "EDUCATION_WRITER_TIMEOUT"
+    EDUCATION_GROUNDING_CHECK_FAILED = "EDUCATION_GROUNDING_CHECK_FAILED"
+    EDUCATION_OUTPUT_SCHEMA_INVALID = "EDUCATION_OUTPUT_SCHEMA_INVALID"
+    EDUCATION_TOKEN_BUDGET_EXCEEDED = "EDUCATION_TOKEN_BUDGET_EXCEEDED"
+    EDUCATION_RUNTIME_CONFIG_UNAVAILABLE = "EDUCATION_RUNTIME_CONFIG_UNAVAILABLE"
+    EDUCATION_INTERNAL_ERROR = "EDUCATION_INTERNAL_ERROR"
+
+
+__all__: tuple[str, ...] = (
+    "EducationAgentErrorCode",
+    "EducationAgentOperation",
+    "EducationDraftStatus",
+    "EducationRetrievalPurpose",
+    "EducationTraceWriteStatus",
+    "EvidenceSufficiencyStatus",
+    "ExplanationDimensionCode",
+)
