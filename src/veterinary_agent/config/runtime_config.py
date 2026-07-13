@@ -39,6 +39,10 @@ from veterinary_agent.config.vet_safety_trigger import (
     SafetyTriggerAgentSettings,
     load_safety_trigger_agent_settings,
 )
+from veterinary_agent.config.vet_education import (
+    EducationAgentSettings,
+    load_education_agent_settings,
+)
 from veterinary_agent.config.vet_context_builder import (
     VetContextBuilderSettings,
     load_vet_context_builder_settings,
@@ -121,6 +125,7 @@ class RuntimeConfigNamespace(StrEnum):
     VET_CONTEXT_BUILDER = "vet_context_builder"
     STANDARD_CONSULTATION = "standard_consultation"
     SAFETY_TRIGGER = "safety_trigger"
+    EDUCATION_AGENT = "education_agent"
 
 
 class _RuntimeConfigModel(BaseModel):
@@ -435,6 +440,9 @@ class RuntimeConfigSnapshot(_RuntimeConfigModel):
     safety_trigger: SafetyTriggerAgentSettings = Field(
         description="SafetyTriggerAgent RuntimeConfig。",
     )
+    education_agent: EducationAgentSettings = Field(
+        description="EducationAgent RuntimeConfig。",
+    )
     trace_safe_summary: JsonMap = Field(
         description="可写入逻辑链的脱敏配置摘要。",
     )
@@ -657,6 +665,41 @@ def _build_safety_trigger_trace_summary(
     }
 
 
+def _build_education_agent_trace_summary(settings: EducationAgentSettings) -> JsonMap:
+    """构建 EducationAgent trace-safe 配置摘要。
+
+    :param settings: EducationAgent RuntimeConfig。
+    :return: 不含 prompt、业务正文或敏感凭据的配置摘要。
+    """
+
+    return {
+        "enabled": settings.enabled,
+        "config_version": settings.config_version,
+        "education_agent_version": settings.education_agent_version,
+        "planner_version": settings.planner_version,
+        "retrieval_planner_version": settings.retrieval_planner_version,
+        "writer_version": settings.writer_version,
+        "grounding_checker_version": settings.grounding_checker_version,
+        "fallback_template_version": settings.fallback_template_version,
+        "sub_agents": {
+            "planner": f"{settings.planner_agent_id}:{settings.planner_agent_version}",
+            "retrieval_planner": (
+                f"{settings.retrieval_planner_agent_id}:"
+                f"{settings.retrieval_planner_agent_version}"
+            ),
+            "writer": f"{settings.writer_agent_id}:{settings.writer_agent_version}",
+            "grounding_checker": (
+                f"{settings.grounding_checker_agent_id}:"
+                f"{settings.grounding_checker_agent_version}"
+            ),
+        },
+        "allowed_dimensions": settings.allowed_dimensions,
+        "max_draft_chars": settings.max_draft_chars,
+        "timeouts": settings.timeouts.model_dump(mode="json"),
+        "rag": settings.rag.model_dump(mode="json"),
+    }
+
+
 def _build_llm_gateway_trace_summary(settings: LlmGatewaySettings) -> JsonMap:
     """构建 LlmGateway trace-safe 配置摘要。
 
@@ -743,6 +786,7 @@ def _build_trace_safe_summary(
     vet_context_builder_settings: VetContextBuilderSettings,
     standard_consultation_settings: StandardConsultationAgentSettings,
     safety_trigger_settings: SafetyTriggerAgentSettings,
+    education_agent_settings: EducationAgentSettings,
 ) -> JsonMap:
     """构建完整 trace-safe 配置摘要。
 
@@ -756,6 +800,7 @@ def _build_trace_safe_summary(
     :param vet_context_builder_settings: VetContextBuilder RuntimeConfig。
     :param standard_consultation_settings: StandardConsultationAgent RuntimeConfig。
     :param safety_trigger_settings: SafetyTriggerAgent RuntimeConfig。
+    :param education_agent_settings: EducationAgent RuntimeConfig。
     :return: 可写入逻辑链的脱敏配置摘要。
     """
 
@@ -781,6 +826,9 @@ def _build_trace_safe_summary(
             standard_consultation_settings
         ),
         "safety_trigger": _build_safety_trigger_trace_summary(safety_trigger_settings),
+        "education_agent": _build_education_agent_trace_summary(
+            education_agent_settings
+        ),
     }
 
 
@@ -940,6 +988,7 @@ def _dump_namespace_for_lookup(
         | VetContextBuilderSettings
         | StandardConsultationAgentSettings
         | SafetyTriggerAgentSettings
+        | EducationAgentSettings
     ),
 ) -> JsonMap:
     """将配置命名空间转换为可按点路径读取的映射。
@@ -1102,6 +1151,7 @@ def validate_runtime_config_candidate(
     vet_context_builder_settings: VetContextBuilderSettings | None = None,
     standard_consultation_settings: StandardConsultationAgentSettings | None = None,
     safety_trigger_settings: SafetyTriggerAgentSettings | None = None,
+    education_agent_settings: EducationAgentSettings | None = None,
 ) -> None:
     """校验候选 RuntimeConfig 聚合配置。
 
@@ -1115,6 +1165,7 @@ def validate_runtime_config_candidate(
     :param vet_context_builder_settings: 可选 VetContextBuilder RuntimeConfig；未传入时从默认配置源加载。
     :param standard_consultation_settings: 可选 StandardConsultationAgent RuntimeConfig；未传入时从默认配置源加载。
     :param safety_trigger_settings: 可选 SafetyTriggerAgent RuntimeConfig；未传入时从默认配置源加载。
+    :param education_agent_settings: 可选 EducationAgent RuntimeConfig；未传入时从默认配置源加载。
     :return: None。
     :raises RuntimeConfigError: 当候选配置违反安全锁定项、跨组件关系或 trace-safe 约束时抛出。
     """
@@ -1154,6 +1205,11 @@ def validate_runtime_config_candidate(
         if safety_trigger_settings is not None
         else load_safety_trigger_agent_settings()
     )
+    resolved_education_agent_settings = (
+        education_agent_settings
+        if education_agent_settings is not None
+        else load_education_agent_settings()
+    )
     _validate_runtime_config_safety_locks(runtime_config_settings)
     _validate_runtime_config_relations(
         api_ingress_settings=api_ingress_settings,
@@ -1171,6 +1227,7 @@ def validate_runtime_config_candidate(
         vet_context_builder_settings=resolved_vet_context_builder_settings,
         standard_consultation_settings=resolved_standard_consultation_settings,
         safety_trigger_settings=resolved_safety_trigger_settings,
+        education_agent_settings=resolved_education_agent_settings,
     )
     _validate_trace_safe_summary(summary)
 
@@ -1187,6 +1244,7 @@ def build_runtime_config_snapshot(
     vet_context_builder_settings: VetContextBuilderSettings | None = None,
     standard_consultation_settings: StandardConsultationAgentSettings | None = None,
     safety_trigger_settings: SafetyTriggerAgentSettings | None = None,
+    education_agent_settings: EducationAgentSettings | None = None,
 ) -> RuntimeConfigSnapshot:
     """构建 RuntimeConfig 不可变快照。
 
@@ -1200,6 +1258,7 @@ def build_runtime_config_snapshot(
     :param vet_context_builder_settings: 可选 VetContextBuilder RuntimeConfig；未传入时从默认配置源加载。
     :param standard_consultation_settings: 可选 StandardConsultationAgent RuntimeConfig；未传入时从默认配置源加载。
     :param safety_trigger_settings: 可选 SafetyTriggerAgent RuntimeConfig；未传入时从默认配置源加载。
+    :param education_agent_settings: 可选 EducationAgent RuntimeConfig；未传入时从默认配置源加载。
     :return: 已完成校验的 RuntimeConfig 快照。
     :raises RuntimeConfigError: 当配置校验失败或 trace-safe 摘要不安全时抛出。
     """
@@ -1239,6 +1298,11 @@ def build_runtime_config_snapshot(
         if safety_trigger_settings is not None
         else load_safety_trigger_agent_settings()
     )
+    resolved_education_agent_settings = (
+        education_agent_settings
+        if education_agent_settings is not None
+        else load_education_agent_settings()
+    )
     validate_runtime_config_candidate(
         runtime_config_settings=runtime_config_settings,
         api_ingress_settings=api_ingress_settings,
@@ -1250,6 +1314,7 @@ def build_runtime_config_snapshot(
         vet_context_builder_settings=resolved_vet_context_builder_settings,
         standard_consultation_settings=resolved_standard_consultation_settings,
         safety_trigger_settings=resolved_safety_trigger_settings,
+        education_agent_settings=resolved_education_agent_settings,
     )
     trace_safe_summary = _build_trace_safe_summary(
         runtime_config_settings=runtime_config_settings,
@@ -1262,6 +1327,7 @@ def build_runtime_config_snapshot(
         vet_context_builder_settings=resolved_vet_context_builder_settings,
         standard_consultation_settings=resolved_standard_consultation_settings,
         safety_trigger_settings=resolved_safety_trigger_settings,
+        education_agent_settings=resolved_education_agent_settings,
     )
     config_snapshot_id = _build_config_snapshot_id(trace_safe_summary)
     summary_with_snapshot_id: JsonMap = {
@@ -1285,6 +1351,7 @@ def build_runtime_config_snapshot(
         vet_context_builder=resolved_vet_context_builder_settings,
         standard_consultation=resolved_standard_consultation_settings,
         safety_trigger=resolved_safety_trigger_settings,
+        education_agent=resolved_education_agent_settings,
         trace_safe_summary=summary_with_snapshot_id,
     )
 
@@ -1339,6 +1406,7 @@ class RuntimeConfigProvider:
         | VetContextBuilderSettings
         | StandardConsultationAgentSettings
         | SafetyTriggerAgentSettings
+        | EducationAgentSettings
     ):
         """按命名空间读取配置对象。
 
@@ -1368,6 +1436,8 @@ class RuntimeConfigProvider:
             return snapshot.standard_consultation
         if namespace is RuntimeConfigNamespace.SAFETY_TRIGGER:
             return snapshot.safety_trigger
+        if namespace is RuntimeConfigNamespace.EDUCATION_AGENT:
+            return snapshot.education_agent
         raise RuntimeConfigError(
             code=RuntimeConfigErrorCode.CONFIG_SNAPSHOT_NOT_FOUND,
             operation=RuntimeConfigOperation.GET_CONFIG_NAMESPACE,
@@ -1477,6 +1547,7 @@ def create_runtime_config_provider(
     vet_context_builder_settings: VetContextBuilderSettings | None = None,
     standard_consultation_settings: StandardConsultationAgentSettings | None = None,
     safety_trigger_settings: SafetyTriggerAgentSettings | None = None,
+    education_agent_settings: EducationAgentSettings | None = None,
 ) -> RuntimeConfigProvider:
     """创建应用内 RuntimeConfig provider。
 
@@ -1490,6 +1561,7 @@ def create_runtime_config_provider(
     :param vet_context_builder_settings: 可选 VetContextBuilder RuntimeConfig；未传入时从默认配置源加载。
     :param standard_consultation_settings: 可选 StandardConsultationAgent RuntimeConfig；未传入时从默认配置源加载。
     :param safety_trigger_settings: 可选 SafetyTriggerAgent RuntimeConfig；未传入时从默认配置源加载。
+    :param education_agent_settings: 可选 EducationAgent RuntimeConfig；未传入时从默认配置源加载。
     :return: 持有当前有效配置快照的 RuntimeConfig provider。
     :raises RuntimeConfigError: 当配置校验失败或 trace-safe 摘要不安全时抛出。
     """
@@ -1544,6 +1616,11 @@ def create_runtime_config_provider(
         if safety_trigger_settings is not None
         else load_safety_trigger_agent_settings()
     )
+    resolved_education_agent_settings = (
+        education_agent_settings
+        if education_agent_settings is not None
+        else load_education_agent_settings()
+    )
     snapshot = build_runtime_config_snapshot(
         runtime_config_settings=resolved_runtime_config_settings,
         api_ingress_settings=resolved_api_ingress_settings,
@@ -1555,6 +1632,7 @@ def create_runtime_config_provider(
         vet_context_builder_settings=resolved_vet_context_builder_settings,
         standard_consultation_settings=resolved_standard_consultation_settings,
         safety_trigger_settings=resolved_safety_trigger_settings,
+        education_agent_settings=resolved_education_agent_settings,
     )
     return RuntimeConfigProvider(snapshot)
 
@@ -1572,12 +1650,14 @@ __all__: tuple[str, ...] = (
     "RuntimeConfigSafetyLockSettings",
     "RuntimeConfigSettings",
     "RuntimeConfigSnapshot",
+    "EducationAgentSettings",
     "StandardConsultationAgentSettings",
     "VetContextBuilderSettings",
     "VetTaskDecomposerSettings",
     "build_runtime_config_error_dto",
     "build_runtime_config_snapshot",
     "create_runtime_config_provider",
+    "load_education_agent_settings",
     "load_standard_consultation_agent_settings",
     "load_runtime_config_settings",
     "load_vet_task_decomposer_settings",

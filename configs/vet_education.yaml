@@ -1,0 +1,48 @@
+# EducationAgent 组件配置。
+# 该文件只承载科普解释规划、RAG 检索、写作、自检与兜底策略，不包含输入侧剖面判决或发布门策略。
+enabled: true
+config_version: education-agent-config.v1
+education_agent_version: education-agent.v1
+planner_version: education-planner.v1
+retrieval_planner_version: education-retrieval-planner.v1
+writer_version: education-writer.v1
+grounding_checker_version: education-grounding-checker.v1
+fallback_template_version: education-fallback-draft.v1
+planner_agent_id: education_explanation_planner
+planner_agent_version: v1
+retrieval_planner_agent_id: education_rag_query_planner
+retrieval_planner_agent_version: v1
+writer_agent_id: education_writer
+writer_agent_version: v1
+grounding_checker_agent_id: education_grounding_checker
+grounding_checker_agent_version: v1
+allowed_dimensions:
+  - DEFINITION
+  - MECHANISM
+  - COMMON_DIRECTIONS
+  - RED_FLAGS
+  - DIAGNOSTIC_LIMITS
+  - CHECKUP_PRINCIPLES
+  - CARE_PRINCIPLES
+  - MEDICATION_BOUNDARY
+  - PREVENTION_MANAGEMENT
+  - MISCONCEPTION_CLARIFICATION
+  - COMPARISON
+max_draft_chars: 5000
+timeouts:
+  total_seconds: 10.0
+  planner_seconds: 2.0
+  retrieval_planner_seconds: 2.0
+  rag_seconds: 1.5
+  writer_seconds: 4.0
+  grounding_seconds: 2.0
+rag:
+  enabled: true
+  required_for_medical: true
+  top_k: 5
+  max_facets: 5
+  default_collections:
+    - vet_kb_public_mvp
+  rerank_enabled: true
+  dosage_filter_required: true
+  ref_range_generation_forbidden: true
