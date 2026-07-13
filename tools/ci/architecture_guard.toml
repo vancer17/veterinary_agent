@@ -23,20 +23,20 @@ source_root = "src/veterinary_agent"
 test_root = "tests"
 
 [budgets]
-max_source_physical_lines = 48000
-max_test_physical_lines = 23700
-max_source_python_files = 146
-max_test_python_files = 101
+max_source_physical_lines = 50630
+max_test_physical_lines = 24820
+max_source_python_files = 155
+max_test_python_files = 108
 warn_file_physical_lines = 800
 max_file_physical_lines = 1800
 max_root_init_physical_lines = 50
-max_total_all_exports = 1370
+max_total_all_exports = 1450
 max_root_all_exports = 5
-max_model_dump_calls = 90
+max_model_dump_calls = 93
 max_model_validate_calls = 28
-max_dto_classes = 215
+max_dto_classes = 224
 max_error_status_todo_classes = 45
-max_template_files = 43
+max_template_files = 47
 max_dependency_cycles = 0
 max_direct_root_imports = 0
 
@@ -46,7 +46,7 @@ agent_runner = 3300
 api_ingress = 4200
 app = 1600
 checkpoint_store = 6900
-config = 4200
+config = 4500
 conversation_store = 4900
 core = 50
 graph_runtime = 3250
@@ -57,6 +57,7 @@ pet_session_policy = 1450
 vet_trace_schema = 2050
 vet_conversation_graph = 200
 vet_context_builder = 3850
+vet_task_decomposer = 2380
 
 [class_patterns]
 dto_suffixes = ["Dto", "DTO"]

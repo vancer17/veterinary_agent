@@ -39,6 +39,10 @@ from veterinary_agent.config.vet_context_builder import (
     VetContextBuilderSettings,
     load_vet_context_builder_settings,
 )
+from veterinary_agent.config.vet_task_decomposer import (
+    VetTaskDecomposerSettings,
+    load_vet_task_decomposer_settings,
+)
 from veterinary_agent.config.llm_gateway import (
     LlmGatewaySettings,
     load_llm_gateway_settings,
@@ -105,6 +109,7 @@ class RuntimeConfigNamespace(StrEnum):
     CONVERSATION_STORE = "conversation_store"
     LLM_GATEWAY = "llm_gateway"
     OBSERVABILITY = "observability"
+    VET_TASK_DECOMPOSER = "vet_task_decomposer"
     VET_CONTEXT_BUILDER = "vet_context_builder"
 
 
@@ -408,6 +413,9 @@ class RuntimeConfigSnapshot(_RuntimeConfigModel):
     observability: ObservabilitySettings = Field(
         description="Observability RuntimeConfig。",
     )
+    vet_task_decomposer: VetTaskDecomposerSettings = Field(
+        description="VetTaskDecomposer RuntimeConfig。",
+    )
     vet_context_builder: VetContextBuilderSettings = Field(
         description="VetContextBuilder RuntimeConfig。",
     )
@@ -539,6 +547,33 @@ def _build_vet_context_builder_trace_summary(
     }
 
 
+def _build_vet_task_decomposer_trace_summary(
+    settings: VetTaskDecomposerSettings,
+) -> JsonMap:
+    """构建 VetTaskDecomposer trace-safe 配置摘要。
+
+    :param settings: VetTaskDecomposer RuntimeConfig。
+    :return: 不含用户原文、prompt 或敏感凭据的配置摘要。
+    """
+
+    return {
+        "enabled": settings.enabled,
+        "config_version": settings.config_version,
+        "decomposer_version": settings.decomposer_version,
+        "llm_enabled": settings.llm_enabled,
+        "review_repair_enabled": settings.review_repair_enabled,
+        "local_fallback_enabled": settings.local_fallback_enabled,
+        "decompose_agent_id": settings.decompose_agent_id,
+        "decompose_agent_version": settings.decompose_agent_version,
+        "review_agent_id": settings.review_agent_id,
+        "review_agent_version": settings.review_agent_version,
+        "timeouts": settings.timeouts.model_dump(mode="json"),
+        "confidence": settings.confidence.model_dump(mode="json"),
+        "max_tasks_per_turn": settings.max_tasks_per_turn,
+        "max_user_message_chars": settings.max_user_message_chars,
+    }
+
+
 def _build_llm_gateway_trace_summary(settings: LlmGatewaySettings) -> JsonMap:
     """构建 LlmGateway trace-safe 配置摘要。
 
@@ -621,6 +656,7 @@ def _build_trace_safe_summary(
     conversation_store_settings: ConversationStoreSettings,
     llm_gateway_settings: LlmGatewaySettings,
     observability_settings: ObservabilitySettings,
+    vet_task_decomposer_settings: VetTaskDecomposerSettings,
     vet_context_builder_settings: VetContextBuilderSettings,
 ) -> JsonMap:
     """构建完整 trace-safe 配置摘要。
@@ -631,6 +667,7 @@ def _build_trace_safe_summary(
     :param conversation_store_settings: ConversationStore RuntimeConfig。
     :param llm_gateway_settings: LlmGateway RuntimeConfig。
     :param observability_settings: Observability RuntimeConfig。
+    :param vet_task_decomposer_settings: VetTaskDecomposer RuntimeConfig。
     :param vet_context_builder_settings: VetContextBuilder RuntimeConfig。
     :return: 可写入逻辑链的脱敏配置摘要。
     """
@@ -647,6 +684,9 @@ def _build_trace_safe_summary(
         ),
         "llm_gateway": _build_llm_gateway_trace_summary(llm_gateway_settings),
         "observability": _build_observability_trace_summary(observability_settings),
+        "vet_task_decomposer": _build_vet_task_decomposer_trace_summary(
+            vet_task_decomposer_settings
+        ),
         "vet_context_builder": _build_vet_context_builder_trace_summary(
             vet_context_builder_settings
         ),
@@ -805,6 +845,7 @@ def _dump_namespace_for_lookup(
         | ConversationStoreSettings
         | LlmGatewaySettings
         | ObservabilitySettings
+        | VetTaskDecomposerSettings
         | VetContextBuilderSettings
     ),
 ) -> JsonMap:
@@ -964,6 +1005,7 @@ def validate_runtime_config_candidate(
     conversation_store_settings: ConversationStoreSettings | None = None,
     llm_gateway_settings: LlmGatewaySettings | None = None,
     observability_settings: ObservabilitySettings | None = None,
+    vet_task_decomposer_settings: VetTaskDecomposerSettings | None = None,
     vet_context_builder_settings: VetContextBuilderSettings | None = None,
 ) -> None:
     """校验候选 RuntimeConfig 聚合配置。
@@ -974,6 +1016,7 @@ def validate_runtime_config_candidate(
     :param conversation_store_settings: 可选 ConversationStore RuntimeConfig；未传入时从默认配置源加载。
     :param llm_gateway_settings: 可选 LlmGateway RuntimeConfig；未传入时从默认配置源加载。
     :param observability_settings: 可选 Observability RuntimeConfig；未传入时从默认配置源加载。
+    :param vet_task_decomposer_settings: 可选 VetTaskDecomposer RuntimeConfig；未传入时从默认配置源加载。
     :param vet_context_builder_settings: 可选 VetContextBuilder RuntimeConfig；未传入时从默认配置源加载。
     :return: None。
     :raises RuntimeConfigError: 当候选配置违反安全锁定项、跨组件关系或 trace-safe 约束时抛出。
@@ -994,6 +1037,11 @@ def validate_runtime_config_candidate(
         if llm_gateway_settings is not None
         else load_llm_gateway_settings()
     )
+    resolved_vet_task_decomposer_settings = (
+        vet_task_decomposer_settings
+        if vet_task_decomposer_settings is not None
+        else load_vet_task_decomposer_settings()
+    )
     resolved_vet_context_builder_settings = (
         vet_context_builder_settings
         if vet_context_builder_settings is not None
@@ -1012,6 +1060,7 @@ def validate_runtime_config_candidate(
         conversation_store_settings=resolved_conversation_store_settings,
         llm_gateway_settings=resolved_llm_gateway_settings,
         observability_settings=resolved_observability_settings,
+        vet_task_decomposer_settings=resolved_vet_task_decomposer_settings,
         vet_context_builder_settings=resolved_vet_context_builder_settings,
     )
     _validate_trace_safe_summary(summary)
@@ -1025,6 +1074,7 @@ def build_runtime_config_snapshot(
     conversation_store_settings: ConversationStoreSettings | None = None,
     llm_gateway_settings: LlmGatewaySettings | None = None,
     observability_settings: ObservabilitySettings | None = None,
+    vet_task_decomposer_settings: VetTaskDecomposerSettings | None = None,
     vet_context_builder_settings: VetContextBuilderSettings | None = None,
 ) -> RuntimeConfigSnapshot:
     """构建 RuntimeConfig 不可变快照。
@@ -1035,6 +1085,7 @@ def build_runtime_config_snapshot(
     :param conversation_store_settings: 可选 ConversationStore RuntimeConfig；未传入时从默认配置源加载。
     :param llm_gateway_settings: 可选 LlmGateway RuntimeConfig；未传入时从默认配置源加载。
     :param observability_settings: 可选 Observability RuntimeConfig；未传入时从默认配置源加载。
+    :param vet_task_decomposer_settings: 可选 VetTaskDecomposer RuntimeConfig；未传入时从默认配置源加载。
     :param vet_context_builder_settings: 可选 VetContextBuilder RuntimeConfig；未传入时从默认配置源加载。
     :return: 已完成校验的 RuntimeConfig 快照。
     :raises RuntimeConfigError: 当配置校验失败或 trace-safe 摘要不安全时抛出。
@@ -1055,6 +1106,11 @@ def build_runtime_config_snapshot(
         if llm_gateway_settings is not None
         else load_llm_gateway_settings()
     )
+    resolved_vet_task_decomposer_settings = (
+        vet_task_decomposer_settings
+        if vet_task_decomposer_settings is not None
+        else load_vet_task_decomposer_settings()
+    )
     resolved_vet_context_builder_settings = (
         vet_context_builder_settings
         if vet_context_builder_settings is not None
@@ -1067,6 +1123,7 @@ def build_runtime_config_snapshot(
         conversation_store_settings=resolved_conversation_store_settings,
         llm_gateway_settings=resolved_llm_gateway_settings,
         observability_settings=resolved_observability_settings,
+        vet_task_decomposer_settings=resolved_vet_task_decomposer_settings,
         vet_context_builder_settings=resolved_vet_context_builder_settings,
     )
     trace_safe_summary = _build_trace_safe_summary(
@@ -1076,6 +1133,7 @@ def build_runtime_config_snapshot(
         conversation_store_settings=resolved_conversation_store_settings,
         llm_gateway_settings=resolved_llm_gateway_settings,
         observability_settings=resolved_observability_settings,
+        vet_task_decomposer_settings=resolved_vet_task_decomposer_settings,
         vet_context_builder_settings=resolved_vet_context_builder_settings,
     )
     config_snapshot_id = _build_config_snapshot_id(trace_safe_summary)
@@ -1096,6 +1154,7 @@ def build_runtime_config_snapshot(
         conversation_store=resolved_conversation_store_settings,
         llm_gateway=resolved_llm_gateway_settings,
         observability=resolved_observability_settings,
+        vet_task_decomposer=resolved_vet_task_decomposer_settings,
         vet_context_builder=resolved_vet_context_builder_settings,
         trace_safe_summary=summary_with_snapshot_id,
     )
@@ -1147,6 +1206,7 @@ class RuntimeConfigProvider:
         | ConversationStoreSettings
         | LlmGatewaySettings
         | ObservabilitySettings
+        | VetTaskDecomposerSettings
         | VetContextBuilderSettings
     ):
         """按命名空间读取配置对象。
@@ -1169,6 +1229,8 @@ class RuntimeConfigProvider:
             return snapshot.llm_gateway
         if namespace is RuntimeConfigNamespace.OBSERVABILITY:
             return snapshot.observability
+        if namespace is RuntimeConfigNamespace.VET_TASK_DECOMPOSER:
+            return snapshot.vet_task_decomposer
         if namespace is RuntimeConfigNamespace.VET_CONTEXT_BUILDER:
             return snapshot.vet_context_builder
         raise RuntimeConfigError(
@@ -1276,6 +1338,7 @@ def create_runtime_config_provider(
     conversation_store_settings: ConversationStoreSettings | None = None,
     llm_gateway_settings: LlmGatewaySettings | None = None,
     observability_settings: ObservabilitySettings | None = None,
+    vet_task_decomposer_settings: VetTaskDecomposerSettings | None = None,
     vet_context_builder_settings: VetContextBuilderSettings | None = None,
 ) -> RuntimeConfigProvider:
     """创建应用内 RuntimeConfig provider。
@@ -1286,6 +1349,7 @@ def create_runtime_config_provider(
     :param conversation_store_settings: 可选 ConversationStore RuntimeConfig；未传入时从默认配置源加载。
     :param llm_gateway_settings: 可选 LlmGateway RuntimeConfig；未传入时从默认配置源加载。
     :param observability_settings: 可选 Observability RuntimeConfig；未传入时从默认配置源加载。
+    :param vet_task_decomposer_settings: 可选 VetTaskDecomposer RuntimeConfig；未传入时从默认配置源加载。
     :param vet_context_builder_settings: 可选 VetContextBuilder RuntimeConfig；未传入时从默认配置源加载。
     :return: 持有当前有效配置快照的 RuntimeConfig provider。
     :raises RuntimeConfigError: 当配置校验失败或 trace-safe 摘要不安全时抛出。
@@ -1321,6 +1385,11 @@ def create_runtime_config_provider(
         if llm_gateway_settings is not None
         else load_llm_gateway_settings()
     )
+    resolved_vet_task_decomposer_settings = (
+        vet_task_decomposer_settings
+        if vet_task_decomposer_settings is not None
+        else load_vet_task_decomposer_settings()
+    )
     resolved_vet_context_builder_settings = (
         vet_context_builder_settings
         if vet_context_builder_settings is not None
@@ -1333,6 +1402,7 @@ def create_runtime_config_provider(
         conversation_store_settings=resolved_conversation_store_settings,
         llm_gateway_settings=resolved_llm_gateway_settings,
         observability_settings=resolved_observability_settings,
+        vet_task_decomposer_settings=resolved_vet_task_decomposer_settings,
         vet_context_builder_settings=resolved_vet_context_builder_settings,
     )
     return RuntimeConfigProvider(snapshot)
@@ -1352,10 +1422,12 @@ __all__: tuple[str, ...] = (
     "RuntimeConfigSettings",
     "RuntimeConfigSnapshot",
     "VetContextBuilderSettings",
+    "VetTaskDecomposerSettings",
     "build_runtime_config_error_dto",
     "build_runtime_config_snapshot",
     "create_runtime_config_provider",
     "load_runtime_config_settings",
+    "load_vet_task_decomposer_settings",
     "load_vet_context_builder_settings",
     "validate_runtime_config_candidate",
 )
