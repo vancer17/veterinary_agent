@@ -358,7 +358,9 @@ class DefaultEducationAgent:
                 request_id=request.request_id,
                 trace_id=request.trace_id,
                 task_id=request.task_id,
-                conflict_with={"context_executor_key": request.context.executor_key.value},
+                conflict_with={
+                    "context_executor_key": request.context.executor_key.value
+                },
             )
         if request.context.compression_audit.compression_strategy is not (
             _EDUCATION_COMPRESSION
@@ -413,7 +415,9 @@ class DefaultEducationAgent:
                 conflict_with={"executor_key": request.executor_key},
             )
 
-    def _build_brief(self, *, request: EducationGenerationRequestDto) -> EducationBriefDto:
+    def _build_brief(
+        self, *, request: EducationGenerationRequestDto
+    ) -> EducationBriefDto:
         """基于轻量上下文构建科普 brief。
 
         :param request: 当前科普生成请求。
@@ -424,7 +428,8 @@ class DefaultEducationAgent:
         allowed_context_refs = [
             block.block_id
             for block in request.context.prompt_blocks
-            if block.required or block.block_type.value in {"task_input", "owner_preference"}
+            if block.required
+            or block.block_type.value in {"task_input", "owner_preference"}
         ]
         excluded_context_reasons = [
             f"{block_id}:{reason}"
@@ -651,9 +656,7 @@ class DefaultEducationAgent:
                 priority=index,
                 required=index <= 2,
                 evidence_requirement="需要 RAG 证据卡支持该维度的通识描述。",
-                prohibited_claims=self._prohibited_claims_for_dimension(
-                    dimension_code
-                ),
+                prohibited_claims=self._prohibited_claims_for_dimension(dimension_code),
             )
             for index, dimension_code in enumerate(dimension_codes, start=1)
         ]
@@ -836,7 +839,11 @@ class DefaultEducationAgent:
                 continue
             queries = _strings_from_unknown_list(item_map.get("queries"))
             if not queries:
-                queries = [self._query_for_dimension(brief=brief, dimension_code=dimension_code)]
+                queries = [
+                    self._query_for_dimension(
+                        brief=brief, dimension_code=dimension_code
+                    )
+                ]
             query_hashes = _strings_from_unknown_list(item_map.get("query_hashes"))
             if not query_hashes:
                 query_hashes = [_text_hash(query) for query in queries]
@@ -849,9 +856,9 @@ class DefaultEducationAgent:
                 )
             except ValueError:
                 purpose = _purpose_for_dimension(dimension_code)
-            collections = _strings_from_unknown_list(item_map.get("collections")) or list(
-                settings.rag.default_collections
-            )
+            collections = _strings_from_unknown_list(
+                item_map.get("collections")
+            ) or list(settings.rag.default_collections)
             facets.append(
                 RetrievalFacetDto(
                     dimension_code=dimension_code,
@@ -1142,7 +1149,9 @@ class DefaultEducationAgent:
         del rag_results
         card_dimensions = {card.dimension_code for card in evidence_cards}
         required_dimensions = {
-            dimension.dimension_code for dimension in plan.dimensions if dimension.required
+            dimension.dimension_code
+            for dimension in plan.dimensions
+            if dimension.required
         }
         missing_dimensions = [
             dimension_code
@@ -1398,7 +1407,9 @@ class DefaultEducationAgent:
 
         section_titles = _strings_from_unknown_list(output.get("section_titles"))
         if not section_titles:
-            section_titles = [dimension.dimension_code.value for dimension in plan.dimensions]
+            section_titles = [
+                dimension.dimension_code.value for dimension in plan.dimensions
+            ]
         return EducationContentPlanDto(
             main_axis=plan.main_axis,
             section_titles=section_titles,
@@ -1439,8 +1450,12 @@ class DefaultEducationAgent:
             if not card_ids:
                 continue
             retrieval_ids = _strings_from_unknown_list(item_map.get("retrieval_ids"))
-            summary = _read_string(item_map.get("binding_summary")) or "证据支持该声明。"
-            claim_id = _read_string(item_map.get("claim_id")) or f"claim_{len(bindings) + 1}"
+            summary = (
+                _read_string(item_map.get("binding_summary")) or "证据支持该声明。"
+            )
+            claim_id = (
+                _read_string(item_map.get("claim_id")) or f"claim_{len(bindings) + 1}"
+            )
             bindings.append(
                 EvidenceBindingDto(
                     claim_id=claim_id,
@@ -1775,5 +1790,6 @@ class DefaultEducationAgent:
                 "duration_ms": duration_ms,
             },
         )
+
 
 __all__: tuple[str, ...] = ("DefaultEducationAgent",)

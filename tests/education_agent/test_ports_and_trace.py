@@ -48,9 +48,7 @@ def test_todo_rag_port_returns_degraded_result() -> None:
     )
 
     assert result.degraded is True
-    assert result.retrieval_purpose is (
-        EducationRetrievalPurpose.EDUCATION_EXPLANATION
-    )
+    assert result.retrieval_purpose is (EducationRetrievalPurpose.EDUCATION_EXPLANATION)
     assert result.evidence_hints == []
 
 

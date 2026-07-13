@@ -23,8 +23,8 @@ source_root = "src/veterinary_agent"
 test_root = "tests"
 
 [budgets]
-max_source_physical_lines = 61186
-max_test_physical_lines = 28038
+max_source_physical_lines = 61202
+max_test_physical_lines = 28044
 max_source_python_files = 185
 max_test_python_files = 125
 warn_file_physical_lines = 800
@@ -60,7 +60,7 @@ vet_conversation_graph = 200
 vet_context_builder = 3850
 vet_task_decomposer = 2382
 standard_consultation_agent = 3029
-education_agent = 3410
+education_agent = 3426
 
 [class_patterns]
 dto_suffixes = ["Dto", "DTO"]

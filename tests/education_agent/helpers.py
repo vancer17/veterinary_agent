@@ -109,7 +109,9 @@ class FakeEducationRagPort:
 
         self.result = result or build_rag_result()
         self.delay_seconds = delay_seconds
-        self.requests: list[tuple[EducationGenerationRequestDto, RetrievalFacetDto]] = []
+        self.requests: list[
+            tuple[EducationGenerationRequestDto, RetrievalFacetDto]
+        ] = []
 
     async def retrieve(
         self,

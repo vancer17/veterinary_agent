@@ -65,14 +65,20 @@ def test_runtime_config_provider_reads_education_agent_value_by_key() -> None:
     provider = create_runtime_config_provider()
     snapshot = provider.current_snapshot()
 
-    assert provider.get_value(
-        key="education_agent.rag.top_k",
-        config_snapshot_id=snapshot.config_snapshot_id,
-    ) == 5
-    assert provider.get_value(
-        key="education_agent.timeouts.rag_seconds",
-        config_snapshot_id=snapshot.config_snapshot_id,
-    ) == 1.5
+    assert (
+        provider.get_value(
+            key="education_agent.rag.top_k",
+            config_snapshot_id=snapshot.config_snapshot_id,
+        )
+        == 5
+    )
+    assert (
+        provider.get_value(
+            key="education_agent.timeouts.rag_seconds",
+            config_snapshot_id=snapshot.config_snapshot_id,
+        )
+        == 1.5
+    )
 
 
 def test_trace_safe_summary_contains_education_agent_summary() -> None:
