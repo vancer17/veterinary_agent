@@ -82,6 +82,14 @@ from veterinary_agent.config.vet_education import (
     EducationTimeoutConfig,
     load_education_agent_settings,
 )
+from veterinary_agent.config.vet_nonmedical_pet_care import (
+    DEFAULT_NONMEDICAL_PET_CARE_CONFIG_PATH,
+    NonmedicalPetCareAgentSettings,
+    NonmedicalPetCareRagConfig,
+    NonmedicalPetCareRuleConfig,
+    NonmedicalPetCareTimeoutConfig,
+    load_nonmedical_pet_care_agent_settings,
+)
 from veterinary_agent.config.vet_safety_trigger import (
     DEFAULT_SAFETY_TRIGGER_CONFIG_PATH,
     SafetyTriggerAgentSettings,
@@ -120,6 +128,7 @@ __all__: tuple[str, ...] = (
     "DEFAULT_CONVERSATION_STORE_CONFIG_PATH",
     "DEFAULT_EDUCATION_AGENT_CONFIG_PATH",
     "DEFAULT_LLM_GATEWAY_CONFIG_PATH",
+    "DEFAULT_NONMEDICAL_PET_CARE_CONFIG_PATH",
     "DEFAULT_OBSERVABILITY_CONFIG_PATH",
     "DEFAULT_RUNTIME_CONFIG_PATH",
     "DEFAULT_SAFETY_TRIGGER_CONFIG_PATH",
@@ -148,6 +157,10 @@ __all__: tuple[str, ...] = (
     "LlmTimeoutPolicyConfig",
     "LlmTokenEstimationConfig",
     "LlmTracePolicyConfig",
+    "NonmedicalPetCareAgentSettings",
+    "NonmedicalPetCareRagConfig",
+    "NonmedicalPetCareRuleConfig",
+    "NonmedicalPetCareTimeoutConfig",
     "OpenAICompatibilityConfig",
     "ObservabilityLabelPolicyConfig",
     "ObservabilityLoggingConfig",
@@ -193,6 +206,7 @@ __all__: tuple[str, ...] = (
     "load_conversation_store_settings",
     "load_education_agent_settings",
     "load_llm_gateway_settings",
+    "load_nonmedical_pet_care_agent_settings",
     "load_observability_settings",
     "load_runtime_config_settings",
     "load_safety_trigger_agent_settings",
