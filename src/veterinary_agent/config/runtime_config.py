@@ -35,6 +35,10 @@ from veterinary_agent.config.observability import (
     ObservabilitySettings,
     load_observability_settings,
 )
+from veterinary_agent.config.vet_context_builder import (
+    VetContextBuilderSettings,
+    load_vet_context_builder_settings,
+)
 from veterinary_agent.config.llm_gateway import (
     LlmGatewaySettings,
     load_llm_gateway_settings,
@@ -101,6 +105,7 @@ class RuntimeConfigNamespace(StrEnum):
     CONVERSATION_STORE = "conversation_store"
     LLM_GATEWAY = "llm_gateway"
     OBSERVABILITY = "observability"
+    VET_CONTEXT_BUILDER = "vet_context_builder"
 
 
 class _RuntimeConfigModel(BaseModel):
@@ -403,6 +408,9 @@ class RuntimeConfigSnapshot(_RuntimeConfigModel):
     observability: ObservabilitySettings = Field(
         description="Observability RuntimeConfig。",
     )
+    vet_context_builder: VetContextBuilderSettings = Field(
+        description="VetContextBuilder RuntimeConfig。",
+    )
     trace_safe_summary: JsonMap = Field(
         description="可写入逻辑链的脱敏配置摘要。",
     )
@@ -503,6 +511,34 @@ def _build_observability_trace_summary(settings: ObservabilitySettings) -> JsonM
     }
 
 
+def _build_vet_context_builder_trace_summary(
+    settings: VetContextBuilderSettings,
+) -> JsonMap:
+    """构建 VetContextBuilder trace-safe 配置摘要。
+
+    :param settings: VetContextBuilder RuntimeConfig。
+    :return: 不含业务正文且避免敏感字段名的配置摘要。
+    """
+
+    return {
+        "enabled": settings.enabled,
+        "config_version": settings.config_version,
+        "budgets": {
+            "single_full_units": settings.budgets.single_full_tokens,
+            "safety_minimal_units": settings.budgets.safety_minimal_tokens,
+            "education_light_units": settings.budgets.education_light_tokens,
+        },
+        "timeouts": settings.timeouts.model_dump(mode="json"),
+        "p0_fields": settings.p0_fields,
+        "recent_message_limit": settings.recent_message_limit,
+        "recent_message_unit_budget": settings.recent_message_token_budget,
+        "max_prompt_blocks": settings.max_prompt_blocks,
+        "max_task_input_chars": settings.max_task_input_chars,
+        "chars_per_unit": settings.chars_per_token,
+        "budget_headroom_ratio": settings.budget_headroom_ratio,
+    }
+
+
 def _build_llm_gateway_trace_summary(settings: LlmGatewaySettings) -> JsonMap:
     """构建 LlmGateway trace-safe 配置摘要。
 
@@ -585,6 +621,7 @@ def _build_trace_safe_summary(
     conversation_store_settings: ConversationStoreSettings,
     llm_gateway_settings: LlmGatewaySettings,
     observability_settings: ObservabilitySettings,
+    vet_context_builder_settings: VetContextBuilderSettings,
 ) -> JsonMap:
     """构建完整 trace-safe 配置摘要。
 
@@ -594,6 +631,7 @@ def _build_trace_safe_summary(
     :param conversation_store_settings: ConversationStore RuntimeConfig。
     :param llm_gateway_settings: LlmGateway RuntimeConfig。
     :param observability_settings: Observability RuntimeConfig。
+    :param vet_context_builder_settings: VetContextBuilder RuntimeConfig。
     :return: 可写入逻辑链的脱敏配置摘要。
     """
 
@@ -609,6 +647,9 @@ def _build_trace_safe_summary(
         ),
         "llm_gateway": _build_llm_gateway_trace_summary(llm_gateway_settings),
         "observability": _build_observability_trace_summary(observability_settings),
+        "vet_context_builder": _build_vet_context_builder_trace_summary(
+            vet_context_builder_settings
+        ),
     }
 
 
@@ -764,6 +805,7 @@ def _dump_namespace_for_lookup(
         | ConversationStoreSettings
         | LlmGatewaySettings
         | ObservabilitySettings
+        | VetContextBuilderSettings
     ),
 ) -> JsonMap:
     """将配置命名空间转换为可按点路径读取的映射。
@@ -922,6 +964,7 @@ def validate_runtime_config_candidate(
     conversation_store_settings: ConversationStoreSettings | None = None,
     llm_gateway_settings: LlmGatewaySettings | None = None,
     observability_settings: ObservabilitySettings | None = None,
+    vet_context_builder_settings: VetContextBuilderSettings | None = None,
 ) -> None:
     """校验候选 RuntimeConfig 聚合配置。
 
@@ -931,6 +974,7 @@ def validate_runtime_config_candidate(
     :param conversation_store_settings: 可选 ConversationStore RuntimeConfig；未传入时从默认配置源加载。
     :param llm_gateway_settings: 可选 LlmGateway RuntimeConfig；未传入时从默认配置源加载。
     :param observability_settings: 可选 Observability RuntimeConfig；未传入时从默认配置源加载。
+    :param vet_context_builder_settings: 可选 VetContextBuilder RuntimeConfig；未传入时从默认配置源加载。
     :return: None。
     :raises RuntimeConfigError: 当候选配置违反安全锁定项、跨组件关系或 trace-safe 约束时抛出。
     """
@@ -950,6 +994,11 @@ def validate_runtime_config_candidate(
         if llm_gateway_settings is not None
         else load_llm_gateway_settings()
     )
+    resolved_vet_context_builder_settings = (
+        vet_context_builder_settings
+        if vet_context_builder_settings is not None
+        else load_vet_context_builder_settings()
+    )
     _validate_runtime_config_safety_locks(runtime_config_settings)
     _validate_runtime_config_relations(
         api_ingress_settings=api_ingress_settings,
@@ -963,6 +1012,7 @@ def validate_runtime_config_candidate(
         conversation_store_settings=resolved_conversation_store_settings,
         llm_gateway_settings=resolved_llm_gateway_settings,
         observability_settings=resolved_observability_settings,
+        vet_context_builder_settings=resolved_vet_context_builder_settings,
     )
     _validate_trace_safe_summary(summary)
 
@@ -975,6 +1025,7 @@ def build_runtime_config_snapshot(
     conversation_store_settings: ConversationStoreSettings | None = None,
     llm_gateway_settings: LlmGatewaySettings | None = None,
     observability_settings: ObservabilitySettings | None = None,
+    vet_context_builder_settings: VetContextBuilderSettings | None = None,
 ) -> RuntimeConfigSnapshot:
     """构建 RuntimeConfig 不可变快照。
 
@@ -984,6 +1035,7 @@ def build_runtime_config_snapshot(
     :param conversation_store_settings: 可选 ConversationStore RuntimeConfig；未传入时从默认配置源加载。
     :param llm_gateway_settings: 可选 LlmGateway RuntimeConfig；未传入时从默认配置源加载。
     :param observability_settings: 可选 Observability RuntimeConfig；未传入时从默认配置源加载。
+    :param vet_context_builder_settings: 可选 VetContextBuilder RuntimeConfig；未传入时从默认配置源加载。
     :return: 已完成校验的 RuntimeConfig 快照。
     :raises RuntimeConfigError: 当配置校验失败或 trace-safe 摘要不安全时抛出。
     """
@@ -1003,6 +1055,11 @@ def build_runtime_config_snapshot(
         if llm_gateway_settings is not None
         else load_llm_gateway_settings()
     )
+    resolved_vet_context_builder_settings = (
+        vet_context_builder_settings
+        if vet_context_builder_settings is not None
+        else load_vet_context_builder_settings()
+    )
     validate_runtime_config_candidate(
         runtime_config_settings=runtime_config_settings,
         api_ingress_settings=api_ingress_settings,
@@ -1010,6 +1067,7 @@ def build_runtime_config_snapshot(
         conversation_store_settings=resolved_conversation_store_settings,
         llm_gateway_settings=resolved_llm_gateway_settings,
         observability_settings=resolved_observability_settings,
+        vet_context_builder_settings=resolved_vet_context_builder_settings,
     )
     trace_safe_summary = _build_trace_safe_summary(
         runtime_config_settings=runtime_config_settings,
@@ -1018,6 +1076,7 @@ def build_runtime_config_snapshot(
         conversation_store_settings=resolved_conversation_store_settings,
         llm_gateway_settings=resolved_llm_gateway_settings,
         observability_settings=resolved_observability_settings,
+        vet_context_builder_settings=resolved_vet_context_builder_settings,
     )
     config_snapshot_id = _build_config_snapshot_id(trace_safe_summary)
     summary_with_snapshot_id: JsonMap = {
@@ -1037,6 +1096,7 @@ def build_runtime_config_snapshot(
         conversation_store=resolved_conversation_store_settings,
         llm_gateway=resolved_llm_gateway_settings,
         observability=resolved_observability_settings,
+        vet_context_builder=resolved_vet_context_builder_settings,
         trace_safe_summary=summary_with_snapshot_id,
     )
 
@@ -1087,6 +1147,7 @@ class RuntimeConfigProvider:
         | ConversationStoreSettings
         | LlmGatewaySettings
         | ObservabilitySettings
+        | VetContextBuilderSettings
     ):
         """按命名空间读取配置对象。
 
@@ -1108,6 +1169,8 @@ class RuntimeConfigProvider:
             return snapshot.llm_gateway
         if namespace is RuntimeConfigNamespace.OBSERVABILITY:
             return snapshot.observability
+        if namespace is RuntimeConfigNamespace.VET_CONTEXT_BUILDER:
+            return snapshot.vet_context_builder
         raise RuntimeConfigError(
             code=RuntimeConfigErrorCode.CONFIG_SNAPSHOT_NOT_FOUND,
             operation=RuntimeConfigOperation.GET_CONFIG_NAMESPACE,
@@ -1213,6 +1276,7 @@ def create_runtime_config_provider(
     conversation_store_settings: ConversationStoreSettings | None = None,
     llm_gateway_settings: LlmGatewaySettings | None = None,
     observability_settings: ObservabilitySettings | None = None,
+    vet_context_builder_settings: VetContextBuilderSettings | None = None,
 ) -> RuntimeConfigProvider:
     """创建应用内 RuntimeConfig provider。
 
@@ -1222,6 +1286,7 @@ def create_runtime_config_provider(
     :param conversation_store_settings: 可选 ConversationStore RuntimeConfig；未传入时从默认配置源加载。
     :param llm_gateway_settings: 可选 LlmGateway RuntimeConfig；未传入时从默认配置源加载。
     :param observability_settings: 可选 Observability RuntimeConfig；未传入时从默认配置源加载。
+    :param vet_context_builder_settings: 可选 VetContextBuilder RuntimeConfig；未传入时从默认配置源加载。
     :return: 持有当前有效配置快照的 RuntimeConfig provider。
     :raises RuntimeConfigError: 当配置校验失败或 trace-safe 摘要不安全时抛出。
     """
@@ -1256,6 +1321,11 @@ def create_runtime_config_provider(
         if llm_gateway_settings is not None
         else load_llm_gateway_settings()
     )
+    resolved_vet_context_builder_settings = (
+        vet_context_builder_settings
+        if vet_context_builder_settings is not None
+        else load_vet_context_builder_settings()
+    )
     snapshot = build_runtime_config_snapshot(
         runtime_config_settings=resolved_runtime_config_settings,
         api_ingress_settings=resolved_api_ingress_settings,
@@ -1263,6 +1333,7 @@ def create_runtime_config_provider(
         conversation_store_settings=resolved_conversation_store_settings,
         llm_gateway_settings=resolved_llm_gateway_settings,
         observability_settings=resolved_observability_settings,
+        vet_context_builder_settings=resolved_vet_context_builder_settings,
     )
     return RuntimeConfigProvider(snapshot)
 
@@ -1280,9 +1351,11 @@ __all__: tuple[str, ...] = (
     "RuntimeConfigSafetyLockSettings",
     "RuntimeConfigSettings",
     "RuntimeConfigSnapshot",
+    "VetContextBuilderSettings",
     "build_runtime_config_error_dto",
     "build_runtime_config_snapshot",
     "create_runtime_config_provider",
     "load_runtime_config_settings",
+    "load_vet_context_builder_settings",
     "validate_runtime_config_candidate",
 )
