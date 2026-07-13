@@ -331,6 +331,9 @@ def test_runtime_config_provider_reads_namespaces() -> None:
     assert provider.get_namespace(RuntimeConfigNamespace.OBSERVABILITY) is (
         provider.current_snapshot().observability
     )
+    assert provider.get_namespace(RuntimeConfigNamespace.SAFETY_TRIGGER) is (
+        provider.current_snapshot().safety_trigger
+    )
 
 
 def test_runtime_config_provider_reads_value_by_key() -> None:

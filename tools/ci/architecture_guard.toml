@@ -23,20 +23,20 @@ source_root = "src/veterinary_agent"
 test_root = "tests"
 
 [budgets]
-max_source_physical_lines = 61202
-max_test_physical_lines = 28044
-max_source_python_files = 185
-max_test_python_files = 125
+max_source_physical_lines = 65635
+max_test_physical_lines = 29097
+max_source_python_files = 199
+max_test_python_files = 129
 warn_file_physical_lines = 800
 max_file_physical_lines = 1800
 max_root_init_physical_lines = 50
-max_total_all_exports = 1738
+max_total_all_exports = 1883
 max_root_all_exports = 5
-max_model_dump_calls = 135
-max_model_validate_calls = 34
-max_dto_classes = 273
-max_error_status_todo_classes = 55
-max_template_files = 62
+max_model_dump_calls = 160
+max_model_validate_calls = 36
+max_dto_classes = 294
+max_error_status_todo_classes = 58
+max_template_files = 67
 max_dependency_cycles = 0
 max_direct_root_imports = 0
 
@@ -46,13 +46,14 @@ agent_runner = 3300
 api_ingress = 4200
 app = 1600
 checkpoint_store = 6900
-config = 5741
+config = 6193
 conversation_store = 4900
 core = 50
 graph_runtime = 3250
 llm_gateway = 5100
 logic_trace_store = 3100
 observability = 2050
+nonmedical_pet_care_agent = 3981
 pet_session_policy = 1450
 safety_trigger_agent = 2864
 vet_trace_schema = 2050
@@ -108,6 +109,7 @@ modules = [
   "veterinary_agent.pet_session_policy",
   "veterinary_agent.safety_trigger_agent",
   "veterinary_agent.education_agent",
+  "veterinary_agent.nonmedical_pet_care_agent",
   "veterinary_agent.vet_context_builder",
 ]
 
