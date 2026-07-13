@@ -1,0 +1,27 @@
+# SafetyTriggerAgent 组件配置。
+# 该文件只承载急症简版生成、关键确认、自检与兜底策略，不包含输入侧 SAF 判决或发布门策略。
+enabled: true
+config_version: safety-trigger-config.v1
+safety_trigger_agent_version: safety-trigger-agent.v1
+writer_version: safety-trigger-writer.v1
+confirmation_planner_version: safety-confirmation-planner.v1
+fallback_template_version: safety-fallback-draft.v1
+requirement_set_version: safety-requirements.v1
+writer_agent_id: safety_trigger_writer
+writer_agent_version: v1
+confirmation_planner_agent_id: safety_key_confirmation_planner
+confirmation_planner_agent_version: v1
+timeouts:
+  total_seconds: 6.0
+  planner_seconds: 1.0
+  writer_seconds: 3.0
+requirements:
+  max_confirmation_count: 1
+  max_draft_chars: 2400
+  require_disclaimer: true
+  forbidden_content_tags:
+    - rag_citation
+    - t4_precise_dose
+    - full_differential
+    - delayed_care
+    - unrelated_longform
