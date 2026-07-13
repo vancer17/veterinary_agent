@@ -1,0 +1,25 @@
+# VetContextBuilder 运行配置。
+enabled: true
+config_version: vet-context-builder-config.v1
+budgets:
+  single_full_tokens: 8192
+  safety_minimal_tokens: 4096
+  education_light_tokens: 4096
+timeouts:
+  total_seconds: 2.5
+  source_seconds: 0.8
+  safety_total_seconds: 0.3
+  safety_source_seconds: 0.12
+p0_fields:
+  - species
+  - birth_date
+  - age
+  - weight_kg
+  - sex
+  - neutered
+recent_message_limit: 20
+recent_message_token_budget: 1536
+max_prompt_blocks: 16
+max_task_input_chars: 4000
+chars_per_token: 2.0
+budget_headroom_ratio: 0.1
