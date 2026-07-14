@@ -120,6 +120,14 @@ from veterinary_agent.config.vet_context_builder import (
     VetContextTimeoutConfig,
     load_vet_context_builder_settings,
 )
+from veterinary_agent.config.vet_response_composer import (
+    DEFAULT_VET_RESPONSE_COMPOSER_CONFIG_PATH,
+    VetResponseComposerOrderingConfig,
+    VetResponseComposerPublishConfig,
+    VetResponseComposerSettings,
+    VetResponseComposerTimeoutConfig,
+    load_vet_response_composer_settings,
+)
 
 __all__: tuple[str, ...] = (
     "ApiIngressSettings",
@@ -135,6 +143,7 @@ __all__: tuple[str, ...] = (
     "DEFAULT_STANDARD_CONSULTATION_CONFIG_PATH",
     "DEFAULT_VET_TASK_DECOMPOSER_CONFIG_PATH",
     "DEFAULT_VET_CONTEXT_BUILDER_CONFIG_PATH",
+    "DEFAULT_VET_RESPONSE_COMPOSER_CONFIG_PATH",
     "CheckpointStoreCheckpointConfig",
     "CheckpointStoreHistoryConfig",
     "CheckpointStoreRunLockConfig",
@@ -194,6 +203,10 @@ __all__: tuple[str, ...] = (
     "VetContextBudgetConfig",
     "VetContextBuilderSettings",
     "VetContextTimeoutConfig",
+    "VetResponseComposerOrderingConfig",
+    "VetResponseComposerPublishConfig",
+    "VetResponseComposerSettings",
+    "VetResponseComposerTimeoutConfig",
     "VetTaskDecomposerConfidenceConfig",
     "VetTaskDecomposerSettings",
     "VetTaskDecomposerTimeoutConfig",
@@ -211,6 +224,7 @@ __all__: tuple[str, ...] = (
     "load_runtime_config_settings",
     "load_safety_trigger_agent_settings",
     "load_standard_consultation_agent_settings",
+    "load_vet_response_composer_settings",
     "load_vet_task_decomposer_settings",
     "load_vet_context_builder_settings",
     "validate_runtime_config_candidate",

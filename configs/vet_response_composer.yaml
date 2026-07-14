@@ -1,0 +1,31 @@
+# VetResponseComposer 组件配置。
+# 仅包含发布排序、大小限制、流式切片和 trace schema 引用，不承载业务正文。
+
+enabled: true
+config_version: vet-response-composer-config.v1
+composer_version: vet-response-composer.v1
+trace_schema_version: vet.response-composer.trace.v1
+capture_policy_version: vet-trace-capture-policy.v1
+audit_tier_order:
+  - C
+  - B
+  - A
+timeouts:
+  total_seconds: 10.0
+  conversation_store_seconds: 3.0
+  checkpoint_store_seconds: 3.0
+  trace_store_seconds: 2.0
+  safety_first_wait_seconds: 2.0
+publish:
+  max_segments_per_turn: 8
+  max_segment_chars: 16384
+  stream_delta_chars: 512
+  final_response_separator: "\n\n"
+  create_assistant_message: true
+ordering:
+  safety_priority: 0
+  medical_priority: 10
+  ocr_priority: 20
+  education_priority: 30
+  nonmedical_priority: 40
+  default_priority: 100
