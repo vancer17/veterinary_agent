@@ -74,6 +74,7 @@ class LangGraphRunContext:
     user_id: str
     current_pet_id: str
     request: JsonMap
+    thread_id: str | None = None
 
 
 def project_handler_state(state: LangGraphRuntimeState) -> GraphState:

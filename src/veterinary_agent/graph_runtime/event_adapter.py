@@ -51,6 +51,26 @@ def _read_checkpoint_id(data: JsonMap) -> str | None:
     return _read_string(configurable.get("checkpoint_id"))
 
 
+def _read_node_events(value: object) -> tuple[AgentGraphEventDto, ...]:
+    """从 LangGraph 节点 update 中读取项目节点事件。
+
+    :param value: 节点 update 中的 node_events 值。
+    :return: 可被 GraphRuntime 直接透传的节点事件元组。
+    """
+
+    if not isinstance(value, list | tuple):
+        return ()
+    events: list[AgentGraphEventDto] = []
+    for item in value:
+        if not isinstance(item, Mapping):
+            continue
+        try:
+            events.append(AgentGraphEventDto.model_validate(dict(item)))
+        except ValueError:
+            continue
+    return tuple(events)
+
+
 @dataclass(slots=True)
 class GraphEventAdapter:
     """LangGraph stream 到 GraphRuntime 标准事件的有状态适配器。"""
@@ -152,6 +172,7 @@ class GraphEventAdapter:
             business_state = _as_json_map(update.get("business_state"))
             selected_routes = _as_json_map(update.get("selected_routes"))
             selected = selected_routes.get(node_id)
+            events.extend(_read_node_events(update.get("node_events")))
             self.emitted_node_events += 1
             events.append(
                 self.event_factory.create(

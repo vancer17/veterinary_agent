@@ -59,6 +59,10 @@ from veterinary_agent.config.vet_task_decomposer import (
     VetTaskDecomposerSettings,
     load_vet_task_decomposer_settings,
 )
+from veterinary_agent.config.vet_response_composer import (
+    VetResponseComposerSettings,
+    load_vet_response_composer_settings,
+)
 from veterinary_agent.config.llm_gateway import (
     LlmGatewaySettings,
     load_llm_gateway_settings,
@@ -131,6 +135,7 @@ class RuntimeConfigNamespace(StrEnum):
     SAFETY_TRIGGER = "safety_trigger"
     EDUCATION_AGENT = "education_agent"
     NONMEDICAL_PET_CARE = "nonmedical_pet_care"
+    VET_RESPONSE_COMPOSER = "vet_response_composer"
 
 
 class _RuntimeConfigModel(BaseModel):
@@ -451,6 +456,9 @@ class RuntimeConfigSnapshot(_RuntimeConfigModel):
     nonmedical_pet_care: NonmedicalPetCareAgentSettings = Field(
         description="NonmedicalPetCareAgent RuntimeConfig。",
     )
+    vet_response_composer: VetResponseComposerSettings = Field(
+        description="VetResponseComposer RuntimeConfig。",
+    )
     trace_safe_summary: JsonMap = Field(
         description="可写入逻辑链的脱敏配置摘要。",
     )
@@ -746,6 +754,28 @@ def _build_nonmedical_pet_care_trace_summary(
     }
 
 
+def _build_vet_response_composer_trace_summary(
+    settings: VetResponseComposerSettings,
+) -> JsonMap:
+    """构建 VetResponseComposer trace-safe 配置摘要。
+
+    :param settings: VetResponseComposer RuntimeConfig。
+    :return: 不含用户正文、完整回复或敏感凭据的配置摘要。
+    """
+
+    return {
+        "enabled": settings.enabled,
+        "config_version": settings.config_version,
+        "composer_version": settings.composer_version,
+        "trace_schema_version": settings.trace_schema_version,
+        "capture_policy_version": settings.capture_policy_version,
+        "audit_tier_order": settings.audit_tier_order,
+        "timeouts": settings.timeouts.model_dump(mode="json"),
+        "publish": settings.publish.model_dump(mode="json"),
+        "ordering": settings.ordering.model_dump(mode="json"),
+    }
+
+
 def _build_llm_gateway_trace_summary(settings: LlmGatewaySettings) -> JsonMap:
     """构建 LlmGateway trace-safe 配置摘要。
 
@@ -834,6 +864,7 @@ def _build_trace_safe_summary(
     safety_trigger_settings: SafetyTriggerAgentSettings,
     education_agent_settings: EducationAgentSettings,
     nonmedical_pet_care_settings: NonmedicalPetCareAgentSettings,
+    vet_response_composer_settings: VetResponseComposerSettings,
 ) -> JsonMap:
     """构建完整 trace-safe 配置摘要。
 
@@ -849,6 +880,7 @@ def _build_trace_safe_summary(
     :param safety_trigger_settings: SafetyTriggerAgent RuntimeConfig。
     :param education_agent_settings: EducationAgent RuntimeConfig。
     :param nonmedical_pet_care_settings: NonmedicalPetCareAgent RuntimeConfig。
+    :param vet_response_composer_settings: VetResponseComposer RuntimeConfig。
     :return: 可写入逻辑链的脱敏配置摘要。
     """
 
@@ -879,6 +911,9 @@ def _build_trace_safe_summary(
         ),
         "nonmedical_pet_care": _build_nonmedical_pet_care_trace_summary(
             nonmedical_pet_care_settings
+        ),
+        "vet_response_composer": _build_vet_response_composer_trace_summary(
+            vet_response_composer_settings
         ),
     }
 
@@ -1041,6 +1076,7 @@ def _dump_namespace_for_lookup(
         | SafetyTriggerAgentSettings
         | EducationAgentSettings
         | NonmedicalPetCareAgentSettings
+        | VetResponseComposerSettings
     ),
 ) -> JsonMap:
     """将配置命名空间转换为可按点路径读取的映射。
@@ -1205,6 +1241,7 @@ def validate_runtime_config_candidate(
     safety_trigger_settings: SafetyTriggerAgentSettings | None = None,
     education_agent_settings: EducationAgentSettings | None = None,
     nonmedical_pet_care_settings: NonmedicalPetCareAgentSettings | None = None,
+    vet_response_composer_settings: VetResponseComposerSettings | None = None,
 ) -> None:
     """校验候选 RuntimeConfig 聚合配置。
 
@@ -1220,6 +1257,7 @@ def validate_runtime_config_candidate(
     :param safety_trigger_settings: 可选 SafetyTriggerAgent RuntimeConfig；未传入时从默认配置源加载。
     :param education_agent_settings: 可选 EducationAgent RuntimeConfig；未传入时从默认配置源加载。
     :param nonmedical_pet_care_settings: 可选 NonmedicalPetCareAgent RuntimeConfig；未传入时从默认配置源加载。
+    :param vet_response_composer_settings: 可选 VetResponseComposer RuntimeConfig；未传入时从默认配置源加载。
     :return: None。
     :raises RuntimeConfigError: 当候选配置违反安全锁定项、跨组件关系或 trace-safe 约束时抛出。
     """
@@ -1269,6 +1307,11 @@ def validate_runtime_config_candidate(
         if nonmedical_pet_care_settings is not None
         else load_nonmedical_pet_care_agent_settings()
     )
+    resolved_vet_response_composer_settings = (
+        vet_response_composer_settings
+        if vet_response_composer_settings is not None
+        else load_vet_response_composer_settings()
+    )
     _validate_runtime_config_safety_locks(runtime_config_settings)
     _validate_runtime_config_relations(
         api_ingress_settings=api_ingress_settings,
@@ -1288,6 +1331,7 @@ def validate_runtime_config_candidate(
         safety_trigger_settings=resolved_safety_trigger_settings,
         education_agent_settings=resolved_education_agent_settings,
         nonmedical_pet_care_settings=resolved_nonmedical_pet_care_settings,
+        vet_response_composer_settings=resolved_vet_response_composer_settings,
     )
     _validate_trace_safe_summary(summary)
 
@@ -1306,6 +1350,7 @@ def build_runtime_config_snapshot(
     safety_trigger_settings: SafetyTriggerAgentSettings | None = None,
     education_agent_settings: EducationAgentSettings | None = None,
     nonmedical_pet_care_settings: NonmedicalPetCareAgentSettings | None = None,
+    vet_response_composer_settings: VetResponseComposerSettings | None = None,
 ) -> RuntimeConfigSnapshot:
     """构建 RuntimeConfig 不可变快照。
 
@@ -1321,6 +1366,7 @@ def build_runtime_config_snapshot(
     :param safety_trigger_settings: 可选 SafetyTriggerAgent RuntimeConfig；未传入时从默认配置源加载。
     :param education_agent_settings: 可选 EducationAgent RuntimeConfig；未传入时从默认配置源加载。
     :param nonmedical_pet_care_settings: 可选 NonmedicalPetCareAgent RuntimeConfig；未传入时从默认配置源加载。
+    :param vet_response_composer_settings: 可选 VetResponseComposer RuntimeConfig；未传入时从默认配置源加载。
     :return: 已完成校验的 RuntimeConfig 快照。
     :raises RuntimeConfigError: 当配置校验失败或 trace-safe 摘要不安全时抛出。
     """
@@ -1370,6 +1416,11 @@ def build_runtime_config_snapshot(
         if nonmedical_pet_care_settings is not None
         else load_nonmedical_pet_care_agent_settings()
     )
+    resolved_vet_response_composer_settings = (
+        vet_response_composer_settings
+        if vet_response_composer_settings is not None
+        else load_vet_response_composer_settings()
+    )
     validate_runtime_config_candidate(
         runtime_config_settings=runtime_config_settings,
         api_ingress_settings=api_ingress_settings,
@@ -1383,6 +1434,7 @@ def build_runtime_config_snapshot(
         safety_trigger_settings=resolved_safety_trigger_settings,
         education_agent_settings=resolved_education_agent_settings,
         nonmedical_pet_care_settings=resolved_nonmedical_pet_care_settings,
+        vet_response_composer_settings=resolved_vet_response_composer_settings,
     )
     trace_safe_summary = _build_trace_safe_summary(
         runtime_config_settings=runtime_config_settings,
@@ -1397,6 +1449,7 @@ def build_runtime_config_snapshot(
         safety_trigger_settings=resolved_safety_trigger_settings,
         education_agent_settings=resolved_education_agent_settings,
         nonmedical_pet_care_settings=resolved_nonmedical_pet_care_settings,
+        vet_response_composer_settings=resolved_vet_response_composer_settings,
     )
     config_snapshot_id = _build_config_snapshot_id(trace_safe_summary)
     summary_with_snapshot_id: JsonMap = {
@@ -1422,6 +1475,7 @@ def build_runtime_config_snapshot(
         safety_trigger=resolved_safety_trigger_settings,
         education_agent=resolved_education_agent_settings,
         nonmedical_pet_care=resolved_nonmedical_pet_care_settings,
+        vet_response_composer=resolved_vet_response_composer_settings,
         trace_safe_summary=summary_with_snapshot_id,
     )
 
@@ -1478,6 +1532,7 @@ class RuntimeConfigProvider:
         | SafetyTriggerAgentSettings
         | EducationAgentSettings
         | NonmedicalPetCareAgentSettings
+        | VetResponseComposerSettings
     ):
         """按命名空间读取配置对象。
 
@@ -1511,6 +1566,8 @@ class RuntimeConfigProvider:
             return snapshot.education_agent
         if namespace is RuntimeConfigNamespace.NONMEDICAL_PET_CARE:
             return snapshot.nonmedical_pet_care
+        if namespace is RuntimeConfigNamespace.VET_RESPONSE_COMPOSER:
+            return snapshot.vet_response_composer
         raise RuntimeConfigError(
             code=RuntimeConfigErrorCode.CONFIG_SNAPSHOT_NOT_FOUND,
             operation=RuntimeConfigOperation.GET_CONFIG_NAMESPACE,
@@ -1622,6 +1679,7 @@ def create_runtime_config_provider(
     safety_trigger_settings: SafetyTriggerAgentSettings | None = None,
     education_agent_settings: EducationAgentSettings | None = None,
     nonmedical_pet_care_settings: NonmedicalPetCareAgentSettings | None = None,
+    vet_response_composer_settings: VetResponseComposerSettings | None = None,
 ) -> RuntimeConfigProvider:
     """创建应用内 RuntimeConfig provider。
 
@@ -1637,6 +1695,7 @@ def create_runtime_config_provider(
     :param safety_trigger_settings: 可选 SafetyTriggerAgent RuntimeConfig；未传入时从默认配置源加载。
     :param education_agent_settings: 可选 EducationAgent RuntimeConfig；未传入时从默认配置源加载。
     :param nonmedical_pet_care_settings: 可选 NonmedicalPetCareAgent RuntimeConfig；未传入时从默认配置源加载。
+    :param vet_response_composer_settings: 可选 VetResponseComposer RuntimeConfig；未传入时从默认配置源加载。
     :return: 持有当前有效配置快照的 RuntimeConfig provider。
     :raises RuntimeConfigError: 当配置校验失败或 trace-safe 摘要不安全时抛出。
     """
@@ -1701,6 +1760,11 @@ def create_runtime_config_provider(
         if nonmedical_pet_care_settings is not None
         else load_nonmedical_pet_care_agent_settings()
     )
+    resolved_vet_response_composer_settings = (
+        vet_response_composer_settings
+        if vet_response_composer_settings is not None
+        else load_vet_response_composer_settings()
+    )
     snapshot = build_runtime_config_snapshot(
         runtime_config_settings=resolved_runtime_config_settings,
         api_ingress_settings=resolved_api_ingress_settings,
@@ -1714,6 +1778,7 @@ def create_runtime_config_provider(
         safety_trigger_settings=resolved_safety_trigger_settings,
         education_agent_settings=resolved_education_agent_settings,
         nonmedical_pet_care_settings=resolved_nonmedical_pet_care_settings,
+        vet_response_composer_settings=resolved_vet_response_composer_settings,
     )
     return RuntimeConfigProvider(snapshot)
 
@@ -1735,6 +1800,7 @@ __all__: tuple[str, ...] = (
     "NonmedicalPetCareAgentSettings",
     "StandardConsultationAgentSettings",
     "VetContextBuilderSettings",
+    "VetResponseComposerSettings",
     "VetTaskDecomposerSettings",
     "build_runtime_config_error_dto",
     "build_runtime_config_snapshot",
@@ -1743,6 +1809,7 @@ __all__: tuple[str, ...] = (
     "load_nonmedical_pet_care_agent_settings",
     "load_standard_consultation_agent_settings",
     "load_runtime_config_settings",
+    "load_vet_response_composer_settings",
     "load_vet_task_decomposer_settings",
     "load_vet_context_builder_settings",
     "validate_runtime_config_candidate",

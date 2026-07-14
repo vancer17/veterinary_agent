@@ -290,6 +290,7 @@ class DefaultGraphRuntime:
                         context=self._build_langgraph_context(
                             request=request,
                             identity=identity,
+                            thread_id=control_context.thread_id,
                         ),
                         thread_id=control_context.thread_id,
                         metadata=self._build_langgraph_metadata(identity=identity),
@@ -433,6 +434,7 @@ class DefaultGraphRuntime:
                         context=self._build_resume_langgraph_context(
                             identity=identity,
                             state=descriptor.values,
+                            thread_id=resume_ref.thread_id,
                         ),
                         metadata=self._build_langgraph_metadata(identity=identity),
                         run_control=run_control,
@@ -814,11 +816,13 @@ class DefaultGraphRuntime:
         *,
         request: AgentGraphTurnRequestDto,
         identity: GraphRunIdentity,
+        thread_id: str,
     ) -> LangGraphRunContext:
         """构建新运行传入 LangGraph Runtime 的上下文。
 
         :param request: GraphRuntime 单轮执行请求。
         :param identity: 当前运行身份。
+        :param thread_id: 当前运行绑定的 checkpoint thread ID。
         :return: LangGraph 运行期上下文。
         """
 
@@ -827,6 +831,7 @@ class DefaultGraphRuntime:
             session_id=request.context.session_id,
             user_id=request.context.user_id,
             current_pet_id=request.context.current_pet_id,
+            thread_id=thread_id,
             request=self._build_initial_state(
                 request=request,
                 identity=identity,
@@ -838,11 +843,13 @@ class DefaultGraphRuntime:
         *,
         identity: GraphRunIdentity,
         state: LangGraphRuntimeState,
+        thread_id: str,
     ) -> LangGraphRunContext:
         """构建恢复运行传入 LangGraph Runtime 的上下文。
 
         :param identity: 恢复阶段运行身份。
         :param state: checkpoint 中读取的 LangGraph 状态。
+        :param thread_id: 当前恢复运行绑定的 checkpoint thread ID。
         :return: LangGraph 运行期上下文。
         """
 
@@ -853,6 +860,7 @@ class DefaultGraphRuntime:
             user_id=self._require_state_string(request, "user_id"),
             current_pet_id=self._require_state_string(request, "current_pet_id"),
             request=request,
+            thread_id=thread_id,
         )
 
     def _build_resume_control_context(

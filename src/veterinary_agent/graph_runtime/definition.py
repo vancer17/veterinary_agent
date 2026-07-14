@@ -44,6 +44,7 @@ class GraphNodeExecutionContext:
     current_pet_id: str
     params_version: str
     config_snapshot_id: str
+    thread_id: str | None = None
 
 
 class GraphNodeHandler(Protocol):
