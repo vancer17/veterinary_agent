@@ -49,6 +49,11 @@ from veterinary_agent.config import (
     load_llm_gateway_settings,
 )
 from veterinary_agent.conversation_store import ConversationStore, TodoConversationStore
+from veterinary_agent.guardrail_framework import (
+    GuardrailFramework,
+    LogicTraceGuardrailTraceSink,
+    create_default_guardrail_framework,
+)
 from veterinary_agent.llm_gateway import (
     LlmCallTraceStore,
     LlmGateway,
@@ -98,6 +103,7 @@ class RuntimeComponentBundle:
     checkpoint_provider_factory: CheckpointProviderFactory
     llm_gateway: LlmGateway
     agent_runner: AgentRunner
+    guardrail_framework: GuardrailFramework
     logic_trace_store: LogicTraceStore
 
 
@@ -288,6 +294,11 @@ def build_runtime_component_bundle(
         observability_provider,
         LogicTraceAgentRunnerTraceSink(logic_trace_store),
     )
+    guardrail_framework = create_default_guardrail_framework(
+        runtime_config_provider=runtime_config_provider,
+        observability_provider=observability_provider,
+        trace_sink=LogicTraceGuardrailTraceSink(store=logic_trace_store),
+    )
     conversation_store = conversation_store_factory(snapshot.conversation_store)
     pet_session_policy = DefaultPetSessionPolicy(
         conversation_store=conversation_store,
@@ -332,6 +343,9 @@ def build_runtime_component_bundle(
         agent_runner=agent_runner,
         agent_runner_ready=agent_runner.is_ready(),
         agent_runner_error=None,
+        guardrail_framework=guardrail_framework,
+        guardrail_framework_ready=guardrail_framework.is_ready(),
+        guardrail_framework_error=None,
         graph_runtime=graph_runtime,
         graph_runtime_ready=graph_runtime.is_ready(),
         logic_trace_store=logic_trace_store,
@@ -347,5 +361,6 @@ def build_runtime_component_bundle(
         checkpoint_provider_factory=checkpoint_provider_factory,
         llm_gateway=llm_gateway,
         agent_runner=agent_runner,
+        guardrail_framework=guardrail_framework,
         logic_trace_store=logic_trace_store,
     )

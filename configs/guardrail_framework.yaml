@@ -1,0 +1,48 @@
+# GuardrailFramework 组件配置。
+# 当前 L2 业务护栏 handler 尚未接入，默认 handler_ref 使用 TODO 空壳；
+# 运行时会按 fail_closed_block 策略阻断，避免未审查内容被误发布。
+enabled: true
+config_version: guardrail-framework-config.v1
+framework_version: guardrail-framework.v1
+trace_schema_version: guardrail.trace.v1
+capture_policy_version: vet-trace-capture-policy.v1
+persist_full_text: false
+pre_generation:
+  enabled: true
+  policy_id: guardrail.pre_generation.default
+  policy_version: guardrail-policy.v1
+  handler_ref: todo_pre_generation_guard
+  stage_timeout_seconds: 8.0
+  handler_timeout_seconds: 6.0
+  max_attempts: 1
+  retry_on_timeout: false
+  retry_on_handler_error: false
+  failure_strategy: fail_closed_block
+  fallback_template_ref: null
+  emit_trace_events: true
+post_generation_review:
+  enabled: true
+  policy_id: guardrail.post_generation_review.default
+  policy_version: guardrail-policy.v1
+  handler_ref: todo_post_generation_review
+  stage_timeout_seconds: 12.0
+  handler_timeout_seconds: 10.0
+  max_attempts: 1
+  retry_on_timeout: false
+  retry_on_handler_error: false
+  failure_strategy: fail_closed_block
+  fallback_template_ref: null
+  emit_trace_events: true
+deterministic_gate:
+  enabled: true
+  policy_id: guardrail.deterministic_gate.default
+  policy_version: guardrail-policy.v1
+  handler_ref: todo_deterministic_gate
+  stage_timeout_seconds: 6.0
+  handler_timeout_seconds: 5.0
+  max_attempts: 1
+  retry_on_timeout: false
+  retry_on_handler_error: false
+  failure_strategy: fail_closed_block
+  fallback_template_ref: null
+  emit_trace_events: true

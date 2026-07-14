@@ -41,6 +41,7 @@ label_policy:
   allow_unlisted_labels: false
   allowed_metric_labels:
     - agent_name
+    - action_type
     - component
     - endpoint
     - error_type
@@ -48,6 +49,7 @@ label_policy:
     - fallback_reason_code
     - generation_profile
     - graph_name
+    - handler_ref
     - is_first_segment
     - method
     - model_name

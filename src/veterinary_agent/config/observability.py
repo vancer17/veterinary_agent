@@ -29,6 +29,7 @@ def _default_allowed_metric_labels() -> list[str]:
 
     return [
         "agent_name",
+        "action_type",
         "component",
         "endpoint",
         "error_type",
@@ -36,6 +37,7 @@ def _default_allowed_metric_labels() -> list[str]:
         "fallback_reason_code",
         "generation_profile",
         "graph_name",
+        "handler_ref",
         "is_first_segment",
         "method",
         "model_name",

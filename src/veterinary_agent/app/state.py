@@ -31,6 +31,10 @@ from veterinary_agent.conversation_store import (
     ConversationStore,
     ConversationStoreErrorDto,
 )
+from veterinary_agent.guardrail_framework import (
+    GuardrailFramework,
+    GuardrailFrameworkErrorDto,
+)
 from veterinary_agent.observability import ObservabilityErrorDto, ObservabilityProvider
 from veterinary_agent.llm_gateway import LlmGateway, LlmErrorDto
 from veterinary_agent.logic_trace_store import LogicTraceStore
@@ -116,6 +120,9 @@ class VeterinaryAgentAppState:
     agent_runner: AgentRunner | None = None
     agent_runner_ready: bool = False
     agent_runner_error: AgentRunnerErrorDto | None = None
+    guardrail_framework: GuardrailFramework | None = None
+    guardrail_framework_ready: bool = False
+    guardrail_framework_error: GuardrailFrameworkErrorDto | None = None
     graph_runtime: AgentGraphRuntime | None = None
     graph_runtime_ready: bool = False
     logic_trace_store: LogicTraceStore | None = None

@@ -31,6 +31,10 @@ from veterinary_agent.config.conversation_store import (
     ConversationStoreSettings,
     load_conversation_store_settings,
 )
+from veterinary_agent.config.guardrail_framework import (
+    GuardrailFrameworkSettings,
+    load_guardrail_framework_settings,
+)
 from veterinary_agent.config.observability import (
     ObservabilitySettings,
     load_observability_settings,
@@ -50,6 +54,10 @@ from veterinary_agent.config.vet_nonmedical_pet_care import (
 from veterinary_agent.config.vet_context_builder import (
     VetContextBuilderSettings,
     load_vet_context_builder_settings,
+)
+from veterinary_agent.config.vet_input_safety_assessor import (
+    VetInputSafetyAssessorSettings,
+    load_vet_input_safety_assessor_settings,
 )
 from veterinary_agent.config.vet_standard_consultation import (
     StandardConsultationAgentSettings,
@@ -129,8 +137,10 @@ class RuntimeConfigNamespace(StrEnum):
     CONVERSATION_STORE = "conversation_store"
     LLM_GATEWAY = "llm_gateway"
     OBSERVABILITY = "observability"
+    GUARDRAIL_FRAMEWORK = "guardrail_framework"
     VET_TASK_DECOMPOSER = "vet_task_decomposer"
     VET_CONTEXT_BUILDER = "vet_context_builder"
+    VET_INPUT_SAFETY_ASSESSOR = "vet_input_safety_assessor"
     STANDARD_CONSULTATION = "standard_consultation"
     SAFETY_TRIGGER = "safety_trigger"
     EDUCATION_AGENT = "education_agent"
@@ -438,11 +448,17 @@ class RuntimeConfigSnapshot(_RuntimeConfigModel):
     observability: ObservabilitySettings = Field(
         description="Observability RuntimeConfig。",
     )
+    guardrail_framework: GuardrailFrameworkSettings = Field(
+        description="GuardrailFramework RuntimeConfig。",
+    )
     vet_task_decomposer: VetTaskDecomposerSettings = Field(
         description="VetTaskDecomposer RuntimeConfig。",
     )
     vet_context_builder: VetContextBuilderSettings = Field(
         description="VetContextBuilder RuntimeConfig。",
+    )
+    vet_input_safety_assessor: VetInputSafetyAssessorSettings = Field(
+        description="VetInputSafetyAssessor RuntimeConfig。",
     )
     standard_consultation: StandardConsultationAgentSettings = Field(
         description="StandardConsultationAgent RuntimeConfig。",
@@ -559,6 +575,30 @@ def _build_observability_trace_summary(settings: ObservabilitySettings) -> JsonM
     }
 
 
+def _build_guardrail_framework_trace_summary(
+    settings: GuardrailFrameworkSettings,
+) -> JsonMap:
+    """构建 GuardrailFramework trace-safe 配置摘要。
+
+    :param settings: GuardrailFramework RuntimeConfig。
+    :return: 不含用户正文、草稿正文或敏感凭据的配置摘要。
+    """
+
+    return {
+        "enabled": settings.enabled,
+        "config_version": settings.config_version,
+        "framework_version": settings.framework_version,
+        "trace_schema_version": settings.trace_schema_version,
+        "capture_policy_version": settings.capture_policy_version,
+        "persist_full_text": settings.persist_full_text,
+        "pre_generation": settings.pre_generation.model_dump(mode="json"),
+        "post_generation_review": settings.post_generation_review.model_dump(
+            mode="json"
+        ),
+        "deterministic_gate": settings.deterministic_gate.model_dump(mode="json"),
+    }
+
+
 def _build_vet_context_builder_trace_summary(
     settings: VetContextBuilderSettings,
 ) -> JsonMap:
@@ -611,6 +651,41 @@ def _build_vet_task_decomposer_trace_summary(
         "confidence": settings.confidence.model_dump(mode="json"),
         "max_tasks_per_turn": settings.max_tasks_per_turn,
         "max_user_message_chars": settings.max_user_message_chars,
+    }
+
+
+def _build_vet_input_safety_assessor_trace_summary(
+    settings: VetInputSafetyAssessorSettings,
+) -> JsonMap:
+    """构建 VetInputSafetyAssessor trace-safe 配置摘要。
+
+    :param settings: VetInputSafetyAssessor RuntimeConfig。
+    :return: 不含用户原文、prompt 或敏感凭据的配置摘要。
+    """
+
+    return {
+        "enabled": settings.enabled,
+        "config_version": settings.config_version,
+        "assessor_version": settings.assessor_version,
+        "dictionary_version": settings.dictionary_version,
+        "trace_schema_version": settings.trace_schema_version,
+        "semantic_router_enabled": settings.semantic_router_enabled,
+        "local_extractor_enabled": settings.local_extractor_enabled,
+        "llm_arbitration_enabled": settings.llm_arbitration_enabled,
+        "arbitration_agent": (
+            f"{settings.arbitration_agent_id}:{settings.arbitration_agent_version}"
+        ),
+        "timeouts": settings.timeouts.model_dump(mode="json"),
+        "confidence": settings.confidence.model_dump(mode="json"),
+        "max_tasks_per_turn": settings.max_tasks_per_turn,
+        "max_task_text_chars": settings.max_task_text_chars,
+        "deterministic_saf01_override_enabled": (
+            settings.deterministic_saf01_override_enabled
+        ),
+        "deterministic_saf03_realtime_override_enabled": (
+            settings.deterministic_saf03_realtime_override_enabled
+        ),
+        "cold_start_default_executor": settings.cold_start_default_executor,
     }
 
 
@@ -858,8 +933,10 @@ def _build_trace_safe_summary(
     conversation_store_settings: ConversationStoreSettings,
     llm_gateway_settings: LlmGatewaySettings,
     observability_settings: ObservabilitySettings,
+    guardrail_framework_settings: GuardrailFrameworkSettings,
     vet_task_decomposer_settings: VetTaskDecomposerSettings,
     vet_context_builder_settings: VetContextBuilderSettings,
+    vet_input_safety_assessor_settings: VetInputSafetyAssessorSettings,
     standard_consultation_settings: StandardConsultationAgentSettings,
     safety_trigger_settings: SafetyTriggerAgentSettings,
     education_agent_settings: EducationAgentSettings,
@@ -874,8 +951,10 @@ def _build_trace_safe_summary(
     :param conversation_store_settings: ConversationStore RuntimeConfig。
     :param llm_gateway_settings: LlmGateway RuntimeConfig。
     :param observability_settings: Observability RuntimeConfig。
+    :param guardrail_framework_settings: GuardrailFramework RuntimeConfig。
     :param vet_task_decomposer_settings: VetTaskDecomposer RuntimeConfig。
     :param vet_context_builder_settings: VetContextBuilder RuntimeConfig。
+    :param vet_input_safety_assessor_settings: VetInputSafetyAssessor RuntimeConfig。
     :param standard_consultation_settings: StandardConsultationAgent RuntimeConfig。
     :param safety_trigger_settings: SafetyTriggerAgent RuntimeConfig。
     :param education_agent_settings: EducationAgent RuntimeConfig。
@@ -896,11 +975,19 @@ def _build_trace_safe_summary(
         ),
         "llm_gateway": _build_llm_gateway_trace_summary(llm_gateway_settings),
         "observability": _build_observability_trace_summary(observability_settings),
+        "guardrail_framework": _build_guardrail_framework_trace_summary(
+            guardrail_framework_settings
+        ),
         "vet_task_decomposer": _build_vet_task_decomposer_trace_summary(
             vet_task_decomposer_settings
         ),
         "vet_context_builder": _build_vet_context_builder_trace_summary(
             vet_context_builder_settings
+        ),
+        "vet_input_safety_assessor": (
+            _build_vet_input_safety_assessor_trace_summary(
+                vet_input_safety_assessor_settings
+            )
         ),
         "standard_consultation": _build_standard_consultation_trace_summary(
             standard_consultation_settings
@@ -1070,8 +1157,10 @@ def _dump_namespace_for_lookup(
         | ConversationStoreSettings
         | LlmGatewaySettings
         | ObservabilitySettings
+        | GuardrailFrameworkSettings
         | VetTaskDecomposerSettings
         | VetContextBuilderSettings
+        | VetInputSafetyAssessorSettings
         | StandardConsultationAgentSettings
         | SafetyTriggerAgentSettings
         | EducationAgentSettings
@@ -1235,8 +1324,10 @@ def validate_runtime_config_candidate(
     conversation_store_settings: ConversationStoreSettings | None = None,
     llm_gateway_settings: LlmGatewaySettings | None = None,
     observability_settings: ObservabilitySettings | None = None,
+    guardrail_framework_settings: GuardrailFrameworkSettings | None = None,
     vet_task_decomposer_settings: VetTaskDecomposerSettings | None = None,
     vet_context_builder_settings: VetContextBuilderSettings | None = None,
+    vet_input_safety_assessor_settings: VetInputSafetyAssessorSettings | None = None,
     standard_consultation_settings: StandardConsultationAgentSettings | None = None,
     safety_trigger_settings: SafetyTriggerAgentSettings | None = None,
     education_agent_settings: EducationAgentSettings | None = None,
@@ -1251,8 +1342,10 @@ def validate_runtime_config_candidate(
     :param conversation_store_settings: 可选 ConversationStore RuntimeConfig；未传入时从默认配置源加载。
     :param llm_gateway_settings: 可选 LlmGateway RuntimeConfig；未传入时从默认配置源加载。
     :param observability_settings: 可选 Observability RuntimeConfig；未传入时从默认配置源加载。
+    :param guardrail_framework_settings: 可选 GuardrailFramework RuntimeConfig；未传入时从默认配置源加载。
     :param vet_task_decomposer_settings: 可选 VetTaskDecomposer RuntimeConfig；未传入时从默认配置源加载。
     :param vet_context_builder_settings: 可选 VetContextBuilder RuntimeConfig；未传入时从默认配置源加载。
+    :param vet_input_safety_assessor_settings: 可选 VetInputSafetyAssessor RuntimeConfig；未传入时从默认配置源加载。
     :param standard_consultation_settings: 可选 StandardConsultationAgent RuntimeConfig；未传入时从默认配置源加载。
     :param safety_trigger_settings: 可选 SafetyTriggerAgent RuntimeConfig；未传入时从默认配置源加载。
     :param education_agent_settings: 可选 EducationAgent RuntimeConfig；未传入时从默认配置源加载。
@@ -1277,6 +1370,11 @@ def validate_runtime_config_candidate(
         if llm_gateway_settings is not None
         else load_llm_gateway_settings()
     )
+    resolved_guardrail_framework_settings = (
+        guardrail_framework_settings
+        if guardrail_framework_settings is not None
+        else load_guardrail_framework_settings()
+    )
     resolved_vet_task_decomposer_settings = (
         vet_task_decomposer_settings
         if vet_task_decomposer_settings is not None
@@ -1286,6 +1384,11 @@ def validate_runtime_config_candidate(
         vet_context_builder_settings
         if vet_context_builder_settings is not None
         else load_vet_context_builder_settings()
+    )
+    resolved_vet_input_safety_assessor_settings = (
+        vet_input_safety_assessor_settings
+        if vet_input_safety_assessor_settings is not None
+        else load_vet_input_safety_assessor_settings()
     )
     resolved_standard_consultation_settings = (
         standard_consultation_settings
@@ -1325,8 +1428,12 @@ def validate_runtime_config_candidate(
         conversation_store_settings=resolved_conversation_store_settings,
         llm_gateway_settings=resolved_llm_gateway_settings,
         observability_settings=resolved_observability_settings,
+        guardrail_framework_settings=resolved_guardrail_framework_settings,
         vet_task_decomposer_settings=resolved_vet_task_decomposer_settings,
         vet_context_builder_settings=resolved_vet_context_builder_settings,
+        vet_input_safety_assessor_settings=(
+            resolved_vet_input_safety_assessor_settings
+        ),
         standard_consultation_settings=resolved_standard_consultation_settings,
         safety_trigger_settings=resolved_safety_trigger_settings,
         education_agent_settings=resolved_education_agent_settings,
@@ -1344,8 +1451,10 @@ def build_runtime_config_snapshot(
     conversation_store_settings: ConversationStoreSettings | None = None,
     llm_gateway_settings: LlmGatewaySettings | None = None,
     observability_settings: ObservabilitySettings | None = None,
+    guardrail_framework_settings: GuardrailFrameworkSettings | None = None,
     vet_task_decomposer_settings: VetTaskDecomposerSettings | None = None,
     vet_context_builder_settings: VetContextBuilderSettings | None = None,
+    vet_input_safety_assessor_settings: VetInputSafetyAssessorSettings | None = None,
     standard_consultation_settings: StandardConsultationAgentSettings | None = None,
     safety_trigger_settings: SafetyTriggerAgentSettings | None = None,
     education_agent_settings: EducationAgentSettings | None = None,
@@ -1360,8 +1469,10 @@ def build_runtime_config_snapshot(
     :param conversation_store_settings: 可选 ConversationStore RuntimeConfig；未传入时从默认配置源加载。
     :param llm_gateway_settings: 可选 LlmGateway RuntimeConfig；未传入时从默认配置源加载。
     :param observability_settings: 可选 Observability RuntimeConfig；未传入时从默认配置源加载。
+    :param guardrail_framework_settings: 可选 GuardrailFramework RuntimeConfig；未传入时从默认配置源加载。
     :param vet_task_decomposer_settings: 可选 VetTaskDecomposer RuntimeConfig；未传入时从默认配置源加载。
     :param vet_context_builder_settings: 可选 VetContextBuilder RuntimeConfig；未传入时从默认配置源加载。
+    :param vet_input_safety_assessor_settings: 可选 VetInputSafetyAssessor RuntimeConfig；未传入时从默认配置源加载。
     :param standard_consultation_settings: 可选 StandardConsultationAgent RuntimeConfig；未传入时从默认配置源加载。
     :param safety_trigger_settings: 可选 SafetyTriggerAgent RuntimeConfig；未传入时从默认配置源加载。
     :param education_agent_settings: 可选 EducationAgent RuntimeConfig；未传入时从默认配置源加载。
@@ -1386,6 +1497,11 @@ def build_runtime_config_snapshot(
         if llm_gateway_settings is not None
         else load_llm_gateway_settings()
     )
+    resolved_guardrail_framework_settings = (
+        guardrail_framework_settings
+        if guardrail_framework_settings is not None
+        else load_guardrail_framework_settings()
+    )
     resolved_vet_task_decomposer_settings = (
         vet_task_decomposer_settings
         if vet_task_decomposer_settings is not None
@@ -1395,6 +1511,11 @@ def build_runtime_config_snapshot(
         vet_context_builder_settings
         if vet_context_builder_settings is not None
         else load_vet_context_builder_settings()
+    )
+    resolved_vet_input_safety_assessor_settings = (
+        vet_input_safety_assessor_settings
+        if vet_input_safety_assessor_settings is not None
+        else load_vet_input_safety_assessor_settings()
     )
     resolved_standard_consultation_settings = (
         standard_consultation_settings
@@ -1428,8 +1549,12 @@ def build_runtime_config_snapshot(
         conversation_store_settings=resolved_conversation_store_settings,
         llm_gateway_settings=resolved_llm_gateway_settings,
         observability_settings=resolved_observability_settings,
+        guardrail_framework_settings=resolved_guardrail_framework_settings,
         vet_task_decomposer_settings=resolved_vet_task_decomposer_settings,
         vet_context_builder_settings=resolved_vet_context_builder_settings,
+        vet_input_safety_assessor_settings=(
+            resolved_vet_input_safety_assessor_settings
+        ),
         standard_consultation_settings=resolved_standard_consultation_settings,
         safety_trigger_settings=resolved_safety_trigger_settings,
         education_agent_settings=resolved_education_agent_settings,
@@ -1443,8 +1568,12 @@ def build_runtime_config_snapshot(
         conversation_store_settings=resolved_conversation_store_settings,
         llm_gateway_settings=resolved_llm_gateway_settings,
         observability_settings=resolved_observability_settings,
+        guardrail_framework_settings=resolved_guardrail_framework_settings,
         vet_task_decomposer_settings=resolved_vet_task_decomposer_settings,
         vet_context_builder_settings=resolved_vet_context_builder_settings,
+        vet_input_safety_assessor_settings=(
+            resolved_vet_input_safety_assessor_settings
+        ),
         standard_consultation_settings=resolved_standard_consultation_settings,
         safety_trigger_settings=resolved_safety_trigger_settings,
         education_agent_settings=resolved_education_agent_settings,
@@ -1469,8 +1598,10 @@ def build_runtime_config_snapshot(
         conversation_store=resolved_conversation_store_settings,
         llm_gateway=resolved_llm_gateway_settings,
         observability=resolved_observability_settings,
+        guardrail_framework=resolved_guardrail_framework_settings,
         vet_task_decomposer=resolved_vet_task_decomposer_settings,
         vet_context_builder=resolved_vet_context_builder_settings,
+        vet_input_safety_assessor=resolved_vet_input_safety_assessor_settings,
         standard_consultation=resolved_standard_consultation_settings,
         safety_trigger=resolved_safety_trigger_settings,
         education_agent=resolved_education_agent_settings,
@@ -1526,8 +1657,10 @@ class RuntimeConfigProvider:
         | ConversationStoreSettings
         | LlmGatewaySettings
         | ObservabilitySettings
+        | GuardrailFrameworkSettings
         | VetTaskDecomposerSettings
         | VetContextBuilderSettings
+        | VetInputSafetyAssessorSettings
         | StandardConsultationAgentSettings
         | SafetyTriggerAgentSettings
         | EducationAgentSettings
@@ -1554,10 +1687,14 @@ class RuntimeConfigProvider:
             return snapshot.llm_gateway
         if namespace is RuntimeConfigNamespace.OBSERVABILITY:
             return snapshot.observability
+        if namespace is RuntimeConfigNamespace.GUARDRAIL_FRAMEWORK:
+            return snapshot.guardrail_framework
         if namespace is RuntimeConfigNamespace.VET_TASK_DECOMPOSER:
             return snapshot.vet_task_decomposer
         if namespace is RuntimeConfigNamespace.VET_CONTEXT_BUILDER:
             return snapshot.vet_context_builder
+        if namespace is RuntimeConfigNamespace.VET_INPUT_SAFETY_ASSESSOR:
+            return snapshot.vet_input_safety_assessor
         if namespace is RuntimeConfigNamespace.STANDARD_CONSULTATION:
             return snapshot.standard_consultation
         if namespace is RuntimeConfigNamespace.SAFETY_TRIGGER:
@@ -1673,8 +1810,10 @@ def create_runtime_config_provider(
     conversation_store_settings: ConversationStoreSettings | None = None,
     llm_gateway_settings: LlmGatewaySettings | None = None,
     observability_settings: ObservabilitySettings | None = None,
+    guardrail_framework_settings: GuardrailFrameworkSettings | None = None,
     vet_task_decomposer_settings: VetTaskDecomposerSettings | None = None,
     vet_context_builder_settings: VetContextBuilderSettings | None = None,
+    vet_input_safety_assessor_settings: VetInputSafetyAssessorSettings | None = None,
     standard_consultation_settings: StandardConsultationAgentSettings | None = None,
     safety_trigger_settings: SafetyTriggerAgentSettings | None = None,
     education_agent_settings: EducationAgentSettings | None = None,
@@ -1689,8 +1828,10 @@ def create_runtime_config_provider(
     :param conversation_store_settings: 可选 ConversationStore RuntimeConfig；未传入时从默认配置源加载。
     :param llm_gateway_settings: 可选 LlmGateway RuntimeConfig；未传入时从默认配置源加载。
     :param observability_settings: 可选 Observability RuntimeConfig；未传入时从默认配置源加载。
+    :param guardrail_framework_settings: 可选 GuardrailFramework RuntimeConfig；未传入时从默认配置源加载。
     :param vet_task_decomposer_settings: 可选 VetTaskDecomposer RuntimeConfig；未传入时从默认配置源加载。
     :param vet_context_builder_settings: 可选 VetContextBuilder RuntimeConfig；未传入时从默认配置源加载。
+    :param vet_input_safety_assessor_settings: 可选 VetInputSafetyAssessor RuntimeConfig；未传入时从默认配置源加载。
     :param standard_consultation_settings: 可选 StandardConsultationAgent RuntimeConfig；未传入时从默认配置源加载。
     :param safety_trigger_settings: 可选 SafetyTriggerAgent RuntimeConfig；未传入时从默认配置源加载。
     :param education_agent_settings: 可选 EducationAgent RuntimeConfig；未传入时从默认配置源加载。
@@ -1730,6 +1871,11 @@ def create_runtime_config_provider(
         if llm_gateway_settings is not None
         else load_llm_gateway_settings()
     )
+    resolved_guardrail_framework_settings = (
+        guardrail_framework_settings
+        if guardrail_framework_settings is not None
+        else load_guardrail_framework_settings()
+    )
     resolved_vet_task_decomposer_settings = (
         vet_task_decomposer_settings
         if vet_task_decomposer_settings is not None
@@ -1739,6 +1885,11 @@ def create_runtime_config_provider(
         vet_context_builder_settings
         if vet_context_builder_settings is not None
         else load_vet_context_builder_settings()
+    )
+    resolved_vet_input_safety_assessor_settings = (
+        vet_input_safety_assessor_settings
+        if vet_input_safety_assessor_settings is not None
+        else load_vet_input_safety_assessor_settings()
     )
     resolved_standard_consultation_settings = (
         standard_consultation_settings
@@ -1772,8 +1923,12 @@ def create_runtime_config_provider(
         conversation_store_settings=resolved_conversation_store_settings,
         llm_gateway_settings=resolved_llm_gateway_settings,
         observability_settings=resolved_observability_settings,
+        guardrail_framework_settings=resolved_guardrail_framework_settings,
         vet_task_decomposer_settings=resolved_vet_task_decomposer_settings,
         vet_context_builder_settings=resolved_vet_context_builder_settings,
+        vet_input_safety_assessor_settings=(
+            resolved_vet_input_safety_assessor_settings
+        ),
         standard_consultation_settings=resolved_standard_consultation_settings,
         safety_trigger_settings=resolved_safety_trigger_settings,
         education_agent_settings=resolved_education_agent_settings,
@@ -1797,20 +1952,24 @@ __all__: tuple[str, ...] = (
     "RuntimeConfigSettings",
     "RuntimeConfigSnapshot",
     "EducationAgentSettings",
+    "GuardrailFrameworkSettings",
     "NonmedicalPetCareAgentSettings",
     "StandardConsultationAgentSettings",
     "VetContextBuilderSettings",
+    "VetInputSafetyAssessorSettings",
     "VetResponseComposerSettings",
     "VetTaskDecomposerSettings",
     "build_runtime_config_error_dto",
     "build_runtime_config_snapshot",
     "create_runtime_config_provider",
     "load_education_agent_settings",
+    "load_guardrail_framework_settings",
     "load_nonmedical_pet_care_agent_settings",
     "load_standard_consultation_agent_settings",
     "load_runtime_config_settings",
     "load_vet_response_composer_settings",
     "load_vet_task_decomposer_settings",
     "load_vet_context_builder_settings",
+    "load_vet_input_safety_assessor_settings",
     "validate_runtime_config_candidate",
 )
