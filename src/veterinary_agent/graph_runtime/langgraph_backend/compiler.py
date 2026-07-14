@@ -71,6 +71,7 @@ def _build_node_context(
         current_pet_id=runtime_context.current_pet_id,
         params_version=identity.params_version,
         config_snapshot_id=identity.config_snapshot_id,
+        thread_id=runtime_context.thread_id,
     )
 
 
