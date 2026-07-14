@@ -35,6 +35,12 @@ from veterinary_agent.config.conversation_store import (
     ConversationStoreSettings,
     load_conversation_store_settings,
 )
+from veterinary_agent.config.guardrail_framework import (
+    DEFAULT_GUARDRAIL_FRAMEWORK_CONFIG_PATH,
+    GuardrailFrameworkSettings,
+    GuardrailFrameworkStageSettings,
+    load_guardrail_framework_settings,
+)
 from veterinary_agent.config.observability import (
     DEFAULT_OBSERVABILITY_CONFIG_PATH,
     ObservabilityLabelPolicyConfig,
@@ -120,6 +126,13 @@ from veterinary_agent.config.vet_context_builder import (
     VetContextTimeoutConfig,
     load_vet_context_builder_settings,
 )
+from veterinary_agent.config.vet_input_safety_assessor import (
+    DEFAULT_VET_INPUT_SAFETY_ASSESSOR_CONFIG_PATH,
+    VetInputSafetyAssessorConfidenceConfig,
+    VetInputSafetyAssessorSettings,
+    VetInputSafetyAssessorTimeoutConfig,
+    load_vet_input_safety_assessor_settings,
+)
 from veterinary_agent.config.vet_response_composer import (
     DEFAULT_VET_RESPONSE_COMPOSER_CONFIG_PATH,
     VetResponseComposerOrderingConfig,
@@ -135,6 +148,7 @@ __all__: tuple[str, ...] = (
     "DEFAULT_CHECKPOINT_STORE_CONFIG_PATH",
     "DEFAULT_CONVERSATION_STORE_CONFIG_PATH",
     "DEFAULT_EDUCATION_AGENT_CONFIG_PATH",
+    "DEFAULT_GUARDRAIL_FRAMEWORK_CONFIG_PATH",
     "DEFAULT_LLM_GATEWAY_CONFIG_PATH",
     "DEFAULT_NONMEDICAL_PET_CARE_CONFIG_PATH",
     "DEFAULT_OBSERVABILITY_CONFIG_PATH",
@@ -143,6 +157,7 @@ __all__: tuple[str, ...] = (
     "DEFAULT_STANDARD_CONSULTATION_CONFIG_PATH",
     "DEFAULT_VET_TASK_DECOMPOSER_CONFIG_PATH",
     "DEFAULT_VET_CONTEXT_BUILDER_CONFIG_PATH",
+    "DEFAULT_VET_INPUT_SAFETY_ASSESSOR_CONFIG_PATH",
     "DEFAULT_VET_RESPONSE_COMPOSER_CONFIG_PATH",
     "CheckpointStoreCheckpointConfig",
     "CheckpointStoreHistoryConfig",
@@ -157,6 +172,8 @@ __all__: tuple[str, ...] = (
     "EducationAgentSettings",
     "EducationRagConfig",
     "EducationTimeoutConfig",
+    "GuardrailFrameworkSettings",
+    "GuardrailFrameworkStageSettings",
     "LlmGatewaySettings",
     "LlmModelCapabilityConfig",
     "LlmModelProfileConfig",
@@ -203,6 +220,9 @@ __all__: tuple[str, ...] = (
     "VetContextBudgetConfig",
     "VetContextBuilderSettings",
     "VetContextTimeoutConfig",
+    "VetInputSafetyAssessorConfidenceConfig",
+    "VetInputSafetyAssessorSettings",
+    "VetInputSafetyAssessorTimeoutConfig",
     "VetResponseComposerOrderingConfig",
     "VetResponseComposerPublishConfig",
     "VetResponseComposerSettings",
@@ -218,6 +238,7 @@ __all__: tuple[str, ...] = (
     "load_checkpoint_store_settings",
     "load_conversation_store_settings",
     "load_education_agent_settings",
+    "load_guardrail_framework_settings",
     "load_llm_gateway_settings",
     "load_nonmedical_pet_care_agent_settings",
     "load_observability_settings",
@@ -227,5 +248,6 @@ __all__: tuple[str, ...] = (
     "load_vet_response_composer_settings",
     "load_vet_task_decomposer_settings",
     "load_vet_context_builder_settings",
+    "load_vet_input_safety_assessor_settings",
     "validate_runtime_config_candidate",
 )

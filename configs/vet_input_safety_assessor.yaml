@@ -1,0 +1,25 @@
+# VetInputSafetyAssessor 运行配置。
+# 该文件只承载输入安全评估、路由裁决、弱依赖超时和降级策略。
+enabled: true
+config_version: vet-input-safety-assessor-config.v1
+assessor_version: vet-input-safety-assessor.v1
+dictionary_version: vet-input-safety-dictionary.v1
+trace_schema_version: vet.input-safety.trace.v1
+semantic_router_enabled: true
+local_extractor_enabled: false
+llm_arbitration_enabled: false
+arbitration_agent_id: vet_input_safety_arbitrator
+arbitration_agent_version: v1
+timeouts:
+  semantic_router_seconds: 0.4
+  local_extractor_seconds: 0.6
+  llm_arbitration_seconds: 2.0
+confidence:
+  min_semantic_score: 0.58
+  min_semantic_margin: 0.12
+  min_intent_confidence: 0.55
+max_tasks_per_turn: 8
+max_task_text_chars: 12000
+deterministic_saf01_override_enabled: true
+deterministic_saf03_realtime_override_enabled: true
+cold_start_default_executor: standard_consultation
