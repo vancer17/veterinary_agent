@@ -19,9 +19,11 @@ from veterinary_agent.agent_application_service import (
 from veterinary_agent.agent_runner import (
     AgentRunner,
     AgentRunnerTraceSink,
+    AgentSpecRegistry,
     LogicTraceAgentRunnerTraceSink,
     create_default_agent_runner,
 )
+from veterinary_agent.agent_spec_registry import create_default_agent_spec_registry
 from veterinary_agent.api_ingress import (
     ApiIngressConcurrencyGate,
     ApiIngressRateLimiter,
@@ -135,7 +137,8 @@ LlmGatewayFactory = Callable[
     [LlmGatewaySettings, ObservabilityProvider, str, LlmCallTraceStore], LlmGateway
 ]
 AgentRunnerFactory = Callable[
-    [LlmGateway, ObservabilityProvider, AgentRunnerTraceSink], AgentRunner
+    [LlmGateway, ObservabilityProvider, AgentRunnerTraceSink, AgentSpecRegistry],
+    AgentRunner,
 ]
 AgentGraphRuntimeFactory = Callable[[], AgentGraphRuntime]
 LogicTraceStoreFactory = Callable[[], LogicTraceStore]
@@ -608,12 +611,14 @@ def create_runtime_agent_runner(
     llm_gateway: LlmGateway,
     observability_provider: ObservabilityProvider,
     trace_sink: AgentRunnerTraceSink,
+    spec_registry: AgentSpecRegistry,
 ) -> AgentRunner:
     """创建默认 AgentRunner。
 
     :param llm_gateway: 已装配的 LlmGateway。
     :param observability_provider: 已装配的 Observability provider。
     :param trace_sink: 已适配为 AgentRunner 契约的运行摘要存储。
+    :param spec_registry: 已根据 RuntimeConfig 快照构建的 Agent 规格注册表。
     :return: 已装配但可能未就绪的默认 AgentRunner。
     """
 
@@ -621,6 +626,7 @@ def create_runtime_agent_runner(
         llm_gateway=llm_gateway,
         trace_sink=trace_sink,
         observability_provider=observability_provider,
+        spec_registry=spec_registry,
     )
 
 
@@ -680,7 +686,7 @@ def build_runtime_component_bundle(
     :param checkpoint_provider_factory: checkpoint provider 工厂。
     :param conversation_store_factory: 对话存储工厂。
     :param llm_gateway_factory: 模型网关工厂。
-    :param agent_runner_factory: AgentRunner 工厂。
+    :param agent_runner_factory: AgentRunner 工厂，接收已构建的 Agent 规格注册表。
     :param graph_runtime_factory: 可选 GraphRuntime 工厂；为空时由 lifespan 在 checkpoint provider 启动后创建真实图运行时。
     :param logic_trace_store_factory: LogicTraceStore 工厂。
     :param agent_application_service_factory: 应用服务工厂。
@@ -720,10 +726,12 @@ def build_runtime_component_bundle(
         snapshot.config_snapshot_id,
         LogicTraceLlmCallTraceStore(logic_trace_store),
     )
+    agent_spec_registry = create_default_agent_spec_registry(snapshot)
     agent_runner = agent_runner_factory(
         llm_gateway,
         observability_provider,
         LogicTraceAgentRunnerTraceSink(logic_trace_store),
+        agent_spec_registry,
     )
     guardrail_framework = create_default_guardrail_framework(
         runtime_config_provider=runtime_config_provider,
