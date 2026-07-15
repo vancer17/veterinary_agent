@@ -24,9 +24,9 @@ test_root = "tests"
 
 [budgets]
 max_source_physical_lines = 81550
-max_test_physical_lines = 35500
+max_test_physical_lines = 36500
 max_source_python_files = 238
-max_test_python_files = 157
+max_test_python_files = 163
 warn_file_physical_lines = 800
 max_file_physical_lines = 1976
 max_root_init_physical_lines = 50
