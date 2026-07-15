@@ -195,6 +195,27 @@ def _build_conditional_router(
     return route_from_state
 
 
+def _predecessors_share_conditional_parent(
+    *,
+    definition: GraphDefinition,
+    predecessors: Sequence[str],
+) -> bool:
+    """判断多个静态前驱是否来自同一个条件路由候选集合。
+
+    :param definition: 当前版本化图定义。
+    :param predecessors: 指向同一静态目标节点的前驱节点列表。
+    :return: 若前驱全部属于同一个条件路由节点的可选后继集合则返回 True。
+    """
+
+    predecessor_set = set(predecessors)
+    if len(predecessor_set) <= 1:
+        return False
+    return any(
+        predecessor_set.issubset(set(definition.conditional_next_node_ids(node_id)))
+        for node_id in definition.nodes
+    )
+
+
 class LangGraphCompiler:
     """GraphRuntime 的 LangGraph 图编译器。"""
 
@@ -286,7 +307,7 @@ class LangGraphCompiler:
         builder: StateGraph[LangGraphRuntimeState, LangGraphRunContext],
         definition: GraphDefinition,
     ) -> None:
-        """将项目静态边注册到 LangGraph，保留多前驱 fan-in 语义。
+        """将项目静态边注册到 LangGraph，并区分条件分支 OR 汇合与普通 fan-in。
 
         :param builder: 正在构建的 LangGraph StateGraph。
         :param definition: 当前版本化图定义。
@@ -301,6 +322,12 @@ class LangGraphCompiler:
         for target_node, predecessors in predecessors_by_target.items():
             if len(predecessors) == 1:
                 builder.add_edge(predecessors[0], target_node)
+            elif _predecessors_share_conditional_parent(
+                definition=definition,
+                predecessors=predecessors,
+            ):
+                for predecessor in predecessors:
+                    builder.add_edge(predecessor, target_node)
             else:
                 builder.add_edge(predecessors, target_node)
 

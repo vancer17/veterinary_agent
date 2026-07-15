@@ -18,6 +18,7 @@ from veterinary_agent.api_ingress import (
     ApiIngressRateLimiter,
 )
 from veterinary_agent.checkpoint_store import (
+    CheckpointStore,
     CheckpointStoreErrorDto,
     LangGraphCheckpointer,
     LangGraphRunnableConfig,
@@ -104,6 +105,9 @@ class VeterinaryAgentAppState:
     orchestrator_concurrency_gate: ApiIngressConcurrencyGate
     rate_limiter: ApiIngressRateLimiter
     checkpoint_store_settings: CheckpointStoreSettings | None
+    checkpoint_store: CheckpointStore | None
+    checkpoint_store_ready: bool
+    checkpoint_store_error: CheckpointStoreErrorDto | None
     checkpoint_provider: CheckpointProviderLifecycle | None
     checkpoint_provider_ready: bool
     checkpoint_provider_error: CheckpointStoreErrorDto | None

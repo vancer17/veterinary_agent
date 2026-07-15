@@ -101,12 +101,14 @@ class VetResponseComposerGraphNode:
         composition = await self._composer.compose_turn_response(request)
         graph_result = self._build_graph_result(composition=composition)
         agent_segments = graph_result.segments
+        segment_payloads = [
+            segment.model_dump(mode="json") for segment in agent_segments
+        ]
         return GraphNodeResult(
             state_patch={
                 "result": graph_result.model_dump(mode="json"),
-                "segments": [
-                    segment.model_dump(mode="json") for segment in agent_segments
-                ],
+                "segments": segment_payloads,
+                "segments_to_publish": segment_payloads,
                 "turn_composition_state": composition.turn_state.model_dump(
                     mode="json"
                 ),

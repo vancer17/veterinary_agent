@@ -1,7 +1,7 @@
 ##################################################################################################
 # 文件: src/veterinary_agent/app/factory.py
 # 作用: 创建并装配 FastAPI ASGI 应用，集中注册生命周期、中间件、异常处理器与入口路由。
-# 边界: 仅装配 ASGI App / Framework 与 ApiIngress Router 外壳，不实现编排调用或兽医业务逻辑。
+# 边界: 仅装配 ASGI App / Framework 与 ApiIngress Router，不直接实现编排调用或兽医业务逻辑。
 ##################################################################################################
 
 from fastapi import FastAPI
@@ -72,7 +72,7 @@ def create_app(
     app = FastAPI(
         title="Veterinary Agent",
         version="0.1.0",
-        description="兽医 Agent API 服务。当前装配 ASGI App / Framework 与 ApiIngress Router 外壳。",
+        description="兽医 Agent API 服务。当前由 lifespan 装配真实主业务图运行链路。",
         lifespan=create_lifespan(
             settings=settings,
             checkpoint_store_settings=checkpoint_store_settings,

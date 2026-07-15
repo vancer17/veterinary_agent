@@ -42,6 +42,18 @@ from veterinary_agent.config import (
 LifespanHandler = Callable[[FastAPI], AbstractAsyncContextManager[None]]
 
 
+def _dispose_resource(resource: object) -> None:
+    """同步释放带 ``dispose`` 方法的运行期资源。
+
+    :param resource: 需要在 lifespan 退出时尝试释放的资源对象。
+    :return: None。
+    """
+
+    dispose = getattr(resource, "dispose", None)
+    if callable(dispose):
+        dispose()
+
+
 def _build_checkpoint_provider_start_error(exc: Exception) -> CheckpointStoreError:
     """将 checkpoint provider 启动异常映射为稳定领域错误。
 
@@ -206,7 +218,7 @@ def create_lifespan(
     :param conversation_store_factory: 可选对话存储工厂。
     :param llm_gateway_factory: 可选模型网关工厂。
     :param agent_runner_factory: 可选 AgentRunner 工厂。
-    :param graph_runtime_factory: 可选 GraphRuntime 工厂。
+    :param graph_runtime_factory: 可选 GraphRuntime 工厂；未传入时默认在 checkpoint provider 启动后装配真实主业务图。
     :param logic_trace_store_factory: 可选 LogicTraceStore 工厂。
     :param agent_application_service_factory: 可选应用服务工厂。
     :return: 可传入 FastAPI 的 lifespan 处理器。
@@ -220,6 +232,8 @@ def create_lifespan(
         :return: 异步上下文迭代器，无业务返回值。
         """
 
+        runtime_database_ready = runtime_bootstrap.has_runtime_database_url()
+        use_late_real_graph = graph_runtime_factory is None and runtime_database_ready
         bundle = runtime_bootstrap.build_runtime_component_bundle(
             settings=settings,
             checkpoint_store_settings=checkpoint_store_settings,
@@ -230,12 +244,20 @@ def create_lifespan(
             checkpoint_provider_factory=(
                 checkpoint_provider_factory
                 if checkpoint_provider_factory is not None
-                else runtime_bootstrap.create_langgraph_postgres_saver_provider
+                else (
+                    runtime_bootstrap.create_langgraph_postgres_saver_provider
+                    if runtime_database_ready
+                    else runtime_bootstrap.create_todo_checkpoint_provider
+                )
             ),
             conversation_store_factory=(
                 conversation_store_factory
                 if conversation_store_factory is not None
-                else runtime_bootstrap.create_todo_conversation_store
+                else (
+                    runtime_bootstrap.create_runtime_conversation_store
+                    if runtime_database_ready
+                    else runtime_bootstrap.create_todo_conversation_store
+                )
             ),
             llm_gateway_factory=(
                 llm_gateway_factory
@@ -250,12 +272,20 @@ def create_lifespan(
             graph_runtime_factory=(
                 graph_runtime_factory
                 if graph_runtime_factory is not None
-                else runtime_bootstrap.create_todo_agent_graph_runtime
+                else (
+                    None
+                    if use_late_real_graph
+                    else runtime_bootstrap.create_todo_agent_graph_runtime
+                )
             ),
             logic_trace_store_factory=(
                 logic_trace_store_factory
                 if logic_trace_store_factory is not None
-                else runtime_bootstrap.create_todo_logic_trace_store
+                else (
+                    runtime_bootstrap.create_runtime_logic_trace_store
+                    if runtime_database_ready
+                    else runtime_bootstrap.create_todo_logic_trace_store
+                )
             ),
             agent_application_service_factory=(
                 agent_application_service_factory
@@ -274,6 +304,26 @@ def create_lifespan(
                 app_state=app_state,
                 checkpoint_provider_factory=bundle.checkpoint_provider_factory,
             )
+            if use_late_real_graph:
+                checkpoint_provider = app_state.checkpoint_provider
+                if checkpoint_provider is None:
+                    raise CheckpointStoreError(
+                        code=CheckpointErrorCode.CHECKPOINT_STORE_UNAVAILABLE,
+                        operation=CheckpointOperation.LANGGRAPH_POSTGRES_SAVER_GET,
+                        message="checkpoint provider 未挂载，无法创建真实 GraphRuntime",
+                        retryable=True,
+                    )
+                graph_bundle = runtime_bootstrap.build_runtime_graph_component_bundle(
+                    app_state=app_state,
+                    checkpointer=checkpoint_provider.get_checkpointer(),
+                    agent_application_service_factory=(
+                        agent_application_service_factory
+                        if agent_application_service_factory is not None
+                        else runtime_bootstrap.create_default_agent_application_service
+                    ),
+                )
+                for resource in graph_bundle.disposable_resources:
+                    resources.callback(_dispose_resource, resource)
             app_state.ready = True
             yield
 
