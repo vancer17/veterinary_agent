@@ -23,14 +23,14 @@ source_root = "src/veterinary_agent"
 test_root = "tests"
 
 [budgets]
-max_source_physical_lines = 81550
-max_test_physical_lines = 36500
-max_source_python_files = 238
-max_test_python_files = 163
+max_source_physical_lines = 82816
+max_test_physical_lines = 36684
+max_source_python_files = 242
+max_test_python_files = 165
 warn_file_physical_lines = 800
 max_file_physical_lines = 1976
 max_root_init_physical_lines = 50
-max_total_all_exports = 2315
+max_total_all_exports = 2333
 max_root_all_exports = 5
 max_model_dump_calls = 189
 max_model_validate_calls = 42
@@ -43,6 +43,7 @@ max_direct_root_imports = 0
 [module_budgets]
 agent_application_service = 2525
 agent_runner = 3300
+agent_spec_registry = 1272
 api_ingress = 4200
 app = 2200
 checkpoint_store = 6900
@@ -108,6 +109,7 @@ modules = [
   "veterinary_agent.api_ingress",
   "veterinary_agent.agent_application_service",
   "veterinary_agent.agent_runner",
+  "veterinary_agent.agent_spec_registry",
   "veterinary_agent.graph_runtime",
   "veterinary_agent.guardrail_framework",
   "veterinary_agent.llm_gateway",
