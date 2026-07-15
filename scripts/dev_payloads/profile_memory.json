@@ -1,0 +1,15 @@
+{
+  "input": "请记一下，Buddy 是一只狗，体重 12 公斤，疑似鸡肉过敏，目前主粮是低敏处方粮。",
+  "stream": false,
+  "vet_context": {
+    "user_id": "dev_user_memory",
+    "session_id": "dev_session_memory",
+    "pet_id": "dev_pet_memory",
+    "pet_info": {
+      "species": "狗",
+      "breed": "柯基",
+      "age": "3岁",
+      "weight_kg": 12
+    }
+  }
+}

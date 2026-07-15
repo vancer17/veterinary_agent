@@ -1,0 +1,85 @@
+services:
+  postgres:
+    image: ${PGVECTOR_IMAGE:-pgvector/pgvector:pg16}
+    container_name: vet-agent-dev-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-vet_agent}
+      POSTGRES_USER: ${POSTGRES_USER:-vet_agent}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vet_agent}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - vet_agent_dev_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vet_agent} -d ${POSTGRES_DB:-vet_agent}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      args:
+        PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-ghcr.io/astral-sh/uv:python3.12-bookworm}
+    container_name: vet-agent-dev-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-vet_agent}:${POSTGRES_PASSWORD:-vet_agent}@postgres:5432/${POSTGRES_DB:-vet_agent}
+      QWEN_API_KEY: ${QWEN_API_KEY:-}
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+      QWEN_MODEL: ${QWEN_MODEL:-qwen-plus}
+      QWEN_EMBEDDING_MODEL: ${QWEN_EMBEDDING_MODEL:-text-embedding-v4}
+      QWEN_BASE_URL: ${QWEN_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      QWEN_TIMEOUT_SECONDS: ${QWEN_TIMEOUT_SECONDS:-30}
+      QWEN_MAX_CONCURRENT_REQUESTS: ${QWEN_MAX_CONCURRENT_REQUESTS:-8}
+      QWEN_MIN_INTERVAL_SECONDS: ${QWEN_MIN_INTERVAL_SECONDS:-0}
+      QWEN_MAX_RETRIES: ${QWEN_MAX_RETRIES:-2}
+      QWEN_RETRY_BASE_DELAY_SECONDS: ${QWEN_RETRY_BASE_DELAY_SECONDS:-0.5}
+      QWEN_CIRCUIT_BREAKER_FAILURE_THRESHOLD: ${QWEN_CIRCUIT_BREAKER_FAILURE_THRESHOLD:-5}
+      QWEN_CIRCUIT_BREAKER_COOLDOWN_SECONDS: ${QWEN_CIRCUIT_BREAKER_COOLDOWN_SECONDS:-30}
+      QWEN_FALLBACK_MODELS: ${QWEN_FALLBACK_MODELS:-}
+      ALLOW_MOCK_LLM: ${ALLOW_MOCK_LLM:-true}
+      ENABLE_RAG_EMBEDDINGS: ${ENABLE_RAG_EMBEDDINGS:-false}
+      ENABLE_LLM_TASK_SPLITTER: ${ENABLE_LLM_TASK_SPLITTER:-true}
+      ENABLE_MEMORY_EXTRACTION: ${ENABLE_MEMORY_EXTRACTION:-true}
+      ENABLE_LLM_MEMORY_EXTRACTION: ${ENABLE_LLM_MEMORY_EXTRACTION:-true}
+      MEMORY_EXTRACTION_MIN_CONFIDENCE: ${MEMORY_EXTRACTION_MIN_CONFIDENCE:-0.72}
+      ENABLE_MEM0: ${ENABLE_MEM0:-false}
+      MEM0_API_KEY: ${MEM0_API_KEY:-}
+      ENABLE_LANGGRAPH_RUNTIME: ${ENABLE_LANGGRAPH_RUNTIME:-false}
+      VET_AGENT_API_KEYS: ${VET_AGENT_API_KEYS:-}
+      REQUIRE_API_AUTH: ${REQUIRE_API_AUTH:-false}
+      REQUIRE_AUTH_USER_MATCH: ${REQUIRE_AUTH_USER_MATCH:-false}
+      PET_AUTHORIZATION_MODE: ${PET_AUTHORIZATION_MODE:-permissive}
+      SESSION_POLICY_MODE: ${SESSION_POLICY_MODE:-permissive}
+      IDEMPOTENCY_WAIT_SECONDS: ${IDEMPOTENCY_WAIT_SECONDS:-10}
+      IDEMPOTENCY_PROCESSING_TTL_SECONDS: ${IDEMPOTENCY_PROCESSING_TTL_SECONDS:-300}
+      VET_AGENT_DATA_DIR: /app/.data
+      VET_AGENT_SEED_DIR: /app/data/seeds
+      MAX_ATTACHMENTS: ${MAX_ATTACHMENTS:-8}
+      MAX_INPUT_CHARS: ${MAX_INPUT_CHARS:-12000}
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    volumes:
+      - .:/app
+    command: >
+      sh -c "alembic upgrade head
+      && python scripts/seed_database.py
+      && uvicorn main:app --host 0.0.0.0 --port 8000"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).read()\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  vet_agent_dev_pgdata:

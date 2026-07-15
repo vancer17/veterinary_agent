@@ -1,0 +1,15 @@
+{
+  "input": "我家狗今天拉稀，精神食欲正常，没有呕吐。最近夜里还总是乱叫。顺便问一下能不能换粮？",
+  "stream": false,
+  "vet_context": {
+    "user_id": "dev_user_multitask",
+    "session_id": "dev_session_multitask",
+    "pet_id": "dev_pet_multitask",
+    "pet_info": {
+      "species": "狗",
+      "breed": "柯基",
+      "age": "3岁",
+      "weight_kg": 12
+    }
+  }
+}

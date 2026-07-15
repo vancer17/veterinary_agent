@@ -1,0 +1,40 @@
+[
+  {
+    "title": "急症分诊",
+    "content": "呼吸困难、抽搐、持续呕吐、血便、误食毒物、腹胀、无法站立等情况应优先线下急诊。",
+    "source": "公开急诊分诊原则 / 默克兽医手册免费版",
+    "public_citation": true,
+    "copyright_risk": "low",
+    "domain": "emergency",
+    "species": "dog_cat",
+    "source_url": "https://www.merckvetmanual.com/"
+  },
+  {
+    "title": "有毒食物与人药",
+    "content": "巧克力、葡萄或葡萄干、木糖醇、洋葱，以及布洛芬、对乙酰氨基酚等人药对犬猫有明显风险。误食后应联系兽医。",
+    "source": "公开宠物毒物安全资料 / 默克兽医手册免费版",
+    "public_citation": true,
+    "copyright_risk": "low",
+    "domain": "toxicity",
+    "species": "dog_cat",
+    "source_url": "https://www.merckvetmanual.com/"
+  },
+  {
+    "title": "消化道症状",
+    "content": "轻微短暂胃肠不适可先观察精神食欲与饮水，但持续呕吐、血便、幼年或老年动物症状应升级就医。",
+    "source": "商业内科教材内部接地",
+    "public_citation": false,
+    "copyright_risk": "licensed_internal",
+    "domain": "gastrointestinal",
+    "species": "dog_cat"
+  },
+  {
+    "title": "行为问题",
+    "content": "行为问题应先排除疼痛、神经异常、内分泌或急性疾病，再做训练和环境管理。",
+    "source": "公开行为医学实践原则",
+    "public_citation": true,
+    "copyright_risk": "low",
+    "domain": "behavior",
+    "species": "dog_cat"
+  }
+]
