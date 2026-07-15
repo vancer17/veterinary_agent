@@ -69,6 +69,7 @@ async def ready(
         checkpoint_store_runtime_config_ready=(
             state.checkpoint_store_settings is not None
         ),
+        checkpoint_store_ready=state.checkpoint_store_ready,
         conversation_store_runtime_config_ready=(
             state.conversation_store_settings is not None
         ),

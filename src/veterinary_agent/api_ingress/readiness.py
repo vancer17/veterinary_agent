@@ -185,6 +185,7 @@ def check_api_ingress_readiness(
     app_ready: bool,
     runtime_config_ready: bool = True,
     checkpoint_store_runtime_config_ready: bool = True,
+    checkpoint_store_ready: bool = True,
     conversation_store_runtime_config_ready: bool = True,
     llm_gateway_runtime_config_ready: bool = True,
     llm_gateway_required: bool = False,
@@ -199,6 +200,7 @@ def check_api_ingress_readiness(
     :param app_ready: ASGI 应用框架级就绪标记。
     :param runtime_config_ready: RuntimeConfig provider 与当前配置快照是否已装配。
     :param checkpoint_store_runtime_config_ready: CheckpointStore RuntimeConfig 是否已装配。
+    :param checkpoint_store_ready: CheckpointStore 控制面存储是否已装配且可供 GraphRuntime 使用。
     :param conversation_store_runtime_config_ready: ConversationStore RuntimeConfig 是否已装配。
     :param llm_gateway_runtime_config_ready: LlmGateway RuntimeConfig 是否已装配。
     :param llm_gateway_required: 当前部署是否要求 LlmGateway 具备真实模型调用能力。
@@ -226,6 +228,13 @@ def check_api_ingress_readiness(
                 _build_detail(
                     "checkpoint_store.runtime_config",
                     "missing",
+                )
+            )
+        if settings.readiness.check_orchestrator and not checkpoint_store_ready:
+            details.append(
+                _build_detail(
+                    "checkpoint_store",
+                    "unavailable",
                 )
             )
         if not conversation_store_runtime_config_ready:
