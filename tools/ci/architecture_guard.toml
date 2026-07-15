@@ -23,20 +23,20 @@ source_root = "src/veterinary_agent"
 test_root = "tests"
 
 [budgets]
-max_source_physical_lines = 76124
-max_test_physical_lines = 32460
-max_source_python_files = 228
-max_test_python_files = 145
+max_source_physical_lines = 79625
+max_test_physical_lines = 33388
+max_source_python_files = 236
+max_test_python_files = 152
 warn_file_physical_lines = 800
 max_file_physical_lines = 1976
 max_root_init_physical_lines = 50
-max_total_all_exports = 2177
+max_total_all_exports = 2260
 max_root_all_exports = 5
-max_model_dump_calls = 183
-max_model_validate_calls = 41
-max_dto_classes = 336
-max_error_status_todo_classes = 68
-max_template_files = 81
+max_model_dump_calls = 189
+max_model_validate_calls = 42
+max_dto_classes = 352
+max_error_status_todo_classes = 72
+max_template_files = 86
 max_dependency_cycles = 0
 max_direct_root_imports = 0
 
@@ -61,6 +61,7 @@ vet_trace_schema = 2050
 vet_conversation_graph = 200
 vet_context_builder = 3850
 vet_input_safety_assessor = 3406
+vet_output_safety_reviewer = 3501
 vet_response_composer = 2846
 vet_task_decomposer = 2382
 standard_consultation_agent = 3029
@@ -114,6 +115,7 @@ modules = [
   "veterinary_agent.safety_trigger_agent",
   "veterinary_agent.education_agent",
   "veterinary_agent.nonmedical_pet_care_agent",
+  "veterinary_agent.vet_output_safety_reviewer",
   "veterinary_agent.vet_context_builder",
   "veterinary_agent.vet_input_safety_assessor",
   "veterinary_agent.vet_response_composer",
