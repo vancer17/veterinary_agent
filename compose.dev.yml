@@ -1,55 +1,138 @@
 # =============================================================================
-# compose.dev.yml — 本地开发用 Docker Compose（非 Dev 宿主机正式编排）
+# compose.dev.yml — 本地基础集成测试 Docker Compose 编排
 # =============================================================================
 #
 # 【用途】
-#   在开发者本机用 Compose 启动 health-agent 容器，验证镜像构建与运行配置。
-#   正式 Dev 环境（dev-01）的 compose 由 infra-ops Ansible app_deploy 渲染，
-#   不在本仓库维护。
+#   在开发者本机启动当前已实现的真实运行链路：
+#   PostgreSQL -> Alembic 迁移 -> FastAPI 应用 -> 可选 smoke 检查。
 #
-# 【前置】
-#   cp .env.example .env   # 按需填写 OPENAI_API_KEY 等
+# 【边界】
+#   - 仅编排当前仓库已接入的基础设施和应用链路。
+#   - LlmGateway 默认仍按 configs/llm_gateway.yaml 保持关闭，不在本文件中接入外部模型供应商。
+#   - 不引用缺失的 assets、知识库或其他尚未实现的跨领域资源。
 #
 # 【常用命令】
-#   docker compose -f compose.dev.yml up --build -d    # 构建并后台启动
-#   docker compose -f compose.dev.yml logs -f        # 查看日志
-#   docker compose -f compose.dev.yml down             # 停止并移除
+#   docker compose -f compose.dev.yml up --build
+#   docker compose -f compose.dev.yml --profile smoke up --build --abort-on-container-exit
+#   docker compose -f compose.dev.yml down
+#   docker compose -f compose.dev.yml down -v
 #
 # 【约定】
-#   - 绑定 127.0.0.1:8080（与 infra app.listen.port 一致，避免公网误暴露）
-#   - 环境变量以 .env 为准；未建 .env 时使用 environment 中的开发默认值
-#   - ASGI 应用就绪后，取消 command 注释以 uvicorn 启动（可配合 src 卷热重载）
+#   - 应用只绑定宿主机 127.0.0.1:8080，避免本地开发实例被公网误暴露。
+#   - DATABASE_URL 默认使用本地固定值；如需自定义 PostgreSQL 凭据，请同步修改 DATABASE_URL 与 POSTGRES_*。
+#   - App 和迁移容器通过 /app/src 读取当前工作区源码，便于本地集成测试覆盖最新代码。
 #
 # =============================================================================
 
-name: xiaozhua-health-agent-dev
+name: veterinary-agent-dev
+
+x-postgres-env: &postgres-env
+  POSTGRES_DB: ${POSTGRES_DB:-veterinary_agent_dev}
+  POSTGRES_USER: ${POSTGRES_USER:-veterinary_agent}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-veterinary_agent}
+
+x-runtime-env: &runtime-env
+  DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://${POSTGRES_USER:-veterinary_agent}:${POSTGRES_PASSWORD:-veterinary_agent}@postgres:5432/${POSTGRES_DB:-veterinary_agent_dev}}
+  LANGGRAPH_POSTGRES_SETUP_ON_STARTUP: ${LANGGRAPH_POSTGRES_SETUP_ON_STARTUP:-true}
+  LANGGRAPH_STRICT_MSGPACK: ${LANGGRAPH_STRICT_MSGPACK:-true}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  PYTHONPATH: /app/src
 
 services:
-  health-agent:
-    container_name: xiaozhua-health-agent-dev
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment: *postgres-env
+    volumes:
+      - veterinary_agent_dev_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U ${POSTGRES_USER:-veterinary_agent} -d ${POSTGRES_DB:-veterinary_agent_dev}
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *runtime-env
+    volumes:
+      - ./src:/app/src:ro
+      - ./migrations:/app/migrations:ro
+      - ./alembic.ini:/app/alembic.ini:ro
+    command:
+      - alembic
+      - -c
+      - /app/alembic.ini
+      - upgrade
+      - head
+
+  app:
     build:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     ports:
       - "127.0.0.1:8080:8080"
-    env_file:
-      - path: .env
-        required: false
     environment:
-      LOG_LEVEL: DEBUG
-      TRIAGE_CORE_PATH: assets/triage-core/triage-core.v1.json
-      KB_TPL_DIR: assets/kb-tpl/config
+      <<: *runtime-env
     volumes:
-      - ./assets:/app/assets:ro
-    # ASGI 就绪后替换 Dockerfile 默认 CMD，并启用源码挂载便于热重载：
-    # command:
-    #   - uvicorn
-    #   - xiaozhua_health_agent.app:app
-    #   - --host
-    #   - "0.0.0.0"
-    #   - --port
-    #   - "8080"
-    #   - --reload
-    # volumes:
-    #   - ./src:/app/src:ro
+      - ./src:/app/src:ro
+      - ./configs:/app/configs:ro
+    command:
+      - uvicorn
+      - veterinary_agent.app:create_app
+      - --factory
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - |
+          import urllib.request
+
+          urllib.request.urlopen("http://127.0.0.1:8080/ready", timeout=5).read()
+      interval: 5s
+      timeout: 5s
+      retries: 18
+      start_period: 30s
+
+  smoke:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    profiles:
+      - smoke
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      <<: *runtime-env
+    command:
+      - python
+      - -c
+      - |
+        import urllib.request
+
+        urllib.request.urlopen("http://app:8080/ready", timeout=5).read()
+        urllib.request.urlopen("http://app:8080/health", timeout=5).read()
+        print("compose.dev smoke check passed")
+
+volumes:
+  veterinary_agent_dev_postgres_data:
