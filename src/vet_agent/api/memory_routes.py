@@ -5,9 +5,9 @@ from typing import Annotated
 from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel, Field
 
-from src.ingress.errors import ForbiddenError
-from src.vet_agent.container import get_container
-from src.vet_agent.contracts import TrustedIdentity
+from ingress.errors import ForbiddenError
+from vet_agent.container import get_container
+from vet_agent.contracts import TrustedIdentity
 
 
 router = APIRouter(prefix="/memories", tags=["memories"])

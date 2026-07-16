@@ -16,8 +16,8 @@ from .errors import (
     OrchestratorUnavailableError,
 )
 from .orchestrator import Orchestrator, get_orchestrator
-from src.vet_agent.container import get_container
-from src.vet_agent.contracts import TrustedIdentity as CoreTrustedIdentity
+from vet_agent.container import get_container
+from vet_agent.contracts import TrustedIdentity as CoreTrustedIdentity
 
 
 router = APIRouter()

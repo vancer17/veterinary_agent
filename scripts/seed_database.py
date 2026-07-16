@@ -8,17 +8,17 @@ from pathlib import Path
 
 from sqlalchemy import select
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from src.vet_agent.config import Settings
-from src.vet_agent.db.models import (
+from vet_agent.config import Settings
+from vet_agent.db.models import (
     ConsultationDomainModel,
     ConsultationSlotModel,
     KnowledgeChunkModel,
     SafetyRuleModel,
 )
-from src.vet_agent.db.session import make_session_factory
-from src.vet_agent.runtime.embeddings import QwenEmbeddingClient
+from vet_agent.db.session import make_session_factory
+from vet_agent.runtime.embeddings import QwenEmbeddingClient
 
 
 def main() -> None:

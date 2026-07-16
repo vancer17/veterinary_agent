@@ -1,0 +1,22 @@
+{
+  "input": "这段时间它和平时不太一样，我拿不准是否需要安排线下检查。请先帮我梳理还需要补充哪些观察。",
+  "stream": false,
+  "metadata": {
+    "scenario": "business_followup_first",
+    "keyword_strategy": "semantic_paraphrase"
+  },
+  "vet_context": {
+    "user_id": "business_user_followup_001",
+    "session_id": "business_session_followup_001",
+    "pet_id": "business_pet_followup_001",
+    "pet_info": {
+      "species": "canine",
+      "breed": "mixed",
+      "age": "5 years",
+      "weight_kg": 14.2
+    }
+  },
+  "turn_options": {
+    "max_followup_questions": 3
+  }
+}

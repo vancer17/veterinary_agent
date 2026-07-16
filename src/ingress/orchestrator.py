@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from collections.abc import AsyncIterator, Mapping
 from typing import Any, Protocol
@@ -51,8 +51,8 @@ def set_orchestrator(orchestrator: Orchestrator) -> None:
 async def get_orchestrator() -> Orchestrator:
     global _orchestrator
     if _orchestrator is None:
-        from src.vet_agent.container import get_container
-        from src.vet_agent.ingress_adapter import VetAgentIngressOrchestrator
+        from vet_agent.container import get_container
+        from vet_agent.ingress_adapter import VetAgentIngressOrchestrator
 
         _orchestrator = VetAgentIngressOrchestrator(get_container())
     return _orchestrator

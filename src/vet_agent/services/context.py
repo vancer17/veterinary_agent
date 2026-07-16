@@ -1,10 +1,10 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from src.vet_agent.contracts import Evidence, VetContext
+from vet_agent.contracts import Evidence, VetContext
 
 
 @dataclass
@@ -33,7 +33,7 @@ class PetContext:
 
 
 class PetContextProvider:
-    """Aggregates existing pet data. Replace mock adapters with production APIs later."""
+    """Aggregates existing pet data from trusted backend context."""
 
     async def load(self, vet_context: VetContext, metadata: dict[str, Any]) -> PetContext:
         supplied = vet_context.pet_info or {}

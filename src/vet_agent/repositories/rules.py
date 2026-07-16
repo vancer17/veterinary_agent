@@ -10,12 +10,12 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from src.vet_agent.db.models import (
+from vet_agent.db.models import (
     ConsultationDomainModel,
     ConsultationSlotModel,
     SafetyRuleModel,
 )
-from src.vet_agent.db.session import make_session_factory
+from vet_agent.db.session import make_session_factory
 
 
 @dataclass(frozen=True)

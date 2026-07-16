@@ -1,21 +1,105 @@
+# File: docker-compose.dev.yml
+# Purpose: Local development orchestration for Vet Agent.
+# Topology: Mirrors production with one pgvector PostgreSQL container and logical
+#           databases for Vet Agent, LiteLLM, Mem0 vector storage, and Mem0 API data.
+# Usage: Run with `docker compose --env-file deploy/env/dev/compose.env.template -f docker-compose.dev.yml ...`.
+
+# 开发环境默认读取 *.env.template；若需要本地覆盖密钥或端口，可复制为同名 *.env，
+# Compose 会按顺序加载，后加载的真实 *.env 覆盖模板值。
+x-postgres-env-files: &postgres-env-files
+  - path: ${ENV_DIR:-./deploy/env/dev}/services/postgres.env.template
+    required: true
+  - path: ${ENV_DIR:-./deploy/env/dev}/services/postgres.env
+    required: false
+
+x-litellm-env-files: &litellm-env-files
+  - path: ${ENV_DIR:-./deploy/env/dev}/services/litellm.env.template
+    required: true
+  - path: ${ENV_DIR:-./deploy/env/dev}/services/litellm.env
+    required: false
+
+x-mem0-env-files: &mem0-env-files
+  - path: ${ENV_DIR:-./deploy/env/dev}/services/mem0.env.template
+    required: true
+  - path: ${ENV_DIR:-./deploy/env/dev}/services/mem0.env
+    required: false
+
+x-app-env-files: &app-env-files
+  - path: ${ENV_DIR:-./deploy/env/dev}/services/app.env.template
+    required: true
+  - path: ${ENV_DIR:-./deploy/env/dev}/services/app.env
+    required: false
+
+name: ${COMPOSE_PROJECT_NAME:-vet-agent-dev}
+
 services:
   postgres:
     image: ${PGVECTOR_IMAGE:-pgvector/pgvector:pg16}
     container_name: vet-agent-dev-postgres
     restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-vet_agent}
-      POSTGRES_USER: ${POSTGRES_USER:-vet_agent}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vet_agent}
+    shm_size: "256mb"
+    env_file: *postgres-env-files
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - vet_agent_dev_pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vet_agent} -d ${POSTGRES_DB:-vet_agent}"]
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
       interval: 5s
       timeout: 5s
       retries: 20
+
+  litellm:
+    image: ${LITELLM_IMAGE:-ghcr.io/berriai/litellm:main-stable}
+    container_name: vet-agent-dev-litellm
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file: *litellm-env-files
+    ports:
+      - "${LITELLM_PORT:-4000}:4000"
+    volumes:
+      - ./docker/litellm/config.yaml:/app/config.yaml:ro
+    command: ["--config", "/app/config.yaml", "--port", "4000", "--num_workers", "${LITELLM_WORKERS:-2}"]
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/readiness', timeout=3).read()\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  mem0:
+    image: ${MEM0_IMAGE:-crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com/vancer-saas/mem0:latest}
+    container_name: vet-agent-dev-mem0
+    restart: unless-stopped
+    depends_on:
+      litellm:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    env_file: *mem0-env-files
+    ports:
+      - "${MEM0_PORT:-8001}:8000"
+    volumes:
+      - vet_agent_dev_mem0_history:/app/history
+    command: >
+      sh -c "python -c 'import psycopg' 2>/dev/null || pip install --no-cache-dir psycopg-binary
+      && alembic upgrade head
+      && uvicorn main:app --host 0.0.0.0 --port 8000"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/docs', timeout=3).read()\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 30
 
   app:
     build:
@@ -28,49 +112,23 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-vet_agent}:${POSTGRES_PASSWORD:-vet_agent}@postgres:5432/${POSTGRES_DB:-vet_agent}
-      QWEN_API_KEY: ${QWEN_API_KEY:-}
-      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
-      QWEN_MODEL: ${QWEN_MODEL:-qwen-plus}
-      QWEN_EMBEDDING_MODEL: ${QWEN_EMBEDDING_MODEL:-text-embedding-v4}
-      QWEN_BASE_URL: ${QWEN_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
-      QWEN_TIMEOUT_SECONDS: ${QWEN_TIMEOUT_SECONDS:-30}
-      QWEN_MAX_CONCURRENT_REQUESTS: ${QWEN_MAX_CONCURRENT_REQUESTS:-8}
-      QWEN_MIN_INTERVAL_SECONDS: ${QWEN_MIN_INTERVAL_SECONDS:-0}
-      QWEN_MAX_RETRIES: ${QWEN_MAX_RETRIES:-2}
-      QWEN_RETRY_BASE_DELAY_SECONDS: ${QWEN_RETRY_BASE_DELAY_SECONDS:-0.5}
-      QWEN_CIRCUIT_BREAKER_FAILURE_THRESHOLD: ${QWEN_CIRCUIT_BREAKER_FAILURE_THRESHOLD:-5}
-      QWEN_CIRCUIT_BREAKER_COOLDOWN_SECONDS: ${QWEN_CIRCUIT_BREAKER_COOLDOWN_SECONDS:-30}
-      QWEN_FALLBACK_MODELS: ${QWEN_FALLBACK_MODELS:-}
-      ALLOW_MOCK_LLM: ${ALLOW_MOCK_LLM:-true}
-      ENABLE_RAG_EMBEDDINGS: ${ENABLE_RAG_EMBEDDINGS:-false}
-      ENABLE_LLM_TASK_SPLITTER: ${ENABLE_LLM_TASK_SPLITTER:-true}
-      ENABLE_MEMORY_EXTRACTION: ${ENABLE_MEMORY_EXTRACTION:-true}
-      ENABLE_LLM_MEMORY_EXTRACTION: ${ENABLE_LLM_MEMORY_EXTRACTION:-true}
-      MEMORY_EXTRACTION_MIN_CONFIDENCE: ${MEMORY_EXTRACTION_MIN_CONFIDENCE:-0.72}
-      ENABLE_MEM0: ${ENABLE_MEM0:-false}
-      MEM0_API_KEY: ${MEM0_API_KEY:-}
-      ENABLE_LANGGRAPH_RUNTIME: ${ENABLE_LANGGRAPH_RUNTIME:-false}
-      VET_AGENT_API_KEYS: ${VET_AGENT_API_KEYS:-}
-      REQUIRE_API_AUTH: ${REQUIRE_API_AUTH:-false}
-      REQUIRE_AUTH_USER_MATCH: ${REQUIRE_AUTH_USER_MATCH:-false}
-      PET_AUTHORIZATION_MODE: ${PET_AUTHORIZATION_MODE:-permissive}
-      SESSION_POLICY_MODE: ${SESSION_POLICY_MODE:-permissive}
-      IDEMPOTENCY_WAIT_SECONDS: ${IDEMPOTENCY_WAIT_SECONDS:-10}
-      IDEMPOTENCY_PROCESSING_TTL_SECONDS: ${IDEMPOTENCY_PROCESSING_TTL_SECONDS:-300}
-      VET_AGENT_DATA_DIR: /app/.data
-      VET_AGENT_SEED_DIR: /app/data/seeds
-      MAX_ATTACHMENTS: ${MAX_ATTACHMENTS:-8}
-      MAX_INPUT_CHARS: ${MAX_INPUT_CHARS:-12000}
+      litellm:
+        condition: service_healthy
+      mem0:
+        condition: service_healthy
+    env_file: *app-env-files
     ports:
       - "${APP_PORT:-8000}:8000"
     volumes:
       - .:/app
     command: >
       sh -c "alembic upgrade head
-      && python scripts/seed_database.py
-      && uvicorn main:app --host 0.0.0.0 --port 8000"
+      && if [ \"$${SEED_WITH_EMBEDDINGS:-false}\" = \"true\" ]; then
+      python scripts/seed_database.py --with-embeddings;
+      else
+      python scripts/seed_database.py;
+      fi
+      && uvicorn vet_agent.main:app --host 0.0.0.0 --port 8000"
     healthcheck:
       test:
         [
@@ -83,3 +141,4 @@ services:
 
 volumes:
   vet_agent_dev_pgdata:
+  vet_agent_dev_mem0_history:

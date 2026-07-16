@@ -1,11 +1,11 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
-from src.vet_agent.agents.question_planner import QuestionPlanner
-from src.vet_agent.agents.safety import SafetyAgent
-from src.vet_agent.contracts import Evidence
-from src.vet_agent.runtime.qwen import QwenClient
-from src.vet_agent.services.context import PetContext
-from src.vet_agent.services.knowledge import KnowledgeHit
+from vet_agent.agents.question_planner import QuestionPlanner
+from vet_agent.agents.safety import SafetyAgent
+from vet_agent.contracts import Evidence
+from vet_agent.runtime.qwen import QwenClient
+from vet_agent.services.context import PetContext
+from vet_agent.services.knowledge import KnowledgeHit
 
 
 class ResponseComposer:

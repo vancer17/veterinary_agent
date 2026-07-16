@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-from src.vet_agent.contracts import Evidence, ReasoningDisplay, SafetySignal
+from vet_agent.contracts import Evidence, ReasoningDisplay, SafetySignal
 
 
 SLOT_LABELS = {

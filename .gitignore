@@ -23,6 +23,7 @@ var/
 # uv 虚拟环境与缓存
 .venv/
 .uv/
+.vendor/
 uv.lock
 .ruff_cache/
 
@@ -31,7 +32,14 @@ uv.lock
 .env.local
 .env.dev
 .env.prod
+.env.production
 *.env
+
+# deploy/env 目录用于提交可审查的配置模板；真实 *.env 仍被上一条规则忽略
+!deploy/
+!deploy/env/
+!deploy/env/**/
+!deploy/env/**/*.template
 
 # 日志
 *.log

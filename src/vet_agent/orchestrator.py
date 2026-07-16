@@ -1,25 +1,25 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
 from uuid import uuid4
 
-from src.vet_agent.agents.consultation import ConsultationStateAgent
-from src.vet_agent.agents.composer import ResponseComposer
-from src.vet_agent.agents.memory_extraction import MemoryExtractionAgent
-from src.vet_agent.agents.question_planner import QuestionPlanner
-from src.vet_agent.agents.safety import SafetyAgent
-from src.vet_agent.agents.safety_review import SafetyReviewAgent
-from src.vet_agent.agents.task_splitter import SplitTask, TaskSplitterAgent
-from src.vet_agent.config import Settings
-from src.vet_agent.contracts import AgentTurnRequest, AgentTurnResponse, StreamEvent, VetSegment
-from src.vet_agent.repositories.rules import RuleRepository
-from src.vet_agent.runtime.qwen import QwenClient
-from src.vet_agent.services.context import PetContextProvider
-from src.vet_agent.services.knowledge import KnowledgeService
-from src.vet_agent.services.memory import MemoryService
-from src.vet_agent.services.reasoning_display import ReasoningDisplayBuilder
-from src.vet_agent.services.trace import LogicTraceStore
+from vet_agent.agents.consultation import ConsultationStateAgent
+from vet_agent.agents.composer import ResponseComposer
+from vet_agent.agents.memory_extraction import MemoryExtractionAgent
+from vet_agent.agents.question_planner import QuestionPlanner
+from vet_agent.agents.safety import SafetyAgent
+from vet_agent.agents.safety_review import SafetyReviewAgent
+from vet_agent.agents.task_splitter import SplitTask, TaskSplitterAgent
+from vet_agent.config import Settings
+from vet_agent.contracts import AgentTurnRequest, AgentTurnResponse, StreamEvent, VetSegment
+from vet_agent.repositories.rules import RuleRepository
+from vet_agent.runtime.qwen import QwenClient
+from vet_agent.services.context import PetContextProvider
+from vet_agent.services.knowledge import KnowledgeService
+from vet_agent.services.memory import MemoryService
+from vet_agent.services.reasoning_display import ReasoningDisplayBuilder
+from vet_agent.services.trace import LogicTraceStore
 
 
 class VetOrchestrator:
@@ -254,7 +254,7 @@ class VetOrchestrator:
                     "QwenResponseAgent",
                     "SafetyReviewAgent",
                 ],
-                "qwen_configured": self.settings.qwen_configured,
+                "litellm_configured": self.settings.litellm_configured,
                 "consultation_phase": consultation_decision.state.phase,
                 "consultation_state": consultation_decision.state.to_dict(),
                 "missing_slots": consultation_decision.missing_slots,
@@ -391,7 +391,7 @@ class VetOrchestrator:
                 "task_router_fallback_reason": split_decision.fallback_reason,
                 "tasks": task_summaries,
                 "consultation_states": updated_task_states,
-                "qwen_configured": self.settings.qwen_configured,
+                "litellm_configured": self.settings.litellm_configured,
             },
         )
 

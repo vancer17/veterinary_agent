@@ -4,8 +4,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from src.vet_agent.repositories.rules import ConsultationRuleSet, RuleRepository, compile_regex
-from src.vet_agent.services.context import PetContext
+from vet_agent.repositories.rules import ConsultationRuleSet, RuleRepository, compile_regex
+from vet_agent.services.context import PetContext
 
 
 SlotValue = str | bool | None

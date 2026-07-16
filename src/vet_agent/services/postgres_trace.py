@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.vet_agent.contracts import AgentTurnRequest, AgentTurnResponse
-from src.vet_agent.db.models import LogicTraceModel
-from src.vet_agent.db.session import make_session_factory
+from vet_agent.contracts import AgentTurnRequest, AgentTurnResponse
+from vet_agent.db.models import LogicTraceModel
+from vet_agent.db.session import make_session_factory
 
 
 class PostgresLogicTraceStore:

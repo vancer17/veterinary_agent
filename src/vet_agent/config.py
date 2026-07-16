@@ -23,18 +23,18 @@ class Settings:
     app_name: str = "Vet Agent"
     default_model: str = "qwen-plus"
     qwen_embedding_model: str = "text-embedding-v4"
-    qwen_api_key: str | None = None
-    qwen_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    qwen_vision_model: str = "qwen-vl-plus"
+    litellm_api_key: str | None = None
+    litellm_base_url: str = "http://127.0.0.1:4000/v1"
     request_timeout_seconds: float = 30.0
-    allow_mock_llm: bool = True
     data_dir: Path = Path(".data")
     seed_dir: Path = Path("data/seeds")
     database_url: str | None = None
     enable_rag_embeddings: bool = False
     enable_llm_task_splitter: bool = True
-    enable_mem0: bool = False
+    enable_mem0: bool = True
+    mem0_base_url: str = "http://127.0.0.1:8001"
     mem0_api_key: str | None = None
-    enable_langgraph_runtime: bool = False
     api_keys: tuple[str, ...] = ()
     require_api_auth: bool = False
     pet_authorization_mode: str = "permissive"
@@ -54,27 +54,27 @@ class Settings:
     memory_extraction_min_confidence: float = 0.72
     max_attachments: int = 8
     max_input_chars: int = 12_000
+    oss_bucket: str = "infra-dev-file-storage"
+    oss_prefix: str = ""
+    oss_endpoint: str = "oss-cn-hangzhou-internal.aliyuncs.com"
 
     @classmethod
     def from_env(cls) -> "Settings":
         return cls(
             default_model=os.getenv("QWEN_MODEL", "qwen-plus"),
             qwen_embedding_model=os.getenv("QWEN_EMBEDDING_MODEL", "text-embedding-v4"),
-            qwen_api_key=os.getenv("QWEN_API_KEY") or os.getenv("DASHSCOPE_API_KEY"),
-            qwen_base_url=os.getenv(
-                "QWEN_BASE_URL",
-                "https://dashscope.aliyuncs.com/compatible-mode/v1",
-            ).rstrip("/"),
-            request_timeout_seconds=float(os.getenv("QWEN_TIMEOUT_SECONDS", "30")),
-            allow_mock_llm=_bool_env("ALLOW_MOCK_LLM", True),
+            qwen_vision_model=os.getenv("QWEN_VISION_MODEL", "qwen-vl-plus"),
+            litellm_api_key=os.getenv("LITELLM_API_KEY") or os.getenv("LITELLM_MASTER_KEY"),
+            litellm_base_url=os.getenv("LITELLM_BASE_URL", "http://127.0.0.1:4000/v1").rstrip("/"),
+            request_timeout_seconds=float(os.getenv("LITELLM_TIMEOUT_SECONDS", os.getenv("QWEN_TIMEOUT_SECONDS", "30"))),
             data_dir=Path(os.getenv("VET_AGENT_DATA_DIR", ".data")),
             seed_dir=Path(os.getenv("VET_AGENT_SEED_DIR", "data/seeds")),
             database_url=os.getenv("DATABASE_URL"),
             enable_rag_embeddings=_bool_env("ENABLE_RAG_EMBEDDINGS", False),
             enable_llm_task_splitter=_bool_env("ENABLE_LLM_TASK_SPLITTER", True),
-            enable_mem0=_bool_env("ENABLE_MEM0", False),
+            enable_mem0=_bool_env("ENABLE_MEM0", True),
+            mem0_base_url=os.getenv("MEM0_BASE_URL", "http://127.0.0.1:8001").rstrip("/"),
             mem0_api_key=os.getenv("MEM0_API_KEY"),
-            enable_langgraph_runtime=_bool_env("ENABLE_LANGGRAPH_RUNTIME", False),
             api_keys=_csv_env("VET_AGENT_API_KEYS"),
             require_api_auth=_bool_env("REQUIRE_API_AUTH", False),
             pet_authorization_mode=os.getenv("PET_AUTHORIZATION_MODE", "permissive").strip().lower(),
@@ -94,11 +94,14 @@ class Settings:
             memory_extraction_min_confidence=float(os.getenv("MEMORY_EXTRACTION_MIN_CONFIDENCE", "0.72")),
             max_attachments=int(os.getenv("MAX_ATTACHMENTS", "8")),
             max_input_chars=int(os.getenv("MAX_INPUT_CHARS", "12000")),
+            oss_bucket=os.getenv("OSS_BUCKET", "infra-dev-file-storage").strip(),
+            oss_prefix=os.getenv("OSS_PREFIX", "").strip().strip("/"),
+            oss_endpoint=os.getenv("OSS_ENDPOINT", "oss-cn-hangzhou-internal.aliyuncs.com").strip().rstrip("/"),
         )
 
     @property
-    def qwen_configured(self) -> bool:
-        return bool(self.qwen_api_key)
+    def litellm_configured(self) -> bool:
+        return bool(self.litellm_api_key and self.litellm_base_url)
 
     @property
     def postgres_configured(self) -> bool:

@@ -1,12 +1,12 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import Any
 
-from src.vet_agent.contracts import TrustedIdentity
-from src.vet_agent.stores.json_store import JsonDocumentStore
+from vet_agent.contracts import TrustedIdentity
+from vet_agent.stores.json_store import JsonDocumentStore
 
 
 class MemoryService:

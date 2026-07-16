@@ -10,16 +10,16 @@ from uuid import uuid4
 from sqlalchemy import delete, desc, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from src.vet_agent.contracts import TrustedIdentity
-from src.vet_agent.db.models import (
+from vet_agent.contracts import TrustedIdentity
+from vet_agent.db.models import (
     ConsultationStateModel,
     ConversationTurnModel,
     IdempotencyRecordModel,
     PetMemoryEpisodeModel,
     PetMemoryFactModel,
 )
-from src.vet_agent.db.session import make_session_factory
-from src.vet_agent.services.semantic_memory import NullSemanticMemory
+from vet_agent.db.session import make_session_factory
+from vet_agent.services.semantic_memory import DisabledSemanticMemory
 
 
 DEFAULT_TASK_KEY = "__default__"
@@ -28,7 +28,7 @@ DEFAULT_TASK_KEY = "__default__"
 class PostgresMemoryService:
     def __init__(self, database_url: str, semantic_memory=None) -> None:
         self.session_factory = make_session_factory(database_url)
-        self.semantic_memory = semantic_memory or NullSemanticMemory()
+        self.semantic_memory = semantic_memory or DisabledSemanticMemory()
 
     @asynccontextmanager
     async def turn_lock(self, identity: TrustedIdentity):
@@ -81,7 +81,7 @@ class PostgresMemoryService:
                 )
             ).all()
 
-        semantic = await self.semantic_memory.search(identity, self._semantic_query(turns), limit=5)
+        semantic, semantic_error = await self._semantic_search(identity, self._semantic_query(turns), limit=5)
         last_summary = turns[0].summary if turns else ""
         return {
             "owner": {},
@@ -91,6 +91,7 @@ class PostgresMemoryService:
                 "facts": [self._fact_dict(row) for row in facts],
                 "episodes": [self._episode_dict(row) for row in episodes],
                 "semantic_memories": semantic,
+                "semantic_memory_error": semantic_error,
             },
             "session": {
                 "last_summary": last_summary,
@@ -163,7 +164,7 @@ class PostgresMemoryService:
                     source_text=user_text,
                     metadata={"source": "user_correction"},
                 )
-        await self.semantic_memory.add_turn(identity, user_text=user_text, summary=summary, metadata=metadata)
+        await self._semantic_add_turn(identity, user_text=user_text, summary=summary, metadata=metadata)
 
     async def read_consultation_state(self, identity: TrustedIdentity) -> dict[str, Any]:
         with self.session_factory() as session:
@@ -221,7 +222,7 @@ class PostgresMemoryService:
             session.execute(delete(ConsultationStateModel).where(*state_where))
             session.execute(delete(PetMemoryEpisodeModel).where(*episode_where))
             session.execute(delete(PetMemoryFactModel).where(*fact_where))
-        await self.semantic_memory.delete_pet(pet_id)
+        await self._semantic_delete_pet(pet_id, user_id=user_id)
 
     async def upsert_pet_fact(
         self,
@@ -468,6 +469,37 @@ class PostgresMemoryService:
         if updated_at.tzinfo is None:
             updated_at = updated_at.replace(tzinfo=UTC)
         return (datetime.now(UTC) - updated_at).total_seconds() > ttl_seconds
+
+    async def _semantic_search(
+        self,
+        identity: TrustedIdentity,
+        query: str,
+        *,
+        limit: int,
+    ) -> tuple[list[dict[str, Any]], str | None]:
+        try:
+            return await self.semantic_memory.search(identity, query, limit=limit), None
+        except Exception as exc:
+            return [], type(exc).__name__
+
+    async def _semantic_add_turn(
+        self,
+        identity: TrustedIdentity,
+        *,
+        user_text: str,
+        summary: str,
+        metadata: dict[str, Any],
+    ) -> None:
+        try:
+            await self.semantic_memory.add_turn(identity, user_text=user_text, summary=summary, metadata=metadata)
+        except Exception:
+            return None
+
+    async def _semantic_delete_pet(self, pet_id: str, *, user_id: str | None = None) -> None:
+        try:
+            await self.semantic_memory.delete_pet(pet_id, user_id=user_id)
+        except Exception:
+            return None
 
     def _lock_key(self, identity: TrustedIdentity) -> int:
         raw = f"{identity.user_id}:{identity.pet_id}:{identity.session_id}".encode("utf-8")

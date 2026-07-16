@@ -8,9 +8,9 @@ from typing import Protocol
 from sqlalchemy import desc, func, literal, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 
-from src.vet_agent.contracts import Evidence
-from src.vet_agent.db.models import KnowledgeChunkModel
-from src.vet_agent.db.session import make_session_factory
+from vet_agent.contracts import Evidence
+from vet_agent.db.models import KnowledgeChunkModel
+from vet_agent.db.session import make_session_factory
 
 
 @dataclass(frozen=True)
@@ -94,7 +94,11 @@ class PostgresKnowledgeRepository:
         score = (1 - distance).label("score")
         statement = (
             select(KnowledgeChunkModel, score)
-            .where(KnowledgeChunkModel.enabled.is_(True), KnowledgeChunkModel.embedding.is_not(None))
+            .where(
+                KnowledgeChunkModel.enabled.is_(True),
+                KnowledgeChunkModel.review_status == "approved",
+                KnowledgeChunkModel.embedding.is_not(None),
+            )
             .order_by(distance)
             .limit(limit)
         )
@@ -122,6 +126,7 @@ class PostgresKnowledgeRepository:
             select(KnowledgeChunkModel, score)
             .where(
                 KnowledgeChunkModel.enabled.is_(True),
+                KnowledgeChunkModel.review_status == "approved",
                 or_(
                     func.lower(KnowledgeChunkModel.title).like(func.lower(like_literal)),
                     func.lower(KnowledgeChunkModel.content).like(func.lower(like_literal)),
@@ -137,7 +142,7 @@ class PostgresKnowledgeRepository:
             if not rows:
                 rows = session.execute(
                     select(KnowledgeChunkModel, literal(0.0).label("score"))
-                    .where(KnowledgeChunkModel.enabled.is_(True))
+                    .where(KnowledgeChunkModel.enabled.is_(True), KnowledgeChunkModel.review_status == "approved")
                     .order_by(KnowledgeChunkModel.id)
                     .limit(limit)
                 ).all()
@@ -158,7 +163,7 @@ class PostgresKnowledgeRepository:
             with self.session_factory() as session:
                 return session.scalar(
                     select(KnowledgeChunkModel.id)
-                    .where(KnowledgeChunkModel.enabled.is_(True))
+                    .where(KnowledgeChunkModel.enabled.is_(True), KnowledgeChunkModel.review_status == "approved")
                     .limit(1)
                 ) is not None
         except SQLAlchemyError:

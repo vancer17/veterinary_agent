@@ -6,8 +6,8 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from src.vet_agent.db.models import Base
-from src.vet_agent.db.session import sqlalchemy_url
+from vet_agent.db.models import Base
+from vet_agent.db.session import sqlalchemy_url
 
 config = context.config
 

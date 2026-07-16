@@ -1,12 +1,12 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from collections.abc import AsyncIterator, Mapping
 from typing import Any
 
-from src.ingress.dto import AgentTurnRequest as IngressAgentTurnRequest
+from ingress.dto import AgentTurnRequest as IngressAgentTurnRequest
 
-from src.vet_agent.container import Container
-from src.vet_agent.contracts import (
+from vet_agent.container import Container
+from vet_agent.contracts import (
     AgentTurnRequest,
     AttachmentRef,
     InputItem,

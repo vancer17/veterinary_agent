@@ -1,0 +1,18 @@
+{
+  "input": "它刚才把桌上写着 xylitol 的无糖口香糖连着一小块包装咽下去了，目前还能自行走动。我现在最先应该做什么？",
+  "stream": false,
+  "metadata": {
+    "scenario": "business_safety_semantic",
+    "keyword_strategy": "avoid_known_toxicity_terms"
+  },
+  "vet_context": {
+    "user_id": "business_user_safety_001",
+    "session_id": "business_session_safety_001",
+    "pet_id": "business_pet_safety_001",
+    "pet_info": {
+      "species": "canine",
+      "age": "2 years",
+      "weight_kg": 9.5
+    }
+  }
+}

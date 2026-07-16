@@ -7,9 +7,9 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from src.vet_agent.config import Settings
-from src.vet_agent.repositories.rules import RuleRepository
-from src.vet_agent.runtime.qwen import QwenClient
+from vet_agent.config import Settings
+from vet_agent.repositories.rules import RuleRepository
+from vet_agent.runtime.qwen import QwenClient
 
 
 DOMAIN_TITLES = {

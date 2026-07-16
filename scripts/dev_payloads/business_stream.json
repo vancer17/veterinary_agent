@@ -1,0 +1,19 @@
+{
+  "input": "我正在准备年度检查，希望先整理一份过去一周的观察框架。请先确认你还缺哪些背景信息。",
+  "stream": true,
+  "metadata": {
+    "scenario": "business_stream",
+    "keyword_strategy": "semantic_paraphrase"
+  },
+  "vet_context": {
+    "user_id": "business_user_stream_001",
+    "session_id": "business_session_stream_001",
+    "pet_id": "business_pet_stream_001",
+    "pet_info": {
+      "species": "feline",
+      "breed": "domestic shorthair",
+      "age": "6 years",
+      "weight_kg": 4.8
+    }
+  }
+}

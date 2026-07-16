@@ -3,8 +3,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from src.vet_agent.agents.safety import SafetyAgent
-from src.vet_agent.contracts import AgentTurnResponse, SafetySignal
+from vet_agent.agents.safety import SafetyAgent
+from vet_agent.contracts import AgentTurnResponse, SafetySignal
 
 
 @dataclass(frozen=True)

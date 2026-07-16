@@ -2,24 +2,69 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from src.ingress.app import app
-from src.ingress.orchestrator import set_orchestrator
-from src.vet_agent.agents.task_splitter import TaskSplitterAgent
-from src.vet_agent.config import Settings
-from src.vet_agent.container import get_container
-from src.vet_agent.ingress_adapter import VetAgentIngressOrchestrator
-from src.vet_agent.repositories.rules import FileRuleRepository
+from ingress.app import app
+from ingress.orchestrator import set_orchestrator
+from vet_agent.agents.task_splitter import TaskSplitterAgent
+from vet_agent.config import Settings
+from vet_agent.container import get_container
+from vet_agent.ingress_adapter import VetAgentIngressOrchestrator
+from vet_agent.repositories.rules import FileRuleRepository
+from vet_agent.runtime.qwen import QwenClient
 
 
 def _client(tmp_path, monkeypatch) -> TestClient:
-    monkeypatch.setenv("ALLOW_MOCK_LLM", "true")
-    monkeypatch.delenv("QWEN_API_KEY", raising=False)
+    monkeypatch.setenv("LITELLM_API_KEY", "sk-test-litellm")
+    monkeypatch.setenv("LITELLM_BASE_URL", "http://litellm.test/v1")
+    monkeypatch.setenv("ENABLE_MEM0", "false")
     monkeypatch.delenv("DASHSCOPE_API_KEY", raising=False)
     monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.setenv("VET_AGENT_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(QwenClient, "_send_chat", _fake_litellm_send_chat)
     get_container.cache_clear()
     set_orchestrator(VetAgentIngressOrchestrator(get_container()))
     return TestClient(app)
+
+
+async def _fake_litellm_send_chat(self, messages, *, model: str, temperature: float) -> str:
+    del self, model, temperature
+    user_text = _message_text(messages)
+    if "image_url" in user_text:
+        return """
+        {
+          "summary": "Parsed visible lab items from the OSS image.",
+          "ocr_text": "ALT 126 U/L 10-100 H\\nWBC 18.5 10^9/L 6-17 H\\nHGB 145 g/L 120-180",
+          "items": [
+            {"item_name": "ALT", "value_text": "126", "numeric_value": 126, "unit": "U/L", "reference_range": "10-100", "abnormal_flag": "high", "confidence": 0.86},
+            {"item_name": "WBC", "value_text": "18.5", "numeric_value": 18.5, "unit": "10^9/L", "reference_range": "6-17", "abnormal_flag": "high", "confidence": 0.86},
+            {"item_name": "HGB", "value_text": "145", "numeric_value": 145, "unit": "g/L", "reference_range": "120-180", "abnormal_flag": null, "confidence": 0.82}
+          ]
+        }
+        """
+    if "结构化问诊状态已足够" in user_text:
+        return (
+            "分诊/紧急度: 目前根据已补充的信息，暂未看到必须立即急诊的红旗，但仍需要继续观察变化。\n"
+            "可能方向与依据: 更偏向轻度、短时的消化道不适或饮食刺激。\n"
+            "现在可以做什么: 先保证饮水，暂停零食和新食物，少量多餐，观察精神、食欲、呕吐、腹泻次数和是否出现血便。不要自行喂人药。\n"
+            "线下兽医兜底: 如果症状加重、持续超过 24 小时、出现血便/频繁呕吐/精神明显变差，请尽快线下就诊。"
+        )
+    if "行为" in user_text or "乱叫" in user_text or "拆家" in user_text:
+        return "这更像行为和环境管理问题，但仍要先排除突然疼痛、食欲下降或神经异常等医疗红旗。"
+    if "喂" in user_text or "吃" in user_text or "粮" in user_text:
+        return "饲养建议应结合物种、年龄、体重、体况和活动量，并避免突然换粮。"
+    return "我会先做分诊:目前还需要确认症状开始时间、精神食欲、是否呕吐腹泻或咳喘。如果加重或出现红旗症状，请尽快就医。"
+
+
+def _message_text(messages) -> str:
+    parts: list[str] = []
+    for message in messages:
+        content = message.get("content")
+        if isinstance(content, str):
+            parts.append(content)
+        elif isinstance(content, list):
+            for item in content:
+                if isinstance(item, dict):
+                    parts.append(str(item))
+    return "\n".join(parts)
 
 
 def _payload(text: str, **extra):
@@ -63,7 +108,7 @@ def test_health_and_ready(tmp_path, monkeypatch):
     assert ready.json()["checks"]["orchestrator"] is True
 
 
-def test_sync_turn_uses_mock_qwen_and_evidence(tmp_path, monkeypatch):
+def test_sync_turn_uses_litellm_gateway_and_evidence(tmp_path, monkeypatch):
     client = _client(tmp_path, monkeypatch)
 
     response = client.post("/agent/turns", json=_payload("我家狗今天有点拉稀，应该怎么办？"))
@@ -280,7 +325,7 @@ def test_llm_task_router_can_drive_task_splitting():
     splitter = TaskSplitterAgent(
         FileRuleRepository(Settings().seed_dir),
         FakeQwen(),
-        Settings(enable_llm_task_splitter=True, qwen_api_key="test"),
+        Settings(enable_llm_task_splitter=True, litellm_api_key="test"),
     )
 
     import asyncio
@@ -398,11 +443,93 @@ def test_memory_extraction_persists_pet_info_facts(tmp_path, monkeypatch):
 
 
 def test_safety_review_removes_dosage_expression():
-    from src.vet_agent.agents.safety import SafetyAgent
-    from src.vet_agent.agents.safety_review import SafetyReviewAgent
+    from vet_agent.agents.safety import SafetyAgent
+    from vet_agent.agents.safety_review import SafetyReviewAgent
 
     reviewer = SafetyReviewAgent(SafetyAgent(FileRuleRepository(Settings().seed_dir)))
     result = reviewer.review_text("You can give 5 mg/kg twice daily.")
 
     assert "5 mg/kg" not in result.text
     assert any(signal.code == "DOSAGE_REMOVED" for signal in result.signals)
+
+
+def test_report_parse_extracts_structured_lab_items(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+
+    response = client.post(
+        "/reports/parse",
+        json={
+            "user_id": "u_report",
+            "session_id": "s_report",
+            "pet_id": "p_report",
+            "report_type": "bloodwork",
+            "oss_image_url": "https://infra-dev-file-storage.oss-cn-hangzhou-internal.aliyuncs.com/uploads/reports/lab.jpg",
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "parsed"
+    assert data["source_type"] == "oss_image_url"
+    assert data["report_id"].startswith("rpt_")
+    assert len(data["items"]) >= 3
+    assert data["attachments"][0]["storage_ref"] == "oss://infra-dev-file-storage/uploads/reports/lab.jpg"
+    assert any(item["item_name"] == "ALT" and item["abnormal_flag"] == "high" for item in data["items"])
+
+
+def test_radiology_report_is_blocked_from_online_interpretation(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+
+    response = client.post(
+        "/reports/parse",
+        json={
+            "user_id": "u_xray_report",
+            "session_id": "s_xray_report",
+            "pet_id": "p_xray_report",
+            "report_type": "xray",
+            "oss_image_url": "oss://infra-dev-file-storage/uploads/reports/xray.jpg",
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "blocked"
+    assert data["items"] == []
+    assert data["safety_flags"][0]["code"] == "RADIOLOGY_REPORT_GATE"
+
+
+def test_report_parse_rejects_non_oss_image_url(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+
+    response = client.post(
+        "/reports/parse",
+        json={
+            "user_id": "u_bad_report",
+            "session_id": "s_bad_report",
+            "pet_id": "p_bad_report",
+            "report_type": "bloodwork",
+            "oss_image_url": "https://example.com/lab.jpg",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == "INVALID_REQUEST"
+
+
+def test_rag_governance_admin_can_list_and_update_seed_chunks(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+
+    stats = client.get("/admin/rag/stats")
+    chunks = client.get("/admin/rag/chunks?limit=1")
+    update = client.patch(
+        "/admin/rag/chunks/1",
+        json={"review_status": "rejected", "enabled": False, "reason": "test quarantine"},
+    )
+
+    assert stats.status_code == 200
+    assert stats.json()["total"] >= 1
+    assert chunks.status_code == 200
+    assert chunks.json()["items"]
+    assert update.status_code == 200
+    assert update.json()["review_status"] == "rejected"
+    assert update.json()["enabled"] is False

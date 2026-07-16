@@ -1,0 +1,19 @@
+{
+  "input": "这只小家伙叫豆包，通常傍晚会在安静角落进餐，外出前需要花几分钟适应胸背带。后续安排请尽量沿用这些习惯。",
+  "stream": false,
+  "metadata": {
+    "scenario": "business_memory",
+    "keyword_strategy": "durable_fact_paraphrase"
+  },
+  "vet_context": {
+    "user_id": "business_user_memory_001",
+    "session_id": "business_session_memory_001",
+    "pet_id": "business_pet_memory_001",
+    "pet_info": {
+      "species": "canine",
+      "breed": "mixed",
+      "age": "5 years",
+      "weight_kg": 14.2
+    }
+  }
+}

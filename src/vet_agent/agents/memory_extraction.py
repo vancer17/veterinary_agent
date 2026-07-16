@@ -7,9 +7,9 @@ from typing import Any
 
 from pydantic import BaseModel, Field, ValidationError
 
-from src.vet_agent.config import Settings
-from src.vet_agent.contracts import AgentTurnResponse, TrustedIdentity, VetContext
-from src.vet_agent.runtime.qwen import QwenClient
+from vet_agent.config import Settings
+from vet_agent.contracts import AgentTurnResponse, TrustedIdentity, VetContext
+from vet_agent.runtime.qwen import QwenClient
 
 
 ALLOWED_FACT_TYPES = {

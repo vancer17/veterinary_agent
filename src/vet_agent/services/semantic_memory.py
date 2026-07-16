@@ -2,10 +2,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.vet_agent.contracts import TrustedIdentity
+import httpx
+
+from vet_agent.config import Settings
+from vet_agent.contracts import TrustedIdentity
 
 
-class NullSemanticMemory:
+class DisabledSemanticMemory:
     enabled = False
 
     async def add_turn(
@@ -21,17 +24,21 @@ class NullSemanticMemory:
     async def search(self, identity: TrustedIdentity, query: str, *, limit: int = 5) -> list[dict[str, Any]]:
         return []
 
-    async def delete_pet(self, pet_id: str) -> None:
+    async def delete_pet(self, pet_id: str, *, user_id: str | None = None) -> None:
         return None
 
 
-class Mem0SemanticMemory:
-    """Optional mem0-backed semantic memory. Failures never block core storage."""
+class Mem0RestSemanticMemory:
+    """Real Mem0 middleware client using the self-hosted REST API."""
 
     enabled = True
 
-    def __init__(self, *, api_key: str | None = None) -> None:
-        self.client = self._make_client(api_key)
+    def __init__(self, *, base_url: str, api_key: str | None, timeout_seconds: float) -> None:
+        if not base_url:
+            raise ValueError("MEM0_BASE_URL is required when ENABLE_MEM0=true")
+        self.base_url = base_url.rstrip("/")
+        self.api_key = api_key
+        self.timeout_seconds = timeout_seconds
 
     async def add_turn(
         self,
@@ -48,61 +55,68 @@ class Mem0SemanticMemory:
             "memory_scope": "semantic",
             **(metadata or {}),
         }
-        messages = [
-            {"role": "user", "content": user_text[:2000]},
-            {"role": "assistant", "content": summary[:2000]},
-        ]
-        try:
-            self.client.add(messages, user_id=identity.user_id, metadata=payload_metadata)
-        except TypeError:
-            try:
-                self.client.add(messages, filters={"user_id": identity.user_id, "pet_id": identity.pet_id}, metadata=payload_metadata)
-            except Exception:
-                return None
-        except Exception:
-            return None
-        return None
+        payload = {
+            "messages": [
+                {"role": "user", "content": user_text[:4000]},
+                {"role": "assistant", "content": summary[:4000]},
+            ],
+            "user_id": identity.user_id,
+            "run_id": identity.pet_id,
+            "metadata": payload_metadata,
+        }
+        await self._request("POST", "/memories", json=payload)
 
     async def search(self, identity: TrustedIdentity, query: str, *, limit: int = 5) -> list[dict[str, Any]]:
-        filters = {"user_id": identity.user_id, "pet_id": identity.pet_id}
-        try:
-            result = self.client.search(query, user_id=identity.user_id, filters=filters, limit=limit)
-        except TypeError:
-            try:
-                result = self.client.search(query, filters=filters, limit=limit)
-            except Exception:
-                return []
-        except Exception:
+        if not query.strip():
             return []
-        if isinstance(result, dict):
-            memories = result.get("results") or result.get("memories") or []
+        payload = {
+            "query": query[:2000],
+            "filters": {"user_id": identity.user_id, "run_id": identity.pet_id},
+            "top_k": limit,
+        }
+        data = await self._request("POST", "/search", json=payload)
+        if isinstance(data, dict):
+            memories = data.get("results") or data.get("memories") or data.get("data") or []
         else:
-            memories = result or []
+            memories = data or []
         return [item for item in memories if isinstance(item, dict)]
 
-    async def delete_pet(self, pet_id: str) -> None:
-        try:
-            self.client.delete_all(filters={"pet_id": pet_id})
-        except Exception:
-            return None
+    async def delete_pet(self, pet_id: str, *, user_id: str | None = None) -> None:
+        params = {"run_id": pet_id}
+        if user_id:
+            params["user_id"] = user_id
+        await self._request("DELETE", "/memories", params=params)
 
-    def _make_client(self, api_key: str | None):
-        try:
-            if api_key:
-                from mem0 import MemoryClient
+    async def _request(
+        self,
+        method: str,
+        path: str,
+        *,
+        json: dict[str, Any] | None = None,
+        params: dict[str, Any] | None = None,
+    ) -> Any:
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["X-API-Key"] = self.api_key
+        async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+            response = await client.request(
+                method,
+                f"{self.base_url}{path}",
+                headers=headers,
+                json=json,
+                params=params,
+            )
+            response.raise_for_status()
+            if not response.content:
+                return None
+            return response.json()
 
-                return MemoryClient(api_key=api_key)
-            from mem0 import Memory
 
-            return Memory()
-        except Exception as exc:
-            raise RuntimeError("mem0 is not installed or could not be initialized") from exc
-
-
-def make_semantic_memory(*, enabled: bool, api_key: str | None = None):
-    if not enabled:
-        return NullSemanticMemory()
-    try:
-        return Mem0SemanticMemory(api_key=api_key)
-    except Exception:
-        return NullSemanticMemory()
+def make_semantic_memory(settings: Settings):
+    if not settings.enable_mem0:
+        return DisabledSemanticMemory()
+    return Mem0RestSemanticMemory(
+        base_url=settings.mem0_base_url,
+        api_key=settings.mem0_api_key,
+        timeout_seconds=settings.request_timeout_seconds,
+    )

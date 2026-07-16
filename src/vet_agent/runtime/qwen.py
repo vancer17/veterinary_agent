@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import asyncio
 import random
@@ -7,11 +7,11 @@ from typing import Any
 
 import httpx
 
-from src.vet_agent.config import Settings
+from vet_agent.config import Settings
 
 
 class QwenClient:
-    """OpenAI-compatible DashScope/Qwen chat client."""
+    """OpenAI-compatible LiteLLM proxy client for Qwen-family models."""
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
@@ -23,7 +23,7 @@ class QwenClient:
 
     @property
     def available(self) -> bool:
-        return self.settings.qwen_configured
+        return self.settings.litellm_configured
 
     async def chat(
         self,
@@ -33,9 +33,7 @@ class QwenClient:
         temperature: float = 0.2,
     ) -> str:
         if not self.available:
-            if self.settings.allow_mock_llm:
-                return self._mock_reply(messages)
-            raise RuntimeError("Qwen API key is not configured")
+            raise RuntimeError("LiteLLM proxy is not configured")
 
         if self._circuit_open():
             raise RuntimeError("Qwen circuit breaker is open")
@@ -59,9 +57,47 @@ class QwenClient:
             self._record_failure()
         raise RuntimeError("Qwen chat request failed") from last_error
 
+    async def chat_with_images(
+        self,
+        *,
+        prompt: str,
+        image_urls: list[str],
+        model: str | None = None,
+        temperature: float = 0.0,
+    ) -> str:
+        if not image_urls:
+            raise ValueError("image_urls is required")
+        if not self.available:
+            raise RuntimeError("LiteLLM proxy is not configured")
+
+        if self._circuit_open():
+            raise RuntimeError("Qwen circuit breaker is open")
+
+        content: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
+        content.extend({"type": "image_url", "image_url": {"url": url}} for url in image_urls)
+        messages: list[dict[str, Any]] = [{"role": "user", "content": content}]
+        model_candidates = [model or self.settings.qwen_vision_model]
+        last_error: Exception | None = None
+        async with self._semaphore:
+            for candidate in model_candidates:
+                try:
+                    result = await self._chat_with_retries(
+                        messages,
+                        model=candidate,
+                        temperature=temperature,
+                    )
+                    self._record_success()
+                    return result
+                except Exception as exc:
+                    last_error = exc
+                    if not self._retryable_exception(exc):
+                        break
+            self._record_failure()
+        raise RuntimeError("Qwen vision request failed") from last_error
+
     async def _chat_with_retries(
         self,
-        messages: list[dict[str, str]],
+        messages: list[dict[str, Any]],
         *,
         model: str,
         temperature: float,
@@ -79,7 +115,7 @@ class QwenClient:
 
     async def _send_chat(
         self,
-        messages: list[dict[str, str]],
+        messages: list[dict[str, Any]],
         *,
         model: str,
         temperature: float,
@@ -90,13 +126,13 @@ class QwenClient:
             "temperature": temperature,
         }
         headers = {
-            "Authorization": f"Bearer {self.settings.qwen_api_key}",
+            "Authorization": f"Bearer {self.settings.litellm_api_key}",
             "Content-Type": "application/json",
         }
         await self._pace()
         async with httpx.AsyncClient(timeout=self.settings.request_timeout_seconds) as client:
             response = await client.post(
-                f"{self.settings.qwen_base_url}/chat/completions",
+                f"{self.settings.litellm_base_url}/chat/completions",
                 headers=headers,
                 json=payload,
             )
@@ -156,27 +192,3 @@ class QwenClient:
             self._failure_count = 0
             return False
         return True
-
-    def _mock_reply(self, messages: list[dict[str, str]]) -> str:
-        user_text = "\n".join(message["content"] for message in messages if message.get("role") == "user")
-        if "结构化问诊状态已足够" in user_text:
-            return (
-                "分诊/紧急度: 目前根据已补充的信息，暂未看到必须立即急诊的红旗，但仍需要继续观察变化。\n"
-                "可能方向与依据: 更偏向轻度、短时的消化道不适或饮食刺激；依据是起病时间、精神食欲、呕吐和大便信息已经补充。\n"
-                "现在可以做什么: 先保证饮水，暂停零食和新食物，少量多餐，观察精神、食欲、呕吐、腹泻次数和是否出现血便。不要自行喂人药。\n"
-                "线下兽医兜底: 如果症状加重、持续超过 24 小时、出现血便/频繁呕吐/精神明显变差，或幼年、老年、基础病宠物，请尽快线下就诊。"
-            )
-        if "行为" in user_text or "乱叫" in user_text or "拆家" in user_text:
-            return (
-                "从现有信息看，这更像行为和环境管理问题，但仍要先排除突然疼痛、食欲下降或神经异常等医疗红旗。"
-                "建议先记录发生时间、诱因和持续多久，增加可预测的运动与嗅闻活动，并用奖励训练替代惩罚。"
-            )
-        if "喂" in user_text or "吃" in user_text or "粮" in user_text:
-            return (
-                "饲养建议应结合物种、年龄、体重、体况和活动量。先按当前主粮包装建议作为基线，"
-                "再根据体重趋势和活动量小幅调整，并避免突然换粮。"
-            )
-        return (
-            "我会先做分诊:目前还需要确认症状开始时间、精神食欲、是否呕吐腹泻或咳喘。"
-            "如果症状轻微且精神食欲正常，可短时观察；如果加重或出现红旗症状，请尽快就医。"
-        )

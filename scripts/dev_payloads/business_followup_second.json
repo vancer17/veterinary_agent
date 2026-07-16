@@ -1,0 +1,19 @@
+{
+  "input": "36 小时前开始；它仍会主动迎接家人，和平常一样活跃；正餐能吃完，水量没有明显变化；主要变化是睡得比以前久一些。",
+  "stream": false,
+  "metadata": {
+    "scenario": "business_followup_second",
+    "keyword_strategy": "slot_only_without_domain_keywords"
+  },
+  "vet_context": {
+    "user_id": "business_user_followup_001",
+    "session_id": "business_session_followup_001",
+    "pet_id": "business_pet_followup_001",
+    "pet_info": {
+      "species": "canine",
+      "breed": "mixed",
+      "age": "5 years",
+      "weight_kg": 14.2
+    }
+  }
+}

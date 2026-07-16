@@ -1,10 +1,10 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
 
-from src.vet_agent.contracts import AttachmentRef, SafetySignal
-from src.vet_agent.repositories.rules import RuleRepository, SafetyRule, compile_regex
+from vet_agent.contracts import AttachmentRef, SafetySignal
+from vet_agent.repositories.rules import RuleRepository, SafetyRule, compile_regex
 
 
 @dataclass(frozen=True)

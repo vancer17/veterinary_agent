@@ -71,6 +71,11 @@ class KnowledgeChunkModel(Base):
     source_url: Mapped[str | None] = mapped_column(Text)
     version: Mapped[str] = mapped_column(Text, nullable=False, default="v1", server_default="v1")
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    review_status: Mapped[str] = mapped_column(Text, nullable=False, default="approved", server_default="approved")
+    quality_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.8, server_default="0.8")
+    last_reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    disabled_reason: Mapped[str | None] = mapped_column(Text)
+    ingestion_batch: Mapped[str | None] = mapped_column(Text)
     metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, nullable=False, default=dict, server_default="{}")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
@@ -182,6 +187,60 @@ class PetMemoryEpisodeModel(Base):
     summary: Mapped[str] = mapped_column(Text, nullable=False)
     memory_scope: Mapped[str] = mapped_column(Text, nullable=False, default="medium", server_default="medium")
     metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, nullable=False, default=dict, server_default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class PetReportModel(Base):
+    __tablename__ = "pet_reports"
+    __table_args__ = (
+        UniqueConstraint("report_id", name="uq_pet_reports_report_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    report_id: Mapped[str] = mapped_column(Text, nullable=False)
+    user_id: Mapped[str] = mapped_column(Text, nullable=False)
+    pet_id: Mapped[str] = mapped_column(Text, nullable=False)
+    session_id: Mapped[str] = mapped_column(Text, nullable=False)
+    report_type: Mapped[str] = mapped_column(Text, nullable=False, default="unknown", server_default="unknown")
+    source_type: Mapped[str] = mapped_column(Text, nullable=False, default="text", server_default="text")
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="parsed", server_default="parsed")
+    raw_text: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    summary: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    ocr_engine: Mapped[str] = mapped_column(Text, nullable=False, default="none", server_default="none")
+    parser_version: Mapped[str] = mapped_column(Text, nullable=False, default="v1", server_default="v1")
+    attachments: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False, default=list, server_default="[]")
+    safety_flags: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False, default=list, server_default="[]")
+    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, nullable=False, default=dict, server_default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class PetReportItemModel(Base):
+    __tablename__ = "pet_report_items"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    report_id: Mapped[str] = mapped_column(Text, nullable=False)
+    item_name: Mapped[str] = mapped_column(Text, nullable=False)
+    value_text: Mapped[str] = mapped_column(Text, nullable=False)
+    numeric_value: Mapped[float | None] = mapped_column(Float)
+    unit: Mapped[str | None] = mapped_column(Text)
+    reference_range: Mapped[str | None] = mapped_column(Text)
+    abnormal_flag: Mapped[str | None] = mapped_column(Text)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.8, server_default="0.8")
+    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, nullable=False, default=dict, server_default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class RagAuditEventModel(Base):
+    __tablename__ = "rag_audit_events"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    chunk_id: Mapped[int | None] = mapped_column(BigInteger)
+    action: Mapped[str] = mapped_column(Text, nullable=False)
+    actor_id: Mapped[str | None] = mapped_column(Text)
+    reason: Mapped[str | None] = mapped_column(Text)
+    before: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    after: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 

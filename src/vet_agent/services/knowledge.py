@@ -1,7 +1,7 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
-from src.vet_agent.contracts import Evidence
-from src.vet_agent.repositories.knowledge import KnowledgeHit, KnowledgeRepository, evidence_from_hits
+from vet_agent.contracts import Evidence
+from vet_agent.repositories.knowledge import KnowledgeHit, KnowledgeRepository, evidence_from_hits
 
 
 class KnowledgeService:

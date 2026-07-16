@@ -8,12 +8,12 @@ from typing import Any, Mapping
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from src.ingress.errors import ForbiddenError, UnauthorizedError
-from src.vet_agent.config import Settings
-from src.vet_agent.contracts import TrustedIdentity
-from src.vet_agent.db.models import PetProfileModel, PetSessionBindingModel
-from src.vet_agent.db.session import make_session_factory
-from src.vet_agent.stores.json_store import JsonDocumentStore
+from ingress.errors import ForbiddenError, UnauthorizedError
+from vet_agent.config import Settings
+from vet_agent.contracts import TrustedIdentity
+from vet_agent.db.models import PetProfileModel, PetSessionBindingModel
+from vet_agent.db.session import make_session_factory
+from vet_agent.stores.json_store import JsonDocumentStore
 
 
 @dataclass(frozen=True)

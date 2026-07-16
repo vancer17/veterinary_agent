@@ -1,6 +1,6 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
-from src.vet_agent.services.context import PetContext
+from vet_agent.services.context import PetContext
 
 
 class QuestionPlanner:

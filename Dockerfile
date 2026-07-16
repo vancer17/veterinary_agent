@@ -1,0 +1,29 @@
+ARG PYTHON_BASE_IMAGE=ghcr.io/astral-sh/uv:python3.12-bookworm
+FROM ${PYTHON_BASE_IMAGE}
+
+WORKDIR /app
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    UV_SYSTEM_PYTHON=1 \
+    UV_LINK_MODE=copy \
+    PYTHONPATH=/app/src
+
+COPY pyproject.toml README.md ./
+COPY alembic.ini ./
+COPY alembic ./alembic
+COPY data ./data
+COPY scripts ./scripts
+COPY src ./src
+
+RUN uv pip install --system . \
+    && groupadd --system app \
+    && useradd --system --gid app --home-dir /app --shell /usr/sbin/nologin app \
+    && mkdir -p /app/.data \
+    && chown -R app:app /app
+
+USER app
+
+EXPOSE 8000
+
+CMD ["uvicorn", "vet_agent.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]

@@ -1,0 +1,10 @@
+{
+  "user_id": "dev_user_report",
+  "session_id": "dev_session_report",
+  "pet_id": "dev_pet_report",
+  "report_type": "bloodwork",
+  "oss_image_url": "https://infra-dev-file-storage.oss-cn-hangzhou-internal.aliyuncs.com/uploads/dev/lab-report.jpg",
+  "metadata": {
+    "source": "dev_payload"
+  }
+}
