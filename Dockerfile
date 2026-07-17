@@ -1,7 +1,7 @@
 # -----------------------------------------------------------------------------
 # File: Dockerfile
 # Purpose: Build the production Vet Agent application image from uv.lock.
-# Dependency source: The default package index is configured in pyproject.toml.
+# Dependency source: uv uses the Tsinghua PyPI mirror from pyproject.toml and UV_DEFAULT_INDEX.
 # -----------------------------------------------------------------------------
 
 ARG PYTHON_BASE_IMAGE=ghcr.io/astral-sh/uv:python3.12-bookworm
@@ -12,6 +12,7 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     UV_LINK_MODE=copy \
+    UV_DEFAULT_INDEX=https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple \
     UV_PROJECT_ENVIRONMENT=/opt/venv \
     PATH="/opt/venv/bin:${PATH}" \
     PYTHONPATH=/app/src
