@@ -71,6 +71,20 @@ services:
       - backend
     logging: *default-logging
 
+  postgres-extensions:
+    image: ${PGVECTOR_IMAGE:-pgvector/pgvector:pg16}
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file: *postgres-env-files
+    volumes:
+      - ./docker/postgres/ops/ensure-extensions.sh:/usr/local/bin/ensure-postgres-extensions:ro
+    command: ["bash", "/usr/local/bin/ensure-postgres-extensions"]
+    networks:
+      - backend
+    logging: *default-logging
+
   litellm:
     image: ${LITELLM_IMAGE:-ghcr.io/berriai/litellm:main-stable}
     restart: unless-stopped
@@ -100,6 +114,8 @@ services:
     depends_on:
       litellm:
         condition: service_healthy
+      postgres-extensions:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
     env_file: *mem0-env-files
@@ -127,8 +143,8 @@ services:
     <<: *app-common
     restart: "no"
     depends_on:
-      postgres:
-        condition: service_healthy
+      postgres-extensions:
+        condition: service_completed_successfully
     command: ["alembic", "upgrade", "head"]
     profiles: ["ops"]
 
@@ -136,8 +152,8 @@ services:
     <<: *app-common
     restart: "no"
     depends_on:
-      postgres:
-        condition: service_healthy
+      postgres-extensions:
+        condition: service_completed_successfully
       litellm:
         condition: service_healthy
     command: >

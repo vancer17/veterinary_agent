@@ -50,6 +50,18 @@ services:
       timeout: 5s
       retries: 20
 
+  postgres-extensions:
+    image: ${PGVECTOR_IMAGE:-pgvector/pgvector:pg16}
+    container_name: vet-agent-dev-postgres-extensions
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file: *postgres-env-files
+    volumes:
+      - ./docker/postgres/ops/ensure-extensions.sh:/usr/local/bin/ensure-postgres-extensions:ro
+    command: ["bash", "/usr/local/bin/ensure-postgres-extensions"]
+
   litellm:
     image: ${LITELLM_IMAGE:-ghcr.io/berriai/litellm:main-stable}
     container_name: vet-agent-dev-litellm
@@ -80,6 +92,8 @@ services:
     depends_on:
       litellm:
         condition: service_healthy
+      postgres-extensions:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
     env_file: *mem0-env-files
@@ -111,8 +125,8 @@ services:
     container_name: vet-agent-dev-app
     restart: unless-stopped
     depends_on:
-      postgres:
-        condition: service_healthy
+      postgres-extensions:
+        condition: service_completed_successfully
       litellm:
         condition: service_healthy
       mem0:

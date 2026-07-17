@@ -84,12 +84,39 @@ create_owned_database() {
     created_databases="${created_databases}${database_name} "
 }
 
+create_database_extensions() {
+    local database_name="$1"
+    shift
+
+    if [ -z "$database_name" ]; then
+        echo "Database name must be non-empty." >&2
+        exit 1
+    fi
+
+    for extension_name in "$@"; do
+        if [ -z "$extension_name" ]; then
+            echo "Extension name must be non-empty." >&2
+            exit 1
+        fi
+
+        psql \
+            -v ON_ERROR_STOP=1 \
+            --username "$admin_user" \
+            --dbname "$database_name" \
+            --set=extension_name="$extension_name" <<-'EOSQL'
+CREATE EXTENSION IF NOT EXISTS :"extension_name";
+EOSQL
+    done
+}
+
 create_login_role "$vet_agent_user" "$vet_agent_password"
 create_owned_database "$vet_agent_database" "$vet_agent_user"
+create_database_extensions "$vet_agent_database" vector pg_trgm
 
 create_login_role "$litellm_user" "$litellm_password"
 create_owned_database "$litellm_database" "$litellm_user"
 
 create_login_role "$mem0_user" "$mem0_password"
 create_owned_database "$mem0_vector_database" "$mem0_user"
+create_database_extensions "$mem0_vector_database" vector
 create_owned_database "$mem0_app_database" "$mem0_user"

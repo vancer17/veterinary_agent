@@ -80,6 +80,7 @@ prod-build -> prod-deps -> prod-migrate -> prod-seed -> start app
 如果只需要执行迁移或 seed：
 
 ```bash
+make prod-db-extensions
 make prod-migrate
 make prod-seed
 ```
@@ -147,7 +148,14 @@ mem0_app      -> Mem0 REST Server 用户、API key、请求日志等
 
 表结构迁移不在初始化脚本中手写：Agent 使用本项目 Alembic，Mem0 使用镜像内官方 Alembic，LiteLLM 使用自身启动迁移。
 
-重要：`docker/postgres/init` 只会在 PostgreSQL 数据卷为空时执行。若从旧的多 PostgreSQL 容器编排升级，需先用 `pg_dump` / `pg_restore` 或等价备份工具迁移旧 `litellm-postgres`、`mem0-postgres` 数据；新环境直接初始化则无需手工建表。
+PostgreSQL 扩展由初始化脚本和 `postgres-extensions` 一次性任务负责：
+
+```text
+vet_agent   -> vector, pg_trgm
+mem0_vector -> vector
+```
+
+重要：`docker/postgres/init` 只会在 PostgreSQL 数据卷为空时执行。若生产机已经存在数据卷，首次迁移前需先执行 `make prod-db-extensions`，补齐扩展后再运行 `make prod-migrate`。若从旧的多 PostgreSQL 容器编排升级，需先用 `pg_dump` / `pg_restore` 或等价备份工具迁移旧 `litellm-postgres`、`mem0-postgres` 数据；新环境直接初始化则无需手工建表。
 
 ## 服务边界
 

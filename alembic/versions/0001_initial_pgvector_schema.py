@@ -19,15 +19,36 @@ down_revision = None
 branch_labels = None
 depends_on = None
 
+REQUIRED_EXTENSIONS = ("vector", "pg_trgm")
+
+
+def _assert_required_extensions() -> None:
+    """校验业务库已由初始化任务安装必要 PostgreSQL 扩展。
+
+    :return: 返回函数执行结果。
+    """
+    bind = op.get_bind()
+    query = sa.text(
+        "SELECT extname FROM pg_extension WHERE extname IN :extension_names"
+    ).bindparams(sa.bindparam("extension_names", expanding=True))
+    installed = set(bind.execute(query, {"extension_names": REQUIRED_EXTENSIONS}).scalars())
+    missing = sorted(set(REQUIRED_EXTENSIONS) - installed)
+
+    if missing:
+        missing_text = ", ".join(missing)
+        raise RuntimeError(
+            "业务库缺少 PostgreSQL 扩展："
+            f"{missing_text}。请先执行 docker compose 中的 postgres-extensions "
+            "一次性任务，或通过 make prod-db-extensions 补齐扩展后再运行 Alembic。"
+        )
+
 
 def upgrade() -> None:
     """执行 Alembic 正向迁移。
 
     :return: 返回函数执行结果。
     """
-    bind = op.get_bind()
-    bind.execute(sa.text("CREATE EXTENSION IF NOT EXISTS vector"))
-    bind.execute(sa.text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
+    _assert_required_extensions()
 
     op.create_table(
         "safety_rules",
