@@ -89,8 +89,7 @@ services:
       - vet_agent_dev_mem0_history:/app/history
       - ./docker/mem0/configure_mem0.py:/app-bootstrap/configure_mem0.py:ro
     command: >
-      sh -c "python -c 'import psycopg' 2>/dev/null || pip install --no-cache-dir psycopg-binary
-      && alembic upgrade head
+      sh -c "alembic upgrade head
       && python /app-bootstrap/configure_mem0.py
       && uvicorn main:app --host 0.0.0.0 --port 8000"
     healthcheck:
