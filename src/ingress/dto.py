@@ -1,3 +1,10 @@
+"""
+文件：src/ingress/dto.py
+作用：提供外部 API 入口、请求 DTO、错误处理与编排器适配。
+说明：本文件遵循项目标准文件树编排；跨包引用应通过对应包的 __init__.py 暴露能力。
+"""
+
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -65,11 +72,20 @@ class IngressRequest(BaseModel):
 
     @model_validator(mode="after")
     def require_input_or_attachment(self) -> IngressRequest:
+        """执行 require_input_or_attachment 业务逻辑。
+
+        :return: 返回函数执行结果。
+        """
         if not _has_input(self.input) and not self.attachments:
             raise ValueError("input or attachments is required")
         return self
 
     def to_agent_turn_request(self, source_path: str) -> AgentTurnRequest:
+        """执行 to_agent_turn_request 业务逻辑。
+
+        :param source_path: 来源接口路径。
+        :return: 返回函数执行结果。
+        """
         request_id = self.request_id or str(uuid4())
         trace_id = self.trace_id or request_id
         response_mode: ResponseMode = "stream" if self.stream else "sync"
@@ -124,6 +140,11 @@ class AgentTurnRequest(BaseModel):
 
 
 def _has_input(value: InputPayload | None) -> bool:
+    """执行 _has_input 内部辅助逻辑。
+
+    :param value: 待处理值。
+    :return: 返回函数执行结果。
+    """
     if value is None:
         return False
     if isinstance(value, str):

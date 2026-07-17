@@ -1,10 +1,17 @@
+"""
+文件：src/vet_agent/agents/safety.py
+作用：提供多 Agent 协作中的任务拆分、安全、问诊、记忆抽取与回答生成能力。
+说明：本文件遵循项目标准文件树编排；跨包引用应通过对应包的 __init__.py 暴露能力。
+"""
+
+
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
 
-from vet_agent.contracts import AttachmentRef, SafetySignal
-from vet_agent.repositories.rules import RuleRepository, SafetyRule, compile_regex
+from vet_agent import AttachmentRef, SafetySignal
+from vet_agent.repositories import RuleRepository, SafetyRule, compile_regex
 
 
 @dataclass(frozen=True)
@@ -15,6 +22,10 @@ class SafetyAssessment:
 
     @property
     def highest_status(self) -> str:
+        """执行 highest_status 业务逻辑。
+
+        :return: 返回函数执行结果。
+        """
         if self.blocked:
             return "blocked"
         if self.escalated:
@@ -26,9 +37,20 @@ class SafetyAgent:
     """Deterministic clinical safety gate that runs before and after LLM calls."""
 
     def __init__(self, rule_repository: RuleRepository) -> None:
+        """初始化当前对象。
+
+        :param rule_repository: 参数 rule_repository。
+        :return: 无返回值。
+        """
         self.rule_repository = rule_repository
 
     def analyze(self, text: str, attachments: list[AttachmentRef]) -> SafetyAssessment:
+        """分析输入内容并生成安全评估。
+
+        :param text: 待处理文本。
+        :param attachments: 附件引用列表。
+        :return: 返回函数执行结果。
+        """
         lowered = text.lower()
         signals: list[SafetySignal] = []
         rule_matches: dict[str, tuple[SafetyRule, list[str]]] = {}
@@ -59,6 +81,11 @@ class SafetyAgent:
         )
 
     def sanitize_output(self, text: str) -> tuple[str, list[SafetySignal]]:
+        """执行 sanitize_output 业务逻辑。
+
+        :param text: 待处理文本。
+        :return: 返回函数执行结果。
+        """
         sanitized = text
         signals: list[SafetySignal] = []
         changed = False
@@ -81,9 +108,19 @@ class SafetyAgent:
         return sanitized, signals
 
     def _looks_medical(self, text: str) -> bool:
+        """执行 _looks_medical 内部辅助逻辑。
+
+        :param text: 待处理文本。
+        :return: 返回函数执行结果。
+        """
         return self._matches_any_keyword(text, "medical_output_marker")
 
     def forced_response(self, assessment: SafetyAssessment) -> str:
+        """执行 forced_response 业务逻辑。
+
+        :param assessment: 参数 assessment。
+        :return: 返回函数执行结果。
+        """
         codes = {signal.code for signal in assessment.signals}
         for code in ("RADIOLOGY_GATE", "TOXIC_SUBSTANCE", "EMERGENCY_RED_FLAG"):
             if code not in codes:
@@ -100,6 +137,13 @@ class SafetyAgent:
         return "当前信息需要进一步确认。"
 
     def _match_rule(self, rule: SafetyRule, lowered_text: str, attachments: list[AttachmentRef]) -> list[str]:
+        """执行 _match_rule 内部辅助逻辑。
+
+        :param rule: 规则对象。
+        :param lowered_text: 参数 lowered_text。
+        :param attachments: 附件引用列表。
+        :return: 返回函数执行结果。
+        """
         if rule.match_type == "keyword":
             return [rule.pattern for _ in [0] if rule.pattern.lower() in lowered_text]
         if rule.match_type == "regex":
@@ -119,9 +163,20 @@ class SafetyAgent:
         return []
 
     def _rules_by_type(self, rule_type: str) -> list[SafetyRule]:
+        """执行 _rules_by_type 内部辅助逻辑。
+
+        :param rule_type: 规则类型。
+        :return: 返回函数执行结果。
+        """
         return [rule for rule in self.rule_repository.safety_rules() if rule.rule_type == rule_type]
 
     def _matches_any_keyword(self, text: str, rule_type: str) -> bool:
+        """执行 _matches_any_keyword 内部辅助逻辑。
+
+        :param text: 待处理文本。
+        :param rule_type: 规则类型。
+        :return: 返回函数执行结果。
+        """
         lowered = text.lower()
         for rule in self._rules_by_type(rule_type):
             if rule.match_type == "keyword" and rule.pattern.lower() in lowered:
@@ -131,6 +186,11 @@ class SafetyAgent:
         return False
 
     def _response_template_for(self, code: str) -> str | None:
+        """执行 _response_template_for 内部辅助逻辑。
+
+        :param code: 错误或规则代码。
+        :return: 返回函数执行结果。
+        """
         for rule in self.rule_repository.safety_rules():
             if rule.code == code and rule.response_template:
                 return rule.response_template

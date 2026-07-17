@@ -1,10 +1,17 @@
+"""
+文件：src/vet_agent/services/context.py
+作用：承载业务服务、记忆、报告解析、权限与治理逻辑。
+说明：本文件遵循项目标准文件树编排；跨包引用应通过对应包的 __init__.py 暴露能力。
+"""
+
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from vet_agent.contracts import Evidence, VetContext
+from vet_agent import Evidence, VetContext
 
 
 @dataclass
@@ -17,6 +24,10 @@ class PetContext:
     evidence: list[Evidence] = field(default_factory=list)
 
     def summary(self) -> str:
+        """执行 summary 业务逻辑。
+
+        :return: 返回函数执行结果。
+        """
         profile = self.profile
         telemetry = self.telemetry
         risks = ", ".join(
@@ -36,6 +47,12 @@ class PetContextProvider:
     """Aggregates existing pet data from trusted backend context."""
 
     async def load(self, vet_context: VetContext, metadata: dict[str, Any]) -> PetContext:
+        """加载结构化数据。
+
+        :param vet_context: 兽医业务上下文。
+        :param metadata: 附加元数据。
+        :return: 返回函数执行结果。
+        """
         supplied = vet_context.pet_info or {}
         profile = {
             "species": supplied.get("species") or metadata.get("species") or "未知",

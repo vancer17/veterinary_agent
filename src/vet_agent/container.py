@@ -1,40 +1,53 @@
+"""
+文件：src/vet_agent/container.py
+作用：提供兽医 Agent 项目的业务实现。
+说明：本文件遵循项目标准文件树编排；跨包引用应通过对应包的 __init__.py 暴露能力。
+"""
+
+
 from __future__ import annotations
 
 from functools import lru_cache
 
-from vet_agent.config import Settings
-from vet_agent.orchestrator import VetOrchestrator
-from vet_agent.runtime.qwen import QwenClient
-from vet_agent.repositories.knowledge import (
+from vet_agent import Settings
+from vet_agent import VetOrchestrator
+from vet_agent.repositories import (
     FallbackKnowledgeRepository,
     FileKnowledgeRepository,
+    FallbackRuleRepository,
+    FileRuleRepository,
     PostgresKnowledgeRepository,
+    PostgresRuleRepository,
 )
-from vet_agent.repositories.rules import FallbackRuleRepository, FileRuleRepository, PostgresRuleRepository
-from vet_agent.runtime.embeddings import QwenEmbeddingClient
-from vet_agent.services.context import PetContextProvider
-from vet_agent.services.access_control import (
+from vet_agent.runtime import QwenClient, QwenEmbeddingClient
+from vet_agent.services import (
     AccessControlService,
     JsonAccessControlStore,
-    PostgresAccessControlStore,
-)
-from vet_agent.services.knowledge import KnowledgeService
-from vet_agent.services.memory import MemoryService
-from vet_agent.services.postgres_memory import PostgresMemoryService
-from vet_agent.services.postgres_trace import PostgresLogicTraceStore
-from vet_agent.services.rag_governance import (
     JsonRagGovernanceStore,
+    JsonReportStore,
+    KnowledgeService,
+    LogicTraceStore,
+    MemoryService,
+    PetContextProvider,
+    PostgresAccessControlStore,
+    PostgresLogicTraceStore,
+    PostgresMemoryService,
     PostgresRagGovernanceStore,
+    PostgresReportStore,
     RagGovernanceService,
+    ReportIngestionService,
+    make_semantic_memory,
 )
-from vet_agent.services.reports import JsonReportStore, PostgresReportStore, ReportIngestionService
-from vet_agent.services.semantic_memory import make_semantic_memory
-from vet_agent.services.trace import LogicTraceStore
-from vet_agent.stores.json_store import JsonDocumentStore
+from vet_agent.stores import JsonDocumentStore
 
 
 class Container:
     def __init__(self, settings: Settings) -> None:
+        """初始化当前对象。
+
+        :param settings: 应用配置对象。
+        :return: 无返回值。
+        """
         self.settings = settings
         self.semantic_memory = make_semantic_memory(settings)
         self.memory_service = (
@@ -98,6 +111,10 @@ class Container:
 
     @property
     def ready(self) -> bool:
+        """返回服务就绪检查结果。
+
+        :return: 返回函数执行结果。
+        """
         return (
             self.settings.litellm_configured
             and self.rule_repository.is_ready()
@@ -107,4 +124,8 @@ class Container:
 
 @lru_cache
 def get_container() -> Container:
+    """执行 get_container 业务逻辑。
+
+    :return: 返回函数执行结果。
+    """
     return Container(Settings.from_env())

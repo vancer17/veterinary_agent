@@ -1,3 +1,10 @@
+"""
+文件：scripts/dev_request.py
+作用：提供开发、导入与初始化脚本。
+说明：本文件遵循项目标准文件树编排；跨包引用应通过对应包的 __init__.py 暴露能力。
+"""
+
+
 from __future__ import annotations
 
 import argparse
@@ -37,6 +44,10 @@ BUSINESS_SCENARIOS = (
 
 
 def main() -> None:
+    """执行命令行入口逻辑。
+
+    :return: 返回函数执行结果。
+    """
     parser = argparse.ArgumentParser(description="Send dev requests to the Vet Agent API.")
     parser.add_argument(
         "scenario",
@@ -108,6 +119,14 @@ def run_scenario(
     full: bool,
     business_run_id: str | None = None,
 ) -> None:
+    """执行 run_scenario 业务逻辑。
+
+    :param client: 参数 client。
+    :param scenario: 参数 scenario。
+    :param full: 参数 full。
+    :param business_run_id: 参数 business_run_id。
+    :return: 返回函数执行结果。
+    """
     print(f"\n=== {scenario} ===")
     if scenario == "health":
         print_response(client.get("/health"), full=full)
@@ -170,6 +189,12 @@ def run_scenario(
 
 
 def memory_read(client: httpx.Client, *, full: bool) -> None:
+    """执行 memory_read 业务逻辑。
+
+    :param client: 参数 client。
+    :param full: 参数 full。
+    :return: 返回函数执行结果。
+    """
     response = client.get(
         "/memories",
         params={
@@ -182,6 +207,12 @@ def memory_read(client: httpx.Client, *, full: bool) -> None:
 
 
 def business_memory_read(client: httpx.Client, payload: dict[str, Any]) -> None:
+    """执行 business_memory_read 业务逻辑。
+
+    :param client: 参数 client。
+    :param payload: 请求载荷。
+    :return: 返回函数执行结果。
+    """
     vet_context = payload["vet_context"]
     response = client.get(
         "/memories",
@@ -226,6 +257,13 @@ def business_memory_read(client: httpx.Client, payload: dict[str, Any]) -> None:
 
 
 def stream_response(client: httpx.Client, payload: dict[str, Any], *, full: bool) -> None:
+    """执行 stream_response 业务逻辑。
+
+    :param client: 参数 client。
+    :param payload: 请求载荷。
+    :param full: 参数 full。
+    :return: 返回函数执行结果。
+    """
     with client.stream("POST", "/agent/turns", json=payload) as response:
         body = response.read().decode("utf-8", errors="replace")
     event_names = [
@@ -247,6 +285,12 @@ def stream_response(client: httpx.Client, payload: dict[str, Any], *, full: bool
 
 
 def print_response(response: httpx.Response, *, full: bool) -> None:
+    """执行 print_response 业务逻辑。
+
+    :param response: 响应对象。
+    :param full: 参数 full。
+    :return: 返回函数执行结果。
+    """
     body = safe_json(response)
     print(f"HTTP {response.status_code}")
     if full:
@@ -276,6 +320,10 @@ def print_response(response: httpx.Response, *, full: bool) -> None:
 
 
 def headers() -> dict[str, str]:
+    """执行 headers 业务逻辑。
+
+    :return: 返回函数执行结果。
+    """
     result = {"Content-Type": "application/json"}
     api_key = (
         os.getenv("VET_AGENT_DEV_API_KEY")
@@ -288,15 +336,31 @@ def headers() -> dict[str, str]:
 
 
 def first_csv_value(value: str) -> str | None:
+    """执行 first_csv_value 业务逻辑。
+
+    :param value: 待处理值。
+    :return: 返回函数执行结果。
+    """
     values = [item.strip() for item in value.split(",") if item.strip()]
     return values[0] if values else None
 
 
 def load_payload(path: Path) -> dict[str, Any]:
+    """执行 load_payload 业务逻辑。
+
+    :param path: 文件或接口路径。
+    :return: 返回函数执行结果。
+    """
     return json.loads(path.read_text(encoding="utf-8"))
 
 
 def scenario_payload(scenario: str, business_run_id: str | None) -> dict[str, Any]:
+    """执行 scenario_payload 业务逻辑。
+
+    :param scenario: 参数 scenario。
+    :param business_run_id: 参数 business_run_id。
+    :return: 返回函数执行结果。
+    """
     payload = load_payload(PAYLOADS[scenario])
     if not scenario.startswith("business-") or not business_run_id:
         return payload
@@ -312,6 +376,11 @@ def scenario_payload(scenario: str, business_run_id: str | None) -> dict[str, An
 
 
 def safe_json(response: httpx.Response) -> dict[str, Any]:
+    """执行 safe_json 业务逻辑。
+
+    :param response: 响应对象。
+    :return: 返回函数执行结果。
+    """
     try:
         data = response.json()
     except json.JSONDecodeError:
@@ -320,12 +389,23 @@ def safe_json(response: httpx.Response) -> dict[str, Any]:
 
 
 def truncate(text: str, limit: int) -> str:
+    """执行 truncate 业务逻辑。
+
+    :param text: 待处理文本。
+    :param limit: 返回数量上限。
+    :return: 返回函数执行结果。
+    """
     if len(text) <= limit:
         return text
     return f"{text[:limit]}..."
 
 
 def print_curl_examples(base_url: str) -> None:
+    """执行 print_curl_examples 业务逻辑。
+
+    :param base_url: 参数 base_url。
+    :return: 返回函数执行结果。
+    """
     print("# Health")
     print(f"curl {base_url}/health")
     print()

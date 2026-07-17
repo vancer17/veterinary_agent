@@ -1,9 +1,10 @@
-"""initial pgvector schema
-
-Revision ID: 0001_initial
-Revises:
-Create Date: 2026-07-16
 """
+文件：alembic/versions/0001_initial_pgvector_schema.py
+作用：提供数据库迁移环境与版本脚本。
+说明：本文件遵循项目标准文件树编排；跨包引用应通过对应包的 __init__.py 暴露能力。
+"""
+
+
 
 from __future__ import annotations
 
@@ -20,6 +21,10 @@ depends_on = None
 
 
 def upgrade() -> None:
+    """执行 Alembic 正向迁移。
+
+    :return: 返回函数执行结果。
+    """
     bind = op.get_bind()
     bind.execute(sa.text("CREATE EXTENSION IF NOT EXISTS vector"))
     bind.execute(sa.text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
@@ -88,6 +93,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """执行 Alembic 回滚迁移。
+
+    :return: 返回函数执行结果。
+    """
     op.drop_index("idx_knowledge_chunks_domain", table_name="knowledge_chunks")
     op.drop_index("idx_knowledge_chunks_enabled", table_name="knowledge_chunks")
     op.drop_table("knowledge_chunks")

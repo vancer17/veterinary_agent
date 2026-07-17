@@ -1,3 +1,10 @@
+"""
+文件：src/vet_agent/contracts.py
+作用：提供兽医 Agent 项目的业务实现。
+说明：本文件遵循项目标准文件树编排；跨包引用应通过对应包的 __init__.py 暴露能力。
+"""
+
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -8,6 +15,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 
 def now_utc() -> datetime:
+    """执行 now_utc 业务逻辑。
+
+    :return: 返回函数执行结果。
+    """
     return datetime.now(UTC)
 
 
@@ -19,6 +30,10 @@ class InputItem(BaseModel):
     content: str | list[Any] | dict[str, Any] | None = None
 
     def text(self) -> str:
+        """执行 text 业务逻辑。
+
+        :return: 返回函数执行结果。
+        """
         if self.content is None:
             return ""
         if isinstance(self.content, str):
@@ -83,6 +98,11 @@ class IngressRequest(BaseModel):
     @field_validator("input", mode="before")
     @classmethod
     def normalize_input(cls, value: Any) -> list[Any]:
+        """执行 normalize_input 业务逻辑。
+
+        :param value: 待处理值。
+        :return: 返回函数执行结果。
+        """
         if value is None:
             return []
         if isinstance(value, str):
@@ -93,15 +113,27 @@ class IngressRequest(BaseModel):
 
     @model_validator(mode="after")
     def require_input_or_attachment(self) -> "IngressRequest":
+        """执行 require_input_or_attachment 业务逻辑。
+
+        :return: 返回函数执行结果。
+        """
         has_text = any(item.text().strip() for item in self.input)
         if not has_text and not self.attachments:
             raise ValueError("input or attachments must contain valid content")
         return self
 
     def joined_text(self) -> str:
+        """执行 joined_text 业务逻辑。
+
+        :return: 返回函数执行结果。
+        """
         return "\n".join(item.text() for item in self.input if item.text().strip())
 
     def ensure_ids(self) -> "IngressRequest":
+        """执行 ensure_ids 业务逻辑。
+
+        :return: 返回函数执行结果。
+        """
         if not self.request_id:
             self.request_id = f"req_{uuid4().hex}"
         if not self.trace_id:
@@ -134,6 +166,11 @@ class AgentTurnRequest(BaseModel):
 
     @classmethod
     def from_ingress(cls, ingress: IngressRequest) -> "AgentTurnRequest":
+        """执行 from_ingress 业务逻辑。
+
+        :param ingress: 参数 ingress。
+        :return: 返回函数执行结果。
+        """
         ingress.ensure_ids()
         return cls(
             request_context=RequestContext(
@@ -155,6 +192,10 @@ class AgentTurnRequest(BaseModel):
         )
 
     def joined_text(self) -> str:
+        """执行 joined_text 业务逻辑。
+
+        :return: 返回函数执行结果。
+        """
         return "\n".join(item.text() for item in self.input if item.text().strip())
 
 
@@ -214,6 +255,10 @@ class StreamEvent(BaseModel):
     data: dict[str, Any]
 
     def to_sse(self) -> str:
+        """转换为 SSE 文本帧。
+
+        :return: 返回函数执行结果。
+        """
         import json
 
         return f"event: {self.event}\ndata: {json.dumps(self.data, ensure_ascii=False)}\n\n"

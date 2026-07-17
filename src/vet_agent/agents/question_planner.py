@@ -1,10 +1,24 @@
+"""
+文件：src/vet_agent/agents/question_planner.py
+作用：提供多 Agent 协作中的任务拆分、安全、问诊、记忆抽取与回答生成能力。
+说明：本文件遵循项目标准文件树编排；跨包引用应通过对应包的 __init__.py 暴露能力。
+"""
+
+
 from __future__ import annotations
 
-from vet_agent.services.context import PetContext
+from vet_agent.services import PetContext
 
 
 class QuestionPlanner:
     def plan(self, user_text: str, pet_context: PetContext, max_questions: int = 3) -> list[str]:
+        """执行 plan 业务逻辑。
+
+        :param user_text: 用户输入文本。
+        :param pet_context: 宠物上下文。
+        :param max_questions: 最多追问数量。
+        :return: 返回函数执行结果。
+        """
         text = user_text.lower()
         questions: list[str] = []
         if not any(term in text for term in ("多久", "今天", "昨天", "小时", "天", "刚刚")):

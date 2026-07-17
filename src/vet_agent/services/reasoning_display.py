@@ -1,8 +1,15 @@
+"""
+文件：src/vet_agent/services/reasoning_display.py
+作用：承载业务服务、记忆、报告解析、权限与治理逻辑。
+说明：本文件遵循项目标准文件树编排；跨包引用应通过对应包的 __init__.py 暴露能力。
+"""
+
+
 from __future__ import annotations
 
 from uuid import uuid4
 
-from vet_agent.contracts import Evidence, ReasoningDisplay, SafetySignal
+from vet_agent import Evidence, ReasoningDisplay, SafetySignal
 
 
 SLOT_LABELS = {
@@ -26,6 +33,11 @@ class ReasoningDisplayBuilder:
     """Builds safe user-visible reasoning summaries, not hidden chain-of-thought."""
 
     def user_answer_evidence(self, consultation_state: dict | None) -> list[Evidence]:
+        """执行 user_answer_evidence 业务逻辑。
+
+        :param consultation_state: 问诊状态。
+        :return: 返回函数执行结果。
+        """
         slots = dict((consultation_state or {}).get("slots") or {})
         evidence: list[Evidence] = []
         for slot, value in slots.items():
@@ -61,6 +73,16 @@ class ReasoningDisplayBuilder:
         missing_slots: list[str] | None = None,
         safety_signals: list[SafetySignal] | None = None,
     ) -> ReasoningDisplay:
+        """执行 build_turn_display 业务逻辑。
+
+        :param status: 业务状态。
+        :param segment_id: 片段标识。
+        :param evidence: 证据列表。
+        :param consultation_state: 问诊状态。
+        :param missing_slots: 缺失槽位列表。
+        :param safety_signals: 安全信号列表。
+        :return: 返回函数执行结果。
+        """
         title = "本轮思考过程"
         if status == "requires_followup":
             text = self._followup_text(consultation_state, missing_slots or [], evidence)
@@ -88,6 +110,13 @@ class ReasoningDisplayBuilder:
         evidence: list[Evidence],
         status: str,
     ) -> ReasoningDisplay:
+        """执行 build_multi_task_display 业务逻辑。
+
+        :param task_summaries: 任务摘要列表。
+        :param evidence: 证据列表。
+        :param status: 业务状态。
+        :return: 返回函数执行结果。
+        """
         task_text = "、".join(
             f"{item.get('title', '咨询任务')}({item.get('status', 'unknown')})"
             for item in task_summaries[:5]
@@ -111,6 +140,11 @@ class ReasoningDisplayBuilder:
         )
 
     def references_from_evidence(self, evidence: list[Evidence]) -> list[dict]:
+        """执行 references_from_evidence 业务逻辑。
+
+        :param evidence: 证据列表。
+        :return: 返回函数执行结果。
+        """
         references = []
         seen: set[tuple[str, str | None]] = set()
         for item in evidence:
@@ -138,6 +172,13 @@ class ReasoningDisplayBuilder:
         missing_slots: list[str],
         evidence: list[Evidence],
     ) -> str:
+        """执行 _followup_text 内部辅助逻辑。
+
+        :param consultation_state: 问诊状态。
+        :param missing_slots: 缺失槽位列表。
+        :param evidence: 证据列表。
+        :return: 返回函数执行结果。
+        """
         known = self._known_user_answers(consultation_state, limit=5)
         missing = "、".join(SLOT_LABELS.get(slot, slot) for slot in missing_slots[:5]) or "关键问诊信息"
         basis = self._evidence_source_summary(evidence)
@@ -154,6 +195,13 @@ class ReasoningDisplayBuilder:
         evidence: list[Evidence],
         safety_signals: list[SafetySignal],
     ) -> str:
+        """执行 _completed_text 内部辅助逻辑。
+
+        :param consultation_state: 问诊状态。
+        :param evidence: 证据列表。
+        :param safety_signals: 安全信号列表。
+        :return: 返回函数执行结果。
+        """
         known = self._known_user_answers(consultation_state, limit=6)
         basis = self._evidence_source_summary(evidence)
         safety = self._safety_signal_summary(safety_signals)
@@ -165,6 +213,12 @@ class ReasoningDisplayBuilder:
         )
 
     def _safety_text(self, status: str, safety_signals: list[SafetySignal]) -> str:
+        """执行 _safety_text 内部辅助逻辑。
+
+        :param status: 业务状态。
+        :param safety_signals: 安全信号列表。
+        :return: 返回函数执行结果。
+        """
         signal_text = self._safety_signal_summary(safety_signals)
         action = "阻断了本轮请求" if status == "blocked" else "优先升级为线下兽医处理"
         return (
@@ -173,6 +227,12 @@ class ReasoningDisplayBuilder:
         )
 
     def _known_user_answers(self, consultation_state: dict | None, *, limit: int) -> str:
+        """执行 _known_user_answers 内部辅助逻辑。
+
+        :param consultation_state: 问诊状态。
+        :param limit: 返回数量上限。
+        :return: 返回函数执行结果。
+        """
         if not consultation_state:
             return ""
         parts = []
@@ -186,6 +246,11 @@ class ReasoningDisplayBuilder:
         return "、".join(parts)
 
     def _evidence_source_summary(self, evidence: list[Evidence]) -> str:
+        """执行 _evidence_source_summary 内部辅助逻辑。
+
+        :param evidence: 证据列表。
+        :return: 返回函数执行结果。
+        """
         public_sources: list[str] = []
         internal_count = 0
         user_count = 0
@@ -207,6 +272,11 @@ class ReasoningDisplayBuilder:
         return "、".join(parts)
 
     def _safety_signal_summary(self, safety_signals: list[SafetySignal]) -> str:
+        """执行 _safety_signal_summary 内部辅助逻辑。
+
+        :param safety_signals: 安全信号列表。
+        :return: 返回函数执行结果。
+        """
         if not safety_signals:
             return "，未发现需要立刻中断普通问诊流程的安全信号"
         labels = []
@@ -216,6 +286,11 @@ class ReasoningDisplayBuilder:
         return f"，发现安全信号：{'、'.join(labels)}"
 
     def _unique(self, values: list[str]) -> list[str]:
+        """执行 _unique 内部辅助逻辑。
+
+        :param values: 待处理值列表。
+        :return: 返回函数执行结果。
+        """
         seen: set[str] = set()
         result: list[str] = []
         for value in values:

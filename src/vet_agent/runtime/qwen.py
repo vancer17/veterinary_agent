@@ -1,3 +1,10 @@
+"""
+文件：src/vet_agent/runtime/qwen.py
+作用：封装模型调用、向量生成与外部运行时能力。
+说明：本文件遵循项目标准文件树编排；跨包引用应通过对应包的 __init__.py 暴露能力。
+"""
+
+
 from __future__ import annotations
 
 import asyncio
@@ -7,13 +14,18 @@ from typing import Any
 
 import httpx
 
-from vet_agent.config import Settings
+from vet_agent import Settings
 
 
 class QwenClient:
     """OpenAI-compatible LiteLLM proxy client for Qwen-family models."""
 
     def __init__(self, settings: Settings) -> None:
+        """初始化当前对象。
+
+        :param settings: 应用配置对象。
+        :return: 无返回值。
+        """
         self.settings = settings
         self._semaphore = asyncio.Semaphore(max(1, settings.qwen_max_concurrent_requests))
         self._pace_lock = asyncio.Lock()
@@ -23,6 +35,10 @@ class QwenClient:
 
     @property
     def available(self) -> bool:
+        """执行 available 业务逻辑。
+
+        :return: 返回函数执行结果。
+        """
         return self.settings.litellm_configured
 
     async def chat(
@@ -32,6 +48,13 @@ class QwenClient:
         model: str | None = None,
         temperature: float = 0.2,
     ) -> str:
+        """执行 chat 业务逻辑。
+
+        :param messages: 参数 messages。
+        :param model: 模型名称。
+        :param temperature: 参数 temperature。
+        :return: 返回函数执行结果。
+        """
         if not self.available:
             raise RuntimeError("LiteLLM proxy is not configured")
 
@@ -65,6 +88,14 @@ class QwenClient:
         model: str | None = None,
         temperature: float = 0.0,
     ) -> str:
+        """执行 chat_with_images 业务逻辑。
+
+        :param prompt: 参数 prompt。
+        :param image_urls: 参数 image_urls。
+        :param model: 模型名称。
+        :param temperature: 参数 temperature。
+        :return: 返回函数执行结果。
+        """
         if not image_urls:
             raise ValueError("image_urls is required")
         if not self.available:
@@ -102,6 +133,13 @@ class QwenClient:
         model: str,
         temperature: float,
     ) -> str:
+        """执行 _chat_with_retries 内部辅助逻辑。
+
+        :param messages: 参数 messages。
+        :param model: 模型名称。
+        :param temperature: 参数 temperature。
+        :return: 返回函数执行结果。
+        """
         last_error: Exception | None = None
         for attempt in range(self.settings.qwen_max_retries + 1):
             try:
@@ -120,6 +158,13 @@ class QwenClient:
         model: str,
         temperature: float,
     ) -> str:
+        """执行 _send_chat 内部辅助逻辑。
+
+        :param messages: 参数 messages。
+        :param model: 模型名称。
+        :param temperature: 参数 temperature。
+        :return: 返回函数执行结果。
+        """
         payload: dict[str, Any] = {
             "model": model,
             "messages": messages,
@@ -141,9 +186,17 @@ class QwenClient:
         return data["choices"][0]["message"]["content"]
 
     async def close(self) -> None:
+        """执行 close 业务逻辑。
+
+        :return: 返回函数执行结果。
+        """
         await asyncio.sleep(0)
 
     async def _pace(self) -> None:
+        """执行 _pace 内部辅助逻辑。
+
+        :return: 返回函数执行结果。
+        """
         min_interval = max(0.0, self.settings.qwen_min_interval_seconds)
         if min_interval <= 0:
             return
@@ -155,6 +208,11 @@ class QwenClient:
             self._last_request_at = time.monotonic()
 
     def _model_candidates(self, model: str | None) -> list[str]:
+        """执行 _model_candidates 内部辅助逻辑。
+
+        :param model: 模型名称。
+        :return: 返回函数执行结果。
+        """
         primary = model or self.settings.default_model
         candidates = [primary]
         for fallback in self.settings.qwen_fallback_models:
@@ -163,11 +221,21 @@ class QwenClient:
         return candidates
 
     def _retry_delay(self, attempt: int) -> float:
+        """执行 _retry_delay 内部辅助逻辑。
+
+        :param attempt: 参数 attempt。
+        :return: 返回函数执行结果。
+        """
         base = max(0.05, self.settings.qwen_retry_base_delay_seconds)
         jitter = random.uniform(0, base / 2)
         return min(8.0, base * (2**attempt) + jitter)
 
     def _retryable_exception(self, exc: Exception) -> bool:
+        """执行 _retryable_exception 内部辅助逻辑。
+
+        :param exc: 异常对象。
+        :return: 返回函数执行结果。
+        """
         if isinstance(exc, (httpx.TimeoutException, httpx.ConnectError, httpx.RemoteProtocolError)):
             return True
         if isinstance(exc, httpx.HTTPStatusError):
@@ -175,16 +243,28 @@ class QwenClient:
         return False
 
     def _record_success(self) -> None:
+        """执行 _record_success 内部辅助逻辑。
+
+        :return: 返回函数执行结果。
+        """
         self._failure_count = 0
         self._circuit_open_until = 0.0
 
     def _record_failure(self) -> None:
+        """执行 _record_failure 内部辅助逻辑。
+
+        :return: 返回函数执行结果。
+        """
         self._failure_count += 1
         threshold = max(1, self.settings.qwen_circuit_breaker_failure_threshold)
         if self._failure_count >= threshold:
             self._circuit_open_until = time.monotonic() + max(1.0, self.settings.qwen_circuit_breaker_cooldown_seconds)
 
     def _circuit_open(self) -> bool:
+        """执行 _circuit_open 内部辅助逻辑。
+
+        :return: 返回函数执行结果。
+        """
         if self._circuit_open_until <= 0:
             return False
         if time.monotonic() >= self._circuit_open_until:

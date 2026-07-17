@@ -1,3 +1,10 @@
+"""
+文件：src/vet_agent/agents/task_splitter.py
+作用：提供多 Agent 协作中的任务拆分、安全、问诊、记忆抽取与回答生成能力。
+说明：本文件遵循项目标准文件树编排；跨包引用应通过对应包的 __init__.py 暴露能力。
+"""
+
+
 from __future__ import annotations
 
 import json
@@ -7,9 +14,9 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from vet_agent.config import Settings
-from vet_agent.repositories.rules import RuleRepository
-from vet_agent.runtime.qwen import QwenClient
+from vet_agent import Settings
+from vet_agent.repositories import RuleRepository
+from vet_agent.runtime import QwenClient
 
 
 DOMAIN_TITLES = {
@@ -33,6 +40,10 @@ class SplitTask:
 
     @property
     def state_key(self) -> str:
+        """执行 state_key 业务逻辑。
+
+        :return: 返回函数执行结果。
+        """
         return self.domain
 
 
@@ -59,9 +70,19 @@ class RuleTaskSplitter:
     """Splits one user turn into domain-level tasks using consultation rules."""
 
     def __init__(self, rule_repository: RuleRepository) -> None:
+        """初始化当前对象。
+
+        :param rule_repository: 参数 rule_repository。
+        :return: 无返回值。
+        """
         self.rule_repository = rule_repository
 
     def split(self, user_text: str) -> list[SplitTask]:
+        """拆分用户输入中的多任务。
+
+        :param user_text: 用户输入文本。
+        :return: 返回函数执行结果。
+        """
         text = self._normalize(user_text)
         if not text:
             return []
@@ -91,6 +112,11 @@ class RuleTaskSplitter:
         return tasks
 
     def _matched_domains(self, text: str) -> list[str]:
+        """执行 _matched_domains 内部辅助逻辑。
+
+        :param text: 待处理文本。
+        :return: 返回函数执行结果。
+        """
         rules = self.rule_repository.consultation_rules()
         domains: list[str] = []
         for domain_rule in sorted(rules.domains.values(), key=lambda item: item.priority):
@@ -101,10 +127,22 @@ class RuleTaskSplitter:
         return domains
 
     def _primary_domain(self, text: str) -> str:
+        """执行 _primary_domain 内部辅助逻辑。
+
+        :param text: 待处理文本。
+        :return: 返回函数执行结果。
+        """
         matches = self._matched_domains(text)
         return matches[0] if matches else "general"
 
     def _task(self, index: int, text: str, domain: str) -> SplitTask:
+        """执行 _task 内部辅助逻辑。
+
+        :param index: 序号。
+        :param text: 待处理文本。
+        :param domain: 问诊领域。
+        :return: 返回函数执行结果。
+        """
         return SplitTask(
             task_id=f"task_{index:03d}",
             text=text.strip(),
@@ -114,6 +152,11 @@ class RuleTaskSplitter:
         )
 
     def _clauses(self, text: str) -> list[str]:
+        """执行 _clauses 内部辅助逻辑。
+
+        :param text: 待处理文本。
+        :return: 返回函数执行结果。
+        """
         normalized = re.sub(r"\s+", " ", text)
         normalized = re.sub(r"(另外|还有|顺便|同时|再问一下|再问|然后|还有一个问题)", "。\\1", normalized)
         parts = re.split(r"[。！？!?；;\n]+", normalized)
@@ -126,9 +169,19 @@ class RuleTaskSplitter:
         return clauses or [text]
 
     def _normalize(self, text: str) -> str:
+        """执行 _normalize 内部辅助逻辑。
+
+        :param text: 待处理文本。
+        :return: 返回函数执行结果。
+        """
         return text.strip()
 
     def _unique(self, values: list[str]) -> list[str]:
+        """执行 _unique 内部辅助逻辑。
+
+        :param values: 待处理值列表。
+        :return: 返回函数执行结果。
+        """
         seen: set[str] = set()
         result: list[str] = []
         for value in values:
@@ -148,6 +201,13 @@ class TaskSplitterAgent:
         qwen: QwenClient | None = None,
         settings: Settings | None = None,
     ) -> None:
+        """初始化当前对象。
+
+        :param rule_repository: 参数 rule_repository。
+        :param qwen: 参数 qwen。
+        :param settings: 应用配置对象。
+        :return: 无返回值。
+        """
         self.rule_repository = rule_repository
         self.qwen = qwen
         self.settings = settings
@@ -160,6 +220,13 @@ class TaskSplitterAgent:
         model: str | None = None,
         pet_context_summary: str | None = None,
     ) -> TaskSplitDecision:
+        """拆分用户输入中的多任务。
+
+        :param user_text: 用户输入文本。
+        :param model: 模型名称。
+        :param pet_context_summary: 参数 pet_context_summary。
+        :return: 返回函数执行结果。
+        """
         if not self._llm_enabled():
             return self._fallback(user_text, "llm_task_router_unavailable")
 
@@ -190,6 +257,12 @@ class TaskSplitterAgent:
             return self._fallback(user_text, f"{type(exc).__name__}")
 
     def _fallback(self, user_text: str, reason: str) -> TaskSplitDecision:
+        """执行 _fallback 内部辅助逻辑。
+
+        :param user_text: 用户输入文本。
+        :param reason: 参数 reason。
+        :return: 返回函数执行结果。
+        """
         return TaskSplitDecision(
             tasks=self.rule_splitter.split(user_text),
             strategy="rule_fallback",
@@ -197,6 +270,10 @@ class TaskSplitterAgent:
         )
 
     def _llm_enabled(self) -> bool:
+        """执行 _llm_enabled 内部辅助逻辑。
+
+        :return: 返回函数执行结果。
+        """
         if self.qwen is None or not self.qwen.available:
             return False
         if self.settings is not None and not self.settings.enable_llm_task_splitter:
@@ -204,6 +281,12 @@ class TaskSplitterAgent:
         return True
 
     def _prompt(self, user_text: str, pet_context_summary: str | None) -> str:
+        """执行 _prompt 内部辅助逻辑。
+
+        :param user_text: 用户输入文本。
+        :param pet_context_summary: 参数 pet_context_summary。
+        :return: 返回函数执行结果。
+        """
         return (
             "请把用户这一轮话拆成 1 到 5 个任务。相同 domain 的内容应合并成一个任务；"
             "不同 domain 的内容应拆开。不要编造用户没说过的信息。\n\n"
@@ -221,6 +304,10 @@ class TaskSplitterAgent:
         )
 
     def _domain_catalog_json(self) -> str:
+        """执行 _domain_catalog_json 内部辅助逻辑。
+
+        :return: 返回函数执行结果。
+        """
         rules = self.rule_repository.consultation_rules()
         domains: list[dict[str, Any]] = []
         for domain_rule in sorted(rules.domains.values(), key=lambda item: item.priority):
@@ -235,6 +322,12 @@ class TaskSplitterAgent:
         return json.dumps(domains, ensure_ascii=False)
 
     def _parse_llm_tasks(self, raw: str, user_text: str) -> list[SplitTask]:
+        """执行内部解析逻辑。
+
+        :param raw: 原始文本或响应内容。
+        :param user_text: 用户输入文本。
+        :return: 返回函数执行结果。
+        """
         payload = self._extract_json(raw)
         parsed = TaskRouterOutput.model_validate(payload)
         allowed_domains = set(self.rule_repository.consultation_rules().domains)
@@ -261,6 +354,11 @@ class TaskSplitterAgent:
         return tasks
 
     def _extract_json(self, raw: str) -> dict[str, Any]:
+        """执行内部抽取逻辑。
+
+        :param raw: 原始文本或响应内容。
+        :return: 返回函数执行结果。
+        """
         text = raw.strip()
         if text.startswith("```"):
             text = re.sub(r"^```(?:json)?\s*", "", text)

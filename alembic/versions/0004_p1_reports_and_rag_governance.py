@@ -1,9 +1,10 @@
-"""p1 reports and rag governance
-
-Revision ID: 0004_p1_governance
-Revises: 0003_access_control
-Create Date: 2026-07-16
 """
+文件：alembic/versions/0004_p1_reports_and_rag_governance.py
+作用：提供数据库迁移环境与版本脚本。
+说明：本文件遵循项目标准文件树编排；跨包引用应通过对应包的 __init__.py 暴露能力。
+"""
+
+
 
 from __future__ import annotations
 
@@ -19,6 +20,10 @@ depends_on = None
 
 
 def upgrade() -> None:
+    """执行 Alembic 正向迁移。
+
+    :return: 返回函数执行结果。
+    """
     op.add_column("knowledge_chunks", sa.Column("review_status", sa.Text(), nullable=False, server_default="approved"))
     op.add_column("knowledge_chunks", sa.Column("quality_score", sa.Float(), nullable=False, server_default="0.8"))
     op.add_column("knowledge_chunks", sa.Column("last_reviewed_at", sa.DateTime(timezone=True), nullable=True))
@@ -83,6 +88,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """执行 Alembic 回滚迁移。
+
+    :return: 返回函数执行结果。
+    """
     op.drop_index("idx_rag_audit_events_created_at", table_name="rag_audit_events")
     op.drop_index("idx_rag_audit_events_chunk_id", table_name="rag_audit_events")
     op.drop_table("rag_audit_events")

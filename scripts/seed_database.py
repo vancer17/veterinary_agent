@@ -1,3 +1,10 @@
+"""
+文件：scripts/seed_database.py
+作用：提供开发、导入与初始化脚本。
+说明：本文件遵循项目标准文件树编排；跨包引用应通过对应包的 __init__.py 暴露能力。
+"""
+
+
 from __future__ import annotations
 
 import argparse
@@ -10,18 +17,22 @@ from sqlalchemy import select
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from vet_agent.config import Settings
-from vet_agent.db.models import (
+from vet_agent import Settings
+from vet_agent.db import (
     ConsultationDomainModel,
     ConsultationSlotModel,
     KnowledgeChunkModel,
+    make_session_factory,
     SafetyRuleModel,
 )
-from vet_agent.db.session import make_session_factory
-from vet_agent.runtime.embeddings import QwenEmbeddingClient
+from vet_agent.runtime import QwenEmbeddingClient
 
 
 def main() -> None:
+    """执行命令行入口逻辑。
+
+    :return: 返回函数执行结果。
+    """
     parser = argparse.ArgumentParser(description="Seed PostgreSQL rule and RAG tables.")
     parser.add_argument("--database-url", default=os.getenv("DATABASE_URL"))
     parser.add_argument("--seed-dir", default="data/seeds")
@@ -42,6 +53,12 @@ def main() -> None:
 
 
 def seed_safety(session, path: Path) -> None:
+    """执行 seed_safety 业务逻辑。
+
+    :param session: 数据库会话。
+    :param path: 文件或接口路径。
+    :return: 返回函数执行结果。
+    """
     rows = json.loads(path.read_text(encoding="utf-8"))
     for item in rows:
         for pattern in item.get("patterns", []):
@@ -68,6 +85,12 @@ def seed_safety(session, path: Path) -> None:
 
 
 def seed_consultation(session, path: Path) -> None:
+    """执行 seed_consultation 业务逻辑。
+
+    :param session: 数据库会话。
+    :param path: 文件或接口路径。
+    :return: 返回函数执行结果。
+    """
     raw = json.loads(path.read_text(encoding="utf-8"))
     for item in raw.get("domains", []):
         model = session.get(ConsultationDomainModel, item["domain"])
@@ -89,6 +112,13 @@ def seed_consultation(session, path: Path) -> None:
 
 
 def seed_knowledge(session, path: Path, embedding_client: QwenEmbeddingClient | None) -> None:
+    """执行 seed_knowledge 业务逻辑。
+
+    :param session: 数据库会话。
+    :param path: 文件或接口路径。
+    :param embedding_client: 参数 embedding_client。
+    :return: 返回函数执行结果。
+    """
     rows = json.loads(path.read_text(encoding="utf-8"))
     for item in rows:
         embedding = embedding_client.embed(item["content"]) if embedding_client else None

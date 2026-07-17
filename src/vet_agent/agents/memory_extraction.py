@@ -1,3 +1,10 @@
+"""
+文件：src/vet_agent/agents/memory_extraction.py
+作用：提供多 Agent 协作中的任务拆分、安全、问诊、记忆抽取与回答生成能力。
+说明：本文件遵循项目标准文件树编排；跨包引用应通过对应包的 __init__.py 暴露能力。
+"""
+
+
 from __future__ import annotations
 
 import json
@@ -7,9 +14,9 @@ from typing import Any
 
 from pydantic import BaseModel, Field, ValidationError
 
-from vet_agent.config import Settings
-from vet_agent.contracts import AgentTurnResponse, TrustedIdentity, VetContext
-from vet_agent.runtime.qwen import QwenClient
+from vet_agent import Settings
+from vet_agent import AgentTurnResponse, TrustedIdentity, VetContext
+from vet_agent.runtime import QwenClient
 
 
 ALLOWED_FACT_TYPES = {
@@ -49,9 +56,19 @@ class MemoryExtractionOutput(BaseModel):
 
 class MemoryWritePolicy:
     def __init__(self, *, min_confidence: float) -> None:
+        """初始化当前对象。
+
+        :param min_confidence: 参数 min_confidence。
+        :return: 无返回值。
+        """
         self.min_confidence = min_confidence
 
     def filter(self, candidates: list[MemoryFactCandidate]) -> list[MemoryFactCandidate]:
+        """执行 filter 业务逻辑。
+
+        :param candidates: 参数 candidates。
+        :return: 返回函数执行结果。
+        """
         filtered: list[MemoryFactCandidate] = []
         seen: set[tuple[str, str]] = set()
         for item in candidates:
@@ -75,6 +92,12 @@ class MemoryExtractionAgent:
     """Extracts durable pet facts; PostgreSQL remains the authoritative fact store."""
 
     def __init__(self, qwen: QwenClient, settings: Settings) -> None:
+        """初始化当前对象。
+
+        :param qwen: 参数 qwen。
+        :param settings: 应用配置对象。
+        :return: 无返回值。
+        """
         self.qwen = qwen
         self.settings = settings
         self.policy = MemoryWritePolicy(min_confidence=settings.memory_extraction_min_confidence)
@@ -88,6 +111,15 @@ class MemoryExtractionAgent:
         vet_context: VetContext,
         model: str,
     ) -> list[MemoryFactCandidate]:
+        """抽取可持久化的宠物事实。
+
+        :param identity: 可信身份信息。
+        :param user_text: 用户输入文本。
+        :param response: 响应对象。
+        :param vet_context: 兽医业务上下文。
+        :param model: 模型名称。
+        :return: 返回函数执行结果。
+        """
         if not self.settings.enable_memory_extraction:
             return []
         candidates = [*self._from_pet_info(vet_context), *self._rule_candidates(user_text)]
@@ -96,9 +128,18 @@ class MemoryExtractionAgent:
         return self.policy.filter(candidates)
 
     def _llm_enabled(self) -> bool:
+        """执行 _llm_enabled 内部辅助逻辑。
+
+        :return: 返回函数执行结果。
+        """
         return self.settings.enable_llm_memory_extraction and self.qwen.available
 
     def _from_pet_info(self, vet_context: VetContext) -> list[MemoryFactCandidate]:
+        """执行 _from_pet_info 内部辅助逻辑。
+
+        :param vet_context: 兽医业务上下文。
+        :return: 返回函数执行结果。
+        """
         profile = vet_context.pet_info or {}
         mapping = {
             "species": profile.get("species"),
@@ -125,6 +166,11 @@ class MemoryExtractionAgent:
         return candidates
 
     def _rule_candidates(self, user_text: str) -> list[MemoryFactCandidate]:
+        """执行 _rule_candidates 内部辅助逻辑。
+
+        :param user_text: 用户输入文本。
+        :return: 返回函数执行结果。
+        """
         text = user_text.strip()
         if not text:
             return []
@@ -156,6 +202,15 @@ class MemoryExtractionAgent:
         vet_context: VetContext,
         model: str,
     ) -> list[MemoryFactCandidate]:
+        """执行 _llm_candidates 内部辅助逻辑。
+
+        :param identity: 可信身份信息。
+        :param user_text: 用户输入文本。
+        :param response: 响应对象。
+        :param vet_context: 兽医业务上下文。
+        :param model: 模型名称。
+        :return: 返回函数执行结果。
+        """
         try:
             raw = await self.qwen.chat(
                 [
@@ -197,6 +252,14 @@ class MemoryExtractionAgent:
         response: AgentTurnResponse,
         vet_context: VetContext,
     ) -> str:
+        """执行 _prompt 内部辅助逻辑。
+
+        :param identity: 可信身份信息。
+        :param user_text: 用户输入文本。
+        :param response: 响应对象。
+        :param vet_context: 兽医业务上下文。
+        :return: 返回函数执行结果。
+        """
         return json.dumps(
             {
                 "scope": {
@@ -232,6 +295,11 @@ class MemoryExtractionAgent:
         )
 
     def _extract_json(self, raw: str) -> dict[str, Any]:
+        """执行内部抽取逻辑。
+
+        :param raw: 原始文本或响应内容。
+        :return: 返回函数执行结果。
+        """
         text = raw.strip()
         if text.startswith("```"):
             text = re.sub(r"^```(?:json)?\s*", "", text)
@@ -255,6 +323,15 @@ class MemoryExtractionAgent:
         confidence: float,
         source_text: str,
     ) -> MemoryFactCandidate:
+        """执行 _candidate 内部辅助逻辑。
+
+        :param fact_type: 事实类型。
+        :param fact_key: 事实键名。
+        :param fact_value: 事实内容。
+        :param confidence: 置信度。
+        :param source_text: 事实来源文本。
+        :return: 返回函数执行结果。
+        """
         return MemoryFactCandidate(
             fact_type=fact_type,
             fact_key=fact_key,
@@ -265,6 +342,12 @@ class MemoryExtractionAgent:
         )
 
     def _snippet(self, text: str, keyword: str) -> str:
+        """执行 _snippet 内部辅助逻辑。
+
+        :param text: 待处理文本。
+        :param keyword: 参数 keyword。
+        :return: 返回函数执行结果。
+        """
         index = text.find(keyword)
         if index < 0:
             return text[:160]

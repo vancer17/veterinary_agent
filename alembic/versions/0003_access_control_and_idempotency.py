@@ -1,9 +1,10 @@
-"""access control and idempotency hardening
-
-Revision ID: 0003_access_control
-Revises: 0002_memory_concurrency
-Create Date: 2026-07-16
 """
+文件：alembic/versions/0003_access_control_and_idempotency.py
+作用：提供数据库迁移环境与版本脚本。
+说明：本文件遵循项目标准文件树编排；跨包引用应通过对应包的 __init__.py 暴露能力。
+"""
+
+
 
 from __future__ import annotations
 
@@ -19,6 +20,10 @@ depends_on = None
 
 
 def upgrade() -> None:
+    """执行 Alembic 正向迁移。
+
+    :return: 返回函数执行结果。
+    """
     op.create_table(
         "pet_profiles",
         sa.Column("id", sa.BigInteger(), primary_key=True, autoincrement=True),
@@ -51,6 +56,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """执行 Alembic 回滚迁移。
+
+    :return: 返回函数执行结果。
+    """
     op.alter_column("idempotency_records", "response_snapshot", existing_type=postgresql.JSONB(), nullable=False)
     op.drop_index("idx_pet_session_bindings_identity", table_name="pet_session_bindings")
     op.drop_table("pet_session_bindings")

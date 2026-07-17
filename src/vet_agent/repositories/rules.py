@@ -1,3 +1,10 @@
+"""
+文件：src/vet_agent/repositories/rules.py
+作用：提供规则库与 RAG 知识库的数据访问能力。
+说明：本文件遵循项目标准文件树编排；跨包引用应通过对应包的 __init__.py 暴露能力。
+"""
+
+
 from __future__ import annotations
 
 import json
@@ -10,12 +17,12 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from vet_agent.db.models import (
+from vet_agent.db import (
     ConsultationDomainModel,
     ConsultationSlotModel,
+    make_session_factory,
     SafetyRuleModel,
 )
-from vet_agent.db.session import make_session_factory
 
 
 @dataclass(frozen=True)
@@ -56,20 +63,41 @@ class ConsultationRuleSet:
 
 class RuleRepository(Protocol):
     def safety_rules(self) -> list[SafetyRule]:
+        """执行 safety_rules 业务逻辑。
+
+        :return: 返回函数执行结果。
+        """
         ...
 
     def consultation_rules(self) -> ConsultationRuleSet:
+        """执行 consultation_rules 业务逻辑。
+
+        :return: 返回函数执行结果。
+        """
         ...
 
     def is_ready(self) -> bool:
+        """检查当前组件是否就绪。
+
+        :return: 返回函数执行结果。
+        """
         ...
 
 
 class FileRuleRepository:
     def __init__(self, seed_dir: Path) -> None:
+        """初始化当前对象。
+
+        :param seed_dir: 参数 seed_dir。
+        :return: 无返回值。
+        """
         self.seed_dir = seed_dir
 
     def safety_rules(self) -> list[SafetyRule]:
+        """执行 safety_rules 业务逻辑。
+
+        :return: 返回函数执行结果。
+        """
         raw = json.loads((self.seed_dir / "safety_rules.json").read_text(encoding="utf-8"))
         rules: list[SafetyRule] = []
         for item in raw:
@@ -89,6 +117,10 @@ class FileRuleRepository:
         return rules
 
     def consultation_rules(self) -> ConsultationRuleSet:
+        """执行 consultation_rules 业务逻辑。
+
+        :return: 返回函数执行结果。
+        """
         raw = json.loads((self.seed_dir / "consultation_rules.json").read_text(encoding="utf-8"))
         domains = {
             item["domain"]: ConsultationDomainRule(
@@ -116,15 +148,28 @@ class FileRuleRepository:
         )
 
     def is_ready(self) -> bool:
+        """检查当前组件是否就绪。
+
+        :return: 返回函数执行结果。
+        """
         return (self.seed_dir / "safety_rules.json").exists() and (self.seed_dir / "consultation_rules.json").exists()
 
 
 class PostgresRuleRepository:
     def __init__(self, database_url: str) -> None:
+        """初始化当前对象。
+
+        :param database_url: 数据库连接地址。
+        :return: 无返回值。
+        """
         self.database_url = database_url
         self.session_factory = make_session_factory(database_url)
 
     def safety_rules(self) -> list[SafetyRule]:
+        """执行 safety_rules 业务逻辑。
+
+        :return: 返回函数执行结果。
+        """
         with self.session_factory() as session:
             rows = session.scalars(
                 select(SafetyRuleModel)
@@ -146,6 +191,10 @@ class PostgresRuleRepository:
         ]
 
     def consultation_rules(self) -> ConsultationRuleSet:
+        """执行 consultation_rules 业务逻辑。
+
+        :return: 返回函数执行结果。
+        """
         with self.session_factory() as session:
             domain_rows = session.scalars(
                 select(ConsultationDomainModel)
@@ -179,6 +228,10 @@ class PostgresRuleRepository:
         return ConsultationRuleSet(domains=domains, slots=slots, safety_net_text="")
 
     def is_ready(self) -> bool:
+        """检查当前组件是否就绪。
+
+        :return: 返回函数执行结果。
+        """
         try:
             with self.session_factory() as session:
                 safety_count = _count_enabled(session, SafetyRuleModel)
@@ -191,10 +244,20 @@ class PostgresRuleRepository:
 
 class FallbackRuleRepository:
     def __init__(self, primary: RuleRepository, fallback: RuleRepository) -> None:
+        """初始化当前对象。
+
+        :param primary: 参数 primary。
+        :param fallback: 参数 fallback。
+        :return: 无返回值。
+        """
         self.primary = primary
         self.fallback = fallback
 
     def safety_rules(self) -> list[SafetyRule]:
+        """执行 safety_rules 业务逻辑。
+
+        :return: 返回函数执行结果。
+        """
         try:
             rules = self.primary.safety_rules()
             return rules or self.fallback.safety_rules()
@@ -202,6 +265,10 @@ class FallbackRuleRepository:
             return self.fallback.safety_rules()
 
     def consultation_rules(self) -> ConsultationRuleSet:
+        """执行 consultation_rules 业务逻辑。
+
+        :return: 返回函数执行结果。
+        """
         try:
             rules = self.primary.consultation_rules()
             if rules.domains and rules.slots:
@@ -211,12 +278,27 @@ class FallbackRuleRepository:
             return self.fallback.consultation_rules()
 
     def is_ready(self) -> bool:
+        """检查当前组件是否就绪。
+
+        :return: 返回函数执行结果。
+        """
         return self.primary.is_ready() or self.fallback.is_ready()
 
 
 def compile_regex(pattern: str) -> re.Pattern[str]:
+    """执行 compile_regex 业务逻辑。
+
+    :param pattern: 参数 pattern。
+    :return: 返回函数执行结果。
+    """
     return re.compile(pattern, re.IGNORECASE)
 
 
 def _count_enabled(session: Session, model) -> int:
+    """执行 _count_enabled 内部辅助逻辑。
+
+    :param session: 数据库会话。
+    :param model: 模型名称。
+    :return: 返回函数执行结果。
+    """
     return int(session.scalar(select(func.count()).select_from(model).where(model.enabled.is_(True))) or 0)

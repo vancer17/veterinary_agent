@@ -1,9 +1,10 @@
-"""memory and concurrency schema
-
-Revision ID: 0002_memory_concurrency
-Revises: 0001_initial
-Create Date: 2026-07-16
 """
+文件：alembic/versions/0002_memory_concurrency_schema.py
+作用：提供数据库迁移环境与版本脚本。
+说明：本文件遵循项目标准文件树编排；跨包引用应通过对应包的 __init__.py 暴露能力。
+"""
+
+
 
 from __future__ import annotations
 
@@ -19,6 +20,10 @@ depends_on = None
 
 
 def upgrade() -> None:
+    """执行 Alembic 正向迁移。
+
+    :return: 返回函数执行结果。
+    """
     op.create_table(
         "conversation_turns",
         sa.Column("id", sa.BigInteger(), primary_key=True, autoincrement=True),
@@ -128,6 +133,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """执行 Alembic 回滚迁移。
+
+    :return: 返回函数执行结果。
+    """
     op.drop_index("idx_idempotency_records_request_id", table_name="idempotency_records")
     op.drop_table("idempotency_records")
     op.drop_index("idx_logic_traces_identity", table_name="logic_traces")

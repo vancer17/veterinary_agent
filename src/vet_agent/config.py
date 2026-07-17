@@ -1,3 +1,10 @@
+"""
+文件：src/vet_agent/config.py
+作用：提供兽医 Agent 项目的业务实现。
+说明：本文件遵循项目标准文件树编排；跨包引用应通过对应包的 __init__.py 暴露能力。
+"""
+
+
 from __future__ import annotations
 
 import os
@@ -6,6 +13,12 @@ from pathlib import Path
 
 
 def _bool_env(name: str, default: bool) -> bool:
+    """执行 _bool_env 内部辅助逻辑。
+
+    :param name: 名称。
+    :param default: 参数 default。
+    :return: 返回函数执行结果。
+    """
     raw = os.getenv(name)
     if raw is None:
         return default
@@ -13,6 +26,11 @@ def _bool_env(name: str, default: bool) -> bool:
 
 
 def _csv_env(name: str) -> tuple[str, ...]:
+    """执行 _csv_env 内部辅助逻辑。
+
+    :param name: 名称。
+    :return: 返回函数执行结果。
+    """
     raw = os.getenv(name, "")
     values = [item.strip() for item in raw.split(",") if item.strip()]
     return tuple(values)
@@ -60,6 +78,10 @@ class Settings:
 
     @classmethod
     def from_env(cls) -> "Settings":
+        """执行 from_env 业务逻辑。
+
+        :return: 返回函数执行结果。
+        """
         return cls(
             default_model=os.getenv("QWEN_MODEL", "qwen-plus"),
             qwen_embedding_model=os.getenv("QWEN_EMBEDDING_MODEL", "text-embedding-v4"),
@@ -101,8 +123,16 @@ class Settings:
 
     @property
     def litellm_configured(self) -> bool:
+        """执行 litellm_configured 业务逻辑。
+
+        :return: 返回函数执行结果。
+        """
         return bool(self.litellm_api_key and self.litellm_base_url)
 
     @property
     def postgres_configured(self) -> bool:
+        """执行 postgres_configured 业务逻辑。
+
+        :return: 返回函数执行结果。
+        """
         return bool(self.database_url)

@@ -1,3 +1,10 @@
+"""
+文件：src/vet_agent/services/memory.py
+作用：承载业务服务、记忆、报告解析、权限与治理逻辑。
+说明：本文件遵循项目标准文件树编排；跨包引用应通过对应包的 __init__.py 暴露能力。
+"""
+
+
 from __future__ import annotations
 
 import asyncio
@@ -5,24 +12,39 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import Any
 
-from vet_agent.contracts import TrustedIdentity
-from vet_agent.stores.json_store import JsonDocumentStore
+from vet_agent import TrustedIdentity
+from vet_agent.stores import JsonDocumentStore
 
 
 class MemoryService:
     def __init__(self, store: JsonDocumentStore) -> None:
+        """初始化当前对象。
+
+        :param store: 参数 store。
+        :return: 无返回值。
+        """
         self.store = store
         self._turn_locks: dict[str, asyncio.Lock] = {}
         self._idempotency_locks: dict[str, asyncio.Lock] = {}
 
     @asynccontextmanager
     async def turn_lock(self, identity: TrustedIdentity):
+        """执行 turn_lock 业务逻辑。
+
+        :param identity: 可信身份信息。
+        :return: 返回异步执行结果。
+        """
         key = f"{identity.user_id}:{identity.pet_id}:{identity.session_id}"
         lock = self._turn_locks.setdefault(key, asyncio.Lock())
         async with lock:
             yield
 
     async def read(self, identity: TrustedIdentity) -> dict[str, Any]:
+        """读取指定范围内的持久化数据。
+
+        :param identity: 可信身份信息。
+        :return: 返回函数执行结果。
+        """
         data = self.store.load()
         pet_memory = dict(data.get("pets", {}).get(identity.pet_id, {}))
         facts = pet_memory.get("facts")
@@ -43,6 +65,15 @@ class MemoryService:
         medical: bool,
         metadata: dict[str, Any] | None = None,
     ) -> None:
+        """执行 remember_turn 业务逻辑。
+
+        :param identity: 可信身份信息。
+        :param user_text: 用户输入文本。
+        :param summary: 参数 summary。
+        :param medical: 是否属于医疗咨询回合。
+        :param metadata: 附加元数据。
+        :return: 返回函数执行结果。
+        """
         data = self.store.load()
         data.setdefault("owners", {}).setdefault(identity.user_id, {})
         pet_memory = data.setdefault("pets", {}).setdefault(identity.pet_id, {"turns": []})
@@ -61,6 +92,11 @@ class MemoryService:
         self.store.save(data)
 
     async def read_consultation_state(self, identity: TrustedIdentity) -> dict[str, Any]:
+        """执行 read_consultation_state 业务逻辑。
+
+        :param identity: 可信身份信息。
+        :return: 返回函数执行结果。
+        """
         data = self.store.load()
         return (
             data.get("sessions", {})
@@ -73,6 +109,12 @@ class MemoryService:
         identity: TrustedIdentity,
         state: dict[str, Any],
     ) -> None:
+        """执行 save_consultation_state 业务逻辑。
+
+        :param identity: 可信身份信息。
+        :param state: 参数 state。
+        :return: 返回函数执行结果。
+        """
         data = self.store.load()
         data.setdefault("owners", {}).setdefault(identity.user_id, {})
         data.setdefault("pets", {}).setdefault(identity.pet_id, {"turns": []})
@@ -82,6 +124,11 @@ class MemoryService:
         self.store.save(data)
 
     async def read_task_consultation_states(self, identity: TrustedIdentity) -> dict[str, Any]:
+        """执行 read_task_consultation_states 业务逻辑。
+
+        :param identity: 可信身份信息。
+        :return: 返回函数执行结果。
+        """
         data = self.store.load()
         return (
             data.get("sessions", {})
@@ -94,6 +141,12 @@ class MemoryService:
         identity: TrustedIdentity,
         states: dict[str, Any],
     ) -> None:
+        """执行 save_task_consultation_states 业务逻辑。
+
+        :param identity: 可信身份信息。
+        :param states: 参数 states。
+        :return: 返回函数执行结果。
+        """
         data = self.store.load()
         data.setdefault("owners", {}).setdefault(identity.user_id, {})
         data.setdefault("pets", {}).setdefault(identity.pet_id, {"turns": []})
@@ -103,6 +156,11 @@ class MemoryService:
         self.store.save(data)
 
     async def clear_consultation_state(self, identity: TrustedIdentity) -> None:
+        """执行 clear_consultation_state 业务逻辑。
+
+        :param identity: 可信身份信息。
+        :return: 返回函数执行结果。
+        """
         data = self.store.load()
         data.get("sessions", {}).get(identity.session_id, {}).pop("consultation_state", None)
         data.get("sessions", {}).get(identity.session_id, {}).pop("task_consultation_states", None)
@@ -111,6 +169,12 @@ class MemoryService:
         self.store.save(data)
 
     async def delete_pet_memory(self, pet_id: str, user_id: str | None = None) -> None:
+        """执行 delete_pet_memory 业务逻辑。
+
+        :param pet_id: 参数 pet_id。
+        :param user_id: 参数 user_id。
+        :return: 返回函数执行结果。
+        """
         data = self.store.load()
         data.get("pets", {}).pop(pet_id, None)
         self.store.save(data)
@@ -127,6 +191,18 @@ class MemoryService:
         source_text: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> None:
+        """执行 upsert_pet_fact 业务逻辑。
+
+        :param identity: 可信身份信息。
+        :param fact_type: 事实类型。
+        :param fact_key: 事实键名。
+        :param fact_value: 事实内容。
+        :param confidence: 置信度。
+        :param source_turn_id: 参数 source_turn_id。
+        :param source_text: 事实来源文本。
+        :param metadata: 附加元数据。
+        :return: 返回函数执行结果。
+        """
         data = self.store.load()
         pet_memory = data.setdefault("pets", {}).setdefault(identity.pet_id, {"turns": []})
         facts = pet_memory.setdefault("facts", {})
@@ -148,6 +224,12 @@ class MemoryService:
         identity: TrustedIdentity,
         idempotency_key: str,
     ) -> dict[str, Any] | None:
+        """执行 read_idempotency_response 业务逻辑。
+
+        :param identity: 可信身份信息。
+        :param idempotency_key: 幂等键。
+        :return: 返回函数执行结果。
+        """
         data = self.store.load()
         key = self._idempotency_key(identity, idempotency_key)
         record = data.get("idempotency_records", {}).get(key)
@@ -166,6 +248,16 @@ class MemoryService:
         wait_seconds: float,
         processing_ttl_seconds: float,
     ) -> dict[str, Any]:
+        """执行 begin_idempotency 业务逻辑。
+
+        :param identity: 可信身份信息。
+        :param idempotency_key: 幂等键。
+        :param request_id: 请求标识。
+        :param trace_id: 链路追踪标识。
+        :param wait_seconds: 等待秒数。
+        :param processing_ttl_seconds: 处理中状态的过期秒数。
+        :return: 返回函数执行结果。
+        """
         key = self._idempotency_key(identity, idempotency_key)
         lock = self._idempotency_locks.setdefault(key, asyncio.Lock())
         deadline = asyncio.get_running_loop().time() + wait_seconds
@@ -199,6 +291,15 @@ class MemoryService:
         trace_id: str,
         response_snapshot: dict[str, Any],
     ) -> None:
+        """执行 save_idempotency_response 业务逻辑。
+
+        :param identity: 可信身份信息。
+        :param idempotency_key: 幂等键。
+        :param request_id: 请求标识。
+        :param trace_id: 链路追踪标识。
+        :param response_snapshot: 响应快照。
+        :return: 返回函数执行结果。
+        """
         data = self.store.load()
         key = self._idempotency_key(identity, idempotency_key)
         data.setdefault("idempotency_records", {})[key] = {
@@ -220,6 +321,15 @@ class MemoryService:
         trace_id: str,
         error_type: str,
     ) -> None:
+        """执行 mark_idempotency_failed 业务逻辑。
+
+        :param identity: 可信身份信息。
+        :param idempotency_key: 幂等键。
+        :param request_id: 请求标识。
+        :param trace_id: 链路追踪标识。
+        :param error_type: 错误类型。
+        :return: 返回函数执行结果。
+        """
         data = self.store.load()
         key = self._idempotency_key(identity, idempotency_key)
         data.setdefault("idempotency_records", {})[key] = {
@@ -233,9 +343,21 @@ class MemoryService:
         self.store.save(data)
 
     def _idempotency_key(self, identity: TrustedIdentity, idempotency_key: str) -> str:
+        """执行 _idempotency_key 内部辅助逻辑。
+
+        :param identity: 可信身份信息。
+        :param idempotency_key: 幂等键。
+        :return: 返回函数执行结果。
+        """
         return f"{identity.user_id}:{identity.pet_id}:{identity.session_id}:{idempotency_key}"
 
     def _processing_record(self, request_id: str, trace_id: str) -> dict[str, Any]:
+        """执行 _processing_record 内部辅助逻辑。
+
+        :param request_id: 请求标识。
+        :param trace_id: 链路追踪标识。
+        :return: 返回函数执行结果。
+        """
         return {
             "request_id": request_id,
             "trace_id": trace_id,
@@ -245,6 +367,11 @@ class MemoryService:
         }
 
     def _parse_time(self, value: Any) -> datetime | None:
+        """执行内部解析逻辑。
+
+        :param value: 待处理值。
+        :return: 返回函数执行结果。
+        """
         if not isinstance(value, str) or not value:
             return None
         try:
@@ -253,6 +380,12 @@ class MemoryService:
             return None
 
     def _is_stale(self, updated_at: datetime | None, ttl_seconds: float) -> bool:
+        """执行 _is_stale 内部辅助逻辑。
+
+        :param updated_at: 参数 updated_at。
+        :param ttl_seconds: 参数 ttl_seconds。
+        :return: 返回函数执行结果。
+        """
         if updated_at is None:
             return True
         if updated_at.tzinfo is None:

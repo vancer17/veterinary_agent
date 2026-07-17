@@ -1,3 +1,10 @@
+"""
+文件：src/ingress/errors.py
+作用：提供外部 API 入口、请求 DTO、错误处理与编排器适配。
+说明：本文件遵循项目标准文件树编排；跨包引用应通过对应包的 __init__.py 暴露能力。
+"""
+
+
 from __future__ import annotations
 
 from enum import Enum
@@ -44,6 +51,14 @@ class ApiIngressError(Exception):
         trace_id: str | None = None,
         details: Any | None = None,
     ) -> None:
+        """初始化当前对象。
+
+        :param message: 参数 message。
+        :param request_id: 请求标识。
+        :param trace_id: 链路追踪标识。
+        :param details: 错误详情。
+        :return: 无返回值。
+        """
         super().__init__(message or self.message)
         self.message = message or self.message
         self.request_id = request_id
@@ -100,6 +115,11 @@ class OrchestratorTimeoutError(ApiIngressError):
 
 
 def build_error_response(error: ApiIngressError) -> JSONResponse:
+    """执行 build_error_response 业务逻辑。
+
+    :param error: 参数 error。
+    :return: 返回函数执行结果。
+    """
     payload = ErrorResponse(
         code=error.code,
         message=error.message,
@@ -116,12 +136,24 @@ def build_error_response(error: ApiIngressError) -> JSONResponse:
 
 
 async def api_error_handler(_request: Request, error: ApiIngressError) -> JSONResponse:
+    """执行 api_error_handler 业务逻辑。
+
+    :param _request: FastAPI 原始请求对象。
+    :param error: 参数 error。
+    :return: 返回函数执行结果。
+    """
     return build_error_response(error)
 
 
 async def validation_error_handler(
     _request: Request, error: RequestValidationError
 ) -> JSONResponse:
+    """执行 validation_error_handler 业务逻辑。
+
+    :param _request: FastAPI 原始请求对象。
+    :param error: 参数 error。
+    :return: 返回函数执行结果。
+    """
     body = error.body if isinstance(error.body, dict) else {}
     request_id = _string_or_none(body.get("request_id")) or str(uuid4())
     trace_id = _string_or_none(body.get("trace_id")) or request_id
@@ -146,12 +178,23 @@ async def validation_error_handler(
 
 
 async def unhandled_error_handler(_request: Request, error: Exception) -> JSONResponse:
+    """执行 unhandled_error_handler 业务逻辑。
+
+    :param _request: FastAPI 原始请求对象。
+    :param error: 参数 error。
+    :return: 返回函数执行结果。
+    """
     return build_error_response(
         ApiIngressError(details={"error_type": type(error).__name__})
     )
 
 
 def _is_missing_context_error(errors: list[dict[str, Any]]) -> bool:
+    """执行 _is_missing_context_error 内部辅助逻辑。
+
+    :param errors: 参数 errors。
+    :return: 返回函数执行结果。
+    """
     required_fields = {"user_id", "session_id", "pet_id"}
     for item in errors:
         loc = tuple(str(part) for part in item.get("loc", ()))
@@ -165,6 +208,11 @@ def _is_missing_context_error(errors: list[dict[str, Any]]) -> bool:
 
 
 def _serializable_errors(errors: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """执行 _serializable_errors 内部辅助逻辑。
+
+    :param errors: 参数 errors。
+    :return: 返回函数执行结果。
+    """
     serializable: list[dict[str, Any]] = []
     for error in errors:
         item = dict(error)
@@ -175,12 +223,23 @@ def _serializable_errors(errors: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _string_or_none(value: Any) -> str | None:
+    """执行 _string_or_none 内部辅助逻辑。
+
+    :param value: 待处理值。
+    :return: 返回函数执行结果。
+    """
     if isinstance(value, str) and value.strip():
         return value
     return None
 
 
 def _trace_headers(request_id: str | None, trace_id: str | None) -> dict[str, str]:
+    """构建内部追踪信息。
+
+    :param request_id: 请求标识。
+    :param trace_id: 链路追踪标识。
+    :return: 返回函数执行结果。
+    """
     headers: dict[str, str] = {}
     if request_id:
         headers["X-Request-ID"] = request_id

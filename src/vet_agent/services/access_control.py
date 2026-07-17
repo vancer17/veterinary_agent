@@ -1,3 +1,10 @@
+"""
+文件：src/vet_agent/services/access_control.py
+作用：承载业务服务、记忆、报告解析、权限与治理逻辑。
+说明：本文件遵循项目标准文件树编排；跨包引用应通过对应包的 __init__.py 暴露能力。
+"""
+
+
 from __future__ import annotations
 
 import hmac
@@ -8,12 +15,11 @@ from typing import Any, Mapping
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from ingress.errors import ForbiddenError, UnauthorizedError
-from vet_agent.config import Settings
-from vet_agent.contracts import TrustedIdentity
-from vet_agent.db.models import PetProfileModel, PetSessionBindingModel
-from vet_agent.db.session import make_session_factory
-from vet_agent.stores.json_store import JsonDocumentStore
+from ingress import ForbiddenError, UnauthorizedError
+from vet_agent import Settings
+from vet_agent import TrustedIdentity
+from vet_agent.db import PetProfileModel, PetSessionBindingModel, make_session_factory
+from vet_agent.stores import JsonDocumentStore
 
 
 @dataclass(frozen=True)
@@ -25,10 +31,21 @@ class AuthenticatedPrincipal:
 
 class AccessControlService:
     def __init__(self, settings: Settings, store: "AccessControlStore") -> None:
+        """初始化当前对象。
+
+        :param settings: 应用配置对象。
+        :param store: 参数 store。
+        :return: 无返回值。
+        """
         self.settings = settings
         self.store = store
 
     def authenticate(self, headers: Mapping[str, str]) -> AuthenticatedPrincipal:
+        """解析并校验调用方认证信息。
+
+        :param headers: HTTP 请求头。
+        :return: 返回函数执行结果。
+        """
         configured_keys = self.settings.api_keys
         auth_required = self.settings.require_api_auth or bool(configured_keys)
         if not auth_required:
@@ -52,6 +69,13 @@ class AccessControlService:
         pet_info: dict[str, Any] | None = None,
         principal: AuthenticatedPrincipal | None = None,
     ) -> None:
+        """执行用户与宠物访问授权。
+
+        :param identity: 可信身份信息。
+        :param pet_info: 宠物基础信息。
+        :param principal: 认证主体。
+        :return: 返回函数执行结果。
+        """
         principal = principal or AuthenticatedPrincipal()
         if self.settings.require_auth_user_match and principal.user_id and principal.user_id != identity.user_id:
             raise ForbiddenError(
@@ -62,6 +86,12 @@ class AccessControlService:
         await self._enforce_session_policy(identity)
 
     async def _authorize_pet(self, identity: TrustedIdentity, pet_info: dict[str, Any]) -> None:
+        """执行内部授权逻辑。
+
+        :param identity: 可信身份信息。
+        :param pet_info: 宠物基础信息。
+        :return: 返回函数执行结果。
+        """
         mode = self._mode(self.settings.pet_authorization_mode)
         if mode == "off":
             return
@@ -90,6 +120,11 @@ class AccessControlService:
             )
 
     async def _enforce_session_policy(self, identity: TrustedIdentity) -> None:
+        """执行 _enforce_session_policy 内部辅助逻辑。
+
+        :param identity: 可信身份信息。
+        :return: 返回函数执行结果。
+        """
         mode = self._mode(self.settings.session_policy_mode)
         if mode == "off":
             return
@@ -119,10 +154,20 @@ class AccessControlService:
         await self.store.touch_session(identity)
 
     def _mode(self, value: str) -> str:
+        """执行 _mode 内部辅助逻辑。
+
+        :param value: 待处理值。
+        :return: 返回函数执行结果。
+        """
         normalized = (value or "permissive").strip().lower()
         return normalized if normalized in {"off", "permissive", "strict"} else "permissive"
 
     def _bearer_token(self, headers: Mapping[str, str]) -> str | None:
+        """执行 _bearer_token 内部辅助逻辑。
+
+        :param headers: HTTP 请求头。
+        :return: 返回函数执行结果。
+        """
         value = self._header_value(headers, "authorization")
         if not value:
             return None
@@ -133,12 +178,23 @@ class AccessControlService:
         return None
 
     def _header_value(self, headers: Mapping[str, str], name: str) -> str | None:
+        """执行 _header_value 内部辅助逻辑。
+
+        :param headers: HTTP 请求头。
+        :param name: 名称。
+        :return: 返回函数执行结果。
+        """
         value = headers.get(name) or headers.get(name.lower()) or headers.get(name.upper())
         if isinstance(value, str) and value.strip():
             return value.strip()
         return None
 
     def _fingerprint(self, token: str) -> str:
+        """执行 _fingerprint 内部辅助逻辑。
+
+        :param token: 参数 token。
+        :return: 返回函数执行结果。
+        """
         if len(token) <= 8:
             return "***"
         return f"{token[:4]}...{token[-4:]}"
@@ -146,31 +202,75 @@ class AccessControlService:
 
 class AccessControlStore:
     async def pet_owner(self, pet_id: str) -> str | None:
+        """执行 pet_owner 业务逻辑。
+
+        :param pet_id: 参数 pet_id。
+        :return: 返回函数执行结果。
+        """
         raise NotImplementedError
 
     async def upsert_pet(self, identity: TrustedIdentity, profile: dict[str, Any], *, source: str) -> None:
+        """执行 upsert_pet 业务逻辑。
+
+        :param identity: 可信身份信息。
+        :param profile: 参数 profile。
+        :param source: 参数 source。
+        :return: 返回函数执行结果。
+        """
         raise NotImplementedError
 
     async def session_binding(self, session_id: str) -> dict[str, str] | None:
+        """执行 session_binding 业务逻辑。
+
+        :param session_id: 参数 session_id。
+        :return: 返回函数执行结果。
+        """
         raise NotImplementedError
 
     async def bind_session(self, identity: TrustedIdentity) -> None:
+        """执行 bind_session 业务逻辑。
+
+        :param identity: 可信身份信息。
+        :return: 返回函数执行结果。
+        """
         raise NotImplementedError
 
     async def touch_session(self, identity: TrustedIdentity) -> None:
+        """执行 touch_session 业务逻辑。
+
+        :param identity: 可信身份信息。
+        :return: 返回函数执行结果。
+        """
         raise NotImplementedError
 
 
 class JsonAccessControlStore(AccessControlStore):
     def __init__(self, store: JsonDocumentStore) -> None:
+        """初始化当前对象。
+
+        :param store: 参数 store。
+        :return: 无返回值。
+        """
         self.store = store
 
     async def pet_owner(self, pet_id: str) -> str | None:
+        """执行 pet_owner 业务逻辑。
+
+        :param pet_id: 参数 pet_id。
+        :return: 返回函数执行结果。
+        """
         data = self.store.load()
         owner = data.get("pet_owners", {}).get(pet_id)
         return str(owner) if owner else None
 
     async def upsert_pet(self, identity: TrustedIdentity, profile: dict[str, Any], *, source: str) -> None:
+        """执行 upsert_pet 业务逻辑。
+
+        :param identity: 可信身份信息。
+        :param profile: 参数 profile。
+        :param source: 参数 source。
+        :return: 返回函数执行结果。
+        """
         data = self.store.load()
         now = datetime.now(UTC).isoformat()
         owners = data.setdefault("pet_owners", {})
@@ -195,11 +295,21 @@ class JsonAccessControlStore(AccessControlStore):
         self.store.save(data)
 
     async def session_binding(self, session_id: str) -> dict[str, str] | None:
+        """执行 session_binding 业务逻辑。
+
+        :param session_id: 参数 session_id。
+        :return: 返回函数执行结果。
+        """
         data = self.store.load()
         binding = data.get("session_bindings", {}).get(session_id)
         return dict(binding) if isinstance(binding, dict) else None
 
     async def bind_session(self, identity: TrustedIdentity) -> None:
+        """执行 bind_session 业务逻辑。
+
+        :param identity: 可信身份信息。
+        :return: 返回函数执行结果。
+        """
         data = self.store.load()
         now = datetime.now(UTC).isoformat()
         data.setdefault("session_bindings", {})[identity.session_id] = {
@@ -212,6 +322,11 @@ class JsonAccessControlStore(AccessControlStore):
         self.store.save(data)
 
     async def touch_session(self, identity: TrustedIdentity) -> None:
+        """执行 touch_session 业务逻辑。
+
+        :param identity: 可信身份信息。
+        :return: 返回函数执行结果。
+        """
         data = self.store.load()
         binding = data.setdefault("session_bindings", {}).setdefault(
             identity.session_id,
@@ -223,9 +338,19 @@ class JsonAccessControlStore(AccessControlStore):
 
 class PostgresAccessControlStore(AccessControlStore):
     def __init__(self, database_url: str) -> None:
+        """初始化当前对象。
+
+        :param database_url: 数据库连接地址。
+        :return: 无返回值。
+        """
         self.session_factory = make_session_factory(database_url)
 
     async def pet_owner(self, pet_id: str) -> str | None:
+        """执行 pet_owner 业务逻辑。
+
+        :param pet_id: 参数 pet_id。
+        :return: 返回函数执行结果。
+        """
         with self.session_factory() as session:
             row = session.scalar(
                 select(PetProfileModel).where(
@@ -236,6 +361,13 @@ class PostgresAccessControlStore(AccessControlStore):
         return row.user_id if row else None
 
     async def upsert_pet(self, identity: TrustedIdentity, profile: dict[str, Any], *, source: str) -> None:
+        """执行 upsert_pet 业务逻辑。
+
+        :param identity: 可信身份信息。
+        :param profile: 参数 profile。
+        :param source: 参数 source。
+        :return: 返回函数执行结果。
+        """
         now = datetime.now(UTC)
         statement = pg_insert(PetProfileModel).values(
             user_id=identity.user_id,
@@ -259,6 +391,11 @@ class PostgresAccessControlStore(AccessControlStore):
             session.execute(statement)
 
     async def session_binding(self, session_id: str) -> dict[str, str] | None:
+        """执行 session_binding 业务逻辑。
+
+        :param session_id: 参数 session_id。
+        :return: 返回函数执行结果。
+        """
         with self.session_factory() as session:
             row = session.scalar(
                 select(PetSessionBindingModel).where(PetSessionBindingModel.session_id == session_id)
@@ -268,6 +405,11 @@ class PostgresAccessControlStore(AccessControlStore):
         return {"user_id": row.user_id, "pet_id": row.pet_id, "session_id": row.session_id}
 
     async def bind_session(self, identity: TrustedIdentity) -> None:
+        """执行 bind_session 业务逻辑。
+
+        :param identity: 可信身份信息。
+        :return: 返回函数执行结果。
+        """
         now = datetime.now(UTC)
         statement = pg_insert(PetSessionBindingModel).values(
             session_id=identity.session_id,
@@ -281,6 +423,11 @@ class PostgresAccessControlStore(AccessControlStore):
             session.execute(statement)
 
     async def touch_session(self, identity: TrustedIdentity) -> None:
+        """执行 touch_session 业务逻辑。
+
+        :param identity: 可信身份信息。
+        :return: 返回函数执行结果。
+        """
         now = datetime.now(UTC)
         statement = pg_insert(PetSessionBindingModel).values(
             session_id=identity.session_id,

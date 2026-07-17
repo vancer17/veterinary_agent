@@ -1,3 +1,10 @@
+"""
+文件：src/ingress/app.py
+作用：提供外部 API 入口、请求 DTO、错误处理与编排器适配。
+说明：本文件遵循项目标准文件树编排；跨包引用应通过对应包的 __init__.py 暴露能力。
+"""
+
+
 from __future__ import annotations
 
 from fastapi import FastAPI
@@ -10,12 +17,14 @@ from .errors import (
     validation_error_handler,
 )
 from .routes import router
-from vet_agent.api.admin_routes import router as admin_router
-from vet_agent.api.memory_routes import router as memory_router
-from vet_agent.api.report_routes import router as report_router
+from vet_agent.api import admin_router, memory_router, report_router
 
 
 def create_app() -> FastAPI:
+    """创建并配置 FastAPI 应用实例。
+
+    :return: 返回函数执行结果。
+    """
     app = FastAPI(title="Agent API Ingress", version="0.1.0")
     app.include_router(router)
     app.include_router(memory_router)

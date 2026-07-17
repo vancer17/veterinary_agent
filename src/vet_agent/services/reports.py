@@ -1,3 +1,10 @@
+"""
+文件：src/vet_agent/services/reports.py
+作用：承载业务服务、记忆、报告解析、权限与治理逻辑。
+说明：本文件遵循项目标准文件树编排；跨包引用应通过对应包的 __init__.py 暴露能力。
+"""
+
+
 from __future__ import annotations
 
 import json
@@ -11,12 +18,11 @@ from uuid import uuid4
 from sqlalchemy import delete, desc, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from vet_agent.config import Settings
-from vet_agent.contracts import TrustedIdentity
-from vet_agent.db.models import PetReportItemModel, PetReportModel
-from vet_agent.db.session import make_session_factory
-from vet_agent.runtime.qwen import QwenClient
-from vet_agent.stores.json_store import JsonDocumentStore
+from vet_agent import Settings
+from vet_agent import TrustedIdentity
+from vet_agent.db import PetReportItemModel, PetReportModel, make_session_factory
+from vet_agent.runtime import QwenClient
+from vet_agent.stores import JsonDocumentStore
 
 
 RADIOLOGY_PURPOSES = {"radiology", "xray", "x_ray", "ultrasound", "ct", "mri"}
@@ -46,6 +52,10 @@ class ParsedReportItem:
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
+        """转换为普通字典。
+
+        :return: 返回函数执行结果。
+        """
         return {
             "item_name": self.item_name,
             "value_text": self.value_text,
@@ -71,11 +81,21 @@ class VisionParseResult:
 
 class OssImageSourceValidator:
     def __init__(self, settings: Settings) -> None:
+        """初始化当前对象。
+
+        :param settings: 应用配置对象。
+        :return: 无返回值。
+        """
         self.bucket = settings.oss_bucket
         self.prefix = settings.oss_prefix.strip("/")
         self.endpoint = settings.oss_endpoint.rstrip("/")
 
     def validate(self, image_url: str) -> OssImageSource:
+        """校验输入内容是否满足业务约束。
+
+        :param image_url: 参数 image_url。
+        :return: 返回函数执行结果。
+        """
         value = (image_url or "").strip()
         if not value:
             raise ValueError("oss_image_url is required")
@@ -107,6 +127,11 @@ class OssImageSourceValidator:
         )
 
     def _parse_http_url(self, parsed) -> tuple[str, str]:
+        """执行内部解析逻辑。
+
+        :param parsed: 参数 parsed。
+        :return: 返回函数执行结果。
+        """
         host = (parsed.hostname or "").lower()
         endpoint_hosts = self._allowed_endpoint_hosts()
         bucket_hosts = {f"{self.bucket}.{host}" for host in endpoint_hosts}
@@ -124,6 +149,10 @@ class OssImageSourceValidator:
         raise ValueError("oss_image_url host is not an allowed OSS endpoint")
 
     def _allowed_endpoint_hosts(self) -> set[str]:
+        """执行 _allowed_endpoint_hosts 内部辅助逻辑。
+
+        :return: 返回函数执行结果。
+        """
         endpoint = self.endpoint.lower()
         hosts = {endpoint}
         if "-internal" in endpoint:
@@ -131,10 +160,22 @@ class OssImageSourceValidator:
         return hosts
 
     def _build_https_url(self, bucket: str, object_key: str) -> str:
+        """执行 _build_https_url 内部辅助逻辑。
+
+        :param bucket: OSS 存储桶名称。
+        :param object_key: OSS 对象键。
+        :return: 返回函数执行结果。
+        """
         encoded_key = quote(object_key, safe="/-_.~")
         return f"https://{bucket}.{self.endpoint}/{encoded_key}"
 
     def _validate_bucket_and_key(self, bucket: str, object_key: str) -> None:
+        """执行 _validate_bucket_and_key 内部辅助逻辑。
+
+        :param bucket: OSS 存储桶名称。
+        :param object_key: OSS 对象键。
+        :return: 返回函数执行结果。
+        """
         if bucket != self.bucket:
             raise ValueError(f"OSS bucket must be {self.bucket}")
         if not object_key or object_key.endswith("/"):
@@ -145,6 +186,11 @@ class OssImageSourceValidator:
             raise ValueError("oss_image_url must point to a supported image file")
 
     def _mime_type(self, object_key: str) -> str:
+        """执行 _mime_type 内部辅助逻辑。
+
+        :param object_key: OSS 对象键。
+        :return: 返回函数执行结果。
+        """
         extension = self._extension(object_key)
         if extension in {".jpg", ".jpeg"}:
             return "image/jpeg"
@@ -157,6 +203,11 @@ class OssImageSourceValidator:
         return "application/octet-stream"
 
     def _extension(self, object_key: str) -> str:
+        """执行 _extension 内部辅助逻辑。
+
+        :param object_key: OSS 对象键。
+        :return: 返回函数执行结果。
+        """
         clean_key = object_key.split("?", 1)[0].split("#", 1)[0]
         match = re.search(r"(\.[A-Za-z0-9]+)$", clean_key)
         return match.group(1).lower() if match else ""
@@ -166,11 +217,23 @@ class ReportVisionParserAgent:
     parser_version = "oss-image-qwen-v1"
 
     def __init__(self, qwen_client: QwenClient, settings: Settings) -> None:
+        """初始化当前对象。
+
+        :param qwen_client: 参数 qwen_client。
+        :param settings: 应用配置对象。
+        :return: 无返回值。
+        """
         self.qwen_client = qwen_client
         self.settings = settings
         self.line_parser = ReportLineParser()
 
     async def parse(self, source: OssImageSource, *, report_type: str) -> VisionParseResult:
+        """解析输入内容并生成结构化结果。
+
+        :param source: 参数 source。
+        :param report_type: 参数 report_type。
+        :return: 返回函数执行结果。
+        """
         prompt = self._prompt(report_type)
         raw = await self.qwen_client.chat_with_images(
             prompt=prompt,
@@ -206,6 +269,11 @@ class ReportVisionParserAgent:
         )
 
     def _prompt(self, report_type: str) -> str:
+        """执行 _prompt 内部辅助逻辑。
+
+        :param report_type: 参数 report_type。
+        :return: 返回函数执行结果。
+        """
         return (
             "You are parsing a veterinary lab report image from OSS. "
             "Extract only text and lab-measurement rows that are clearly visible in the image. "
@@ -220,6 +288,11 @@ class ReportVisionParserAgent:
         )
 
     def _extract_json(self, text: str) -> dict[str, Any] | None:
+        """执行内部抽取逻辑。
+
+        :param text: 待处理文本。
+        :return: 返回函数执行结果。
+        """
         candidate = text.strip()
         if candidate.startswith("```"):
             candidate = re.sub(r"^```(?:json)?\s*", "", candidate, flags=re.I)
@@ -240,6 +313,11 @@ class ReportVisionParserAgent:
         return value if isinstance(value, dict) else None
 
     def _items_from_json(self, raw_items: Any) -> list[ParsedReportItem]:
+        """执行 _items_from_json 内部辅助逻辑。
+
+        :param raw_items: 参数 raw_items。
+        :return: 返回函数执行结果。
+        """
         if not isinstance(raw_items, list):
             return []
         items: list[ParsedReportItem] = []
@@ -265,6 +343,11 @@ class ReportVisionParserAgent:
         return items
 
     def _summary(self, items: list[ParsedReportItem]) -> str:
+        """执行 _summary 内部辅助逻辑。
+
+        :param items: 数据项列表。
+        :return: 返回函数执行结果。
+        """
         abnormal_count = sum(1 for item in items if item.abnormal_flag)
         if not items:
             return "Vision parser did not extract structured lab items; manual review is recommended."
@@ -273,6 +356,11 @@ class ReportVisionParserAgent:
         return f"Parsed {len(items)} lab items."
 
     def _number(self, value: Any) -> float | None:
+        """执行 _number 内部辅助逻辑。
+
+        :param value: 待处理值。
+        :return: 返回函数执行结果。
+        """
         if value is None:
             return None
         try:
@@ -281,12 +369,22 @@ class ReportVisionParserAgent:
             return None
 
     def _optional_string(self, value: Any) -> str | None:
+        """执行 _optional_string 内部辅助逻辑。
+
+        :param value: 待处理值。
+        :return: 返回函数执行结果。
+        """
         if value is None:
             return None
         text = str(value).strip()
         return text or None
 
     def _normalize_flag(self, value: Any) -> str | None:
+        """执行 _normalize_flag 内部辅助逻辑。
+
+        :param value: 待处理值。
+        :return: 返回函数执行结果。
+        """
         if value is None:
             return None
         text = str(value).strip().lower()
@@ -297,6 +395,11 @@ class ReportVisionParserAgent:
         return None
 
     def _confidence(self, value: Any) -> float:
+        """执行 _confidence 内部辅助逻辑。
+
+        :param value: 待处理值。
+        :return: 返回函数执行结果。
+        """
         try:
             confidence = float(value)
         except (TypeError, ValueError):
@@ -306,6 +409,11 @@ class ReportVisionParserAgent:
 
 class ReportLineParser:
     def parse(self, text: str) -> tuple[list[ParsedReportItem], str]:
+        """解析输入内容并生成结构化结果。
+
+        :param text: 待处理文本。
+        :return: 返回函数执行结果。
+        """
         items: list[ParsedReportItem] = []
         for line in text.splitlines():
             item = self._parse_line(line)
@@ -319,6 +427,11 @@ class ReportLineParser:
         return items, f"Parsed {len(items)} lab items."
 
     def _parse_line(self, line: str) -> ParsedReportItem | None:
+        """执行内部解析逻辑。
+
+        :param line: 参数 line。
+        :return: 返回函数执行结果。
+        """
         text = re.sub(r"\s+", " ", line.strip())
         if len(text) < 3:
             return None
@@ -346,12 +459,22 @@ class ReportLineParser:
         )
 
     def _number(self, value: str) -> float | None:
+        """执行 _number 内部辅助逻辑。
+
+        :param value: 待处理值。
+        :return: 返回函数执行结果。
+        """
         try:
             return float(value.replace("<", "").replace(">", ""))
         except ValueError:
             return None
 
     def _normalize_flag(self, value: str | None) -> str | None:
+        """执行 _normalize_flag 内部辅助逻辑。
+
+        :param value: 待处理值。
+        :return: 返回函数执行结果。
+        """
         if not value:
             return None
         lowered = value.lower()
@@ -364,6 +487,13 @@ class ReportLineParser:
 
 class ReportIngestionService:
     def __init__(self, store: "ReportStore", qwen_client: QwenClient, settings: Settings) -> None:
+        """初始化当前对象。
+
+        :param store: 参数 store。
+        :param qwen_client: 参数 qwen_client。
+        :param settings: 应用配置对象。
+        :return: 无返回值。
+        """
         self.store = store
         self.validator = OssImageSourceValidator(settings)
         self.parser = ReportVisionParserAgent(qwen_client, settings)
@@ -376,6 +506,14 @@ class ReportIngestionService:
         report_type: str,
         metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        """执行 parse_report 业务逻辑。
+
+        :param identity: 可信身份信息。
+        :param oss_image_url: OSS 图片地址。
+        :param report_type: 参数 report_type。
+        :param metadata: 附加元数据。
+        :return: 返回函数执行结果。
+        """
         report_id = f"rpt_{uuid4().hex}"
         source = self.validator.validate(oss_image_url)
         safety_flags = self._safety_flags(report_type)
@@ -412,12 +550,29 @@ class ReportIngestionService:
         return record
 
     async def list_reports(self, identity: TrustedIdentity) -> list[dict[str, Any]]:
+        """执行 list_reports 业务逻辑。
+
+        :param identity: 可信身份信息。
+        :return: 返回函数执行结果。
+        """
         return await self.store.list(identity)
 
     async def get_report(self, identity: TrustedIdentity, report_id: str) -> dict[str, Any] | None:
+        """执行 get_report 业务逻辑。
+
+        :param identity: 可信身份信息。
+        :param report_id: 报告标识。
+        :return: 返回函数执行结果。
+        """
         return await self.store.get(identity, report_id)
 
     async def _parse_with_vision(self, source: OssImageSource, report_type: str) -> VisionParseResult:
+        """执行内部解析逻辑。
+
+        :param source: 参数 source。
+        :param report_type: 参数 report_type。
+        :return: 返回函数执行结果。
+        """
         try:
             return await self.parser.parse(source, report_type=report_type)
         except Exception as exc:
@@ -432,6 +587,10 @@ class ReportIngestionService:
             )
 
     def _blocked_parse_result(self) -> VisionParseResult:
+        """执行 _blocked_parse_result 内部辅助逻辑。
+
+        :return: 返回函数执行结果。
+        """
         return VisionParseResult(
             items=[],
             summary="Radiology or imaging reports are blocked from online interpretation; offline veterinary review is required.",
@@ -442,6 +601,11 @@ class ReportIngestionService:
         )
 
     def _safety_flags(self, report_type: str) -> list[dict[str, Any]]:
+        """执行 _safety_flags 内部辅助逻辑。
+
+        :param report_type: 参数 report_type。
+        :return: 返回函数执行结果。
+        """
         if (report_type or "").lower() not in RADIOLOGY_PURPOSES:
             return []
         return [
@@ -453,6 +617,13 @@ class ReportIngestionService:
         ]
 
     def _attachment_record(self, report_id: str, report_type: str, source: OssImageSource) -> dict[str, Any]:
+        """执行 _attachment_record 内部辅助逻辑。
+
+        :param report_id: 报告标识。
+        :param report_type: 参数 report_type。
+        :param source: 参数 source。
+        :return: 返回函数执行结果。
+        """
         return {
             "attachment_id": f"{report_id}_image",
             "mime_type": source.mime_type,
@@ -467,26 +638,57 @@ class ReportIngestionService:
 
 class ReportStore:
     async def save(self, record: dict[str, Any]) -> None:
+        """保存结构化数据。
+
+        :param record: 记录对象。
+        :return: 返回函数执行结果。
+        """
         raise NotImplementedError
 
     async def list(self, identity: TrustedIdentity) -> list[dict[str, Any]]:
+        """执行 list 业务逻辑。
+
+        :param identity: 可信身份信息。
+        :return: 返回函数执行结果。
+        """
         raise NotImplementedError
 
     async def get(self, identity: TrustedIdentity, report_id: str) -> dict[str, Any] | None:
+        """执行 get 业务逻辑。
+
+        :param identity: 可信身份信息。
+        :param report_id: 报告标识。
+        :return: 返回函数执行结果。
+        """
         raise NotImplementedError
 
 
 class JsonReportStore(ReportStore):
     def __init__(self, store: JsonDocumentStore) -> None:
+        """初始化当前对象。
+
+        :param store: 参数 store。
+        :return: 无返回值。
+        """
         self.store = store
 
     async def save(self, record: dict[str, Any]) -> None:
+        """保存结构化数据。
+
+        :param record: 记录对象。
+        :return: 返回函数执行结果。
+        """
         data = self.store.load()
         reports = data.setdefault("reports", {})
         reports[record["report_id"]] = record
         self.store.save(data)
 
     async def list(self, identity: TrustedIdentity) -> list[dict[str, Any]]:
+        """执行 list 业务逻辑。
+
+        :param identity: 可信身份信息。
+        :return: 返回函数执行结果。
+        """
         data = self.store.load()
         rows = [
             dict(row)
@@ -496,6 +698,12 @@ class JsonReportStore(ReportStore):
         return sorted(rows, key=lambda row: row.get("created_at") or "", reverse=True)
 
     async def get(self, identity: TrustedIdentity, report_id: str) -> dict[str, Any] | None:
+        """执行 get 业务逻辑。
+
+        :param identity: 可信身份信息。
+        :param report_id: 报告标识。
+        :return: 返回函数执行结果。
+        """
         data = self.store.load()
         row = data.get("reports", {}).get(report_id)
         if not row:
@@ -507,9 +715,19 @@ class JsonReportStore(ReportStore):
 
 class PostgresReportStore(ReportStore):
     def __init__(self, database_url: str) -> None:
+        """初始化当前对象。
+
+        :param database_url: 数据库连接地址。
+        :return: 无返回值。
+        """
         self.session_factory = make_session_factory(database_url)
 
     async def save(self, record: dict[str, Any]) -> None:
+        """保存结构化数据。
+
+        :param record: 记录对象。
+        :return: 返回函数执行结果。
+        """
         report_values = {
             "report_id": record["report_id"],
             "user_id": record["user_id"],
@@ -551,6 +769,11 @@ class PostgresReportStore(ReportStore):
                 )
 
     async def list(self, identity: TrustedIdentity) -> list[dict[str, Any]]:
+        """执行 list 业务逻辑。
+
+        :param identity: 可信身份信息。
+        :return: 返回函数执行结果。
+        """
         with self.session_factory() as session:
             reports = session.scalars(
                 select(PetReportModel)
@@ -572,6 +795,12 @@ class PostgresReportStore(ReportStore):
         return [self._report_dict(row, items_by_report.get(row.report_id, [])) for row in reports]
 
     async def get(self, identity: TrustedIdentity, report_id: str) -> dict[str, Any] | None:
+        """执行 get 业务逻辑。
+
+        :param identity: 可信身份信息。
+        :param report_id: 报告标识。
+        :return: 返回函数执行结果。
+        """
         with self.session_factory() as session:
             report = session.scalar(
                 select(PetReportModel).where(
@@ -586,6 +815,12 @@ class PostgresReportStore(ReportStore):
         return self._report_dict(report, [self._item_dict(item) for item in items])
 
     def _report_dict(self, row: PetReportModel, items: list[dict[str, Any]]) -> dict[str, Any]:
+        """执行 _report_dict 内部辅助逻辑。
+
+        :param row: 数据库行。
+        :param items: 数据项列表。
+        :return: 返回函数执行结果。
+        """
         return {
             "report_id": row.report_id,
             "user_id": row.user_id,
@@ -606,6 +841,11 @@ class PostgresReportStore(ReportStore):
         }
 
     def _item_dict(self, row: PetReportItemModel) -> dict[str, Any]:
+        """执行 _item_dict 内部辅助逻辑。
+
+        :param row: 数据库行。
+        :return: 返回函数执行结果。
+        """
         return {
             "item_name": row.item_name,
             "value_text": row.value_text,

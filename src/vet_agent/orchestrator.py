@@ -1,25 +1,37 @@
+"""
+文件：src/vet_agent/orchestrator.py
+作用：提供兽医 Agent 项目的业务实现。
+说明：本文件遵循项目标准文件树编排；跨包引用应通过对应包的 __init__.py 暴露能力。
+"""
+
+
 from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
 from uuid import uuid4
 
-from vet_agent.agents.consultation import ConsultationStateAgent
-from vet_agent.agents.composer import ResponseComposer
-from vet_agent.agents.memory_extraction import MemoryExtractionAgent
-from vet_agent.agents.question_planner import QuestionPlanner
-from vet_agent.agents.safety import SafetyAgent
-from vet_agent.agents.safety_review import SafetyReviewAgent
-from vet_agent.agents.task_splitter import SplitTask, TaskSplitterAgent
-from vet_agent.config import Settings
-from vet_agent.contracts import AgentTurnRequest, AgentTurnResponse, StreamEvent, VetSegment
-from vet_agent.repositories.rules import RuleRepository
-from vet_agent.runtime.qwen import QwenClient
-from vet_agent.services.context import PetContextProvider
-from vet_agent.services.knowledge import KnowledgeService
-from vet_agent.services.memory import MemoryService
-from vet_agent.services.reasoning_display import ReasoningDisplayBuilder
-from vet_agent.services.trace import LogicTraceStore
+from vet_agent.agents import (
+    ConsultationStateAgent,
+    MemoryExtractionAgent,
+    QuestionPlanner,
+    ResponseComposer,
+    SafetyAgent,
+    SafetyReviewAgent,
+    SplitTask,
+    TaskSplitterAgent,
+)
+from vet_agent import Settings
+from vet_agent import AgentTurnRequest, AgentTurnResponse, StreamEvent, VetSegment
+from vet_agent.repositories import RuleRepository
+from vet_agent.runtime import QwenClient
+from vet_agent.services import (
+    KnowledgeService,
+    LogicTraceStore,
+    MemoryService,
+    PetContextProvider,
+    ReasoningDisplayBuilder,
+)
 
 
 class VetOrchestrator:
@@ -34,6 +46,17 @@ class VetOrchestrator:
         qwen_client: QwenClient,
         rule_repository: RuleRepository,
     ) -> None:
+        """初始化当前对象。
+
+        :param settings: 应用配置对象。
+        :param context_provider: 参数 context_provider。
+        :param memory_service: 参数 memory_service。
+        :param trace_store: 参数 trace_store。
+        :param knowledge_service: 参数 knowledge_service。
+        :param qwen_client: 参数 qwen_client。
+        :param rule_repository: 参数 rule_repository。
+        :return: 无返回值。
+        """
         self.settings = settings
         self.context_provider = context_provider
         self.memory_service = memory_service
@@ -48,6 +71,11 @@ class VetOrchestrator:
         self.reasoning_display = ReasoningDisplayBuilder()
 
     async def run_turn(self, request: AgentTurnRequest) -> AgentTurnResponse:
+        """执行一个 Agent 对话回合。
+
+        :param request: 请求对象。
+        :return: 返回函数执行结果。
+        """
         async with self._turn_lock(request):
             idempotency_key = request.turn_options.idempotency_key
             if idempotency_key:
@@ -77,6 +105,11 @@ class VetOrchestrator:
             return await self._run_turn_core(request)
 
     async def _run_turn_core(self, request: AgentTurnRequest) -> AgentTurnResponse:
+        """执行 _run_turn_core 内部辅助逻辑。
+
+        :param request: 请求对象。
+        :return: 返回函数执行结果。
+        """
         user_text = request.joined_text()
         assessment = self.safety.analyze(user_text, request.attachments)
         model = request.model or self.settings.default_model
@@ -273,6 +306,17 @@ class VetOrchestrator:
         assessment,
         model: str,
     ) -> AgentTurnResponse:
+        """执行 _run_multi_task_turn 内部辅助逻辑。
+
+        :param request: 请求对象。
+        :param tasks: 任务列表。
+        :param split_decision: 参数 split_decision。
+        :param pet_context: 宠物上下文。
+        :param memory: 参数 memory。
+        :param assessment: 参数 assessment。
+        :param model: 模型名称。
+        :return: 返回函数执行结果。
+        """
         task_states = await self.memory_service.read_task_consultation_states(request.trusted_identity)
         updated_task_states = dict(task_states)
         segments: list[VetSegment] = []
@@ -396,6 +440,11 @@ class VetOrchestrator:
         )
 
     async def stream_turn(self, request: AgentTurnRequest):
+        """以流式事件形式执行一个 Agent 对话回合。
+
+        :param request: 请求对象。
+        :return: 返回异步执行结果。
+        """
         response = await self.run_turn(request)
         yield StreamEvent(
             event="turn.started",
@@ -472,6 +521,11 @@ class VetOrchestrator:
 
     @asynccontextmanager
     async def _turn_lock(self, request: AgentTurnRequest):
+        """执行 _turn_lock 内部辅助逻辑。
+
+        :param request: 请求对象。
+        :return: 返回异步执行结果。
+        """
         lock_factory = getattr(self.memory_service, "turn_lock", None)
         if callable(lock_factory):
             async with lock_factory(request.trusted_identity):
@@ -486,6 +540,13 @@ class VetOrchestrator:
         *,
         medical: bool,
     ) -> AgentTurnResponse:
+        """执行 _finalize_and_persist 内部辅助逻辑。
+
+        :param request: 请求对象。
+        :param response: 响应对象。
+        :param medical: 是否属于医疗咨询回合。
+        :return: 返回函数执行结果。
+        """
         response = self.safety_review.review_response(response)
         extracted_facts = await self._extract_and_store_facts(request, response)
         response.metadata["memory_extraction"] = {
@@ -504,6 +565,12 @@ class VetOrchestrator:
         request: AgentTurnRequest,
         response: AgentTurnResponse,
     ):
+        """执行内部抽取逻辑。
+
+        :param request: 请求对象。
+        :param response: 响应对象。
+        :return: 返回异步执行结果。
+        """
         try:
             facts = await self.memory_extractor.extract(
                 identity=request.trusted_identity,
@@ -533,6 +600,13 @@ class VetOrchestrator:
         return stored
 
     async def _persist(self, request: AgentTurnRequest, response: AgentTurnResponse, *, medical: bool) -> None:
+        """执行 _persist 内部辅助逻辑。
+
+        :param request: 请求对象。
+        :param response: 响应对象。
+        :param medical: 是否属于医疗咨询回合。
+        :return: 返回函数执行结果。
+        """
         await self.memory_service.remember_turn(
             request.trusted_identity,
             user_text=request.joined_text(),
@@ -557,5 +631,11 @@ class VetOrchestrator:
             )
 
     def _chunks(self, text: str, size: int):
+        """执行 _chunks 内部辅助逻辑。
+
+        :param text: 待处理文本。
+        :param size: 分片大小。
+        :return: 返回函数执行结果。
+        """
         for start in range(0, len(text), size):
             yield text[start : start + size]

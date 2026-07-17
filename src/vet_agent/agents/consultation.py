@@ -1,11 +1,18 @@
+"""
+文件：src/vet_agent/agents/consultation.py
+作用：提供多 Agent 协作中的任务拆分、安全、问诊、记忆抽取与回答生成能力。
+说明：本文件遵循项目标准文件树编排；跨包引用应通过对应包的 __init__.py 暴露能力。
+"""
+
+
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from vet_agent.repositories.rules import ConsultationRuleSet, RuleRepository, compile_regex
-from vet_agent.services.context import PetContext
+from vet_agent.repositories import ConsultationRuleSet, RuleRepository, compile_regex
+from vet_agent.services import PetContext
 
 
 SlotValue = str | bool | None
@@ -22,6 +29,11 @@ class ConsultationState:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> "ConsultationState":
+        """从普通字典恢复对象。
+
+        :param data: 结构化数据。
+        :return: 返回函数执行结果。
+        """
         if not data:
             return cls()
         return cls(
@@ -34,6 +46,10 @@ class ConsultationState:
         )
 
     def to_dict(self) -> dict[str, Any]:
+        """转换为普通字典。
+
+        :return: 返回函数执行结果。
+        """
         return {
             "chief_complaint": self.chief_complaint,
             "domain": self.domain,
@@ -56,6 +72,11 @@ class ConsultationStateAgent:
     """Builds structured consultation context across turns before final advice."""
 
     def __init__(self, rule_repository: RuleRepository) -> None:
+        """初始化当前对象。
+
+        :param rule_repository: 参数 rule_repository。
+        :return: 无返回值。
+        """
         self.rule_repository = rule_repository
 
     def update(
@@ -66,6 +87,14 @@ class ConsultationStateAgent:
         *,
         max_questions: int,
     ) -> ConsultationDecision:
+        """执行 update 业务逻辑。
+
+        :param previous: 上一轮持久化状态。
+        :param user_text: 用户输入文本。
+        :param pet_context: 宠物上下文。
+        :param max_questions: 最多追问数量。
+        :return: 返回函数执行结果。
+        """
         state = ConsultationState.from_dict(previous)
         text = user_text.strip()
         if text and not state.chief_complaint:
@@ -89,6 +118,11 @@ class ConsultationStateAgent:
         return ConsultationDecision(state=state, ready=ready, missing_slots=missing, questions=questions)
 
     def format_followup_response(self, decision: ConsultationDecision) -> str:
+        """执行 format_followup_response 业务逻辑。
+
+        :param decision: 参数 decision。
+        :return: 返回函数执行结果。
+        """
         rules = self.rule_repository.consultation_rules()
         known = self._known_lines(decision.state)
         missing = "、".join(self._question_for(rules, slot) for slot in decision.missing_slots[:5])
@@ -103,6 +137,11 @@ class ConsultationStateAgent:
         )
 
     def format_state_for_prompt(self, state: ConsultationState) -> str:
+        """执行 format_state_for_prompt 业务逻辑。
+
+        :param state: 参数 state。
+        :return: 返回函数执行结果。
+        """
         lines = [f"主诉: {state.chief_complaint or '未知'}", f"方向: {state.domain}"]
         for slot, value in state.slots.items():
             if value:
@@ -110,6 +149,12 @@ class ConsultationStateAgent:
         return "\n".join(lines)
 
     def _classify_domain(self, text: str, previous_domain: str) -> str:
+        """执行 _classify_domain 内部辅助逻辑。
+
+        :param text: 待处理文本。
+        :param previous_domain: 上一轮领域。
+        :return: 返回函数执行结果。
+        """
         rules = self.rule_repository.consultation_rules()
         for domain_rule in sorted(rules.domains.values(), key=lambda item: item.priority):
             if domain_rule.domain == "general":
@@ -119,6 +164,12 @@ class ConsultationStateAgent:
         return previous_domain if previous_domain != "general" else "general"
 
     def _prefill_from_pet_context(self, state: ConsultationState, pet_context: PetContext) -> None:
+        """执行 _prefill_from_pet_context 内部辅助逻辑。
+
+        :param state: 参数 state。
+        :param pet_context: 宠物上下文。
+        :return: 返回函数执行结果。
+        """
         profile = pet_context.profile
         if profile.get("species") and profile["species"] != "未知":
             state.slots.setdefault("species", str(profile["species"]))
@@ -128,6 +179,12 @@ class ConsultationStateAgent:
             state.slots.setdefault("weight", f"{profile['weight_kg']}kg")
 
     def _extract_slots(self, state: ConsultationState, text: str) -> None:
+        """执行内部抽取逻辑。
+
+        :param state: 参数 state。
+        :param text: 待处理文本。
+        :return: 返回函数执行结果。
+        """
         rules = self.rule_repository.consultation_rules()
         for slot_rule in rules.slots.values():
             value = self._extract_slot_value(slot_rule.extraction_rules, text)
@@ -135,6 +192,13 @@ class ConsultationStateAgent:
                 state.slots[slot_rule.slot_name] = value
 
     def _questions_for_missing(self, missing: list[str], state: ConsultationState, max_questions: int) -> list[str]:
+        """执行 _questions_for_missing 内部辅助逻辑。
+
+        :param missing: 参数 missing。
+        :param state: 参数 state。
+        :param max_questions: 最多追问数量。
+        :return: 返回函数执行结果。
+        """
         questions: list[str] = []
         asked = set(state.asked_questions)
         rules = self.rule_repository.consultation_rules()
@@ -149,6 +213,11 @@ class ConsultationStateAgent:
         return questions
 
     def _known_lines(self, state: ConsultationState) -> str:
+        """执行 _known_lines 内部辅助逻辑。
+
+        :param state: 参数 state。
+        :return: 返回函数执行结果。
+        """
         rules = self.rule_repository.consultation_rules()
         lines = []
         for slot, value in state.slots.items():
@@ -158,14 +227,32 @@ class ConsultationStateAgent:
         return "\n".join(lines)
 
     def _required_slots(self, rules: ConsultationRuleSet, domain: str) -> list[str]:
+        """执行 _required_slots 内部辅助逻辑。
+
+        :param rules: 规则集合。
+        :param domain: 问诊领域。
+        :return: 返回函数执行结果。
+        """
         if domain in rules.domains:
             return rules.domains[domain].required_slots
         return rules.domains.get("general").required_slots if "general" in rules.domains else []
 
     def _question_for(self, rules: ConsultationRuleSet, slot: str) -> str:
+        """执行 _question_for 内部辅助逻辑。
+
+        :param rules: 规则集合。
+        :param slot: 参数 slot。
+        :return: 返回函数执行结果。
+        """
         return rules.slots[slot].question if slot in rules.slots else slot
 
     def _extract_slot_value(self, extraction_rules: list[dict[str, Any]], text: str) -> str | None:
+        """执行内部抽取逻辑。
+
+        :param extraction_rules: 参数 extraction_rules。
+        :param text: 待处理文本。
+        :return: 返回函数执行结果。
+        """
         for rule in extraction_rules:
             match_type = rule.get("match_type")
             if match_type == "keyword":

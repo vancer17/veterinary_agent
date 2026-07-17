@@ -1,10 +1,18 @@
+"""
+文件：src/vet_agent/agents/safety_review.py
+作用：提供多 Agent 协作中的任务拆分、安全、问诊、记忆抽取与回答生成能力。
+说明：本文件遵循项目标准文件树编排；跨包引用应通过对应包的 __init__.py 暴露能力。
+"""
+
+
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
 
-from vet_agent.agents.safety import SafetyAgent
-from vet_agent.contracts import AgentTurnResponse, SafetySignal
+from vet_agent import AgentTurnResponse, SafetySignal
+
+from .safety import SafetyAgent
 
 
 @dataclass(frozen=True)
@@ -18,9 +26,19 @@ class SafetyReviewAgent:
     """Final user-visible output review before persistence and delivery."""
 
     def __init__(self, safety: SafetyAgent) -> None:
+        """初始化当前对象。
+
+        :param safety: 参数 safety。
+        :return: 无返回值。
+        """
         self.safety = safety
 
     def review_response(self, response: AgentTurnResponse) -> AgentTurnResponse:
+        """执行 review_response 业务逻辑。
+
+        :param response: 响应对象。
+        :return: 返回函数执行结果。
+        """
         review_signals: list[SafetySignal] = []
         changed_segments = 0
         for segment in response.segments:
@@ -60,6 +78,11 @@ class SafetyReviewAgent:
         return response
 
     def review_text(self, text: str) -> SafetyReviewResult:
+        """执行 review_text 业务逻辑。
+
+        :param text: 待处理文本。
+        :return: 返回函数执行结果。
+        """
         sanitized, signals = self.safety.sanitize_output(text)
         extra: list[SafetySignal] = []
         reviewed = self._soften_definitive_diagnosis(sanitized)
@@ -87,6 +110,11 @@ class SafetyReviewAgent:
         )
 
     def _soften_definitive_diagnosis(self, text: str) -> str:
+        """执行 _soften_definitive_diagnosis 内部辅助逻辑。
+
+        :param text: 待处理文本。
+        :return: 返回函数执行结果。
+        """
         replacements = {
             "确诊为": "更倾向于",
             "可以确诊": "需要线下检查确认",
@@ -99,6 +127,11 @@ class SafetyReviewAgent:
         return result
 
     def _scrub_internal_trace_terms(self, text: str) -> str:
+        """执行 _scrub_internal_trace_terms 内部辅助逻辑。
+
+        :param text: 待处理文本。
+        :return: 返回函数执行结果。
+        """
         patterns = [
             r"(?i)system prompt[:：]?.*",
             r"(?i)chain[- ]?of[- ]?thought[:：]?.*",
@@ -111,6 +144,11 @@ class SafetyReviewAgent:
         return result
 
     def _dedupe(self, signals: list[SafetySignal]) -> list[SafetySignal]:
+        """执行 _dedupe 内部辅助逻辑。
+
+        :param signals: 参数 signals。
+        :return: 返回函数执行结果。
+        """
         seen: set[tuple[str, str, str]] = set()
         result: list[SafetySignal] = []
         for signal in signals:

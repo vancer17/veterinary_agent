@@ -1,3 +1,10 @@
+"""
+文件：src/ingress/routes.py
+作用：提供外部 API 入口、请求 DTO、错误处理与编排器适配。
+说明：本文件遵循项目标准文件树编排；跨包引用应通过对应包的 __init__.py 暴露能力。
+"""
+
+
 from __future__ import annotations
 
 import json
@@ -16,8 +23,8 @@ from .errors import (
     OrchestratorUnavailableError,
 )
 from .orchestrator import Orchestrator, get_orchestrator
-from vet_agent.container import get_container
-from vet_agent.contracts import TrustedIdentity as CoreTrustedIdentity
+from vet_agent import TrustedIdentity as CoreTrustedIdentity
+from vet_agent import get_container
 
 
 router = APIRouter()
@@ -37,6 +44,10 @@ ERROR_RESPONSES = {
 
 @router.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
+    """返回服务健康检查结果。
+
+    :return: 返回函数执行结果。
+    """
     return HealthResponse()
 
 
@@ -48,6 +59,11 @@ async def health() -> HealthResponse:
 async def ready(
     orchestrator: Orchestrator = Depends(get_orchestrator),
 ) -> ReadyResponse:
+    """返回服务就绪检查结果。
+
+    :param orchestrator: 编排器实例。
+    :return: 返回函数执行结果。
+    """
     orchestrator_ready = await orchestrator.is_ready()
     if not orchestrator_ready:
         raise OrchestratorUnavailableError(details={"checks": _ready_checks(False)})
@@ -60,6 +76,13 @@ async def create_agent_turn(
     request: Request,
     orchestrator: Orchestrator = Depends(get_orchestrator),
 ) -> JSONResponse | StreamingResponse:
+    """执行 create_agent_turn 业务逻辑。
+
+    :param payload: 请求载荷。
+    :param request: 请求对象。
+    :param orchestrator: 编排器实例。
+    :return: 返回函数执行结果。
+    """
     return await _dispatch_turn(payload, request, orchestrator)
 
 
@@ -69,6 +92,13 @@ async def create_openai_response(
     request: Request,
     orchestrator: Orchestrator = Depends(get_orchestrator),
 ) -> JSONResponse | StreamingResponse:
+    """执行 create_openai_response 业务逻辑。
+
+    :param payload: 请求载荷。
+    :param request: 请求对象。
+    :param orchestrator: 编排器实例。
+    :return: 返回函数执行结果。
+    """
     return await _dispatch_turn(payload, request, orchestrator, openai_compatible=True)
 
 
@@ -79,6 +109,14 @@ async def _dispatch_turn(
     *,
     openai_compatible: bool = False,
 ) -> JSONResponse | StreamingResponse:
+    """执行 _dispatch_turn 内部辅助逻辑。
+
+    :param payload: 请求载荷。
+    :param request: 请求对象。
+    :param orchestrator: 编排器实例。
+    :param openai_compatible: 是否输出 OpenAI 兼容响应。
+    :return: 返回函数执行结果。
+    """
     _apply_header_ids(payload, request)
     turn_request = payload.to_agent_turn_request(source_path=request.url.path)
     await _authorize_turn(payload, request)
@@ -119,6 +157,12 @@ async def _stream_events(
     orchestrator: Orchestrator,
     turn_request: AgentTurnRequest,
 ) -> AsyncIterator[str]:
+    """执行 _stream_events 内部辅助逻辑。
+
+    :param orchestrator: 编排器实例。
+    :param turn_request: Agent 回合请求。
+    :return: 返回函数执行结果。
+    """
     try:
         async for event in orchestrator.stream_turn(turn_request):
             yield _to_sse(event)
@@ -140,6 +184,11 @@ async def _stream_events(
 
 
 def _to_sse(event: Mapping[str, Any]) -> str:
+    """执行内部数据格式转换。
+
+    :param event: 事件载荷。
+    :return: 返回函数执行结果。
+    """
     event_type = str(event.get("event") or event.get("type") or "message")
     if "event" in event:
         payload = {key: value for key, value in event.items() if key != "event"}
@@ -150,6 +199,11 @@ def _to_sse(event: Mapping[str, Any]) -> str:
 
 
 def _to_openai_response(response: Mapping[str, Any]) -> dict[str, Any]:
+    """执行内部数据格式转换。
+
+    :param response: 响应对象。
+    :return: 返回函数执行结果。
+    """
     output_text = str(response.get("output_text") or "")
     return {
         "id": response.get("id"),
@@ -178,6 +232,12 @@ def _to_openai_response(response: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _apply_header_ids(payload: IngressRequest, request: Request) -> None:
+    """执行 _apply_header_ids 内部辅助逻辑。
+
+    :param payload: 请求载荷。
+    :param request: 请求对象。
+    :return: 返回函数执行结果。
+    """
     header_request_id = _header_value(request, "x-request-id")
     header_trace_id = _header_value(request, "x-trace-id")
     if header_request_id and payload.request_id and header_request_id != payload.request_id:
@@ -201,6 +261,12 @@ def _apply_header_ids(payload: IngressRequest, request: Request) -> None:
 
 
 def _header_value(request: Request, name: str) -> str | None:
+    """执行 _header_value 内部辅助逻辑。
+
+    :param request: 请求对象。
+    :param name: 名称。
+    :return: 返回函数执行结果。
+    """
     value = request.headers.get(name)
     if isinstance(value, str) and value.strip():
         return value.strip()
@@ -208,6 +274,12 @@ def _header_value(request: Request, name: str) -> str | None:
 
 
 async def _authorize_turn(payload: IngressRequest, request: Request) -> None:
+    """执行内部授权逻辑。
+
+    :param payload: 请求载荷。
+    :param request: 请求对象。
+    :return: 返回函数执行结果。
+    """
     container = get_container()
     principal = container.access_control.authenticate(request.headers)
     await container.access_control.authorize(
@@ -222,6 +294,11 @@ async def _authorize_turn(payload: IngressRequest, request: Request) -> None:
 
 
 def _ready_checks(orchestrator_ready: bool) -> dict[str, bool]:
+    """构建内部就绪检查结果。
+
+    :param orchestrator_ready: 参数 orchestrator_ready。
+    :return: 返回函数执行结果。
+    """
     return {
         "ingress_config": True,
         "rule_repository": orchestrator_ready,
@@ -231,6 +308,11 @@ def _ready_checks(orchestrator_ready: bool) -> dict[str, bool]:
 
 
 def _trace_headers(turn_request: AgentTurnRequest) -> dict[str, str]:
+    """构建内部追踪信息。
+
+    :param turn_request: Agent 回合请求。
+    :return: 返回函数执行结果。
+    """
     return {
         "X-Request-ID": turn_request.request_context.request_id,
         "X-Trace-ID": turn_request.request_context.trace_id,

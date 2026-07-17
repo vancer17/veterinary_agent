@@ -1,3 +1,10 @@
+"""
+文件：src/vet_agent/api/memory_routes.py
+作用：提供面向业务侧的 HTTP API 路由。
+说明：本文件遵循项目标准文件树编排；跨包引用应通过对应包的 __init__.py 暴露能力。
+"""
+
+
 from __future__ import annotations
 
 from typing import Annotated
@@ -5,9 +12,9 @@ from typing import Annotated
 from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel, Field
 
-from ingress.errors import ForbiddenError
-from vet_agent.container import get_container
-from vet_agent.contracts import TrustedIdentity
+from ingress import ForbiddenError
+from vet_agent import get_container
+from vet_agent import TrustedIdentity
 
 
 router = APIRouter(prefix="/memories", tags=["memories"])
@@ -39,6 +46,14 @@ async def read_memory(
     session_id: Annotated[str, Query(min_length=1)],
     pet_id: Annotated[str, Query(min_length=1)],
 ):
+    """执行 read_memory 业务逻辑。
+
+    :param request: 请求对象。
+    :param user_id: 参数 user_id。
+    :param session_id: 参数 session_id。
+    :param pet_id: 参数 pet_id。
+    :return: 返回异步执行结果。
+    """
     container = get_container()
     identity = TrustedIdentity(user_id=user_id, session_id=session_id, pet_id=pet_id)
     await _authorize_memory_request(request, identity)
@@ -49,6 +64,12 @@ async def read_memory(
 
 @router.put("")
 async def correct_memory(correction: MemoryCorrection, request: Request):
+    """执行 correct_memory 业务逻辑。
+
+    :param correction: 参数 correction。
+    :param request: 请求对象。
+    :return: 返回异步执行结果。
+    """
     container = get_container()
     identity = TrustedIdentity(
         user_id=correction.user_id,
@@ -68,6 +89,12 @@ async def correct_memory(correction: MemoryCorrection, request: Request):
 
 @router.put("/facts")
 async def correct_pet_fact(correction: FactCorrection, request: Request):
+    """执行 correct_pet_fact 业务逻辑。
+
+    :param correction: 参数 correction。
+    :param request: 请求对象。
+    :return: 返回异步执行结果。
+    """
     container = get_container()
     identity = TrustedIdentity(
         user_id=correction.user_id,
@@ -94,6 +121,14 @@ async def delete_pet_memory(
     user_id: Annotated[str | None, Query(min_length=1)] = None,
     session_id: Annotated[str | None, Query(min_length=1)] = None,
 ):
+    """执行 delete_pet_memory 业务逻辑。
+
+    :param pet_id: 参数 pet_id。
+    :param request: 请求对象。
+    :param user_id: 参数 user_id。
+    :param session_id: 参数 session_id。
+    :return: 返回异步执行结果。
+    """
     container = get_container()
     if user_id and session_id:
         identity = TrustedIdentity(user_id=user_id, session_id=session_id, pet_id=pet_id)
@@ -108,6 +143,12 @@ async def delete_pet_memory(
 
 
 async def _authorize_memory_request(request: Request, identity: TrustedIdentity) -> None:
+    """执行内部授权逻辑。
+
+    :param request: 请求对象。
+    :param identity: 可信身份信息。
+    :return: 返回函数执行结果。
+    """
     container = get_container()
     principal = container.access_control.authenticate(request.headers)
     await container.access_control.authorize(identity, pet_info={}, principal=principal)

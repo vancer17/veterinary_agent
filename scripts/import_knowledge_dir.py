@@ -1,3 +1,10 @@
+"""
+文件：scripts/import_knowledge_dir.py
+作用：提供开发、导入与初始化脚本。
+说明：本文件遵循项目标准文件树编排；跨包引用应通过对应包的 __init__.py 暴露能力。
+"""
+
+
 from __future__ import annotations
 
 import argparse
@@ -8,13 +15,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from vet_agent.config import Settings
-from vet_agent.db.models import KnowledgeChunkModel
-from vet_agent.db.session import make_session_factory
-from vet_agent.runtime.embeddings import QwenEmbeddingClient
+from vet_agent import Settings
+from vet_agent.db import KnowledgeChunkModel, make_session_factory
+from vet_agent.runtime import QwenEmbeddingClient
 
 
 def main() -> None:
+    """执行命令行入口逻辑。
+
+    :return: 返回函数执行结果。
+    """
     parser = argparse.ArgumentParser(description="Import local veterinary RAG documents into knowledge_chunks.")
     parser.add_argument("--database-url", default=os.getenv("DATABASE_URL"))
     parser.add_argument("--source-dir", default="rag_sources")
@@ -61,6 +71,12 @@ def main() -> None:
 
 
 def chunk_text(text: str, chunk_chars: int) -> list[str]:
+    """执行 chunk_text 业务逻辑。
+
+    :param text: 待处理文本。
+    :param chunk_chars: 参数 chunk_chars。
+    :return: 返回函数执行结果。
+    """
     clean = re.sub(r"\n{3,}", "\n\n", text.strip())
     paragraphs = [item.strip() for item in clean.split("\n\n") if item.strip()]
     chunks: list[str] = []

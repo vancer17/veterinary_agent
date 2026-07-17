@@ -1,3 +1,10 @@
+"""
+文件：src/vet_agent/ingress_adapter.py
+作用：提供兽医 Agent 项目的业务实现。
+说明：本文件遵循项目标准文件树编排；跨包引用应通过对应包的 __init__.py 暴露能力。
+"""
+
+
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Mapping
@@ -5,8 +12,8 @@ from typing import Any
 
 from ingress.dto import AgentTurnRequest as IngressAgentTurnRequest
 
-from vet_agent.container import Container
-from vet_agent.contracts import (
+from vet_agent import Container
+from vet_agent import (
     AgentTurnRequest,
     AttachmentRef,
     InputItem,
@@ -19,17 +26,36 @@ from vet_agent.contracts import (
 
 class VetAgentIngressOrchestrator:
     def __init__(self, container: Container) -> None:
+        """初始化当前对象。
+
+        :param container: 参数 container。
+        :return: 无返回值。
+        """
         self.container = container
 
     async def is_ready(self) -> bool:
+        """检查当前组件是否就绪。
+
+        :return: 返回函数执行结果。
+        """
         return self.container.ready
 
     async def create_turn(self, request: IngressAgentTurnRequest) -> Mapping[str, Any]:
+        """创建一个 Agent 对话回合。
+
+        :param request: 请求对象。
+        :return: 返回函数执行结果。
+        """
         core_request = self._translate_request(request)
         response = await self.container.orchestrator.run_turn(core_request)
         return self._to_external_turn(response.model_dump(mode="json"))
 
     async def stream_turn(self, request: IngressAgentTurnRequest) -> AsyncIterator[Mapping[str, Any]]:
+        """以流式事件形式执行一个 Agent 对话回合。
+
+        :param request: 请求对象。
+        :return: 返回函数执行结果。
+        """
         core_request = self._translate_request(request)
         response = await self.container.orchestrator.run_turn(core_request)
         external = self._to_external_turn(response.model_dump(mode="json"))
@@ -104,6 +130,11 @@ class VetAgentIngressOrchestrator:
         }
 
     def _translate_request(self, request: IngressAgentTurnRequest) -> AgentTurnRequest:
+        """执行 _translate_request 内部辅助逻辑。
+
+        :param request: 请求对象。
+        :return: 返回函数执行结果。
+        """
         extra = request.turn_options.model_extra or {}
         max_followup_questions = getattr(request.turn_options, "max_followup_questions", None)
         return AgentTurnRequest(
@@ -144,6 +175,11 @@ class VetAgentIngressOrchestrator:
         )
 
     def _input_items(self, value: Any) -> list[InputItem]:
+        """执行 _input_items 内部辅助逻辑。
+
+        :param value: 待处理值。
+        :return: 返回函数执行结果。
+        """
         if value is None:
             return []
         if isinstance(value, str):
@@ -159,6 +195,11 @@ class VetAgentIngressOrchestrator:
         return items
 
     def _to_external_turn(self, response: Mapping[str, Any]) -> dict[str, Any]:
+        """执行内部数据格式转换。
+
+        :param response: 响应对象。
+        :return: 返回函数执行结果。
+        """
         output_text = str(response.get("output_text") or "")
         external_segments = [
             self._to_external_segment(segment, index)
@@ -189,6 +230,12 @@ class VetAgentIngressOrchestrator:
         }
 
     def _to_external_segment(self, segment: Mapping[str, Any], index: int) -> dict[str, Any]:
+        """执行内部数据格式转换。
+
+        :param segment: 参数 segment。
+        :param index: 序号。
+        :return: 返回函数执行结果。
+        """
         output_text = str(segment.get("output_text") or segment.get("content") or "")
         return {
             "segment_id": segment.get("segment_id") or f"seg_{index + 1:03d}",
@@ -203,5 +250,11 @@ class VetAgentIngressOrchestrator:
         }
 
     def _chunks(self, text: str, size: int):
+        """执行 _chunks 内部辅助逻辑。
+
+        :param text: 待处理文本。
+        :param size: 分片大小。
+        :return: 返回函数执行结果。
+        """
         for start in range(0, len(text), size):
             yield text[start : start + size]

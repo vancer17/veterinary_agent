@@ -1,3 +1,10 @@
+"""
+文件：src/vet_agent/services/rag_governance.py
+作用：承载业务服务、记忆、报告解析、权限与治理逻辑。
+说明：本文件遵循项目标准文件树编排；跨包引用应通过对应包的 __init__.py 暴露能力。
+"""
+
+
 from __future__ import annotations
 
 import json
@@ -7,9 +14,8 @@ from typing import Any
 
 from sqlalchemy import func, select, update
 
-from vet_agent.db.models import KnowledgeChunkModel, RagAuditEventModel
-from vet_agent.db.session import make_session_factory
-from vet_agent.stores.json_store import JsonDocumentStore
+from vet_agent.db import KnowledgeChunkModel, RagAuditEventModel, make_session_factory
+from vet_agent.stores import JsonDocumentStore
 
 
 VALID_REVIEW_STATUSES = {"approved", "pending", "rejected", "quarantined"}
@@ -17,9 +23,21 @@ VALID_REVIEW_STATUSES = {"approved", "pending", "rejected", "quarantined"}
 
 class RagGovernanceService:
     def __init__(self, store: "RagGovernanceStore") -> None:
+        """初始化当前对象。
+
+        :param store: 参数 store。
+        :return: 无返回值。
+        """
         self.store = store
 
     async def list_chunks(self, *, review_status: str | None = None, limit: int = 50, offset: int = 0) -> dict[str, Any]:
+        """执行 list_chunks 业务逻辑。
+
+        :param review_status: 参数 review_status。
+        :param limit: 返回数量上限。
+        :param offset: 分页偏移量。
+        :return: 返回函数执行结果。
+        """
         return await self.store.list_chunks(review_status=review_status, limit=limit, offset=offset)
 
     async def update_chunk(
@@ -33,6 +51,17 @@ class RagGovernanceService:
         actor_id: str | None = None,
         reason: str | None = None,
     ) -> dict[str, Any]:
+        """执行 update_chunk 业务逻辑。
+
+        :param chunk_id: 参数 chunk_id。
+        :param enabled: 是否启用。
+        :param review_status: 参数 review_status。
+        :param quality_score: 参数 quality_score。
+        :param disabled_reason: 参数 disabled_reason。
+        :param actor_id: 参数 actor_id。
+        :param reason: 参数 reason。
+        :return: 返回函数执行结果。
+        """
         if review_status is not None and review_status not in VALID_REVIEW_STATUSES:
             raise ValueError(f"review_status must be one of {sorted(VALID_REVIEW_STATUSES)}")
         if quality_score is not None and not 0 <= quality_score <= 1:
@@ -48,32 +77,72 @@ class RagGovernanceService:
         )
 
     async def stats(self) -> dict[str, Any]:
+        """执行 stats 业务逻辑。
+
+        :return: 返回函数执行结果。
+        """
         return await self.store.stats()
 
 
 class RagGovernanceStore:
     async def list_chunks(self, *, review_status: str | None, limit: int, offset: int) -> dict[str, Any]:
+        """执行 list_chunks 业务逻辑。
+
+        :param review_status: 参数 review_status。
+        :param limit: 返回数量上限。
+        :param offset: 分页偏移量。
+        :return: 返回函数执行结果。
+        """
         raise NotImplementedError
 
     async def update_chunk(self, chunk_id: int, **kwargs) -> dict[str, Any]:
+        """执行 update_chunk 业务逻辑。
+
+        :param chunk_id: 参数 chunk_id。
+        :param kwargs: 参数 kwargs。
+        :return: 返回函数执行结果。
+        """
         raise NotImplementedError
 
     async def stats(self) -> dict[str, Any]:
+        """执行 stats 业务逻辑。
+
+        :return: 返回函数执行结果。
+        """
         raise NotImplementedError
 
 
 class JsonRagGovernanceStore(RagGovernanceStore):
     def __init__(self, seed_dir: Path, store: JsonDocumentStore) -> None:
+        """初始化当前对象。
+
+        :param seed_dir: 参数 seed_dir。
+        :param store: 参数 store。
+        :return: 无返回值。
+        """
         self.seed_dir = seed_dir
         self.store = store
 
     async def list_chunks(self, *, review_status: str | None, limit: int, offset: int) -> dict[str, Any]:
+        """执行 list_chunks 业务逻辑。
+
+        :param review_status: 参数 review_status。
+        :param limit: 返回数量上限。
+        :param offset: 分页偏移量。
+        :return: 返回函数执行结果。
+        """
         rows = self._chunks()
         if review_status:
             rows = [row for row in rows if row.get("review_status") == review_status]
         return {"items": rows[offset : offset + limit], "total": len(rows), "backend": "json_seed"}
 
     async def update_chunk(self, chunk_id: int, **kwargs) -> dict[str, Any]:
+        """执行 update_chunk 业务逻辑。
+
+        :param chunk_id: 参数 chunk_id。
+        :param kwargs: 参数 kwargs。
+        :return: 返回函数执行结果。
+        """
         data = self.store.load()
         states = data.setdefault("chunk_states", {})
         current = dict(states.get(str(chunk_id)) or {})
@@ -98,6 +167,10 @@ class JsonRagGovernanceStore(RagGovernanceStore):
         return {"chunk_id": chunk_id, **current}
 
     async def stats(self) -> dict[str, Any]:
+        """执行 stats 业务逻辑。
+
+        :return: 返回函数执行结果。
+        """
         rows = self._chunks()
         by_status: dict[str, int] = {}
         for row in rows:
@@ -105,6 +178,10 @@ class JsonRagGovernanceStore(RagGovernanceStore):
         return {"total": len(rows), "by_review_status": by_status, "backend": "json_seed"}
 
     def _chunks(self) -> list[dict[str, Any]]:
+        """执行 _chunks 内部辅助逻辑。
+
+        :return: 返回函数执行结果。
+        """
         path = self.seed_dir / "knowledge_chunks.json"
         raw = json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
         state_data = self.store.load().get("chunk_states", {})
@@ -131,9 +208,21 @@ class JsonRagGovernanceStore(RagGovernanceStore):
 
 class PostgresRagGovernanceStore(RagGovernanceStore):
     def __init__(self, database_url: str) -> None:
+        """初始化当前对象。
+
+        :param database_url: 数据库连接地址。
+        :return: 无返回值。
+        """
         self.session_factory = make_session_factory(database_url)
 
     async def list_chunks(self, *, review_status: str | None, limit: int, offset: int) -> dict[str, Any]:
+        """执行 list_chunks 业务逻辑。
+
+        :param review_status: 参数 review_status。
+        :param limit: 返回数量上限。
+        :param offset: 分页偏移量。
+        :return: 返回函数执行结果。
+        """
         filters = []
         if review_status:
             filters.append(KnowledgeChunkModel.review_status == review_status)
@@ -149,6 +238,12 @@ class PostgresRagGovernanceStore(RagGovernanceStore):
         return {"items": [self._chunk_dict(row) for row in rows], "total": total, "backend": "postgres"}
 
     async def update_chunk(self, chunk_id: int, **kwargs) -> dict[str, Any]:
+        """执行 update_chunk 业务逻辑。
+
+        :param chunk_id: 参数 chunk_id。
+        :param kwargs: 参数 kwargs。
+        :return: 返回函数执行结果。
+        """
         now = datetime.now(UTC)
         with self.session_factory.begin() as session:
             row = session.scalar(select(KnowledgeChunkModel).where(KnowledgeChunkModel.id == chunk_id))
@@ -175,6 +270,10 @@ class PostgresRagGovernanceStore(RagGovernanceStore):
         return after
 
     async def stats(self) -> dict[str, Any]:
+        """执行 stats 业务逻辑。
+
+        :return: 返回函数执行结果。
+        """
         with self.session_factory() as session:
             rows = session.execute(
                 select(KnowledgeChunkModel.review_status, func.count()).group_by(KnowledgeChunkModel.review_status)
@@ -189,6 +288,11 @@ class PostgresRagGovernanceStore(RagGovernanceStore):
         }
 
     def _chunk_dict(self, row: KnowledgeChunkModel | None) -> dict[str, Any]:
+        """执行 _chunk_dict 内部辅助逻辑。
+
+        :param row: 数据库行。
+        :return: 返回函数执行结果。
+        """
         if row is None:
             return {}
         return {

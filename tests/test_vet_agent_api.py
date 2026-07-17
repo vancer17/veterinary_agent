@@ -1,18 +1,31 @@
+"""
+文件：tests/test_vet_agent_api.py
+作用：提供项目自动化测试用例与测试辅助函数。
+说明：本文件遵循项目标准文件树编排；跨包引用应通过对应包的 __init__.py 暴露能力。
+"""
+
+
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from ingress.app import app
-from ingress.orchestrator import set_orchestrator
-from vet_agent.agents.task_splitter import TaskSplitterAgent
-from vet_agent.config import Settings
-from vet_agent.container import get_container
-from vet_agent.ingress_adapter import VetAgentIngressOrchestrator
-from vet_agent.repositories.rules import FileRuleRepository
-from vet_agent.runtime.qwen import QwenClient
+from ingress import create_app, set_orchestrator
+from vet_agent import Settings, VetAgentIngressOrchestrator, get_container
+from vet_agent.agents import TaskSplitterAgent
+from vet_agent.repositories import FileRuleRepository
+from vet_agent.runtime import QwenClient
+
+
+app = create_app()
 
 
 def _client(tmp_path, monkeypatch) -> TestClient:
+    """执行 _client 内部辅助逻辑。
+
+    :param tmp_path: 参数 tmp_path。
+    :param monkeypatch: 参数 monkeypatch。
+    :return: 返回函数执行结果。
+    """
     monkeypatch.setenv("LITELLM_API_KEY", "sk-test-litellm")
     monkeypatch.setenv("LITELLM_BASE_URL", "http://litellm.test/v1")
     monkeypatch.setenv("ENABLE_MEM0", "false")
@@ -26,6 +39,13 @@ def _client(tmp_path, monkeypatch) -> TestClient:
 
 
 async def _fake_litellm_send_chat(self, messages, *, model: str, temperature: float) -> str:
+    """执行 _fake_litellm_send_chat 内部辅助逻辑。
+
+    :param messages: 参数 messages。
+    :param model: 模型名称。
+    :param temperature: 参数 temperature。
+    :return: 返回函数执行结果。
+    """
     del self, model, temperature
     user_text = _message_text(messages)
     if "image_url" in user_text:
@@ -55,6 +75,11 @@ async def _fake_litellm_send_chat(self, messages, *, model: str, temperature: fl
 
 
 def _message_text(messages) -> str:
+    """执行 _message_text 内部辅助逻辑。
+
+    :param messages: 参数 messages。
+    :return: 返回函数执行结果。
+    """
     parts: list[str] = []
     for message in messages:
         content = message.get("content")
@@ -68,6 +93,12 @@ def _message_text(messages) -> str:
 
 
 def _payload(text: str, **extra):
+    """执行 _payload 内部辅助逻辑。
+
+    :param text: 待处理文本。
+    :param extra: 参数 extra。
+    :return: 返回函数执行结果。
+    """
     payload = {
         "input": text,
         "stream": False,
@@ -88,6 +119,12 @@ def _payload(text: str, **extra):
 
 
 def _payload_without_pet_info(text: str, session_id: str = "s_ctx"):
+    """执行 _payload_without_pet_info 内部辅助逻辑。
+
+    :param text: 待处理文本。
+    :param session_id: 参数 session_id。
+    :return: 返回函数执行结果。
+    """
     return {
         "input": text,
         "stream": False,
@@ -100,6 +137,12 @@ def _payload_without_pet_info(text: str, session_id: str = "s_ctx"):
 
 
 def test_health_and_ready(tmp_path, monkeypatch):
+    """验证对应业务场景是否符合预期。
+
+    :param tmp_path: 参数 tmp_path。
+    :param monkeypatch: 参数 monkeypatch。
+    :return: 无返回值；断言通过表示场景符合预期。
+    """
     client = _client(tmp_path, monkeypatch)
 
     assert client.get("/health").json()["status"] == "ok"
@@ -109,6 +152,12 @@ def test_health_and_ready(tmp_path, monkeypatch):
 
 
 def test_sync_turn_uses_litellm_gateway_and_evidence(tmp_path, monkeypatch):
+    """验证对应业务场景是否符合预期。
+
+    :param tmp_path: 参数 tmp_path。
+    :param monkeypatch: 参数 monkeypatch。
+    :return: 无返回值；断言通过表示场景符合预期。
+    """
     client = _client(tmp_path, monkeypatch)
 
     response = client.post("/agent/turns", json=_payload("我家狗今天有点拉稀，应该怎么办？"))
@@ -123,6 +172,12 @@ def test_sync_turn_uses_litellm_gateway_and_evidence(tmp_path, monkeypatch):
 
 
 def test_toxic_substance_is_escalated(tmp_path, monkeypatch):
+    """验证对应业务场景是否符合预期。
+
+    :param tmp_path: 参数 tmp_path。
+    :param monkeypatch: 参数 monkeypatch。
+    :return: 无返回值；断言通过表示场景符合预期。
+    """
     client = _client(tmp_path, monkeypatch)
 
     response = client.post("/agent/turns", json=_payload("狗误食了巧克力，还能观察一下吗？"))
@@ -135,6 +190,12 @@ def test_toxic_substance_is_escalated(tmp_path, monkeypatch):
 
 
 def test_emergency_red_flag_skips_followup(tmp_path, monkeypatch):
+    """验证对应业务场景是否符合预期。
+
+    :param tmp_path: 参数 tmp_path。
+    :param monkeypatch: 参数 monkeypatch。
+    :return: 无返回值；断言通过表示场景符合预期。
+    """
     client = _client(tmp_path, monkeypatch)
 
     response = client.post("/agent/turns", json=_payload("猫现在呼吸困难，站不起来"))
@@ -147,6 +208,12 @@ def test_emergency_red_flag_skips_followup(tmp_path, monkeypatch):
 
 
 def test_radiology_attachment_is_blocked(tmp_path, monkeypatch):
+    """验证对应业务场景是否符合预期。
+
+    :param tmp_path: 参数 tmp_path。
+    :param monkeypatch: 参数 monkeypatch。
+    :return: 无返回值；断言通过表示场景符合预期。
+    """
     client = _client(tmp_path, monkeypatch)
 
     response = client.post(
@@ -172,6 +239,12 @@ def test_radiology_attachment_is_blocked(tmp_path, monkeypatch):
 
 
 def test_memory_read_correct_delete(tmp_path, monkeypatch):
+    """验证对应业务场景是否符合预期。
+
+    :param tmp_path: 参数 tmp_path。
+    :param monkeypatch: 参数 monkeypatch。
+    :return: 无返回值；断言通过表示场景符合预期。
+    """
     client = _client(tmp_path, monkeypatch)
 
     correction = {
@@ -191,6 +264,12 @@ def test_memory_read_correct_delete(tmp_path, monkeypatch):
 
 
 def test_pet_fact_memory_can_be_persisted_and_read(tmp_path, monkeypatch):
+    """验证对应业务场景是否符合预期。
+
+    :param tmp_path: 参数 tmp_path。
+    :param monkeypatch: 参数 monkeypatch。
+    :return: 无返回值；断言通过表示场景符合预期。
+    """
     client = _client(tmp_path, monkeypatch)
 
     fact = {
@@ -210,6 +289,12 @@ def test_pet_fact_memory_can_be_persisted_and_read(tmp_path, monkeypatch):
 
 
 def test_idempotency_key_reuses_first_response(tmp_path, monkeypatch):
+    """验证对应业务场景是否符合预期。
+
+    :param tmp_path: 参数 tmp_path。
+    :param monkeypatch: 参数 monkeypatch。
+    :return: 无返回值；断言通过表示场景符合预期。
+    """
     client = _client(tmp_path, monkeypatch)
     payload = _payload(
         "我家狗今天有点拉稀，应该怎么办？",
@@ -225,6 +310,12 @@ def test_idempotency_key_reuses_first_response(tmp_path, monkeypatch):
 
 
 def test_openai_compatible_response_shape(tmp_path, monkeypatch):
+    """验证对应业务场景是否符合预期。
+
+    :param tmp_path: 参数 tmp_path。
+    :param monkeypatch: 参数 monkeypatch。
+    :return: 无返回值；断言通过表示场景符合预期。
+    """
     client = _client(tmp_path, monkeypatch)
 
     response = client.post("/openai/v1/responses", json=_payload("我家狗最近乱叫"))
@@ -241,6 +332,12 @@ def test_openai_compatible_response_shape(tmp_path, monkeypatch):
 
 
 def test_agent_turn_external_contract_includes_reasoning_display(tmp_path, monkeypatch):
+    """验证对应业务场景是否符合预期。
+
+    :param tmp_path: 参数 tmp_path。
+    :param monkeypatch: 参数 monkeypatch。
+    :return: 无返回值；断言通过表示场景符合预期。
+    """
     client = _client(tmp_path, monkeypatch)
 
     response = client.post("/agent/turns", json=_payload_without_pet_info("它有点拉稀，怎么办？", session_id="s_reasoning"))
@@ -259,6 +356,12 @@ def test_agent_turn_external_contract_includes_reasoning_display(tmp_path, monke
 
 
 def test_stream_turn_emits_reasoning_display_events(tmp_path, monkeypatch):
+    """验证对应业务场景是否符合预期。
+
+    :param tmp_path: 参数 tmp_path。
+    :param monkeypatch: 参数 monkeypatch。
+    :return: 无返回值；断言通过表示场景符合预期。
+    """
     client = _client(tmp_path, monkeypatch)
 
     response = client.post(
@@ -275,6 +378,12 @@ def test_stream_turn_emits_reasoning_display_events(tmp_path, monkeypatch):
 
 
 def test_multi_task_turn_splits_into_independent_segments(tmp_path, monkeypatch):
+    """验证对应业务场景是否符合预期。
+
+    :param tmp_path: 参数 tmp_path。
+    :param monkeypatch: 参数 monkeypatch。
+    :return: 无返回值；断言通过表示场景符合预期。
+    """
     client = _client(tmp_path, monkeypatch)
 
     response = client.post(
@@ -309,10 +418,21 @@ def test_multi_task_turn_splits_into_independent_segments(tmp_path, monkeypatch)
 
 
 def test_llm_task_router_can_drive_task_splitting():
+    """验证对应业务场景是否符合预期。
+
+    :return: 无返回值；断言通过表示场景符合预期。
+    """
     class FakeQwen:
         available = True
 
         async def chat(self, messages, *, model=None, temperature=0.2):
+            """执行 chat 业务逻辑。
+
+            :param messages: 参数 messages。
+            :param model: 模型名称。
+            :param temperature: 参数 temperature。
+            :return: 返回异步执行结果。
+            """
             return """
             {
               "tasks": [
@@ -338,6 +458,12 @@ def test_llm_task_router_can_drive_task_splitting():
 
 
 def test_header_body_id_conflict_returns_invalid_request(tmp_path, monkeypatch):
+    """验证对应业务场景是否符合预期。
+
+    :param tmp_path: 参数 tmp_path。
+    :param monkeypatch: 参数 monkeypatch。
+    :return: 无返回值；断言通过表示场景符合预期。
+    """
     client = _client(tmp_path, monkeypatch)
     payload = _payload_without_pet_info("它有点拉稀，怎么办？", session_id="s_header_conflict")
     payload["request_id"] = "req_body"
@@ -351,6 +477,12 @@ def test_header_body_id_conflict_returns_invalid_request(tmp_path, monkeypatch):
 
 
 def test_consultation_first_turn_collects_slots_without_final_advice(tmp_path, monkeypatch):
+    """验证对应业务场景是否符合预期。
+
+    :param tmp_path: 参数 tmp_path。
+    :param monkeypatch: 参数 monkeypatch。
+    :return: 无返回值；断言通过表示场景符合预期。
+    """
     client = _client(tmp_path, monkeypatch)
 
     response = client.post("/agent/turns", json=_payload_without_pet_info("它有点拉稀，怎么办？"))
@@ -366,6 +498,12 @@ def test_consultation_first_turn_collects_slots_without_final_advice(tmp_path, m
 
 
 def test_consultation_second_turn_completes_after_context_is_built(tmp_path, monkeypatch):
+    """验证对应业务场景是否符合预期。
+
+    :param tmp_path: 参数 tmp_path。
+    :param monkeypatch: 参数 monkeypatch。
+    :return: 无返回值；断言通过表示场景符合预期。
+    """
     client = _client(tmp_path, monkeypatch)
     session_id = "s_ctx_2"
 
@@ -390,6 +528,12 @@ def test_consultation_second_turn_completes_after_context_is_built(tmp_path, mon
     assert "请先回答" not in data["output_text"]
     assert "线下兽医" in data["output_text"]
 def test_api_key_auth_can_be_required(tmp_path, monkeypatch):
+    """验证对应业务场景是否符合预期。
+
+    :param tmp_path: 参数 tmp_path。
+    :param monkeypatch: 参数 monkeypatch。
+    :return: 无返回值；断言通过表示场景符合预期。
+    """
     monkeypatch.setenv("REQUIRE_API_AUTH", "true")
     monkeypatch.setenv("VET_AGENT_API_KEYS", "secret-token")
     client = _client(tmp_path, monkeypatch)
@@ -405,6 +549,12 @@ def test_api_key_auth_can_be_required(tmp_path, monkeypatch):
 
 
 def test_session_policy_blocks_switching_pet_in_same_session(tmp_path, monkeypatch):
+    """验证对应业务场景是否符合预期。
+
+    :param tmp_path: 参数 tmp_path。
+    :param monkeypatch: 参数 monkeypatch。
+    :return: 无返回值；断言通过表示场景符合预期。
+    """
     client = _client(tmp_path, monkeypatch)
     first = _payload_without_pet_info("My dog has mild diarrhea.", session_id="s_one_pet")
     second = _payload_without_pet_info("My cat has mild diarrhea.", session_id="s_one_pet")
@@ -418,6 +568,12 @@ def test_session_policy_blocks_switching_pet_in_same_session(tmp_path, monkeypat
 
 
 def test_memory_extraction_persists_pet_info_facts(tmp_path, monkeypatch):
+    """验证对应业务场景是否符合预期。
+
+    :param tmp_path: 参数 tmp_path。
+    :param monkeypatch: 参数 monkeypatch。
+    :return: 无返回值；断言通过表示场景符合预期。
+    """
     client = _client(tmp_path, monkeypatch)
     payload = {
         "input": "Please remember this profile.",
@@ -443,8 +599,11 @@ def test_memory_extraction_persists_pet_info_facts(tmp_path, monkeypatch):
 
 
 def test_safety_review_removes_dosage_expression():
-    from vet_agent.agents.safety import SafetyAgent
-    from vet_agent.agents.safety_review import SafetyReviewAgent
+    """验证对应业务场景是否符合预期。
+
+    :return: 无返回值；断言通过表示场景符合预期。
+    """
+    from vet_agent.agents import SafetyAgent, SafetyReviewAgent
 
     reviewer = SafetyReviewAgent(SafetyAgent(FileRuleRepository(Settings().seed_dir)))
     result = reviewer.review_text("You can give 5 mg/kg twice daily.")
@@ -454,6 +613,12 @@ def test_safety_review_removes_dosage_expression():
 
 
 def test_report_parse_extracts_structured_lab_items(tmp_path, monkeypatch):
+    """验证对应业务场景是否符合预期。
+
+    :param tmp_path: 参数 tmp_path。
+    :param monkeypatch: 参数 monkeypatch。
+    :return: 无返回值；断言通过表示场景符合预期。
+    """
     client = _client(tmp_path, monkeypatch)
 
     response = client.post(
@@ -478,6 +643,12 @@ def test_report_parse_extracts_structured_lab_items(tmp_path, monkeypatch):
 
 
 def test_radiology_report_is_blocked_from_online_interpretation(tmp_path, monkeypatch):
+    """验证对应业务场景是否符合预期。
+
+    :param tmp_path: 参数 tmp_path。
+    :param monkeypatch: 参数 monkeypatch。
+    :return: 无返回值；断言通过表示场景符合预期。
+    """
     client = _client(tmp_path, monkeypatch)
 
     response = client.post(
@@ -499,6 +670,12 @@ def test_radiology_report_is_blocked_from_online_interpretation(tmp_path, monkey
 
 
 def test_report_parse_rejects_non_oss_image_url(tmp_path, monkeypatch):
+    """验证对应业务场景是否符合预期。
+
+    :param tmp_path: 参数 tmp_path。
+    :param monkeypatch: 参数 monkeypatch。
+    :return: 无返回值；断言通过表示场景符合预期。
+    """
     client = _client(tmp_path, monkeypatch)
 
     response = client.post(
@@ -517,6 +694,12 @@ def test_report_parse_rejects_non_oss_image_url(tmp_path, monkeypatch):
 
 
 def test_rag_governance_admin_can_list_and_update_seed_chunks(tmp_path, monkeypatch):
+    """验证对应业务场景是否符合预期。
+
+    :param tmp_path: 参数 tmp_path。
+    :param monkeypatch: 参数 monkeypatch。
+    :return: 无返回值；断言通过表示场景符合预期。
+    """
     client = _client(tmp_path, monkeypatch)
 
     stats = client.get("/admin/rag/stats")
