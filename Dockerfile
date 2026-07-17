@@ -1,3 +1,9 @@
+# -----------------------------------------------------------------------------
+# File: Dockerfile
+# Purpose: Build the production Vet Agent application image from uv.lock.
+# Dependency source: The default package index is configured in pyproject.toml.
+# -----------------------------------------------------------------------------
+
 ARG PYTHON_BASE_IMAGE=ghcr.io/astral-sh/uv:python3.12-bookworm
 FROM ${PYTHON_BASE_IMAGE}
 
@@ -5,22 +11,23 @@ WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    UV_SYSTEM_PYTHON=1 \
     UV_LINK_MODE=copy \
+    UV_PROJECT_ENVIRONMENT=/opt/venv \
+    PATH="/opt/venv/bin:${PATH}" \
     PYTHONPATH=/app/src
 
-COPY pyproject.toml README.md ./
+COPY pyproject.toml uv.lock README.md ./
 COPY alembic.ini ./
 COPY alembic ./alembic
 COPY data ./data
 COPY scripts ./scripts
 COPY src ./src
 
-RUN uv pip install --system . \
+RUN uv sync --frozen --no-dev \
     && groupadd --system app \
     && useradd --system --gid app --home-dir /app --shell /usr/sbin/nologin app \
     && mkdir -p /app/.data \
-    && chown -R app:app /app
+    && chown -R app:app /app /opt/venv
 
 USER app
 
