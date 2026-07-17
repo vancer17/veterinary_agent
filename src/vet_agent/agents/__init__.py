@@ -10,6 +10,7 @@ from .composer import ResponseComposer
 from .consultation import ConsultationDecision, ConsultationState, ConsultationStateAgent
 from .memory_extraction import MemoryExtractionAgent, MemoryFactCandidate
 from .question_planner import QuestionPlanner
+from .rag_question_planner import RagFollowupPlan, RagFollowupQuestion, RagQuestionPlannerAgent
 from .safety import SafetyAgent, SafetyAssessment
 from .safety_review import SafetyReviewAgent, SafetyReviewResult
 from .task_splitter import SplitTask, TaskSplitDecision, TaskSplitterAgent
@@ -21,6 +22,9 @@ __all__ = [
     "MemoryExtractionAgent",
     "MemoryFactCandidate",
     "QuestionPlanner",
+    "RagFollowupPlan",
+    "RagFollowupQuestion",
+    "RagQuestionPlannerAgent",
     "ResponseComposer",
     "SafetyAgent",
     "SafetyAssessment",

@@ -48,6 +48,37 @@ async def _fake_litellm_send_chat(self, messages, *, model: str, temperature: fl
     """
     del self, model, temperature
     user_text = _message_text(messages)
+    if "TaskRouterAgent" in user_text and "主餐都会清空" in user_text:
+        return """
+        {
+          "tasks": [
+            {"domain": "general", "title": "一般补充", "text": "主餐都会清空，前天第一次看到", "priority": 10, "reason": "补充问诊信息"},
+            {"domain": "behavior", "title": "互动状态", "text": "叫名字会抬头，结束后会自己拿玩具过来", "priority": 20, "reason": "互动和行为信息"},
+            {"domain": "gastrointestinal", "title": "腹部反应", "text": "轻碰腹部会把身体绷紧", "priority": 30, "reason": "腹部相关线索"}
+          ]
+        }
+        """
+    if "RagQuestionPlannerAgent" in user_text and "缩成一团" in user_text:
+        return """
+        {
+          "questions": [
+            {
+              "slot": "mental_status",
+              "question": "它缩成一团时，腹部有没有明显紧绷，或被抱起、轻碰肚子时躲开？",
+              "reason": "知识库提示姿势改变要优先区分疼痛、腹部不适和普通休息状态。",
+              "evidence_titles": ["消化道症状"],
+              "priority": 10
+            },
+            {
+              "slot": "onset",
+              "question": "这种缩着趴通常是在饭后多久出现，每次会持续多长时间？",
+              "reason": "发生时间和进食关系能帮助判断是否更偏向短暂胃肠不适。",
+              "evidence_titles": ["消化道症状"],
+              "priority": 20
+            }
+          ]
+        }
+        """
     if "image_url" in user_text:
         return """
         {
@@ -495,6 +526,96 @@ def test_consultation_first_turn_collects_slots_without_final_advice(tmp_path, m
     assert "它是猫还是狗" in data["output_text"]
     assert "请先回答" in data["output_text"]
     assert "QwenResponseAgent" not in data["metadata"]["multi_agent_path"]
+
+
+def test_rag_guided_followup_uses_knowledge_to_plan_questions(tmp_path, monkeypatch):
+    """验证知识库命中结果可反推动态追问。
+
+    :param tmp_path: 参数 tmp_path。
+    :param monkeypatch: 参数 monkeypatch。
+    :return: 无返回值；断言通过表示场景符合预期。
+    """
+    client = _client(tmp_path, monkeypatch)
+
+    response = client.post(
+        "/agent/turns",
+        json=_payload(
+            "饭后总是缩成一团趴着，看起来不太舒服。",
+            vet_context={
+                "user_id": "u_rag_followup",
+                "session_id": "s_rag_followup",
+                "pet_id": "p_rag_followup",
+                "pet_info": {
+                    "species": "犬",
+                    "breed": "柯基",
+                    "age": "3岁",
+                    "weight_kg": 12,
+                },
+            },
+        ),
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "requires_followup"
+    assert data["vet_result"]["route"] == "rag_guided_followup"
+    assert "RagQuestionPlannerAgent" in data["metadata"]["multi_agent_path"]
+    assert "QwenResponseAgent" not in data["metadata"]["multi_agent_path"]
+    assert "腹部有没有明显紧绷" in data["output_text"]
+    assert "饭后多久出现" in data["output_text"]
+    assert "为什么先问这些" in data["output_text"]
+    plan = data["metadata"]["followup_question_plan"]
+    assert plan["strategy"] == "rag_llm_question_planner"
+    assert plan["questions"][0]["evidence_titles"] == ["消化道症状"]
+    assert data["evidence"]
+
+
+def test_unfinished_consultation_state_skips_task_splitting(tmp_path, monkeypatch):
+    """验证未完成问诊状态会优先吸收下一轮回答。
+
+    :param tmp_path: 参数 tmp_path。
+    :param monkeypatch: 参数 monkeypatch。
+    :return: 无返回值；断言通过表示场景符合预期。
+    """
+    client = _client(tmp_path, monkeypatch)
+    session_id = "s_skip_task_router"
+    vet_context = {
+        "user_id": "u_skip_task_router",
+        "session_id": session_id,
+        "pet_id": "p_skip_task_router",
+        "pet_info": {
+            "species": "犬",
+            "breed": "柯基",
+            "age": "3岁",
+            "weight_kg": 12,
+        },
+    }
+
+    first = client.post(
+        "/agent/turns",
+        json=_payload(
+            "饭后总是缩成一团趴着，看起来不太舒服。",
+            vet_context=vet_context,
+        ),
+    )
+    assert first.status_code == 200
+    assert first.json()["status"] == "requires_followup"
+
+    second = client.post(
+        "/agent/turns",
+        json=_payload(
+            "主餐都会清空，平时喜欢的小块奖励也主动来拿，叫名字会抬头并且结束后会自己拿玩具过来，前天第一次看到，轻碰腹部会把身体绷紧但不会躲开。",
+            vet_context=vet_context,
+        ),
+    )
+
+    assert second.status_code == 200
+    data = second.json()
+    assert data["vet_result"]["route"] == "rag_guided_followup"
+    assert data["metadata"]["task_router_skipped"] is True
+    assert data["metadata"]["task_router_strategy"] == "skipped_unfinished_consultation_state"
+    assert "TaskRouterAgent" not in data["metadata"]["multi_agent_path"]
+    assert "任务 1" not in data["output_text"]
 
 
 def test_consultation_second_turn_completes_after_context_is_built(tmp_path, monkeypatch):

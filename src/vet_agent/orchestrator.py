@@ -12,9 +12,12 @@ from contextlib import asynccontextmanager
 from uuid import uuid4
 
 from vet_agent.agents import (
+    ConsultationDecision,
     ConsultationStateAgent,
     MemoryExtractionAgent,
     QuestionPlanner,
+    RagFollowupPlan,
+    RagQuestionPlannerAgent,
     ResponseComposer,
     SafetyAgent,
     SafetyReviewAgent,
@@ -66,6 +69,7 @@ class VetOrchestrator:
         self.safety_review = SafetyReviewAgent(self.safety)
         self.consultation = ConsultationStateAgent(rule_repository)
         self.task_splitter = TaskSplitterAgent(rule_repository, qwen_client, settings)
+        self.rag_question_planner = RagQuestionPlannerAgent(qwen_client)
         self.memory_extractor = MemoryExtractionAgent(qwen_client, settings)
         self.composer = ResponseComposer(qwen_client, self.safety, QuestionPlanner())
         self.reasoning_display = ReasoningDisplayBuilder()
@@ -147,41 +151,55 @@ class VetOrchestrator:
 
         pet_context = await self.context_provider.load(request.vet_context, request.metadata)
         memory = await self.memory_service.read(request.trusted_identity)
-        split_decision = await self.task_splitter.split(
-            user_text,
-            model=model,
-            pet_context_summary=pet_context.summary(),
-        )
-        tasks = split_decision.tasks
-        if len(tasks) > 1:
-            response = await self._run_multi_task_turn(
-                request=request,
-                tasks=tasks,
-                split_decision=split_decision,
-                pet_context=pet_context,
-                memory=memory,
-                assessment=assessment,
-                model=model,
-            )
-            return await self._finalize_and_persist(request, response, medical=True)
-
         previous_state = await self.memory_service.read_consultation_state(request.trusted_identity)
+        continuing_consultation = self._has_unfinished_consultation_state(previous_state)
+        if continuing_consultation:
+            split_decision = None
+        else:
+            split_decision = await self.task_splitter.split(
+                user_text,
+                model=model,
+                pet_context_summary=pet_context.summary(),
+            )
+            tasks = split_decision.tasks
+            if len(tasks) > 1:
+                response = await self._run_multi_task_turn(
+                    request=request,
+                    tasks=tasks,
+                    split_decision=split_decision,
+                    pet_context=pet_context,
+                    memory=memory,
+                    assessment=assessment,
+                    model=model,
+                )
+                return await self._finalize_and_persist(request, response, medical=True)
+
         consultation_decision = self.consultation.update(
             previous_state,
             user_text,
             pet_context,
             max_questions=request.turn_options.max_followup_questions,
         )
-        await self.memory_service.save_consultation_state(
-            request.trusted_identity,
-            consultation_decision.state.to_dict(),
-        )
 
         if not consultation_decision.ready:
-            output_text = self.consultation.format_followup_response(consultation_decision)
+            followup_plan, knowledge_evidence, consultation_decision = await self._plan_followup_questions(
+                user_text=user_text,
+                pet_context=pet_context,
+                consultation_decision=consultation_decision,
+                model=model,
+                max_questions=request.turn_options.max_followup_questions,
+            )
+            await self.memory_service.save_consultation_state(
+                request.trusted_identity,
+                consultation_decision.state.to_dict(),
+            )
+            output_text = self.consultation.format_followup_response(
+                consultation_decision,
+                question_reasons=followup_plan.reason_lines(),
+            )
             output_text, post_signals = self.safety.sanitize_output(output_text)
             user_evidence = self.reasoning_display.user_answer_evidence(consultation_decision.state.to_dict())
-            evidence = [*user_evidence, *pet_context.evidence]
+            evidence = [*user_evidence, *pet_context.evidence, *knowledge_evidence]
             segment = VetSegment(
                 type="followup_consultation",
                 title="补充问诊信息",
@@ -209,8 +227,8 @@ class VetOrchestrator:
                 segments=[segment],
                 reasoning_display=reasoning_display,
                 vet_result={
-                    "generation_profile": "followup_first",
-                    "route": "collect_consultation_context",
+                    "generation_profile": "rag_followup",
+                    "route": "rag_guided_followup",
                     "audit_tier": "A",
                 },
                 safety_signals=[*assessment.signals, *post_signals],
@@ -221,14 +239,22 @@ class VetOrchestrator:
                         "PetContextAgent",
                         "MemoryAgent",
                         "ConsultationStateAgent",
+                        "KnowledgeAgent",
+                        "RagQuestionPlannerAgent",
                     ],
                     "consultation_phase": consultation_decision.state.phase,
                     "consultation_state": consultation_decision.state.to_dict(),
                     "missing_slots": consultation_decision.missing_slots,
+                    "followup_question_plan": followup_plan.to_metadata(),
+                    **self._task_router_skip_metadata(continuing_consultation),
                 },
             )
             return await self._finalize_and_persist(request, response, medical=True)
 
+        await self.memory_service.save_consultation_state(
+            request.trusted_identity,
+            consultation_decision.state.to_dict(),
+        )
         knowledge_hits, knowledge_evidence = await self.knowledge_service.retrieve(user_text)
 
         output_text, context_evidence = await self.composer.compose(
@@ -291,6 +317,7 @@ class VetOrchestrator:
                 "consultation_phase": consultation_decision.state.phase,
                 "consultation_state": consultation_decision.state.to_dict(),
                 "missing_slots": consultation_decision.missing_slots,
+                **self._task_router_skip_metadata(continuing_consultation),
             },
         )
         return await self._finalize_and_persist(request, response, medical=True)
@@ -323,6 +350,8 @@ class VetOrchestrator:
         all_evidence = []
         all_safety_signals = list(assessment.signals)
         task_summaries: list[dict] = []
+        used_rag_question_planner = False
+        used_response_composer = False
 
         for index, task in enumerate(tasks, start=1):
             consultation_decision = self.consultation.update(
@@ -331,8 +360,8 @@ class VetOrchestrator:
                 pet_context,
                 max_questions=request.turn_options.max_followup_questions,
             )
-            updated_task_states[task.state_key] = consultation_decision.state.to_dict()
             user_evidence = self.reasoning_display.user_answer_evidence(consultation_decision.state.to_dict())
+            followup_plan: RagFollowupPlan | None = None
 
             if consultation_decision.ready:
                 knowledge_hits, knowledge_evidence = await self.knowledge_service.retrieve(task.text)
@@ -346,14 +375,28 @@ class VetOrchestrator:
                     consultation_context=self.consultation.format_state_for_prompt(consultation_decision.state),
                     allow_followup=False,
                 )
+                used_response_composer = True
                 segment_status = "completed"
                 segment_type = "medical_consultation"
                 evidence = [*user_evidence, *context_evidence, *knowledge_evidence]
             else:
-                output_text = self.consultation.format_followup_response(consultation_decision)
+                followup_plan, knowledge_evidence, consultation_decision = await self._plan_followup_questions(
+                    user_text=task.text,
+                    pet_context=pet_context,
+                    consultation_decision=consultation_decision,
+                    model=model,
+                    max_questions=request.turn_options.max_followup_questions,
+                )
+                used_rag_question_planner = True
+                output_text = self.consultation.format_followup_response(
+                    consultation_decision,
+                    question_reasons=followup_plan.reason_lines(),
+                )
                 segment_status = "requires_followup"
                 segment_type = "followup_consultation"
-                evidence = [*user_evidence, *pet_context.evidence]
+                evidence = [*user_evidence, *pet_context.evidence, *knowledge_evidence]
+
+            updated_task_states[task.state_key] = consultation_decision.state.to_dict()
 
             output_text, post_signals = self.safety.sanitize_output(output_text)
             all_safety_signals.extend(post_signals)
@@ -386,6 +429,7 @@ class VetOrchestrator:
                     "status": segment_status,
                     "missing_slots": consultation_decision.missing_slots,
                     "consultation_phase": consultation_decision.state.phase,
+                    "followup_question_plan": followup_plan.to_metadata() if followup_plan else None,
                 }
             )
 
@@ -426,8 +470,8 @@ class VetOrchestrator:
                     "TaskRouterAgent",
                     "ConsultationStateAgent",
                     "KnowledgeAgent",
-                    "QuestionPlannerAgent",
-                    "QwenResponseAgent",
+                    *(["RagQuestionPlannerAgent"] if used_rag_question_planner else []),
+                    *(["QwenResponseAgent"] if used_response_composer else []),
                     "SafetyReviewAgent",
                 ],
                 "task_count": len(tasks),
@@ -437,6 +481,131 @@ class VetOrchestrator:
                 "consultation_states": updated_task_states,
                 "litellm_configured": self.settings.litellm_configured,
             },
+        )
+
+    def _has_unfinished_consultation_state(self, state: dict | None) -> bool:
+        """判断当前会话是否存在未完成的默认问诊状态。
+
+        :param state: 已持久化的默认问诊状态。
+        :return: 返回函数执行结果。
+        """
+        if not isinstance(state, dict) or not state:
+            return False
+        phase = str(state.get("phase") or "").strip()
+        if phase == "ready_to_answer":
+            return False
+        has_consultation_trace = any(
+            [
+                state.get("chief_complaint"),
+                state.get("asked_questions"),
+                state.get("followup_rounds"),
+                state.get("slots"),
+            ]
+        )
+        return bool(has_consultation_trace and phase in {"", "collecting_info"})
+
+    def _task_router_skip_metadata(self, skipped: bool) -> dict[str, str | bool]:
+        """构造任务拆分跳过审计信息。
+
+        :param skipped: 是否跳过任务拆分。
+        :return: 返回函数执行结果。
+        """
+        if not skipped:
+            return {}
+        return {
+            "task_router_skipped": True,
+            "task_router_strategy": "skipped_unfinished_consultation_state",
+            "task_router_skip_reason": "当前 session 存在未完成问诊状态，本轮优先作为上一轮追问回答处理。",
+        }
+
+    async def _plan_followup_questions(
+        self,
+        *,
+        user_text: str,
+        pet_context,
+        consultation_decision: ConsultationDecision,
+        model: str,
+        max_questions: int,
+    ) -> tuple[RagFollowupPlan, list, ConsultationDecision]:
+        """基于知识库反推下一轮追问，并写回问诊决策。
+
+        :param user_text: 用户本轮输入文本。
+        :param pet_context: 宠物上下文。
+        :param consultation_decision: 当前问诊决策。
+        :param model: 模型名称。
+        :param max_questions: 最多追问数量。
+        :return: 返回追问规划、知识库证据列表与更新后的问诊决策。
+        """
+        query = self._followup_knowledge_query(
+            user_text=user_text,
+            pet_context=pet_context,
+            consultation_decision=consultation_decision,
+        )
+        try:
+            knowledge_hits, knowledge_evidence = await self.knowledge_service.retrieve(query)
+        except Exception:
+            knowledge_hits = []
+            knowledge_evidence = []
+
+        fallback_questions = list(consultation_decision.questions)
+        plan = await self.rag_question_planner.plan(
+            user_text=user_text,
+            pet_context_summary=pet_context.summary(),
+            consultation_state=consultation_decision.state.to_dict(),
+            missing_slots=consultation_decision.missing_slots,
+            fallback_questions=fallback_questions,
+            knowledge_hits=knowledge_hits,
+            model=model,
+            max_questions=max_questions,
+        )
+        if plan.questions:
+            recent_questions = (
+                consultation_decision.state.asked_questions[-len(fallback_questions) :]
+                if fallback_questions
+                else []
+            )
+            if fallback_questions and recent_questions == fallback_questions:
+                consultation_decision.state.asked_questions = consultation_decision.state.asked_questions[
+                    : -len(fallback_questions)
+                ]
+            planned_questions = plan.question_texts()
+            for question in planned_questions:
+                if question not in consultation_decision.state.asked_questions:
+                    consultation_decision.state.asked_questions.append(question)
+            consultation_decision = ConsultationDecision(
+                state=consultation_decision.state,
+                ready=consultation_decision.ready,
+                missing_slots=consultation_decision.missing_slots,
+                questions=planned_questions,
+            )
+        return plan, knowledge_evidence, consultation_decision
+
+    def _followup_knowledge_query(
+        self,
+        *,
+        user_text: str,
+        pet_context,
+        consultation_decision: ConsultationDecision,
+    ) -> str:
+        """构造用于反推追问的知识库检索查询。
+
+        :param user_text: 用户本轮输入文本。
+        :param pet_context: 宠物上下文。
+        :param consultation_decision: 当前问诊决策。
+        :return: 返回函数执行结果。
+        """
+        state = consultation_decision.state.to_dict()
+        slots = state.get("slots") or {}
+        missing = "、".join(consultation_decision.missing_slots) or "无"
+        return "\n".join(
+            [
+                user_text,
+                f"宠物资料: {pet_context.summary()}",
+                f"问诊方向: {consultation_decision.state.domain}",
+                f"已知槽位: {slots}",
+                f"缺失槽位: {missing}",
+                "请检索与风险分层、鉴别观察点、下一步问诊要点相关的兽医知识。",
+            ]
         )
 
     async def stream_turn(self, request: AgentTurnRequest):

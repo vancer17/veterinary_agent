@@ -117,22 +117,30 @@ class ConsultationStateAgent:
             state.asked_questions.extend(questions)
         return ConsultationDecision(state=state, ready=ready, missing_slots=missing, questions=questions)
 
-    def format_followup_response(self, decision: ConsultationDecision) -> str:
-        """执行 format_followup_response 业务逻辑。
+    def format_followup_response(
+        self,
+        decision: ConsultationDecision,
+        *,
+        question_reasons: list[str] | None = None,
+    ) -> str:
+        """格式化基于当前上下文生成的追问响应。
 
-        :param decision: 参数 decision。
+        :param decision: 问诊决策。
+        :param question_reasons: 动态追问的知识库依据。
         :return: 返回函数执行结果。
         """
         rules = self.rule_repository.consultation_rules()
         known = self._known_lines(decision.state)
-        missing = "、".join(self._question_for(rules, slot) for slot in decision.missing_slots[:5])
+        missing = "、".join(self._label_for(rules, slot) for slot in decision.missing_slots[:5])
         questions = "\n".join(f"{index + 1}. {question}" for index, question in enumerate(decision.questions))
+        reasons = "\n".join(question_reasons or [])
+        reason_section = f"\n\n为什么先问这些:\n{reasons}" if reasons else ""
         return (
             "我先不武断下结论，先把关键问诊信息补齐。这样可以避免把普通护理问题误判成疾病，"
             "也避免在信息不足时给出不可靠建议。\n\n"
             f"已知信息:\n{known or '- 目前只有你的主诉，还缺关键问诊信息。'}\n\n"
             f"还缺的关键点: {missing}\n\n"
-            f"请先回答这几个问题:\n{questions}\n\n"
+            f"请先回答这几个问题:\n{questions}{reason_section}\n\n"
             f"{rules.safety_net_text}"
         )
 
@@ -245,6 +253,15 @@ class ConsultationStateAgent:
         :return: 返回函数执行结果。
         """
         return rules.slots[slot].question if slot in rules.slots else slot
+
+    def _label_for(self, rules: ConsultationRuleSet, slot: str) -> str:
+        """返回槽位对应的用户可见标签。
+
+        :param rules: 规则集合。
+        :param slot: 标准问诊槽位。
+        :return: 返回函数执行结果。
+        """
+        return rules.slots[slot].label if slot in rules.slots else slot
 
     def _extract_slot_value(self, extraction_rules: list[dict[str, Any]], text: str) -> str | None:
         """执行内部抽取逻辑。
