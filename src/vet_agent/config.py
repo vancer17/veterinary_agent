@@ -50,6 +50,9 @@ class Settings:
     database_url: str | None = None
     enable_rag_embeddings: bool = False
     enable_llm_task_splitter: bool = True
+    enable_llm_semantic_extraction: bool = True
+    semantic_extraction_min_confidence: float = 0.65
+    consultation_max_followup_rounds: int = 2
     enable_mem0: bool = True
     mem0_base_url: str = "http://127.0.0.1:8001"
     mem0_api_key: str | None = None
@@ -94,6 +97,9 @@ class Settings:
             database_url=os.getenv("DATABASE_URL"),
             enable_rag_embeddings=_bool_env("ENABLE_RAG_EMBEDDINGS", False),
             enable_llm_task_splitter=_bool_env("ENABLE_LLM_TASK_SPLITTER", True),
+            enable_llm_semantic_extraction=_bool_env("ENABLE_LLM_SEMANTIC_EXTRACTION", True),
+            semantic_extraction_min_confidence=float(os.getenv("SEMANTIC_EXTRACTION_MIN_CONFIDENCE", "0.65")),
+            consultation_max_followup_rounds=int(os.getenv("CONSULTATION_MAX_FOLLOWUP_ROUNDS", "2")),
             enable_mem0=_bool_env("ENABLE_MEM0", True),
             mem0_base_url=os.getenv("MEM0_BASE_URL", "http://127.0.0.1:8001").rstrip("/"),
             mem0_api_key=os.getenv("MEM0_API_KEY"),

@@ -22,7 +22,9 @@ from vet_agent.repositories import (
 from vet_agent.runtime import QwenClient, QwenEmbeddingClient
 from vet_agent.services import (
     AccessControlService,
+    ClinicalKnowledgeService,
     JsonAccessControlStore,
+    JsonClinicalKnowledgeStore,
     JsonRagGovernanceStore,
     JsonReportStore,
     KnowledgeService,
@@ -30,6 +32,7 @@ from vet_agent.services import (
     MemoryService,
     PetContextProvider,
     PostgresAccessControlStore,
+    PostgresClinicalKnowledgeStore,
     PostgresLogicTraceStore,
     PostgresMemoryService,
     PostgresRagGovernanceStore,
@@ -98,6 +101,12 @@ class Container:
             PostgresRagGovernanceStore(settings.database_url)
             if settings.database_url
             else JsonRagGovernanceStore(settings.seed_dir, JsonDocumentStore(settings.data_dir / "rag_governance.json"))
+        )
+        self.clinical_knowledge_service = ClinicalKnowledgeService(
+            PostgresClinicalKnowledgeStore(settings.database_url)
+            if settings.database_url
+            else JsonClinicalKnowledgeStore(JsonDocumentStore(settings.data_dir / "clinical_knowledge.json")),
+            embedding_client=self.embedding_client,
         )
         self.orchestrator = VetOrchestrator(
             settings,

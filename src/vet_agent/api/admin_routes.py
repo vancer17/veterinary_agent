@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Query, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ingress import InvalidRequestError
 from vet_agent import get_container
@@ -28,6 +28,31 @@ class RagChunkUpdate(BaseModel):
     reason: str | None = None
 
 
+class ClinicalKnowledgeImport(BaseModel):
+    """结构化临床知识导入请求。
+
+    :return: 无返回值。
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    source: str = Field(default="common_conditions_handbook")
+    version: str = Field(default="v1")
+    publish: bool = False
+    source_url: str | None = None
+    conditions: list[dict] = Field(default_factory=list)
+    metadata: dict = Field(default_factory=dict, alias="_meta")
+
+
+class ClinicalKnowledgePublish(BaseModel):
+    """结构化临床知识发布请求。
+
+    :return: 无返回值。
+    """
+
+    reason: str | None = None
+
+
 @router.get("/rag/stats")
 async def rag_stats(request: Request):
     """执行 rag_stats 业务逻辑。
@@ -38,6 +63,118 @@ async def rag_stats(request: Request):
     container = get_container()
     container.access_control.authenticate(request.headers)
     return await container.rag_governance_service.stats()
+
+
+@router.post("/clinical-knowledge/conditions/preview")
+async def preview_clinical_conditions(
+    payload: ClinicalKnowledgeImport,
+    request: Request,
+    limit: Annotated[int, Query(ge=1, le=20)] = 5,
+):
+    """预览结构化临床病症卡入库效果。
+
+    :param payload: 请求载荷。
+    :param request: 请求对象。
+    :param limit: 返回数量上限。
+    :return: 返回异步执行结果。
+    """
+    container = get_container()
+    container.access_control.authenticate(request.headers)
+    raw_payload = payload.model_dump(mode="json", by_alias=True)
+    raw_payload["_meta"] = raw_payload.pop("_meta", raw_payload.get("metadata", {}))
+    return await container.clinical_knowledge_service.preview_conditions(raw_payload, limit=limit)
+
+
+@router.post("/clinical-knowledge/conditions/import")
+async def import_clinical_conditions(payload: ClinicalKnowledgeImport, request: Request):
+    """导入结构化临床病症卡。
+
+    :param payload: 请求载荷。
+    :param request: 请求对象。
+    :return: 返回异步执行结果。
+    """
+    container = get_container()
+    principal = container.access_control.authenticate(request.headers)
+    raw_payload = payload.model_dump(mode="json", by_alias=True)
+    raw_payload["_meta"] = raw_payload.pop("_meta", raw_payload.get("metadata", {}))
+    return await container.clinical_knowledge_service.import_conditions(
+        raw_payload,
+        source=payload.source,
+        version=payload.version,
+        actor_id=principal.user_id or principal.api_key_id,
+        publish=payload.publish,
+        source_url=payload.source_url,
+    )
+
+
+@router.post("/clinical-knowledge/batches/{batch_id}/publish")
+async def publish_clinical_knowledge_batch(
+    batch_id: str,
+    payload: ClinicalKnowledgePublish,
+    request: Request,
+):
+    """发布结构化临床知识导入批次。
+
+    :param batch_id: 导入批次标识。
+    :param payload: 请求载荷。
+    :param request: 请求对象。
+    :return: 返回异步执行结果。
+    """
+    container = get_container()
+    principal = container.access_control.authenticate(request.headers)
+    try:
+        return await container.clinical_knowledge_service.publish_batch(
+            batch_id,
+            actor_id=principal.user_id or principal.api_key_id,
+            reason=payload.reason,
+        )
+    except KeyError as exc:
+        raise InvalidRequestError(str(exc)) from exc
+
+
+@router.get("/clinical-knowledge/batches")
+async def list_clinical_knowledge_batches(
+    request: Request,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+):
+    """分页查询结构化临床知识导入批次。
+
+    :param request: 请求对象。
+    :param limit: 返回数量上限。
+    :param offset: 分页偏移量。
+    :return: 返回异步执行结果。
+    """
+    container = get_container()
+    container.access_control.authenticate(request.headers)
+    return await container.clinical_knowledge_service.list_batches(limit=limit, offset=offset)
+
+
+@router.get("/clinical-knowledge/conditions")
+async def list_clinical_conditions(
+    request: Request,
+    review_status: str | None = None,
+    system: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+):
+    """分页查询结构化临床病症卡。
+
+    :param request: 请求对象。
+    :param review_status: 审核状态。
+    :param system: 所属系统。
+    :param limit: 返回数量上限。
+    :param offset: 分页偏移量。
+    :return: 返回异步执行结果。
+    """
+    container = get_container()
+    container.access_control.authenticate(request.headers)
+    return await container.clinical_knowledge_service.list_conditions(
+        review_status=review_status,
+        system=system,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get("/rag/chunks")

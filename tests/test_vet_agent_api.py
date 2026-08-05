@@ -48,6 +48,43 @@ async def _fake_litellm_send_chat(self, messages, *, model: str, temperature: fl
     """
     del self, model, temperature
     user_text = _message_text(messages)
+    if "ConsultationSemanticExtractorAgent" in user_text and "没以前积极" in user_text:
+        return """
+        {
+          "facts": [
+            {
+              "key": "appetite",
+              "value": "仍会进食但主动性下降",
+              "status": "confirmed",
+              "confidence": 0.91,
+              "source_text": "饭还是吃的，就是没以前积极",
+              "category": "intake_output"
+            },
+            {
+              "key": "mental_status",
+              "value": "整体活跃度较平时轻度下降",
+              "status": "confirmed",
+              "confidence": 0.88,
+              "source_text": "没以前积极",
+              "category": "systemic_status"
+            },
+            {
+              "key": "vomiting",
+              "value": "没有把东西吐出来",
+              "status": "negative",
+              "confidence": 0.9,
+              "source_text": "没有把东西吐出来，只是像反胃",
+              "category": "intake_output"
+            }
+          ],
+          "intent": {
+            "answer_now": true,
+            "wants_triage": true,
+            "correction": false,
+            "raw_intent": "用户希望根据现有材料先判断"
+          }
+        }
+        """
     if "TaskRouterAgent" in user_text and "主餐都会清空" in user_text:
         return """
         {
@@ -611,11 +648,144 @@ def test_unfinished_consultation_state_skips_task_splitting(tmp_path, monkeypatc
 
     assert second.status_code == 200
     data = second.json()
-    assert data["vet_result"]["route"] == "rag_guided_followup"
+    assert data["status"] == "completed"
+    assert data["vet_result"]["route"] == "standard_consultation"
     assert data["metadata"]["task_router_skipped"] is True
     assert data["metadata"]["task_router_strategy"] == "skipped_unfinished_consultation_state"
     assert "TaskRouterAgent" not in data["metadata"]["multi_agent_path"]
+    assert "AnswerabilityEvaluator" in data["metadata"]["multi_agent_path"]
+    assert data["metadata"]["answerability"]["mode"] in {"slot_complete", "sufficient_semantic_evidence"}
     assert "任务 1" not in data["output_text"]
+
+
+def test_answer_now_intent_stops_followup_funnel(tmp_path, monkeypatch):
+    """验证用户明确要求先答时，系统会进入带边界的阶段性回答。
+
+    :param tmp_path: 参数 tmp_path。
+    :param monkeypatch: 参数 monkeypatch。
+    :return: 无返回值；断言通过表示场景符合预期。
+    """
+    client = _client(tmp_path, monkeypatch)
+    vet_context = {
+        "user_id": "u_answer_now",
+        "session_id": "s_answer_now",
+        "pet_id": "p_answer_now",
+        "pet_info": {
+            "species": "犬",
+            "breed": "柯基",
+            "age": "3岁",
+            "weight_kg": 12,
+        },
+    }
+
+    first = client.post(
+        "/agent/turns",
+        json=_payload("饭后总是缩成一团趴着，看起来不太舒服。", vet_context=vet_context),
+    )
+    assert first.status_code == 200
+    assert first.json()["status"] == "requires_followup"
+
+    second = client.post(
+        "/agent/turns",
+        json=_payload(
+            "别再追问了，直接说目前怎么看。它前天开始这样，饭量和平常一样，精神也还行，没吐。",
+            vet_context=vet_context,
+        ),
+    )
+
+    assert second.status_code == 200
+    data = second.json()
+    assert data["status"] == "completed"
+    assert data["metadata"]["consultation_phase"] == "ready_to_answer"
+    assert data["metadata"]["missing_slots"] == []
+    assert data["metadata"]["answerability"]["mode"] == "user_requested_answer_now"
+    assert "QwenResponseAgent" in data["metadata"]["multi_agent_path"]
+    assert "请先回答" not in data["output_text"]
+
+
+def test_semantic_answers_reduce_missing_slots_without_exact_templates(tmp_path, monkeypatch):
+    """验证宽泛语义表达可以补全上下文，避免固定槽位追问漏斗。
+
+    :param tmp_path: 参数 tmp_path。
+    :param monkeypatch: 参数 monkeypatch。
+    :return: 无返回值；断言通过表示场景符合预期。
+    """
+    client = _client(tmp_path, monkeypatch)
+    vet_context = {
+        "user_id": "u_semantic_slots",
+        "session_id": "s_semantic_slots",
+        "pet_id": "p_semantic_slots",
+        "pet_info": {
+            "species": "猫",
+            "breed": "中华田园猫",
+            "age": "4岁",
+            "weight_kg": 4.6,
+        },
+    }
+
+    first = client.post(
+        "/agent/turns",
+        json=_payload("它这两天偶尔会躲到角落，晚上节奏和平常不太一样。", vet_context=vet_context),
+    )
+    assert first.status_code == 200
+    assert first.json()["status"] == "requires_followup"
+
+    second = client.post(
+        "/agent/turns",
+        json=_payload("饭量没减少，叫它有反应，也会照常喝水；没有吐，也没有拉肚子。", vet_context=vet_context),
+    )
+
+    assert second.status_code == 200
+    data = second.json()
+    assert data["status"] == "completed"
+    slots = data["metadata"]["consultation_state"]["slots"]
+    assert slots["mental_status"] == "精神基本正常"
+    assert slots["appetite"] == "食欲/饮水基本正常"
+    assert slots["vomiting"] == "无呕吐"
+    assert data["metadata"]["answerability"]["mode"] in {"slot_complete", "sufficient_semantic_evidence"}
+
+
+def test_llm_semantic_extractor_is_primary_fact_path(tmp_path, monkeypatch):
+    """验证 LLM 语义抽取结果会作为主路径合并到问诊状态。
+
+    :param tmp_path: 参数 tmp_path。
+    :param monkeypatch: 参数 monkeypatch。
+    :return: 无返回值；断言通过表示场景符合预期。
+    """
+    client = _client(tmp_path, monkeypatch)
+    vet_context = {
+        "user_id": "u_llm_semantic",
+        "session_id": "s_llm_semantic",
+        "pet_id": "p_llm_semantic",
+        "pet_info": {
+            "species": "犬",
+            "breed": "柯基",
+            "age": "3岁",
+            "weight_kg": 12,
+        },
+    }
+
+    response = client.post(
+        "/agent/turns",
+        json=_payload(
+            "饭还是吃的，就是没以前积极；没有把东西吐出来，只是像反胃。先根据这些告诉我需不需要检查。",
+            vet_context=vet_context,
+        ),
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "completed"
+    assert "ConsultationSemanticExtractorAgent" in data["metadata"]["multi_agent_path"]
+    semantic = data["metadata"]["semantic_extraction"]
+    assert semantic["strategy"] == "llm_semantic_extractor"
+    assert semantic["used_as_primary_semantic_path"] is True
+    assert {"appetite", "mental_status", "vomiting"}.issubset(set(semantic["applied_fact_keys"]))
+    slots = data["metadata"]["consultation_state"]["slots"]
+    assert slots["appetite"] == "仍会进食但主动性下降"
+    assert slots["mental_status"] == "整体活跃度较平时轻度下降"
+    assert slots["vomiting"] == "没有把东西吐出来"
+    assert data["metadata"]["answerability"]["mode"] == "user_requested_answer_now"
 
 
 def test_consultation_second_turn_completes_after_context_is_built(tmp_path, monkeypatch):
@@ -837,3 +1007,67 @@ def test_rag_governance_admin_can_list_and_update_seed_chunks(tmp_path, monkeypa
     assert update.status_code == 200
     assert update.json()["review_status"] == "rejected"
     assert update.json()["enabled"] is False
+
+
+def test_admin_can_preview_import_publish_clinical_conditions(tmp_path, monkeypatch):
+    """验证结构化临床病症卡可通过 Admin API 预览、导入、发布与查询。
+
+    :param tmp_path: 参数 tmp_path。
+    :param monkeypatch: 参数 monkeypatch。
+    :return: 无返回值；断言通过表示场景符合预期。
+    """
+    client = _client(tmp_path, monkeypatch)
+    payload = {
+        "_meta": {
+            "file_name": "vet_conditions.json",
+            "source_document": "common_conditions_handbook.md",
+            "clinical_review_required": True,
+        },
+        "source": "common_conditions_handbook",
+        "version": "v-test",
+        "conditions": [
+            {
+                "system": "耳部(外耳)",
+                "condition": "外耳炎 / 外耳道炎",
+                "presentation": "频繁甩头、抓耳、耳道发红、有异味。",
+                "differentials": "过敏、耳螨、细菌或酵母感染、异物。",
+                "followupQuestions": "1) 单耳还是双耳? 2) 分泌物是什么颜色和气味? 3) 有没有歪头或走路不稳?",
+                "triage": "明显异味、分泌物或疼痛建议尽快就诊。",
+                "redFlagsEscalate": "歪头、转圈、眼球震颤、剧痛或耳道大量出血需立即就诊。",
+                "medicationDirection": "滴耳药和洗耳液需兽医检查鼓膜后选择，不给剂量。",
+                "homeAdvice": "避免棉签深捅，保持耳道干燥，按兽医方案复查。",
+                "source": "Merck/MSD Veterinary Manual, Otitis Externa in Animals",
+            }
+        ],
+    }
+
+    preview = client.post("/admin/clinical-knowledge/conditions/preview", json=payload)
+    assert preview.status_code == 200
+    preview_data = preview.json()
+    assert preview_data["valid"] is True
+    assert preview_data["items"][0]["chunk_count"] == 6
+    assert any(chunk["chunk_type"] == "followup_questions" for chunk in preview_data["items"][0]["chunks"])
+
+    imported = client.post("/admin/clinical-knowledge/conditions/import", json={**payload, "publish": False})
+    assert imported.status_code == 200
+    batch = imported.json()
+    assert batch["status"] == "imported"
+    assert batch["review_status"] == "pending"
+    assert batch["total_conditions"] == 1
+    assert batch["total_chunks"] == 6
+
+    published = client.post(
+        f"/admin/clinical-knowledge/batches/{batch['batch_id']}/publish",
+        json={"reason": "vet reviewed test batch"},
+    )
+    assert published.status_code == 200
+    assert published.json()["status"] == "published"
+    assert published.json()["review_status"] == "approved"
+
+    batches = client.get("/admin/clinical-knowledge/batches")
+    conditions = client.get("/admin/clinical-knowledge/conditions?review_status=approved")
+
+    assert batches.status_code == 200
+    assert batches.json()["total"] >= 1
+    assert conditions.status_code == 200
+    assert conditions.json()["items"][0]["condition_name"] == "外耳炎 / 外耳道炎"

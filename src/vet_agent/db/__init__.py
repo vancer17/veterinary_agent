@@ -8,11 +8,13 @@
 
 from .models import (
     Base,
+    ClinicalConditionCardModel,
     ConsultationDomainModel,
     ConsultationSlotModel,
     ConsultationStateModel,
     ConversationTurnModel,
     IdempotencyRecordModel,
+    KnowledgeIngestionBatchModel,
     KnowledgeChunkModel,
     LogicTraceModel,
     PetMemoryEpisodeModel,
@@ -28,12 +30,14 @@ from .session import make_engine, make_session_factory, session_scope, sqlalchem
 
 __all__ = [
     "Base",
+    "ClinicalConditionCardModel",
     "ConsultationDomainModel",
     "ConsultationSlotModel",
     "ConsultationStateModel",
     "ConversationTurnModel",
     "IdempotencyRecordModel",
     "KnowledgeChunkModel",
+    "KnowledgeIngestionBatchModel",
     "LogicTraceModel",
     "PetMemoryEpisodeModel",
     "PetMemoryFactModel",

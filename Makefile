@@ -20,7 +20,7 @@ BUSINESS_RUN_ARG = $(if $(strip $(BUSINESS_RUN_ID)),--run-id "$(BUSINESS_RUN_ID)
 .PHONY: dev-build dev-up dev-up-no-wait dev-down dev-clean dev-restart dev-ps dev-logs dev-app-logs dev-db-logs dev-litellm-logs dev-mem0-logs dev-mem0-db-logs dev-shell db-shell dev-db-extensions dev-migrate dev-seed dev-test dev-ready dev-url prod-config prod-build prod-db-extensions prod-deps prod-migrate prod-seed prod-up prod-restart prod-down prod-clean prod-ps prod-logs prod-app-logs prod-litellm-logs prod-mem0-logs prod-mem0-db-logs prod-ready prod-shell prod-db-shell request-all request-curl request-health request-ready request-followup-first request-followup-second request-multitask request-safety-toxic request-idempotency request-profile-memory request-memory-read request-report-parse request-rag-stats request-rag-chunks request-business-all request-business-followup-first request-business-followup-second request-business-multitask request-business-memory request-business-safety-semantic request-business-stream
 
 dev-build:
-	$(COMPOSE) build app
+	$(COMPOSE) build app mem0
 
 dev-up:
 	$(COMPOSE) up -d --build --wait
@@ -89,7 +89,7 @@ prod-config:
 	$(PROD_COMPOSE) config
 
 prod-build:
-	$(PROD_COMPOSE) build app
+	$(PROD_COMPOSE) build app mem0
 
 prod-db-extensions:
 	$(PROD_COMPOSE) up -d --wait postgres

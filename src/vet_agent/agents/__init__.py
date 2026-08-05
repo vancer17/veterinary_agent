@@ -7,15 +7,23 @@
 
 
 from .composer import ResponseComposer
-from .consultation import ConsultationDecision, ConsultationState, ConsultationStateAgent
+from .consultation import AnswerabilityDecision, AnswerabilityEvaluator, ConsultationDecision, ConsultationState, ConsultationStateAgent
 from .memory_extraction import MemoryExtractionAgent, MemoryFactCandidate
 from .question_planner import QuestionPlanner
 from .rag_question_planner import RagFollowupPlan, RagFollowupQuestion, RagQuestionPlannerAgent
 from .safety import SafetyAgent, SafetyAssessment
 from .safety_review import SafetyReviewAgent, SafetyReviewResult
+from .semantic_extractor import (
+    ConsultationSemanticExtractorAgent,
+    SemanticExtractionResult,
+    SemanticFact,
+    SemanticIntent,
+)
 from .task_splitter import SplitTask, TaskSplitDecision, TaskSplitterAgent
 
 __all__ = [
+    "AnswerabilityDecision",
+    "AnswerabilityEvaluator",
     "ConsultationDecision",
     "ConsultationState",
     "ConsultationStateAgent",
@@ -30,6 +38,10 @@ __all__ = [
     "SafetyAssessment",
     "SafetyReviewAgent",
     "SafetyReviewResult",
+    "ConsultationSemanticExtractorAgent",
+    "SemanticExtractionResult",
+    "SemanticFact",
+    "SemanticIntent",
     "SplitTask",
     "TaskSplitDecision",
     "TaskSplitterAgent",

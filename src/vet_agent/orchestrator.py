@@ -13,6 +13,7 @@ from uuid import uuid4
 
 from vet_agent.agents import (
     ConsultationDecision,
+    ConsultationSemanticExtractorAgent,
     ConsultationStateAgent,
     MemoryExtractionAgent,
     QuestionPlanner,
@@ -67,7 +68,11 @@ class VetOrchestrator:
         self.knowledge_service = knowledge_service
         self.safety = SafetyAgent(rule_repository)
         self.safety_review = SafetyReviewAgent(self.safety)
-        self.consultation = ConsultationStateAgent(rule_repository)
+        self.semantic_extractor = ConsultationSemanticExtractorAgent(qwen_client, settings)
+        self.consultation = ConsultationStateAgent(
+            rule_repository,
+            max_followup_rounds=settings.consultation_max_followup_rounds,
+        )
         self.task_splitter = TaskSplitterAgent(rule_repository, qwen_client, settings)
         self.rag_question_planner = RagQuestionPlannerAgent(qwen_client)
         self.memory_extractor = MemoryExtractionAgent(qwen_client, settings)
@@ -174,10 +179,17 @@ class VetOrchestrator:
                 )
                 return await self._finalize_and_persist(request, response, medical=True)
 
+        semantic_result = await self.semantic_extractor.extract(
+            user_text=user_text,
+            pet_context_summary=pet_context.summary(),
+            previous_state=previous_state,
+            model=model,
+        )
         consultation_decision = self.consultation.update(
             previous_state,
             user_text,
             pet_context,
+            semantic_result=semantic_result,
             max_questions=request.turn_options.max_followup_questions,
         )
 
@@ -238,13 +250,17 @@ class VetOrchestrator:
                         "SafetyAgent",
                         "PetContextAgent",
                         "MemoryAgent",
+                        "ConsultationSemanticExtractorAgent",
                         "ConsultationStateAgent",
+                        "AnswerabilityEvaluator",
                         "KnowledgeAgent",
                         "RagQuestionPlannerAgent",
                     ],
                     "consultation_phase": consultation_decision.state.phase,
                     "consultation_state": consultation_decision.state.to_dict(),
                     "missing_slots": consultation_decision.missing_slots,
+                    "answerability": consultation_decision.answerability,
+                    "semantic_extraction": consultation_decision.state.semantic_extraction,
                     "followup_question_plan": followup_plan.to_metadata(),
                     **self._task_router_skip_metadata(continuing_consultation),
                 },
@@ -308,6 +324,9 @@ class VetOrchestrator:
                     "SafetyAgent",
                     "PetContextAgent",
                     "MemoryAgent",
+                    "ConsultationSemanticExtractorAgent",
+                    "ConsultationStateAgent",
+                    "AnswerabilityEvaluator",
                     "KnowledgeAgent",
                     "QuestionPlannerAgent",
                     "QwenResponseAgent",
@@ -317,6 +336,8 @@ class VetOrchestrator:
                 "consultation_phase": consultation_decision.state.phase,
                 "consultation_state": consultation_decision.state.to_dict(),
                 "missing_slots": consultation_decision.missing_slots,
+                "answerability": consultation_decision.answerability,
+                "semantic_extraction": consultation_decision.state.semantic_extraction,
                 **self._task_router_skip_metadata(continuing_consultation),
             },
         )
@@ -354,10 +375,18 @@ class VetOrchestrator:
         used_response_composer = False
 
         for index, task in enumerate(tasks, start=1):
+            task_previous_state = task_states.get(task.state_key)
+            semantic_result = await self.semantic_extractor.extract(
+                user_text=task.text,
+                pet_context_summary=pet_context.summary(),
+                previous_state=task_previous_state,
+                model=model,
+            )
             consultation_decision = self.consultation.update(
-                task_states.get(task.state_key),
+                task_previous_state,
                 task.text,
                 pet_context,
+                semantic_result=semantic_result,
                 max_questions=request.turn_options.max_followup_questions,
             )
             user_evidence = self.reasoning_display.user_answer_evidence(consultation_decision.state.to_dict())
@@ -429,6 +458,8 @@ class VetOrchestrator:
                     "status": segment_status,
                     "missing_slots": consultation_decision.missing_slots,
                     "consultation_phase": consultation_decision.state.phase,
+                    "answerability": consultation_decision.answerability,
+                    "semantic_extraction": consultation_decision.state.semantic_extraction,
                     "followup_question_plan": followup_plan.to_metadata() if followup_plan else None,
                 }
             )
@@ -468,7 +499,9 @@ class VetOrchestrator:
                     "PetContextAgent",
                     "MemoryAgent",
                     "TaskRouterAgent",
+                    "ConsultationSemanticExtractorAgent",
                     "ConsultationStateAgent",
+                    "AnswerabilityEvaluator",
                     "KnowledgeAgent",
                     *(["RagQuestionPlannerAgent"] if used_rag_question_planner else []),
                     *(["QwenResponseAgent"] if used_response_composer else []),
@@ -577,6 +610,7 @@ class VetOrchestrator:
                 ready=consultation_decision.ready,
                 missing_slots=consultation_decision.missing_slots,
                 questions=planned_questions,
+                answerability=consultation_decision.answerability,
             )
         return plan, knowledge_evidence, consultation_decision
 
@@ -597,13 +631,17 @@ class VetOrchestrator:
         state = consultation_decision.state.to_dict()
         slots = state.get("slots") or {}
         missing = "、".join(consultation_decision.missing_slots) or "无"
+        answerability = state.get("answerability") or {}
+        semantic = state.get("semantic_extraction") or {}
         return "\n".join(
             [
                 user_text,
                 f"宠物资料: {pet_context.summary()}",
                 f"问诊方向: {consultation_decision.state.domain}",
                 f"已知槽位: {slots}",
-                f"缺失槽位: {missing}",
+                f"语义抽取结果: {semantic}",
+                f"本轮仍阻塞回答的高价值证据: {missing}",
+                f"回答充分性判断: {answerability}",
                 "请检索与风险分层、鉴别观察点、下一步问诊要点相关的兽医知识。",
             ]
         )

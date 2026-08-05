@@ -30,6 +30,13 @@ x-app-env-files: &app-env-files
   - path: ${ENV_DIR:-./deploy/env/dev}/services/app.env
     required: false
 
+x-mem0-build: &mem0-build
+  context: .
+  dockerfile: docker/mem0/Dockerfile
+  args:
+    # 上游 Mem0 镜像由私有仓库或镜像站提供；本项目只在其上补齐 PostgreSQL 驱动。
+    MEM0_BASE_IMAGE: ${MEM0_BASE_IMAGE:-crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com/vancer-saas/mem0:latest}
+
 name: ${COMPOSE_PROJECT_NAME:-vet-agent-dev}
 
 services:
@@ -86,7 +93,8 @@ services:
       retries: 30
 
   mem0:
-    image: ${MEM0_IMAGE:-crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com/vancer-saas/mem0:latest}
+    image: ${MEM0_IMAGE:-vet-agent-mem0:dev}
+    build: *mem0-build
     container_name: vet-agent-dev-mem0
     restart: unless-stopped
     depends_on:

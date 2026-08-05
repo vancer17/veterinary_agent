@@ -88,6 +88,62 @@ class KnowledgeChunkModel(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
+class KnowledgeIngestionBatchModel(Base):
+    __tablename__ = "knowledge_ingestion_batches"
+    __table_args__ = (
+        UniqueConstraint("batch_id", name="uq_knowledge_ingestion_batches_batch_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    batch_id: Mapped[str] = mapped_column(Text, nullable=False)
+    asset_type: Mapped[str] = mapped_column(Text, nullable=False, default="clinical_conditions", server_default="clinical_conditions")
+    source: Mapped[str] = mapped_column(Text, nullable=False)
+    source_url: Mapped[str | None] = mapped_column(Text)
+    version: Mapped[str] = mapped_column(Text, nullable=False, default="v1", server_default="v1")
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="imported", server_default="imported")
+    review_status: Mapped[str] = mapped_column(Text, nullable=False, default="pending", server_default="pending")
+    total_conditions: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    total_chunks: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    validation_errors: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False, default=list, server_default="[]")
+    created_by: Mapped[str | None] = mapped_column(Text)
+    published_by: Mapped[str | None] = mapped_column(Text)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, nullable=False, default=dict, server_default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class ClinicalConditionCardModel(Base):
+    __tablename__ = "clinical_condition_cards"
+    __table_args__ = (
+        UniqueConstraint("condition_key", "version", "ingestion_batch", name="uq_clinical_condition_cards_batch_key"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    condition_key: Mapped[str] = mapped_column(Text, nullable=False)
+    condition_name: Mapped[str] = mapped_column(Text, nullable=False)
+    system: Mapped[str] = mapped_column(Text, nullable=False)
+    presentation: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    differentials: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    followup_questions: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    triage: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    red_flags_escalate: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    medication_direction: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    home_advice: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    source: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    source_url: Mapped[str | None] = mapped_column(Text)
+    content_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    version: Mapped[str] = mapped_column(Text, nullable=False, default="v1", server_default="v1")
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    review_status: Mapped[str] = mapped_column(Text, nullable=False, default="pending", server_default="pending")
+    quality_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.8, server_default="0.8")
+    ingestion_batch: Mapped[str] = mapped_column(Text, nullable=False)
+    last_reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, nullable=False, default=dict, server_default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
 class ConversationTurnModel(Base):
     __tablename__ = "conversation_turns"
     __table_args__ = (

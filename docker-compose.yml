@@ -45,6 +45,13 @@ x-app-build: &app-build
   args:
     PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-ghcr.io/astral-sh/uv:python3.12-bookworm}
 
+x-mem0-build: &mem0-build
+  context: .
+  dockerfile: docker/mem0/Dockerfile
+  args:
+    # 上游 Mem0 镜像由私有仓库或镜像站提供；本项目只在其上补齐 PostgreSQL 驱动。
+    MEM0_BASE_IMAGE: ${MEM0_BASE_IMAGE:-crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com/vancer-saas/mem0:latest}
+
 x-app-common: &app-common
   image: ${VET_AGENT_IMAGE:-vet-agent:prod}
   build: *app-build
@@ -109,7 +116,8 @@ services:
     logging: *default-logging
 
   mem0:
-    image: ${MEM0_IMAGE:-crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com/vancer-saas/mem0:latest}
+    image: ${MEM0_IMAGE:-vet-agent-mem0:prod}
+    build: *mem0-build
     restart: unless-stopped
     depends_on:
       litellm:

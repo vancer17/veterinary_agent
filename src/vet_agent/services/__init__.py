@@ -11,6 +11,11 @@ from .access_control import (
     JsonAccessControlStore,
     PostgresAccessControlStore,
 )
+from .clinical_knowledge import (
+    ClinicalKnowledgeService,
+    JsonClinicalKnowledgeStore,
+    PostgresClinicalKnowledgeStore,
+)
 from .context import PetContext, PetContextProvider
 from .knowledge import KnowledgeService
 from .memory import MemoryService
@@ -28,8 +33,10 @@ from .trace import LogicTraceStore
 
 __all__ = [
     "AccessControlService",
+    "ClinicalKnowledgeService",
     "DisabledSemanticMemory",
     "JsonAccessControlStore",
+    "JsonClinicalKnowledgeStore",
     "JsonRagGovernanceStore",
     "JsonReportStore",
     "KnowledgeService",
@@ -38,6 +45,7 @@ __all__ = [
     "PetContext",
     "PetContextProvider",
     "PostgresAccessControlStore",
+    "PostgresClinicalKnowledgeStore",
     "PostgresLogicTraceStore",
     "PostgresMemoryService",
     "PostgresRagGovernanceStore",

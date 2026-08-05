@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
@@ -27,6 +27,7 @@ class KnowledgeHit:
     public_citation: bool
     score: float = 0.0
     source_url: str | None = None
+    metadata: dict = field(default_factory=dict)
 
 
 class KnowledgeRepository(Protocol):
@@ -80,6 +81,7 @@ class FileKnowledgeRepository:
                 public_citation=bool(item.get("public_citation", True)),
                 score=score,
                 source_url=item.get("source_url"),
+                metadata=dict(item.get("metadata") or {}),
             )
             for score, item in scored[:limit]
         ]
@@ -171,6 +173,7 @@ class PostgresKnowledgeRepository:
                 public_citation=bool(chunk.public_citation),
                 score=float(score_value or 0.0),
                 source_url=chunk.source_url,
+                metadata=dict(chunk.metadata_json or {}),
             )
             for chunk, score_value in rows
         ]
@@ -219,6 +222,7 @@ class PostgresKnowledgeRepository:
                 public_citation=bool(chunk.public_citation),
                 score=float(score_value or 0.0),
                 source_url=chunk.source_url,
+                metadata=dict(chunk.metadata_json or {}),
             )
             for chunk, score_value in rows
         ]
@@ -282,7 +286,13 @@ def evidence_from_hits(hits: list[KnowledgeHit]) -> list[Evidence]:
             source=hit.source,
             detail=hit.summary,
             public_citation=hit.public_citation,
-            metadata={"score": hit.score, "title": hit.title, "source_url": hit.source_url, "type": "knowledge"},
+            metadata={
+                **dict(hit.metadata or {}),
+                "score": hit.score,
+                "title": hit.title,
+                "source_url": hit.source_url,
+                "type": "knowledge",
+            },
         )
         for hit in hits
     ]

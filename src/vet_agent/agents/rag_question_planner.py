@@ -249,6 +249,20 @@ class RagQuestionPlannerAgent:
                 "summary": hit.summary[:700],
                 "source": hit.source,
                 "score": hit.score,
+                "metadata": {
+                    key: value
+                    for key, value in dict(hit.metadata or {}).items()
+                    if key
+                    in {
+                        "asset_type",
+                        "condition_key",
+                        "condition_name",
+                        "condition_system",
+                        "field",
+                        "chunk_type",
+                        "field_label",
+                    }
+                },
             }
             for hit in knowledge_hits[:4]
         ]
@@ -258,6 +272,8 @@ class RagQuestionPlannerAgent:
                 "rules": [
                     "问题必须面向宠物主人，口语化、具体、避免模板腔。",
                     "优先询问能区分风险等级或下一步行动的信息。",
+                    "如果 knowledge_hits 中包含 field=followup_questions 或 chunk_type=followup_questions 的病症卡字段，优先从这些病症特异追问中选择或改写问题。",
+                    "不要把召回到的病症卡当作确诊，只把它们当作候选知识证据。",
                     "不要重复询问 consultation_state.slots 中已经明确的信息。",
                     "slot 必须来自 missing_slots；如果确实需要问非标准信息，映射到最接近的 missing slot。",
                     "每个问题必须说明 reason，reason 用一句话解释为什么这条证据提示要问这个。",
