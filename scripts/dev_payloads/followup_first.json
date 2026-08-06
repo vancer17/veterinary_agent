@@ -1,0 +1,9 @@
+{
+  "input": "它今天有点拉稀，应该怎么办？",
+  "stream": false,
+  "vet_context": {
+    "user_id": "dev_user_followup",
+    "session_id": "dev_session_followup",
+    "pet_id": "dev_pet_followup"
+  }
+}

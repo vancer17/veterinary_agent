@@ -1,27 +1,18 @@
-# =============================================================================
-# .dockerignore — Docker 构建上下文排除项
-# =============================================================================
-#
-# 【用途】
-#   缩小 build context，避免将开发产物、密钥与无关目录打入镜像层。
-#
-# =============================================================================
-
 .git
-.github
 .venv
-__pycache__
+.data
 .pytest_cache
 .ruff_cache
-.mypy_cache
-dist
-htmlcov
-.coverage
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.log
 .env
 .env.*
-!.env.example
-thirdparty
-docs
-tests
-*.md
-!README.md
+logs
+htmlcov
+coverage
+dist
+build
+*.egg-info

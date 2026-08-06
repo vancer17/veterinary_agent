@@ -1,64 +1,42 @@
+# =============================================================================
+# 文件: pyproject.toml
+# 作用: 定义兽医 Agent Python 包元信息、依赖解析源与测试基础配置。
+# 范围: 作为 uv、setuptools 与 pytest 的统一项目配置入口。
+# 说明: 依赖解析默认使用清华 PyPI 镜像，以匹配当前生产与 CI 网络环境。
+# =============================================================================
+
 [project]
-name = "veterinaryagent"
+name = "agent"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 dependencies = [
-    "alembic>=1.18.5",
+    "alembic>=1.17.2",
     "fastapi>=0.139.0",
     "httpx>=0.28.1",
-    "httpx-sse>=0.4.3",
-    "jinja2>=3.1.6",
-    "jsonschema>=4.26.0",
-    "langchain-core>=1.4.8",
-    "langgraph>=1.2.8",
-    "langgraph-checkpoint-postgres>=3.1.0",
-    "psycopg[binary,pool]>=3.3.4",
-    "pydantic>=2.13.4",
-    "pydantic-settings>=2.14.2",
-    "sqlalchemy>=2.0.51",
-    "tenacity>=9.1.4",
-    "uvicorn>=0.50.0",
+    "pgvector>=0.4.2",
+    "psycopg[binary]>=3.3.2",
+    "pytest>=9.0.2",
+    "sqlalchemy>=2.0.45",
+    "uvicorn>=0.51.0",
 ]
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
 
-[dependency-groups]
-dev = [
-    "bandit>=1.9.4",
-    "deptry>=0.25.1",
-    "pyright>=1.1.411",
-    "pytest>=8.4.2",
-    "ruff>=0.15.20",
-    "vulture>=2.16",
-]
+[[tool.uv.index]]
+# 将 uv 依赖解析与锁文件生成固定到清华 PyPI 镜像，匹配当前国内服务器网络环境。
+name = "tsinghua"
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+default = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.pytest.ini_options]
+# pytest 仅收集本仓库测试，避免把 vendor 子模块的上游测试作为业务门禁。
+pythonpath = ["src"]
 testpaths = ["tests"]
-filterwarnings = [
-    "ignore:Using `httpx` with `starlette.testclient` is deprecated.*:starlette.exceptions.StarletteDeprecationWarning",
-]
-
-[tool.deptry]
-known_first_party = ["veterinary_agent"]
-
-[tool.deptry.per_rule_ignores]
-DEP002 = ["psycopg"]
-
-[tool.pyright]
-include = ["src", "tests", "tools", "main.py", "migrations"]
-exclude = ["**/__pycache__"]
-venvPath = "."
-venv = ".venv"
-pythonVersion = "3.13"
-pythonPlatform = "Linux"
-
-[tool.bandit]
-exclude_dirs = ["tests", ".venv"]
-skips = ["B101"]
-
-[tool.hatch.build.targets.wheel]
-packages = ["src/veterinary_agent"]
+norecursedirs = [".git", ".venv", "vendor"]

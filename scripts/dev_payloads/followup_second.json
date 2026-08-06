@@ -1,0 +1,9 @@
+{
+  "input": "是狗，3岁，12公斤，今天早上开始，精神食欲正常，没有呕吐，大便拉稀但没有血。",
+  "stream": false,
+  "vet_context": {
+    "user_id": "dev_user_followup",
+    "session_id": "dev_session_followup",
+    "pet_id": "dev_pet_followup"
+  }
+}
