@@ -5,7 +5,7 @@
 - API 接入层: `/agent/turns`、`/openai/v1/responses`、`/health`、`/ready`
 - 多 Agent 编排: `SafetyAgent -> PetContextAgent -> MemoryAgent -> KnowledgeAgent -> QuestionPlannerAgent -> QwenResponseAgent -> SafetyReviewAgent`
 - 硬安全规则: 急症红旗、有毒食物/危险人药、不给具体剂量、片子不判读
-- 记忆与留痕: PostgreSQL 存储主人/宠物/会话记忆和涉诊涉药 trace，官方 Mem0 REST Server + pgvector 提供语义记忆增强
+- 记忆与留痕: PostgreSQL 存储主人/宠物/会话记忆和涉诊涉药 trace，基于 vendor/mem0/server 封装的自托管 Mem0 REST Server + pgvector 提供语义记忆增强
 - LLM 网关: 通过 LiteLLM Proxy 统一调用通义千问，默认模型 `qwen-plus`
 - PostgreSQL + pgvector: 安全规则、问诊槽位和 RAG 语料可从数据库读取，代码里不再内置规则语料
 
@@ -17,7 +17,7 @@ cp docker/litellm/template/litellm.dev.env.template docker/litellm/template/lite
 make dev-up
 ```
 
-Compose 拓扑文件只描述服务、网络、卷、端口和依赖；编排层参数位于 `docker/compose.*.env*`，服务运行时配置位于 `docker/{service}/template/*.env*`。
+Compose 拓扑文件只描述服务、网络、卷、端口和依赖；编排层参数位于 `docker/compose.*.env*`，服务非敏感运行配置位于服务 yml，敏感参数位于 `docker/{service}/template/*.env*`。
 开发和正式环境模板均默认启用真实 LiteLLM、Mem0、PostgreSQL 与 RAG embedding 链路。
 
 配置文件树：
@@ -35,7 +35,10 @@ docker/litellm/litellm.yml
 docker/litellm/template/litellm.dev.env.template
 docker/litellm/template/litellm.prod.env.template
 docker/mem0/Dockerfile
+docker/mem0/application.yml
 docker/mem0/configure_mem0.py
+docker/mem0/entrypoint.sh
+docker/mem0/render_env.py
 docker/mem0/template/mem0.dev.env.template
 docker/mem0/template/mem0.prod.env.template
 docker/postgres/init/10-bootstrap-logical-databases.sh
@@ -122,7 +125,7 @@ curl -X POST http://127.0.0.1:8000/agent/turns \
 - `POSTGRES_ADMIN_*`: 单 PostgreSQL 容器的初始化管理员配置，仅用于首次创建逻辑库和登录角色
 - `QWEN_MODEL`: 默认 `qwen-plus`
 - `QWEN_VISION_MODEL`: 报告图片解析使用的视觉模型，默认 `qwen-vl-plus`
-- `MEM0_BASE_URL` / `MEM0_API_KEY`: app 侧官方 Mem0 REST Server 配置，compose 中默认指向 `http://mem0:8000`
+- `MEM0_BASE_URL` / `MEM0_API_KEY`: app 侧自托管 Mem0 REST Server 配置，compose 中默认指向 `http://mem0:8000`
 - `VET_AGENT_DATA_DIR`: 记忆和留痕数据目录
 - `DATABASE_URL`: PostgreSQL 连接串；配置后优先读取数据库规则/RAG，失败时回退 `data/seeds`
 - `VET_AGENT_SEED_DIR`: 本地规则和知识 seed 目录，默认 `data/seeds`
@@ -219,7 +222,7 @@ docker compose --env-file docker/compose.dev.env.template -f docker/compose.dev.
 docker compose --env-file docker/compose.dev.env.template -f docker/compose.dev.yml up -d postgres litellm mem0
 ```
 
-Mem0 通过 `MEM0_BASE_URL` 接入 REST Server。开发环境默认构建 `docker/mem0/Dockerfile` 薄封装镜像，生产环境由 CD 使用 `MEM0_IMAGE` 指向 GitHub Release tag 对应的私有仓库镜像；`pet_memory_facts` 仍是医疗事实、用户纠正和删除治理的可信事实源。
+Mem0 通过 `MEM0_BASE_URL` 接入自托管 REST Server。开发环境默认从 `vendor/mem0/server` 子模块构建 `docker/mem0/Dockerfile`，镜像内的 `mem0ai` 核心包同样从 `vendor/mem0` 子模块源码安装；生产环境由 CD 使用 `MEM0_IMAGE` 指向 GitHub Release tag 对应的私有仓库预编译镜像，并通过镜像标签记录业务仓库 commit 与 Mem0 子模块 commit。Mem0 非敏感服务参数由 `docker/mem0/application.yml` 挂载，密钥由 env 文件注入。`pet_memory_facts` 仍是医疗事实、用户纠正和删除治理的可信事实源。
 
 迁移说明:
 

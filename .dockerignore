@@ -1,18 +1,35 @@
+# =============================================================================
+# 文件: .dockerignore
+# 作用: 限制仓库级 Docker build context，避免无关源码、缓存和子模块资产进入构建上下文。
+# 范围: 同时服务主应用镜像与自托管 Mem0 镜像构建。
+# 说明: vendor/mem0/server 后端源码保留；其 Dashboard 与其他非运行时目录不参与本项目镜像。
+# =============================================================================
+
 .git
+.github
 .venv
 .data
 .pytest_cache
 .ruff_cache
-__pycache__
-*.pyc
-*.pyo
-*.pyd
+.mypy_cache
+.coverage
+coverage
+htmlcov
+logs
+**/__pycache__
+**/*.py[cod]
 *.log
 .env
 .env.*
-logs
-htmlcov
-coverage
 dist
 build
 *.egg-info
+
+# Mem0 子模块仅使用 REST Server 后端源码，排除与运行镜像无关的大体积目录。
+vendor/mem0/.git
+vendor/mem0/docs
+vendor/mem0/evaluation
+vendor/mem0/examples
+vendor/mem0/mem0-ts
+vendor/mem0/tests
+vendor/mem0/server/dashboard

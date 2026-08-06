@@ -2,7 +2,7 @@
 # =============================================================================
 # 文件: scripts/cd/repository/sync-production-bundle.sh
 # 作用: 将正式环境运行编排文件同步到生产服务器部署目录。
-# 范围: 只同步 docker/ 下的正式编排、env 模板和挂载脚本，不同步真实 env 密钥。
+# 范围: 只同步 docker/ 下的正式编排、服务配置、env 模板和挂载脚本，不同步真实 env 密钥。
 # 说明: 生产服务器使用同步后的 yml 与本地真实 env 文件拉取 GitHub Release 镜像。
 # =============================================================================
 
@@ -38,7 +38,7 @@ bundle_paths=(
     docker/mem0/template/mem0.prod.env.template
     docker/postgres/template/postgres.prod.env.template
     docker/litellm/litellm.yml
-    docker/mem0/configure_mem0.py
+    docker/mem0/application.yml
     docker/postgres/init/10-bootstrap-logical-databases.sh
     docker/postgres/ops/ensure-extensions.sh
 )

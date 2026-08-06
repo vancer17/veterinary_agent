@@ -1,15 +1,9 @@
 """
 文件：docker/mem0/configure_mem0.py
-作用：提供容器启动前的中间件辅助配置脚本。
-说明：本文件遵循项目标准文件树编排；跨包引用应通过对应包的 __init__.py 暴露能力。
+作用：在 Mem0 REST Server 启动前写入项目所需的运行时配置覆盖。
+范围：当前仅维护 pgvector embedding 维度配置，不创建业务表，不导入业务数据。
+说明：Mem0 上游服务暂未通过环境变量暴露 pgvector 维度，本脚本在 Alembic 后写入 settings 表。
 """
-
-
-# File: docker/mem0/configure_mem0.py
-# Purpose: Inject runtime Mem0 server overrides before the REST API starts.
-# Notes: The official Mem0 server currently does not expose pgvector dimensions
-#        through environment variables, so this script persists the override in
-#        Mem0's own settings table after its Alembic migrations have run.
 
 from __future__ import annotations
 
@@ -22,11 +16,11 @@ from sqlalchemy.engine import URL
 
 
 def deep_merge(base: dict[str, Any], updates: dict[str, Any]) -> dict[str, Any]:
-    """执行 deep_merge 业务逻辑。
+    """递归合并配置字典。
 
-    :param base: 基础数据。
-    :param updates: 参数 updates。
-    :return: 返回函数执行结果。
+    :param base: 原始配置字典。
+    :param updates: 需要覆盖或补充的配置字典。
+    :return: 合并后的新配置字典。
     """
     merged = dict(base)
     for key, value in updates.items():
@@ -38,9 +32,9 @@ def deep_merge(base: dict[str, Any], updates: dict[str, Any]) -> dict[str, Any]:
 
 
 def main() -> None:
-    """执行命令行入口逻辑。
+    """执行 Mem0 启动前配置写入流程。
 
-    :return: 返回函数执行结果。
+    :return: 无返回值。
     """
     dims = int(os.getenv("MEM0_EMBEDDING_MODEL_DIMS", "1024"))
     database = os.getenv("APP_DB_NAME", "mem0_app")

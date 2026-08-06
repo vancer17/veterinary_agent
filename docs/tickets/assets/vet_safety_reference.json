@@ -1,0 +1,1187 @@
+{
+  "_meta": {
+    "file_name": "vet_safety_reference.json",
+    "file_type": "structured_clinical_safety_reference",
+    "purpose": "提供毒物、人用药、急症红旗和隐匿高风险语义模式，用于安全层拦截、风险升级和语义识别。",
+    "scope": "toxinsAndDrugs 82 条 emergencyRedFlags 37 条 dangerPatterns 11 条。",
+    "source_document": "../docs/clinical_safety_reference.md",
+    "clinical_review_required": true,
+    "emoji_policy": "not_allowed"
+  },
+  "toxinsAndDrugs": [
+    {
+      "category": "人用药物",
+      "item": "对乙酰氨基酚(acetaminophen / 扑热息痛)",
+      "aliases": "泰诺、必理通/百服宁(Panadol)、感冒灵颗粒、日夜百服宁、白加黑、氨酚烷胺(含此成分的复方感冒药)、退烧药、'孩子/大人吃的退烧药'、'家里治感冒的白片'。用户常见表达'给猫喂了片退烧的'",
+      "species": "both,但猫极度致命(物种特异)。猫缺乏葡萄糖醛酸转移酶,无法代谢,单片325mg即可致死;猫更易高铁血红蛋白血症(红细胞损伤),狗更易肝损伤",
+      "danger": "机制:代谢产物NAPQI耗竭谷胱甘肽→肝细胞坏死+高铁血红蛋白血症(红细胞失去携氧能力)。临床:黏膜变棕/泥灰色、脸/爪水肿(尤其猫)、呼吸急促、心跳快、虚弱、呕吐、黄疸、褐色尿。剂量阈值:猫一般40-50mg/kg出现毒性,个别报道低至10mg/kg即中毒;狗>100mg/kg出现急性中毒,>200mg/kg出现高铁血红蛋白血症。对猫无安全剂量",
+      "action": "急诊(尤其猫)。任何量猫误食都按急症。有催吐窗口(<1-2小时且无神经症状可由兽医催吐),但猫症状进展极快勿在家拖延。解毒剂=N-乙酰半胱氨酸(NAC),越早越好。立即送医并致电中毒热线",
+      "source": "Merck/MSD Veterinary Manual - Toxicoses From Human Analgesics in Animals; VCA Animal Hospitals - Acetaminophen Toxicity in Cats; ASPCA APCC / Pet Poison Helpline 855-764-7661"
+    },
+    {
+      "category": "人用药物",
+      "item": "布洛芬(ibuprofen)",
+      "aliases": "芬必得、美林(儿童退烧)、Advil、Motrin、'止疼片'、'退烧的粉红色小药丸'、布洛芬缓释胶囊。用户常见表达'狗关节疼我给它吃了片人的止疼药'",
+      "species": "both,猫敏感度约为狗的两倍。'布洛芬对猫在任何剂量下都太毒'。狗最常见的人药中毒之一",
+      "danger": "机制:抑制COX→抑制肾血流+破坏胃黏膜保护前列腺素。临床:呕吐(含血)、黑便、腹痛、食欲废绝、嗜睡、脱水、急性肾损伤;高剂量可致中枢抑制/癫痫。剂量阈值:狗50mg/kg出现胃肠道毒性,175-300mg/kg肾损伤,>400mg/kg中枢/致死;猫25mg/kg即中毒。长期给药狗低至5-6mg/kg也中毒。单粒200mg片对猫和小型犬即可中毒",
+      "action": "尽快就诊/急诊(取决于剂量与体重)。大剂量或已呕血/黑便=急诊。<1-2小时可由兽医催吐;需胃保护(奥美拉唑/米索前列醇)、静脉输液护肾。有肾损伤者需住院监测",
+      "source": "Pet Poison Helpline - Ibuprofen; Merck Veterinary Manual - Toxicoses From Human Analgesics; ASPCA APCC 888-426-4435"
+    },
+    {
+      "category": "人用药物",
+      "item": "萘普生(naproxen)",
+      "aliases": "Aleve、萘普生钠、'蓝色的止疼药'、部分复方止痛/感冒药。用户说'给狗吃了片人用的消炎止痛药'",
+      "species": "both,狗尤其危险。半衰期在犬极长(可达74小时)→即使小剂量也蓄积中毒",
+      "danger": "机制同其他NSAID:抑制肾血流+破坏胃黏膜。因犬半衰期极长,毒性窗口窄。临床:呕吐/呕血、黑便、腹痛、胃穿孔、急性肾衰。剂量阈值:无确立的安全阈值;狗低至5mg/kg即报告出现毒性征象。比布洛芬更危险(蓄积)",
+      "action": "尽快就诊/急诊。任何误食都需兽医评估(阈值极低)。胃肠道保护+长时间输液护肾(因半衰期长需延长支持),严重者住院",
+      "source": "American College of Veterinary Pharmacists (vetmeds.org) - Ibuprofen & Naproxen; Merck Veterinary Manual - Toxicoses From Human Analgesics; Vetstreet"
+    },
+    {
+      "category": "人用药物",
+      "item": "阿司匹林(aspirin / 乙酰水杨酸)",
+      "aliases": "拜阿司匹林、阿司匹林肠溶片、'心脏病人吃的小白片'、水杨酸类、部分复方感冒药(含水杨酸)、水杨酸软膏/膏药(外用也可经皮/舔食中毒)。用户说'给猫喂了片阿司匹林退烧'",
+      "species": "both,猫远比狗敏感(物种特异)。猫缺葡萄糖醛酸转移酶,半衰期长达约37.5小时→易蓄积",
+      "danger": "机制:水杨酸中毒→胃溃疡出血、酸碱失衡、肝肾损伤、骨髓抑制。临床:呕吐/呕血、黑便、呼吸变化(过度换气)、体温升高、中枢神经症状、肾衰。剂量阈值:狗>100mg/kg、猫>80mg/kg可致严重中毒甚至死亡;<50mg/kg多为轻度胃肠道反应。猫即使5-40mg每72小时长期给药也可出现不良反应",
+      "action": "尽快就诊(猫按急症)。切勿自行给宠物喂阿司匹林'退烧/止疼'。胃肠道保护+输液+纠正酸碱。猫因蓄积需延长监测",
+      "source": "Pet Poison Helpline - Aspirin; Merck Veterinary Manual - Toxicoses From Human Analgesics; VCA Animal Hospitals - Aspirin Poisoning in Cats/Dogs"
+    },
+    {
+      "category": "人用药物",
+      "item": "苯二氮䓬类(benzodiazepines,如阿普唑仑/地西泮)",
+      "aliases": "阿普唑仑(Xanax)、地西泮/安定(Valium)、氯硝西泮、劳拉西泮、艾司唑仑(舒乐安定)、'安眠药'、'抗焦虑药'、'助眠的小药片'。用户说'它把我的安眠/安定药偷吃了'",
+      "species": "both。猫口服地西泮(安定)物种特异:可致突发严重急性肝坏死/肝衰(即使小量),因猫经葡萄糖醛酸化代谢受限",
+      "danger": "机制:GABA增强→中枢抑制。临床:严重镇静、共济失调、定向障碍、也可出现反常兴奋/激越/攻击、恶心呕吐;重度可致呼吸/心血管抑制。多数苯二氮䓬安全窗宽,单纯口服很少致死;但猫口服地西泮的特发性暴发性肝衰是致命例外。30-60分钟内起效",
+      "action": "尽快就诊。猫误食地西泮=急诊(监测肝酶数日)。有拮抗剂氟马西尼可用于重度镇静。避免在已镇静动物催吐(误吸风险)。致电中毒热线核实具体药与量",
+      "source": "Merck/MSD Veterinary Manual - Toxicoses From Human Antidepressants, Anxiolytics, and Sleep Aids; Pet Poison Helpline - Benzodiazepines; PetMD"
+    },
+    {
+      "category": "人用药物",
+      "item": "非苯二氮䓬类安眠药 唑吡坦(zolpidem)",
+      "aliases": "思诺思(Stilnox/Ambien)、右佐匹克隆、'新型安眠药'、'助眠药'。用户说'吃了我的安眠药'",
+      "species": "both。唑吡坦与氯硝西泮是宠物中毒热线接到最多的镇静/催眠药来电之一",
+      "danger": "机制:选择性GABA-A激动。临床:镇静或反常的中枢兴奋/激越、共济失调、定向障碍、呕吐;犬中反常兴奋(过度活跃、发声)常见。总体安全窗较宽,单纯口服很少致死",
+      "action": "尽快就诊/兽医评估。多为支持治疗+监测,反常兴奋者可能需镇静。致电中毒热线核实剂量",
+      "source": "Merck/MSD Veterinary Manual - Toxicoses From Human Antidepressants, Anxiolytics, and Sleep Aids; Pet Poison Helpline"
+    },
+    {
+      "category": "人用药物",
+      "item": "伪麻黄碱/减充血剂(pseudoephedrine / 苯肾上腺素)",
+      "aliases": "'感冒药'、新康泰克(含伪麻黄碱)、白加黑、日夜百服宁、泰诺感冒片、鼻炎药、'通鼻子的药'、Sudafed。很多复方感冒药同时含对乙酰氨基酚→双重毒性。用户说'把家里的感冒药翻出来吃了'",
+      "species": "both,宠物比人对伪麻黄碱敏感得多",
+      "danger": "机制:拟交感胺→过度肾上腺素能刺激。临床:极度兴奋/躁动、心动过速、高血压、体温升高、震颤、癫痫;过量致血管剧烈收缩→危险高血压/中风。剂量阈值:5-6mg/kg出现临床症状,10-12mg/kg可致死。起效:速释/液体15-30分钟即可发作,缓释可延迟3-6小时或更久",
+      "action": "急诊。缓释剂型即使当下无症状也需就诊(延迟发作)。有催吐窗口(需在兽医指导下,兴奋/抽搐时不可在家催吐)。需控制血压/心率/体温+镇静。若为复方感冒药还要同时按对乙酰氨基酚处理",
+      "source": "Pet Poison Helpline - Decongestants / Sudafed Toxicity in Pets; ASPCApro - Pseudoephedrine Toxicity in Pets; Merck Veterinary Manual - Toxicoses From Human Cold and Allergy Medications"
+    },
+    {
+      "category": "人用药物",
+      "item": "SSRI类抗抑郁药(选择性5-羟色胺再摄取抑制剂)",
+      "aliases": "舍曲林(左洛复/Zoloft)、氟西汀(百忧解/Prozac)、西酞普兰、艾司西酞普兰(来士普)、帕罗西汀、'抗抑郁药'、'调节情绪的药'。用户说'吃了我的抗抑郁/治抑郁的药'",
+      "species": "both,猫频繁误食。狗最常处方的是舍曲林",
+      "danger": "机制:5-羟色胺过量→5-羟色胺综合征。临床:胃肠道(流涎、呕吐、腹泻、腹痛)+中枢(兴奋或抑制、瞳孔散大、震颤、癫痫、因抽搐/震颤继发高热)+高血压。剂量阈值:狗舍曲林约10mg/kg即可出现临床症状;最低致死量狗>100mg/kg、猫>50mg/kg(相对其他5-羟色胺能药更安全,但仍需就诊)",
+      "action": "尽快就诊/急诊(出现震颤/高热/癫痫=急诊)。及时支持治疗预后良好。治疗含镇静(乙酰丙嗪/氯丙嗪)、输液、控温、抗惊厥、5-羟色胺拮抗剂(赛庚啶)。致电中毒热线",
+      "source": "dvm360 - SSRI/SNRI toxicity: what you need to know; Merck/MSD Veterinary Manual - Toxicoses From Human Antidepressants; PetMD - Antidepressant Toxicity in Dogs"
+    },
+    {
+      "category": "人用药物",
+      "item": "SNRI 文拉法辛(venlafaxine)",
+      "aliases": "怡诺思(Effexor)、文拉法辛缓释胶囊、度洛西汀(欣百达,同类SNRI)、'抗抑郁药'。猫对文拉法辛的胶囊气味/味道有特殊吸引力,主动误食率高",
+      "species": "both,猫尤其高发。文拉法辛是猫误食最多的药物之一(某猫研究占36%)",
+      "danger": "机制:同时抑制5-羟色胺和去甲肾上腺素再摄取→5-羟色胺综合征+更强拟交感效应。临床:兴奋/激越、震颤、癫痫、瞳孔散大、心动过速、高血压、高热。单粒37.5mg胶囊对猫已可能出症状",
+      "action": "急诊(尤其猫)。单独列出因猫主动误食+双重机制。支持治疗+赛庚啶+镇静+控温。致电中毒热线核实剂量",
+      "source": "dvm360 - SSRI/SNRI toxicity; Pugh et al. 2013, J Vet Emerg Crit Care - SSRI toxicosis in cats: 33 cases; Merck/MSD Veterinary Manual"
+    },
+    {
+      "category": "人用药物",
+      "item": "哌甲酯(methylphenidate / 利他林)",
+      "aliases": "利他林(Ritalin)、专注达(Concerta)、择思达(注:择思达=托莫西汀,非哌甲酯)、'多动症的药'、'ADHD药'、'提高注意力的药'。用户说'孩子治多动症的药被狗吃了'",
+      "species": "both,犬猫比人敏感得多,人的小治疗量即可致宠物严重中毒",
+      "danger": "机制:中枢兴奋剂(增加多巴胺/去甲肾上腺素)。临床:躁动、瞳孔散大、震颤、癫痫、心动过速、高血压、流涎、呕吐、高热。剂量阈值:哌甲酯约0.5mg/kg即有毒。缓释剂型部分有甜味包衣→吸引犬误食",
+      "action": "急诊。速释可在30-90分钟内发作,缓释延迟。控制兴奋(镇静如乙酰丙嗪/氯丙嗪)、心率、血压、体温、抗惊厥。致电中毒热线核实剂量与是否缓释",
+      "source": "Pet Poison Helpline - Methylphenidate; Merck Veterinary Manual - Toxicoses in Animals From Amphetamines and ADHD Drugs; VCA - Behavioral Health Medication Poisoning"
+    },
+    {
+      "category": "人用药物",
+      "item": "苯丙胺类(amphetamine,如 Adderall)",
+      "aliases": "Adderall、右苯丙胺、赖氨酸安非他明(Vyvanse)、部分减肥药/兴奋剂、'多动症的另一种药'。比哌甲酯毒性更强",
+      "species": "both,毒性高于哌甲酯,犬猫极敏感",
+      "danger": "机制:强中枢/交感兴奋。临床:严重躁动、瞳孔散大、震颤、癫痫、心动过速、高血压、高热、可致命。剂量阈值:一般1mg/kg即有毒(缓释0.8mg/kg);犬口服半数致死量约9-11至20-27mg/kg。甜味包衣吸引犬",
+      "action": "急诊。控制兴奋/高热/癫痫,可用脂肪乳剂(ILE)治疗(有成功案例)、镇静、抗惊厥、降温。致电中毒热线",
+      "source": "Merck Veterinary Manual - Toxicoses in Animals From Amphetamines and ADHD Drugs; American College of Veterinary Pharmacists - Amphetamines; PMC 案例报告 - ILE for canine amphetamine toxicosis"
+    },
+    {
+      "category": "人用药物",
+      "item": "维生素D3/胆钙化醇(口服补充剂/维生素片)",
+      "aliases": "维生素D、维生素AD滴剂、鱼肝油、钙加D、'补钙的药'、'维D软胶囊'、胆钙化醇灭鼠药(部分鼠药主成分,一并警惕)。用户说'吃了我的维D/钙片'或'舔了灭鼠药'",
+      "species": "both",
+      "danger": "机制:促进胃肠道/骨/肾过量吸收钙→高钙血症+高磷血症→急性肾衰+软组织矿化。临床:呕吐、食欲废绝、口渴/多尿、腹痛、抑郁,危及生命的高钙可在18-72小时内出现。剂量阈值:低至0.1mg/kg即有毒(此处为鼠药级浓度);普通维生素补充剂需较大量,但含高剂量D3的处方/宠物粮超标也可中毒",
+      "action": "尽快就诊/急诊(取决于剂量)。高钙+肾衰死亡率高、治疗昂贵且漫长。早期催吐(<数小时)+输液利钙+双膦酸盐/降钙素。监测血钙磷肾值数日",
+      "source": "Pet Poison Helpline - Cholecalciferol; Merck Veterinary Manual - Cholecalciferol (Vitamin D3) Poisoning in Animals; VCA Animal Hospitals"
+    },
+    {
+      "category": "人用药物",
+      "item": "局部雌激素/激素替代膏(HRT topical estrogen)",
+      "aliases": "雌激素凝胶/乳膏、更年期激素替代膏、'涂在胳膊/腿上的更年期药膏'、雌二醇凝胶、经皮雌激素贴片、部分'抗衰/丰胸'外用品。隐蔽暴露:宠物舔主人涂药的皮肤、蹭到、啃咬用过的贴片",
+      "species": "both。经皮转移(主人手/臂接触宠物)是主要暴露途径",
+      "danger": "机制:雌激素过量→骨髓抑制。临床:骨髓抑制致慢性贫血(严重可致命)、'假发情'(母犬/已绝育母犬外阴肿大、血性分泌物;母猫持续发情嚎叫打滚)、公犬乳腺肿大/睾丸萎缩/阴茎变小、脱毛。慢性隐匿,主人常查不到原因(兽医困惑)。可逆但需数月",
+      "action": "尽快就诊排查(尤其不明原因贫血/发情样表现)。关键=切断暴露源(主人改涂宠物接触不到的部位、戴手套、涂后洗手、妥善丢弃贴片)。查血常规监测骨髓抑制。误食贴片=急诊",
+      "source": "VIN News - Hormone replacement skin products affect users' pets; PetMD - Hormone Replacement Product Poisoning in Dogs; ASPCApro - Birth Control Pill and HRT Exposure in Pets; ANSES(法国食品环境卫生署)警示"
+    },
+    {
+      "category": "人用药物",
+      "item": "口服避孕药(oral contraceptives)",
+      "aliases": "避孕药、短效/长效避孕药、'吃的避孕药'、优思明/妈富隆等商品名、含铁的避孕药(部分安慰剂片含铁)。用户说'狗把我的避孕药吃了'",
+      "species": "both",
+      "danger": "机制:多数避孕药雌/孕激素浓度很低→单次少量误食通常毒性低。真正风险点:①部分避孕药的安慰剂片含铁→铁中毒(呕吐、腹泻、黑便、肝损伤);②大量或长期暴露的雌激素骨髓抑制风险。临床:多数仅轻度胃肠道不适;含铁者按铁中毒处理",
+      "action": "居家观察为主,但需致电中毒热线核实:药品品牌/是否含铁/误食片数与宠物体重。含铁片或大量误食=尽快就诊查血清铁。多数少量误食预后好",
+      "source": "PetMD - My Dog Ate Birth Control. Now What?; ASPCApro - Birth Control Pill and HRT Exposure in Pets; Animal Poisons Helpline - Oral Contraceptives and Your Pet"
+    },
+    {
+      "category": "人用药物",
+      "item": "5-氟尿嘧啶外用膏(5-fluorouracil / 5-FU cream)",
+      "aliases": "氟尿嘧啶乳膏、Efudix、Adrucil、Carac、'治皮肤癌/日光性角化的药膏'、'祛斑/去角化的处方药膏'。宠物常啃咬药膏管而非舔皮肤。用户说'咬破了我治皮肤的药膏'",
+      "species": "both。极高致死性——'即使一舔也可能致命'",
+      "danger": "机制:细胞毒性化疗药。临床:急性胃肠道(呕吐、腹泻)、神经症状(震颤、癫痫)、骨髓抑制,极高死亡率。剂量阈值:犬最低致死口服量约20mg/kg,低至8.6mg/kg即出现中毒症状。起效:30分钟-6小时,最早7小时即有死亡报告",
+      "action": "立即急诊(不可等待)。任何啃咬药膏管的暴露都按致命急症。控制癫痫、支持治疗、监测骨髓(数日至一周)。FDA专门发文警示宠物勿接触。致电中毒热线",
+      "source": "Pet Poison Helpline - 5-fluorouracil; ASPCA - Medication Spotlight: 5-Fluorouracil; FDA - Don't Expose Pets to Prescription Topical Fluorouracil; Merck Veterinary Manual - Toxicosis From Human Topical Agents"
+    },
+    {
+      "category": "人用药物",
+      "item": "卡泊三醇/维生素D类似物软膏(calcipotriene / calcipotriol)",
+      "aliases": "卡泊三醇软膏、达力士(Dovonex)、Taclonex、'治银屑病/牛皮癣的药膏'、维生素D外用软膏。用户说'舔了/咬了我治牛皮癣的药膏'",
+      "species": "both",
+      "danger": "机制:维生素D类似物→高钙血症(同胆钙化醇路径)→急性肾衰、可致慢性肾衰,可致死。临床:12-36小时起出现呕吐、腹泻、多饮多尿、腹痛、抑郁、食欲废绝。剂量阈值:误食40-60mcg/kg即与犬危及生命的高钙血症相关(极小量软膏即达此量)",
+      "action": "急诊。治疗昂贵漫长(同维D中毒:输液利钙+双膦酸盐/降钙素+监测血钙磷肾数日至数周)。有致死案例报告。致电中毒热线",
+      "source": "Pet Poison Helpline - Calcipotriene; Merck Veterinary Manual - Toxicosis From Human Topical Agents; JAAD - Death of a dog caused by calcipotriene toxicity"
+    },
+    {
+      "category": "人用药物",
+      "item": "米诺地尔(minoxidil / 生发水)",
+      "aliases": "米诺地尔搽剂/泡沫、Rogaine、'生发水'、'防脱发的药水/喷雾'、蔓迪(国内商品名)。隐蔽暴露:猫舔主人涂药的皮肤/枕头、被溅到后舔毛。用户说'猫在我涂了生发水的枕头上睡后舔毛了'",
+      "species": "both,但猫物种特异极度致命(死亡病例几乎全为猫)",
+      "danger": "机制:强效血管扩张剂。临床(猫):食欲废绝、呕吐、嗜睡、呼吸困难、肺水肿、胸腔积液、低血压、发绀,45分钟至数小时内起病。死亡率:猫约14.7%(有研究62只中8只死亡),死亡者全为猫。任何量对猫都可能重度中毒致死",
+      "action": "急诊(尤其猫,任何暴露都按急症)。切断暴露源(生发水远离猫、涂后洗手、注意枕头/床品残留)。支持治疗:氧疗、处理肺水肿/胸腔积液、血压支持;重度有血液透析成功案例。致电中毒热线",
+      "source": "Pet Poison Helpline - Hair Loss Drug Can be Deadly to Pets / Warning Minoxidil; ASPCA - Minoxidil and Pets; ScienceDirect - Minoxidil toxicosis in cats and dogs: A scoping review; PMC - Hemodialysis case report"
+    },
+    {
+      "category": "植物",
+      "item": "百合(真百合属 Lilium + 萱草属 Hemerocallis)",
+      "aliases": "百合花、香水百合、东方百合、亚洲百合、火百合/卷丹、复活节百合、麝香百合、观赏百合、萱草/黄花菜(观赏)、切花花束里的百合;用户常见表达「猫啃了百合花/舔了花粉/喝了插花瓶里的水」",
+      "species": "猫=物种特异·致命(肾衰);狗=仅轻度肠胃刺激(狗不会肾衰)。这是最重要的猫专属剧毒植物",
+      "danger": "对猫肾脏剧毒且致死率高。全株剧毒——花、叶、花粉、球茎,连插花的花瓶水都有毒。猫只需啃一小片叶/花瓣、舔掉毛上几粒花粉、或喝几口花瓶水,就可在3天内急性肾衰死亡。摄入后约12–24h出现多尿、脱水、呕吐、精神差,24–72h进入肾衰(少尿/无尿),不治疗则死亡。ASPCA:治疗须在摄入约18小时内启动才最有效。注意:和平百合(白掌 Spathiphyllum)、芦苇百合等「叫百合但不是Lilium」的不致肾衰,但真百合属与萱草属是死亡线",
+      "action": "【猫=最高级急诊·分秒必争】立即送医或打中毒热线,别在家拖延观察。目标18小时内到院开始静脉输液冲肾+催吐/活性炭(由兽医操作,别自行催吐)。发现啃食/舔花粉/喝瓶水任一即按中毒处理。狗误食按轻度肠胃处理即可",
+      "source": "ASPCA Poison Control (aspca.org/pet-care/aspca-poison-control/toxic-and-non-toxic-plants/lily);Pet Poison Helpline(petpoisonhelpline.com/poison/lilies);FDA Animal Health Literacy;ASPCApro(18小时治疗窗)"
+    },
+    {
+      "category": "植物",
+      "item": "杜鹃 / 映山红(Rhododendron / Azalea 杜鹃属)",
+      "aliases": "杜鹃花、映山红、西洋杜鹃、比利时杜鹃、洋杜鹃、石楠杜鹃、盆栽杜鹃;用户说「啃了杜鹃叶/花」",
+      "species": "猫狗都中毒(both),无物种特异",
+      "danger": "全株含木藜芦毒素(grayanotoxin,GTX I/III,又称andromedotoxin/闹羊花毒素),干扰钠通道。临床:流涎、呕吐、腹痛→心血管(心律不齐、低血压、心动过缓)→神经(精神沉郁、无力、抽搐、昏迷)。剂量阈值:摄入体重0.2%的植物量即可中毒(约14kg狗只需15–30g叶/花);少量几片叶或花也可能出现严重症状。Pet Poison Helpline列为对宠物毒性排名很靠前的植物",
+      "action": "【尽快急诊】立即送医;出现心律/神经症状(无力、抽搐、心跳异常)=紧急。别自行催吐,由兽医处置(活性炭+对症+心电监护)。告知啃食量",
+      "source": "Pet Poison Helpline(petpoisonhelpline.com/poison/rhododendrons 与 /azalea);Vet Times 临床综述"
+    },
+    {
+      "category": "植物",
+      "item": "夹竹桃(Oleander / Nerium oleander)",
+      "aliases": "夹竹桃、欧洲夹竹桃、柳叶桃;近亲黄花夹竹桃(Thevetia)同类剧毒;用户说「啃了夹竹桃/绿化带那种红花白花树」",
+      "species": "猫狗都中毒(both),剧毒",
+      "danger": "全株含强心苷 oleandrin(夹竹桃苷),抑制细胞膜Na⁺/K⁺-ATP泵→高钾血症+细胞内钙升高→心肌应激、早期除极、致命性心律失常。临床:呕吐、食欲废绝、心律/心率异常、无力、虚脱、猝死。极少量即可致命(大型家畜吃几片叶就死亡的报道)。无特效解毒剂,即使及时治疗仍可能死亡。焚烧的烟、修剪碎屑亦有毒",
+      "action": "【最高级急诊·别观望】立即送医,需心电监护+对症(纠正电解质/抗心律失常,部分病例用地高辛抗体)。别自行催吐。任何疑似摄入都当致命处理",
+      "source": "Pet Poison Helpline(petpoisonhelpline.com/poison/oleander);ASPCApro;dvm360 oleander toxicosis"
+    },
+    {
+      "category": "植物",
+      "item": "苏铁 / 铁树(Sago Palm / Cycas revoluta,苏铁科 Cycad)",
+      "aliases": "铁树、苏铁、凤尾蕉、避火蕉、盆景苏铁;用户说「啃了铁树的种子/那个红色果子/盆景」",
+      "species": "猫狗都中毒(both),狗误食多见;剧毒·可致死",
+      "danger": "全株有毒,种子(果核)毒性最高。主毒素 cycasin(苏铁苷),经肠道菌代谢为MAM→肝损伤/急性肝衰。仅吃1粒种子就可致狗中毒甚至死亡。临床:呕吐、黑便/血便、黄疸、口渴增加、出血性肠胃炎、瘀斑、凝血障碍、肝衰、死亡。摄入后约15分钟即可出现肠胃症状(也可延迟数小时)。文献报道犬中毒存活率低至约50%",
+      "action": "【尽快急诊·预后差别拖】立即送医;需早期催吐/活性炭(兽医操作)+积极护肝+监测肝功能与凝血。任何啃食(尤其种子)都当严重中毒处理",
+      "source": "ASPCA(aspca.org/.../sago-palm 与 /cycads);VCA Hospitals;dvm360 Cycad toxicosis;PetMD"
+    },
+    {
+      "category": "植物",
+      "item": "郁金香(Tulip / Tulipa)",
+      "aliases": "郁金香、郁金香球茎/种球;用户说「狗刨了花园把球茎啃了/翻了没种的球茎袋子」",
+      "species": "猫狗都中毒(both);多数为轻中度,大量吃球茎可较重",
+      "danger": "全株含毒性生物碱,球茎(球根)浓度最高。毒素 Tulipalin A/B(郁金香苷A)刺激口腔食道并影响蛋白合成。吃少量叶/茎/花通常仅轻度恶心呕吐;吃球茎或大量球茎(狗刨花园、翻球茎袋)可致持续肠胃症状(呕吐、食欲废绝、腹泻、流涎)和精神差,大量时较严重",
+      "action": "少量叶花=居家观察肠胃症状,持续或量大即就诊;吃了球茎/大量=尽快就诊。别自行催吐,由兽医判断",
+      "source": "Pet Poison Helpline(petpoisonhelpline.com/poison/tulip);ASPCA;dvm360 Spring toxin"
+    },
+    {
+      "category": "植物",
+      "item": "风信子(Hyacinth / Hyacinthus)",
+      "aliases": "风信子、风信子球茎;用户说「啃了风信子球根」",
+      "species": "猫狗都中毒(both);机制同郁金香",
+      "danger": "同含 Tuliposide A/Tulipalin A(与郁金香同类毒素),球茎浓度最高。临床:流涎、呕吐(可带血)、腹泻;大量摄入球茎可致较重肠胃刺激,偶见心率/呼吸加快",
+      "action": "少量=居家观察;吃球茎或大量、或呕吐带血=尽快就诊。别自行催吐",
+      "source": "Pet Poison Helpline(petpoisonhelpline.com/poison/tulip,风信子同页);ASPCA"
+    },
+    {
+      "category": "植物",
+      "item": "水仙(Daffodil / Narcissus 水仙属)",
+      "aliases": "水仙、洋水仙、黄水仙、喇叭水仙、中国水仙、水仙球茎;用户说「啃了水仙球根/水养水仙」",
+      "species": "猫狗都中毒(both);球茎最危险",
+      "danger": "全株含石蒜碱等生物碱(lycorine),球茎(球根)浓度最高,球茎外层还含针状草酸钙晶体致口腔刺激/流涎。临床:呕吐、流涎、腹泻;大量摄入→抽搐、低血压、震颤、心律失常。症状最快摄入后2小时出现。水养水仙的水也可能含毒",
+      "action": "吃少量叶=就诊评估;吃球茎或出现震颤/心律异常=紧急急诊。别自行催吐,由兽医处置",
+      "source": "Pet Poison Helpline(petpoisonhelpline.com/poison/daffodil);ASPCA(daffodil/narcissus 页)"
+    },
+    {
+      "category": "植物",
+      "item": "绿萝(Pothos / Devil's Ivy / Epipremnum)",
+      "aliases": "绿萝、黄金葛、魔鬼藤;用户说「猫/狗啃了绿萝叶」。属天南星科草酸钙类,与滴水观音、龟背竹、花叶万年青、白掌同机制",
+      "species": "猫狗都中毒(both);通常轻中度(口腔刺激为主)",
+      "danger": "含不溶性草酸钙(insoluble calcium oxalate)针状晶体(raphides),啃咬时刺入口腔黏膜致灼痛。临床:立即口腔灼痛/刺激、大量流涎、干呕、呕吐、腹泻、拒食;罕见情况舌咽严重肿胀→吞咽困难、呼吸困难(气道风险)。天南星科是ASPCA最常见的植物暴露之一",
+      "action": "多数居家观察+漱口/喂少量牛奶或酸奶缓解口腔灼痛;若舌/喉肿胀、流口水不止、呼吸或吞咽困难=紧急急诊(气道风险)",
+      "source": "Pet Poison Helpline(petpoisonhelpline.com/poison/insoluble-oxalates);ASPCA houseplant guide;Merck Vet Manual(Houseplants toxic to animals)"
+    },
+    {
+      "category": "植物",
+      "item": "滴水观音(Alocasia / 海芋,大型天南星科)",
+      "aliases": "滴水观音、海芋、大叶观音莲、象耳(Elephant Ear);近亲芋头/花叶芋(Caladium/Colocasia)同类;用户说「啃了滴水观音那种大叶子/被汁液弄到皮肤」",
+      "species": "猫狗都中毒(both);口腔刺激为主,气道肿胀风险高于绿萝",
+      "danger": "含不溶性草酸钙针晶。临床:口腔/舌/唇疼痛肿胀、大量流涎、呕吐、吞咽困难;较严重时气道肿胀→无法呼吸。汁液沾皮肤也刺激(红痒痛)",
+      "action": "口腔症状居家观察+清水漱口/牛奶缓解;舌喉肿胀、呼吸/吞咽困难=紧急急诊。汁液入眼/皮肤大量冲洗",
+      "source": "ASPCA(aspca.org/.../alocasia);Pet Poison Helpline(/poison/alocasia 与 /elephant-ears)"
+    },
+    {
+      "category": "植物",
+      "item": "花叶万年青 / 黛粉叶(Dieffenbachia,俗称 Dumbcane「哑棒」)",
+      "aliases": "花叶万年青、黛粉叶、白玉黛粉叶;名称歧义提醒:中文「万年青」可指①花叶万年青/广东万年青 Dieffenbachia/Aglaonema(草酸钙类,见本条)②传统「万年青」Rohdea japonica(百合科,含强心苷类,毒性机制不同——见备注)。产品做别名匹配时须区分,拿不准按更危险处置",
+      "species": "猫狗都中毒(both);草酸钙类,口腔刺激为主",
+      "danger": "含不溶性草酸钙针晶,啃咬释放致口腔剧烈灼痛(俗名Dumbcane「哑棒」即因口舌肿胀发不出声)。临床:口腔灼痛肿胀、大量流涎、干呕呕吐、吞咽困难;罕见舌咽严重肿胀→气道阻塞。备注:传统「万年青」Rohdea japonica 含强心苷类(rhodexin),若为此种则可能出现心脏症状——【待兽医确认/未逐一实核该种权威兽医数据】,按含强心苷的心脏毒植物警惕",
+      "action": "口腔症状居家观察+漱口/牛奶;舌喉肿胀、呼吸吞咽困难=紧急急诊。若确为Rohdea万年青且出现心律异常=按强心苷中毒急诊",
+      "source": "ASPCA(Chinese Evergreen/Dieffenbachia 页);Pet Poison Helpline(/poison/insoluble-oxalates);Rohdea强心苷部分为提示,待兽医确认"
+    },
+    {
+      "category": "植物",
+      "item": "广东万年青 / 粗肋草(Aglaonema,Chinese Evergreen)",
+      "aliases": "广东万年青、粗肋草、亮丝草、花叶万年青(部分商家混称);用户说「啃了那种花叶观叶植物」",
+      "species": "猫狗都中毒(both);草酸钙类,轻中度",
+      "danger": "含不溶性草酸钙针晶。临床:口腔/舌/唇刺激疼痛肿胀、大量流涎、呕吐、吞咽困难;通常引起不适而非全身性/器官衰竭中毒",
+      "action": "口腔症状居家观察+漱口缓解;舌喉肿胀、呼吸吞咽困难=就诊",
+      "source": "ASPCA(aspca.org/.../chinese-evergreen);Pet Poison Helpline(insoluble oxalates)"
+    },
+    {
+      "category": "植物",
+      "item": "龟背竹(Monstera deliciosa / Swiss Cheese Plant)",
+      "aliases": "龟背竹、蓬莱蕉、电线兰;用户说「猫啃了龟背竹叶」",
+      "species": "猫狗都中毒(both);草酸钙类,轻度",
+      "danger": "叶茎含不溶性草酸钙晶体,啃咬刺激口腔。临床:口腔灼痛刺激、流涎、呕吐、吞咽困难;为「轻度毒」——引起不适但不含致器官衰竭的毒素",
+      "action": "多数居家观察+漱口/牛奶缓解;舌喉明显肿胀或吞咽/呼吸困难=就诊",
+      "source": "ASPCA(aspca.org/.../swiss-cheese-plant);Pet Poison Helpline(insoluble oxalates)"
+    },
+    {
+      "category": "植物",
+      "item": "白掌 / 和平百合(Peace Lily / Spathiphyllum)",
+      "aliases": "白掌、一帆风顺、和平百合、白鹤芋;名字带「百合」但不是真百合——不致猫肾衰,机制是草酸钙(别和致命的Lilium混淆)",
+      "species": "猫狗都中毒(both);草酸钙类,轻中度。关键鉴别:与致命真百合区分",
+      "danger": "含不溶性草酸钙针晶,口腔灼痛刺激、流涎、呕吐、吞咽困难;罕见气道肿胀。不会像真百合那样导致猫急性肾衰",
+      "action": "口腔症状居家观察+漱口;舌喉肿胀、呼吸吞咽困难=就诊。若用户分不清是白掌还是真百合(尤其猫),按真百合最坏情况紧急处理",
+      "source": "Pet Poison Helpline / ASPCA(insoluble oxalate 类;ASPCA lily 科普明确白掌≠致肾衰真百合)"
+    },
+    {
+      "category": "植物",
+      "item": "常春藤(English Ivy / Hedera helix)",
+      "aliases": "常春藤、洋常春藤、爬墙虎(常混称)、绿叶/花叶常春藤;用户说「啃了常春藤叶或果子」",
+      "species": "猫狗都中毒(both);叶比浆果更毒",
+      "danger": "含三萜皂苷(hederagenin/triterpenoid saponins)及聚炔类(polyacetylene),刺激消化道黏膜。临床:呕吐、腹痛、大量流涎、腹泻、恶心、食欲下降、精神沉郁。叶片毒性高于浆果",
+      "action": "少量=居家观察肠胃症状;反复呕吐、腹痛明显、呼吸异常或大量摄入=就诊。别自行催吐",
+      "source": "ASPCA(aspca.org/.../english-ivy);Pet Poison Helpline(855-764-7661)"
+    },
+    {
+      "category": "植物",
+      "item": "一品红(Poinsettia / Euphorbia pulcherrima)",
+      "aliases": "一品红、圣诞红、猩猩木;用户常担心「圣诞节这盆红叶子会不会毒死猫狗」",
+      "species": "猫狗都中毒(both);毒性被严重夸大,实际仅轻度",
+      "danger": "毒性名不副实、被夸大。乳白色汁液含二萜类 euphorbol 酯和皂苷类洗涤剂样物质。临床仅轻度:呕吐、流涎,偶见腹泻;汁液沾皮肤/眼睛可致红肿痒。因毒性低,通常无需医疗处置,无特效解毒剂",
+      "action": "居家观察为主,一般不需就医;症状严重(持续呕吐)或汁液入眼再就诊。放宠物够不到即可,别过度恐慌(它远没有百合/夹竹桃/秋水仙危险)",
+      "source": "Pet Poison Helpline(petpoisonhelpline.com/pet-safety-tips/are-poinsettias-poisonous);ASPCA;Snopes 事实核查"
+    },
+    {
+      "category": "植物",
+      "item": "秋水仙(Autumn Crocus / Colchicum autumnale)",
+      "aliases": "秋水仙、秋番红花;别与春天开花的番红花/藏红花(spring Crocus,仅轻度肠胃)混淆——秋水仙剧毒;用户说「啃了像番红花的球茎/秋天开的紫花」",
+      "species": "猫狗都中毒(both);剧毒·可致死",
+      "danger": "全株含生物碱 秋水仙碱(colchicine),抑制细胞分裂。临床:严重肠胃症状(血性呕吐/腹泻)、多器官衰竭(肝、肾)、休克、骨髓抑制/血细胞异常、死亡。症状可立即出现也可延迟数天(延迟性是陷阱,别因初期没事就放松)",
+      "action": "【尽快急诊·别因暂时无症状放松】立即送医;需积极支持+监测肝肾/血象。与无害的春番红花务必区分,拿不准按秋水仙处理",
+      "source": "Pet Poison Helpline(petpoisonhelpline.com/poison/autumn-crocus,列入Top10剧毒);ASPCA(autumn crocus 页)"
+    },
+    {
+      "category": "植物",
+      "item": "铃兰(Lily of the Valley / Convallaria majalis)",
+      "aliases": "铃兰、君影草、山谷百合;名字带「谷中百合」但机制是强心苷,不是真百合肾毒;用户说「啃了铃兰的花/叶/果」",
+      "species": "猫狗都中毒(both);心脏毒·可致死",
+      "danger": "全株(球茎、根、茎、叶、花、浆果)含约38种强心苷类 cardenolides,球茎浓度最高,刺激胃肠并扰乱心脏电活动。临床:呕吐、食欲废绝→心率/心律改变、无力、癫痫样发作、心脏骤停",
+      "action": "【尽快急诊】立即送医+心电监护;出现心律异常/无力/抽搐=紧急。别自行催吐",
+      "source": "Pet Poison Helpline(petpoisonhelpline.com/poison/lily-of-the-valley);ASPCA(lily of the valley 页)"
+    },
+    {
+      "category": "植物",
+      "item": "长寿花 / 伽蓝菜(Kalanchoe)",
+      "aliases": "长寿花、伽蓝菜、寿星花、玉吊钟、燕子掌(部分混称);用户说「啃了长寿花那种多肉开小花的」",
+      "species": "猫狗都中毒(both);含心脏毒,多数轻度但大量可致命",
+      "danger": "含蟾蜍二烯羟酸内酯类强心毒素(bufadienolides)。多数摄入仅致肠胃刺激(呕吐、腹泻);摄入量足够大时可致心率/心律改变、无力、虚脱",
+      "action": "少量=居家观察肠胃症状;大量摄入或出现无力/心律异常=尽快急诊+心电评估",
+      "source": "Pet Poison Helpline(petpoisonhelpline.com/poison/kalanchoe)"
+    },
+    {
+      "category": "植物",
+      "item": "仙客来(Cyclamen)",
+      "aliases": "仙客来、兔耳花、萝卜海棠;用户说「啃了仙客来,尤其挖了根/块茎」",
+      "species": "猫狗都中毒(both);块茎/根毒性最高",
+      "danger": "含刺激性皂苷(saponins),块茎(根部)浓度最高。临床:流涎、呕吐、腹泻;大量摄入(尤其块茎)可致心脏问题(心律异常)、癫痫样发作",
+      "action": "啃叶花=就诊评估;挖食块茎/根或出现心律异常=尽快急诊",
+      "source": "Pet Poison Helpline(autumn-crocus 同篇及 cyclamen 条目);ASPCA cyclamen 页"
+    },
+    {
+      "category": "植物",
+      "item": "玉树(Jade Plant / Crassula ovata)",
+      "aliases": "玉树、燕子掌、发财树(部分误称,真发财树Pachira另论)、厚脸皮;用户说「猫啃了玉树多肉」",
+      "species": "猫狗都中毒(both);猫似乎比狗更敏感,多数轻度",
+      "danger": "毒素成分未完全明确。临床:呕吐、腹泻、精神沉郁、共济失调(走路不稳);少数出现嗜睡、肌震颤、心率升高。严重症状少见",
+      "action": "居家观察为主;出现走路不稳/震颤/精神差明显或反复呕吐=就诊",
+      "source": "ASPCA(aspca.org/.../jade-plant);ASPCA succulents 科普"
+    },
+    {
+      "category": "植物",
+      "item": "芦荟(Aloe vera)",
+      "aliases": "芦荟、库拉索芦荟、木立芦荟;用户说「猫狗啃了芦荟叶/舔了芦荟胶」",
+      "species": "猫狗都中毒(both);轻中度",
+      "danger": "叶片外皮下的黄色汁液含 芦荟素(aloin)等蒽醌类泻剂成分,刺激肠道。临床:呕吐、腹泻、精神沉郁、尿色改变。注意:外用芦荟凝胶涂皮肤无害,但口服/啃食有毒",
+      "action": "居家观察肠胃症状;反复呕吐腹泻、脱水或精神差=就诊",
+      "source": "ASPCA(aspca.org/.../aloe;succulents 科普)"
+    },
+    {
+      "category": "植物",
+      "item": "龙血树 / 富贵竹类(Dracaena)",
+      "aliases": "龙血树、富贵竹(Dracaena sanderiana)、也门铁、巴西木、星点木、金心/金边龙血树;用户说「猫啃了富贵竹/巴西木叶」",
+      "species": "猫狗都中毒(both);猫可出现瞳孔散大等特征;中度",
+      "danger": "含皂苷类(saponins)。临床:小量暴露多为轻度呕吐或腹泻;大量→精神沉郁、无力、共济失调。猫还可出现瞳孔散大、呼吸加快、心率升高、流涎、腹部不适",
+      "action": "少量=居家观察;大量摄入、走路不稳/无力,或猫出现瞳孔散大心跳快=就诊",
+      "source": "ASPCA(aspca.org/.../dracaena)"
+    },
+    {
+      "category": "家用化学/杀鼠灭虫",
+      "item": "乙二醇 / 防冻液",
+      "aliases": "防冻液、汽车水箱冷却液、玻璃水(部分含)、雪种、地暖/暖气防冻剂;用户常见表达\"舔了车库地上甜甜的水\"\"喝了绿色/蓝色/粉色的液体\"。味甜是最大陷阱",
+      "species": "both;猫对乙二醇极度敏感,解毒时间窗比狗短得多",
+      "danger": "极致命。代谢为草酸等产物→急性肾衰竭+严重代谢性酸中毒。致死量极小:狗约2-3 ml/kg(约3-4茶匙),猫仅约0.64 ml/kg(1-2茶匙即可致命)。分三期:早期(30min-12h)似醉酒/共济失调/多饮多尿;中期心肺;后期(狗24-72h/猫12-24h)少尿性肾衰。血钙下降、出现草酸钙结晶尿",
+      "action": "【急诊·分秒必争】立即送急诊,别等症状。解毒剂(甲吡唑4-MP或乙醇)有严格时间窗:猫必须≤3小时(超过后几乎100%致死,除非血透),狗≤8-12小时最有效。若刚误食(<1-2h)且清醒无症状,在兽医指导下可催吐;已出现神经症状或抽搐勿在家催吐。拨ASPCA APCC (888)426-4435",
+      "source": "Merck/MSD Vet Manual《Ethylene Glycol Toxicosis in Animals》;ASPCApro《Ethylene Glycol and Antifreeze Poisoning in Pets》;Pet Poison Helpline《Antifreeze》"
+    },
+    {
+      "category": "家用化学/杀鼠灭虫",
+      "item": "抗凝血型鼠药(第二代:溴鼠灵/溴敌隆/大隆等)",
+      "aliases": "老鼠药、耗子药、灭鼠饵、蜡块鼠药、红/蓝/绿色鼠药颗粒;商品/成分名:溴鼠灵(大隆/brodifacoum)、溴敌隆(bromadiolone)、杀鼠灵(华法林)、氯敌鼠、敌鼠钠盐;用户常见表达\"偷吃了放老鼠药的饵\"\"吃了毒死的老鼠\"(二次中毒)",
+      "species": "both;第二代(溴鼠灵)毒性远高于第一代、体内滞留久,狗极少量即可中毒",
+      "danger": "抑制维生素K环氧化物还原酶→凝血因子II/VII/IX/X耗竭→无法控制的内出血。第二代(溴鼠灵/溴敌隆/大隆/鼠得克)毒性高、组织滞留数周。关键陷阱:症状延迟3-5天才出现(嗜睡、乏力、咳嗽、呼吸困难、牙龈苍白、皮下瘀斑、尿血/便血、体腔积血)。等看到出血往往已重症",
+      "action": "有特效解毒剂——维生素K1(需持续30天,口服须随含脂肪食物如罐头以提升4-5倍吸收)。刚误食(<2-4h)且无症状可在兽医指导催吐+活性炭。凝血功能(PT)需在误食后48-72小时复查才有意义,\"当下不出血\"不代表安全。务必带上鼠药包装辨认成分/代数",
+      "source": "Merck/MSD Vet Manual《Anticoagulant Rodenticide Poisoning in Animals》;Pet Poison Helpline《Long-acting Anticoagulants》;Cornell CVM《Vitamin K Therapy》"
+    },
+    {
+      "category": "家用化学/杀鼠灭虫",
+      "item": "维生素D3型鼠药(胆钙化醇 / cholecalciferol)",
+      "aliases": "老鼠药(维D3型)、维生素D3鼠药、cholecalciferol;易混:也见于人用维生素D补充剂过量、某些外用软膏、宠物粮配方错误;用户可能只说\"吃了老鼠药\"需追问成分",
+      "species": "both;猫被认为更敏感,但无确立的猫致死剂量",
+      "danger": "无真正特效解毒剂,处置最棘手之一。狗0.1 mg/kg即可致胃肠道症状,≥0.5 mg/kg可致高血钙、高血磷、急性肾损伤。机制:体内转为骨化二醇→严重高血钙(可达20 mg/dL)+高血磷→软组织与肾脏矿化钙化→急性肾衰。预后:高血钙出现前治疗好,已高血钙时中等偏差,已肾衰则差",
+      "action": "【急诊】刚误食(<2h)无症状可催吐+活性炭。核心是抢在高血钙/肾损伤前干预,需住院数天-数周监测血钙/血磷/肾指标并用利尿+降钙治疗。务必确认是\"维D3型\"而非抗凝型——处置完全不同。带包装",
+      "source": "Merck/MSD Vet Manual《Cholecalciferol (Vitamin D3) Poisoning in Animals》;VCA《Cholecalciferol Vitamin D3 Rodenticide Poisoning》;Pet Poison Helpline《Cholecalciferol》"
+    },
+    {
+      "category": "家用化学/杀鼠灭虫",
+      "item": "溴鼠胺 / 神经型鼠药(bromethalin)",
+      "aliases": "溴鼠胺、bromethalin、神经毒性鼠药;易与\"溴鼠灵(brodifacoum,抗凝型)\"混淆——名字像但机制完全不同、无解毒剂;用户只说\"吃了鼠药\"务必查包装成分",
+      "species": "both;猫极度敏感(LD50约0.4-0.71 mg/kg),狗中等敏感(约2.38-5.6 mg/kg)",
+      "danger": "无解毒剂。活化为去甲溴鼠胺→解偶联中枢神经线粒体氧化磷酸化→脑与脊髓水肿。1-7天内出现:后肢无力/瘫痪、震颤、共济失调、抽搐、意识改变。与抗凝型的关键区别=没有维生素K可救,只能靠早期拦截吸收",
+      "action": "【急诊】成败取决于极早期、积极的去污:刚误食尽快催吐并重复多剂活性炭(阻断肠肝循环)。已出现神经症状则重症支持+降颅压。别因\"是鼠药就以为有维K解药\"而延误——务必辨明成分",
+      "source": "Merck/MSD Vet Manual《Bromethalin Poisoning in Animals》;ASPCApro《Treating Bromethalin Toxicosis》;VIN Veterinary Partner《Rat Poison (Bromethalin-Based)》"
+    },
+    {
+      "category": "家用化学/杀鼠灭虫",
+      "item": "磷化锌(鼹鼠/地鼠/田鼠药)",
+      "aliases": "磷化锌、磷化物鼠药、地鼠药、鼹鼠药、拌种毒饵、黑色/深灰颗粒毒饵;用户说\"吃了地里/花园防鼹鼠的药\"",
+      "species": "both;致死量约20-40 mg/kg",
+      "danger": "遇胃酸(潮湿胃肠)释放剧毒磷化氢气体。症状:嗜睡、严重(可出血性)胃肠道症状、共济失调、震颤、抽搐、肺水肿、休克、心律异常、肝肾损伤、DIC。特别警示:宠物呕吐物含磷化氢气体,可熏伤在旁的人(哮喘样症状/恶心/头痛)——空腹或饱食影响产气量",
+      "action": "【急诊】不建议在家/密闭车内催吐(呕吐物释放磷化氢气体伤人)。催吐须由兽医在通风环境操作。转运途中保持车窗通风,呕吐物远离口鼻。无特效解毒剂,以去污+支持为主。带包装",
+      "source": "Merck/MSD Vet Manual《Phosphide (Zinc/Magnesium/Aluminum) Poisoning in Animals》;Pet Poison Helpline《Phosphides》;CDC MMWR 2012《Occupational Phosphine Gas Poisoning at Veterinary Hospitals》"
+    },
+    {
+      "category": "家用化学/杀鼠灭虫",
+      "item": "士的宁 / 马钱子碱(strychnine)",
+      "aliases": "士的宁、番木鳖碱、马钱子碱、strychnine;老式鼠药/鼹鼠药/毒饵,也见于恶意投毒;用户说\"突然全身僵直抽搐\"\"腿直挺挺像板凳\"",
+      "species": "both;经口LD50 狗约0.5-1 mg/kg、猫约2 mg/kg",
+      "danger": "拮抗脊髓抑制性递质甘氨酸→伸肌强直。特征:全身僵硬呈\"锯木架/板凳\"姿势、角弓反张,受声光触碰刺激即诱发强直性抽搐。起病快(10-120分钟),死于呼吸肌麻痹缺氧。无特效解毒剂",
+      "action": "【急诊·危重】立即送医。转运中保持安静、遮光、减少一切声光触觉刺激(刺激会诱发致命抽搐),别强行灌东西。治疗靠控制抽搐+肌松+呼吸支持+去污",
+      "source": "Merck/MSD Vet Manual《Strychnine Toxicosis in Animals》;dvm360《Epidemiology and management of strychnine poisoning》"
+    },
+    {
+      "category": "家用化学/杀鼠灭虫",
+      "item": "毒鼠强(四亚甲基二砜四胺 / TETS)",
+      "aliases": "毒鼠强、四二四、没鼠命、三步倒、闻到死、TETS/tetramine;中国已明令禁止但黑市/非法投毒仍常见;无色无味无嗅、可污染食物/水源数周;用户说\"误食后很快剧烈抽搐\"",
+      "species": "both(犬有报告病例);对犬猫及人均剧毒",
+      "danger": "阻断脑内GABA_A受体→剧烈、反复、难治性癫痫发作。极微量即可致命,毒性远超普通鼠药;可经二次中毒(吃了被毒死的老鼠/污染水)。中国1991-2010年报告逾14000例人中毒、932死。无已知特效解毒剂",
+      "action": "【急诊·危重】立即送医,按顽固性癫痫持续状态处置(苯二氮䓬+其他抗惊厥,需重症监护)。转运减少刺激。因常涉及非法投毒,保留可疑食物/呕吐物送检并考虑报警",
+      "source": "Merck/毒理综述 Zhang et al.《Tetramethylenedisulfotetramine neurotoxicity》(Neurochem Int 2019);PMC《TETS: A Health Risk Compound》;BVA Vet Record Case Reports 2026(犬病例)"
+    },
+    {
+      "category": "家用化学/杀鼠灭虫",
+      "item": "氟乙酰胺 / 氟乙酸钠(1080)",
+      "aliases": "氟乙酰胺、氟乙酸钠、1080、\"闻到死\"类剧毒鼠药、灭鼠灵;中国禁用类高毒鼠药但非法品仍存;用户说\"误食后疯跑乱叫、抽搐\"",
+      "species": "both;犬猫高度敏感,毒量低至约0.05 mg/kg",
+      "danger": "转化为氟柠檬酸→抑制乌头酸酶→阻断三羧酸(Krebs)循环→细胞能量代谢崩溃。30分钟至数小时内:躁动亢奋、犬典型\"疯跑狂吠\"、猫持续嚎叫,继而呕吐、失禁、抽搐。无可靠特效解毒剂,犬存活率低,预后差",
+      "action": "【急诊·危重】立即送医积极支持治疗。刚误食且尚清醒可在兽医处去污。可能涉非法投毒,保留可疑物送检。无特效解药,越早越激进处置生存机会越高",
+      "source": "Merck/Veterian Key《Sodium Monofluoroacetate (1080)》;Vetlexicon Canis《1080 poisoning》;Animal Poisons Helpline《Sodium Fluoroacetate (1080)》"
+    },
+    {
+      "category": "家用化学/杀鼠灭虫",
+      "item": "蜗牛/蛞蝓药(四聚乙醛 metaldehyde)",
+      "aliases": "蜗牛药、鼻涕虫药、蛞蝓诱杀剂、四聚乙醛、灭螺颗粒、蓝绿色小颗粒诱饵;用户说\"吃了花园里灭蜗牛的颗粒\",症状俗称\"又抖又烧\"(shake and bake)",
+      "species": "both;极少量即可中毒——每10磅(约4.5kg)体重不到1茶匙",
+      "danger": "代谢为乙醛→中枢神经毒性。特征\"shake and bake\":剧烈肌肉震颤/抽搐+体温危险升高(高热)。数分钟至3小时内出现流涎、呕吐、喘、焦虑,进展为共济失调、震颤、抽搐、高热。高热本身可致命",
+      "action": "【急诊】立即送医。刚误食无症状可在兽医处催吐+活性炭;已震颤/抽搐勿在家催吐。治疗=控制震颤抽搐+主动降温+纠正酸中毒。早治多数2-3天可康复。带包装",
+      "source": "Merck/MSD Vet Manual《Metaldehyde Poisoning in Animals》;Pet Poison Helpline《Metaldehyde》;VCA《Metaldehyde Toxicity (Slug Bait Poisoning)》"
+    },
+    {
+      "category": "家用化学/杀鼠灭虫",
+      "item": "茶树油(melaleuca / 互叶白千层精油)",
+      "aliases": "茶树精油、melaleuca、tea tree oil;常见于\"天然\"驱虫/护肤/祛螨/除臭产品、宠物香波;用户说\"给猫/狗用了茶树油驱虫/涂皮肤\"\"滴了纯精油\"",
+      "species": "both;猫尤其危险(缺乏葡萄糖醛酸转移酶无法代谢)",
+      "danger": "高浓度/纯精油剧毒。含≤1-2%的正规宠物产品按说明用一般安全,但纯油仅7-10滴(约10-20mL量级)涂皮肤即可能致死犬猫。症状(用后1-2h,可迟至8h):流涎、共济失调、无力、震颤、昏迷、低体温、肝损伤(猫)、死亡。无特效解毒剂",
+      "action": "【尽快就诊】皮肤/被毛沾染:用温和洗涤剂(洗洁精)+温水彻底清洗去除油脂,防止舔舐再摄入并保温。误服/出现神经症状立即送医支持治疗。切勿给猫用任何含茶树油产品",
+      "source": "Pet Poison Helpline《Tea Tree Oil》;Villar et al.《Toxicity of melaleuca oil...topically on dogs and cats》(Vet Hum Toxicol);Khan et al.《Concentrated tea tree oil toxicosis in dogs and cats》"
+    },
+    {
+      "category": "家用化学/杀鼠灭虫",
+      "item": "精油 / 液体香薰 / 香薰机(essential oils & liquid potpourri)",
+      "aliases": "精油、香薰、扩香机/扩香石、加湿香薰、液体香薰/煮香、insert精油小夜灯;对猫危险的还有薄荷/桉叶/肉桂/柑橘/丁香/松油/冬青等;用户说\"家里点香薰\"\"猫舔了香薰液\"",
+      "species": "both,猫风险最高(代谢缺陷+爱舔毛把飘落雾滴吞下)",
+      "danger": "扩香雾滴被吸入刺激呼吸道,或落在毛上被舔食摄入。症状:流涎、呕吐、震颤、共济失调、呼吸窘迫、心率/体温下降、肝衰。液体香薰(煮香)对猫更凶:即使舔几口也可致口腔腐蚀性灼伤——扒嘴、呼吸困难、拒食、呕吐、发热、震颤",
+      "action": "【尽快就诊】立即移出扩香环境、开窗通风。皮毛沾染按茶树油处理(洗掉+保温)。液体香薰入口按腐蚀物处理:勿催吐、清水冲洗口腔、立即送医。有猫家庭建议不用开放式扩香/煮香",
+      "source": "Pet Poison Helpline《Essential Oils and Cats》《Liquid Potpourri》;VCA《Essential Oil and Liquid Potpourri Poisoning in Cats》"
+    },
+    {
+      "category": "家用化学/杀鼠灭虫",
+      "item": "樟脑丸 / 卫生球(萘 / 对二氯苯)",
+      "aliases": "樟脑丸、卫生球、臭球、防虫丸、衣柜/厕所除味球、萘丸;成分=萘(naphthalene)或对二氯苯(paradichlorobenzene);用户说\"翻出衣柜里的白丸子吃了\"\"闻到很冲的味\"",
+      "species": "both;猫被认为更敏感",
+      "danger": "萘毒性约为对二氯苯的2倍(ASPCA数据83%案例为萘)。萘破坏红细胞→溶血性贫血、棕褐色黏膜/尿、无力、嗜睡、抽搐、肝损。对二氯苯毒性稍低,主要胃肠道+可能神经症状。小型犬/普通体型猫误食1颗即可致显著中毒;也可经吸入气味或皮肤接触中毒",
+      "action": "【尽快就诊/急诊】误食勿拖延。是否催吐、用不用活性炭需兽医判断(部分成分活性炭效果有限)。尽量辨明是萘还是对二氯苯(萘更毒)——可看包装或做水浮/盐水浮测试由兽医判断。带样品/包装",
+      "source": "MSD/Merck Vet Manual《Toxicosis From Mothballs in Animals》;VCA《Mothball Poisoning in Dogs》;ASPCA APCC 案例数据(2002-2004)"
+    },
+    {
+      "category": "家用化学/杀鼠灭虫",
+      "item": "纽扣电池 / 扣式锂电池(button/disc battery)",
+      "aliases": "纽扣电池、扣式电池、CR2032、遥控器/电子秤/手表/发光玩具/助听器电池、耳温枪电池;用户说\"咬破/吞了小圆电池\"\"玩具里的电池不见了\"",
+      "species": "both",
+      "danger": "既是化学也是电化学急症。3V锂电池卡在食道仅15分钟即可造成显著、危及生命的黏膜坏死灼伤(即使未破损、未漏液,靠自身电流灼穿组织)——30分钟食道上皮可完全消失。卡食道可致穿孔、狭窄;进胃后若破损再叠加碱性/重金属腐蚀",
+      "action": "【急诊·争分夺秒】绝对不要催吐(腐蚀物反流二次灼伤食道口腔)。不要喂食(可能需内镜/手术)。可给少量清水或牛奶。立即拍片定位:卡食道者须紧急内镜取出,不能观望。拨ASPCA APCC (888)426-4435。别等症状",
+      "source": "ASPCApro《Dangers and Veterinary Treatments for Household Battery Ingestion》;ASPCA《The Dangers of Batteries and Your Pets》;《Esophageal electrochemical burns due to button lithium batteries in dogs》(PubMed 9682401)"
+    },
+    {
+      "category": "家用化学/杀鼠灭虫",
+      "item": "季铵盐消毒液(苯扎氯铵 / 84类含季铵)",
+      "aliases": "消毒液、地板/表面消毒剂、宠物环境消毒剂、苯扎氯铵(BAC)、洁尔灭/新洁尔灭、部分\"除菌喷雾\";用户说\"猫走过刚拖的地/舔了消毒过的地板、爪子\"\"猫突然流口水、舌头溃疡\"",
+      "species": "both,猫显著更敏感(≤2%浓度接触即可致口腔溃疡)",
+      "danger": "季铵类阳离子表面活性剂有腐蚀/刺激性。猫最常见:走过消毒地面或喷雾污染后舔爪/舔毛摄入。VPIS 245例猫数据:流涎(53.9%)、舌溃疡(40.4%)、高热(40.4%)、口腔溃疡(22.9%);可拒食、发热",
+      "action": "【尽快就诊】皮毛/爪垫沾染:大量清水冲洗、洗掉、保温。口腔接触:用清水/牛奶冲洗口腔稀释,勿催吐(有腐蚀性)。出现口腔溃疡/拒食/发热须就医支持治疗。消毒后务必待地面完全干燥并通风再放宠物进入",
+      "source": "Bates & Edwards《Benzalkonium chloride exposure in cats: 245 cases (VPIS)》(Vet Record 2015);Merck Vet Manual《Toxicoses From Household Cleaners》"
+    },
+    {
+      "category": "家用化学/杀鼠灭虫",
+      "item": "酚类消毒液(煤酚皂 / 来苏尔 / 对氯间二甲苯酚)",
+      "aliases": "来苏尔(Lysol类)、煤酚皂溶液、含酚消毒液、滴露(Dettol,含对氯间二甲苯酚PCMX)、\"药水味很重的消毒液\";用户说\"用滴露/消毒药水给猫狗洗澡/擦皮肤/消毒环境\"",
+      "species": "both,猫尤其致命(缺UDP-葡萄糖醛酸转移酶无法解毒酚类)",
+      "danger": "酚类对猫高度肝毒+腐蚀性,兽医环境明确建议猫家庭避免使用。狗经口/皮肤吸收也可中毒,出现类似口腔咽喉溃疡(极痛)。摄入还有腐蚀性灼伤风险",
+      "action": "【尽快就诊】皮肤沾染:大量清水+温和洗涤剂彻底清洗。误服勿催吐(腐蚀性),清水/牛奶稀释后送医。有猫家庭改用非酚类、非季铵类的宠物安全消毒方式。带包装辨成分",
+      "source": "Merck Vet Manual《Phenols and Related Compounds as Antiseptics and Disinfectants for Use With Animals》;Merck《Toxicoses From Household Cleaners》"
+    },
+    {
+      "category": "家用化学/杀鼠灭虫",
+      "item": "拟除虫菊酯类杀虫剂(氯菊酯 permethrin / 除虫菊酯)",
+      "aliases": "氯菊酯、扑灭司林、拟除虫菊酯、除虫菊酯、狗用滴剂/驱虫项圈/喷剂、\"电蚊香液/蚊香\"(部分)、家用杀虫喷雾;用户常见致命错误=\"把狗用驱虫滴剂点在猫身上\"或\"猫蹭了刚滴过药的狗\"",
+      "species": "物种特异:猫极度敏感(缺代谢酶),狗安全窗宽;猫中毒是ASPCA最常见猫毒物之一",
+      "danger": "猫误用/接触狗用高浓度氯菊酯产品→通常6小时内:感觉过敏、全身震颤、肌肉抽动、高热、抽搐。狗一般耐受良好。这是\"给猫用了狗的药\"这一人为错误的头号案例",
+      "action": "【急诊】立即送医。皮肤/被毛去污:温水+洗洁精彻底清洗残留药物;控制震颤/抽搐+主动降温是关键,及时正确处置猫存活率高。原则:狗用拟除虫菊酯产品绝不能用于猫,用完药的狗与猫暂时隔离至干燥",
+      "source": "ASPCApro《Five Tips for Treating Cat Permethrin Toxicosis》;catvets.com(AAFP)《Permethrin Poisoning and Cats》;Richardson《Permethrin Spot-On Toxicoses in Cats》"
+    },
+    {
+      "category": "家用化学/杀鼠灭虫",
+      "item": "有机磷 / 氨基甲酸酯类杀虫剂",
+      "aliases": "有机磷农药、敌敌畏、乐果、毒死蜱、氨基甲酸酯、克百威/呋喃丹、灭害灵(部分)、老式跳蚤药/杀虫粉、\"农药\";用户说\"误食农药/喷了杀虫剂后\"\"流口水、瞳孔变小、拉稀\"",
+      "species": "both;猫的胆碱酯酶比狗更易被抑制(更敏感);瘦犬(灵缇等)、瘦长毛猫因脂肪储存少更敏感",
+      "danger": "抑制胆碱酯酶→乙酰胆碱蓄积→SLUDGE胆碱能危象:流涎(Salivation)、流泪(Lacrimation)、排尿(Urination)、排便(Defecation)+胃肠道痉挛(GI)、呕吐(Emesis);加瞳孔缩小、震颤、无力、呼吸困难、抽搐",
+      "action": "【急诊】立即送医。有特效解药:阿托品(对抗毒蕈碱效应)+解磷定/肟类(重活化胆碱酯酶,需早用)+活性炭+支持。皮肤沾染先彻底清洗去污。带农药/杀虫剂包装辨成分",
+      "source": "Merck/MSD Vet Manual《Organophosphate Toxicosis in Animals》《Carbamate Toxicosis in Animals》"
+    },
+    {
+      "category": "家用化学/杀鼠灭虫",
+      "item": "蟑螂药 / 蚂蚁饵剂(硼酸 / 灭蟑胶饵 等)",
+      "aliases": "蟑螂药、灭蟑胶饵、蟑螂屋、蚂蚁药、硼酸、氟虫腈(fipronil)、氢胺菊酯/hydramethylnon、\"蟑螂贴/饵盒\";用户说\"狗把蟑螂屋咬开吃了\"",
+      "species": "both",
+      "danger": "相对低毒——饵剂中杀虫剂浓度很低、哺乳动物安全窗宽,多数仅轻度胃肠道不适(呕吐、腹泻、流涎、食欲下降)。硼酸大量摄入或吸入粉末可致呼吸道刺激(咳嗽、呕吐、肺部炎症);氟虫腈大量摄入偶见神经症状。另一风险=塑料饵盒外壳被吞→胃肠道异物/梗阻",
+      "action": "【多数居家观察】少量误食通常只需观察+清淡饮食+饮水;出现持续呕吐/神经症状就诊。留意吞下塑料外壳的梗阻风险(呕吐、腹痛、不排便需就医)。不确定摄入量/成分可打宠物中毒热线。带包装",
+      "source": "ASPCApro《The 10 Most Common Toxicoses in Dogs》(Veterinary Medicine 2006);Today's Veterinary Nurse《Top 10 Toxins That Are Rarely Serious》"
+    },
+    {
+      "category": "家用化学/杀鼠灭虫",
+      "item": "除草剂(草甘膦 / 2,4-D / 百草枯)",
+      "aliases": "除草剂、草甘膦(农达/Roundup)、2,4-D、百草枯(克无踪/paraquat)、灭草剂、除草药水;用户说\"在打过除草剂的草坪玩/打滚后舔爪\"\"误喝除草剂\"",
+      "species": "both;狗因刨土打滚舔爪最常见,猫因爱舔毛也易中招",
+      "danger": "毒性差异大。草甘膦相对低毒:主要胃肠道刺激,大量可致呕吐/踉跄/后肢无力。2,4-D:呕吐、腹泻、厌食、共济失调,重则肌肉抽动、抽搐、昏迷。百草枯(克无踪)剧毒:极少量即可致命,进行性肺纤维化+肝肾衰竭,预后极差、无有效解毒。症状约2-36小时出现",
+      "action": "【草甘膦/2,4-D:尽快就诊;百草枯:急诊·危重】皮毛沾染彻底清洗。误服务必辨明成分——百草枯须立即急诊(注:百草枯中毒不宜常规吸氧,会加重肺损伤,由兽医决定)。草甘膦轻症支持治疗。带包装/瓶",
+      "source": "Merck/MSD Vet Manual《Herbicide Poisoning》《Organic Herbicides Toxic to Animals》;dvm360《Helping animals exposed to the herbicide paraquat》"
+    },
+    {
+      "category": "家用化学/杀鼠灭虫",
+      "item": "铅(含铅物中毒)",
+      "aliases": "含铅物、铅、旧油漆碎屑/剥落漆皮、钓鱼铅坠、窗帘配重/铅坠、焊锡、铅弹/铅砂、劣质陶瓷/上釉食盆、含铅玩具/饰品、汽车电瓶、油灰腻子、部分卷帘拉链坠;用户说\"啃了旧墙皮/含铅玩具/铅坠\"",
+      "species": "both",
+      "danger": "多为慢性/亚急性摄入蓄积。急性:厌食、呕吐、腹痛、行为改变、共济失调、震颤、亢奋、间歇抽搐。慢性:胃肠道不适、贫血、体重下降、行为改变、失明、间歇抽搐等。含铅金属异物滞留胃肠道会持续溶出中毒",
+      "action": "【尽快就诊】需就医查血铅+腹部拍片找金属异物。有特效螯合治疗(如依地酸钙、二巯丁二酸DMSA等)+移除铅源/异物。排查家中铅暴露源。带可疑物品/描述来源",
+      "source": "Merck/MSD Vet Manual《Lead Poisoning in Animals》;ASPCApro《Understanding and Treating Lead Toxicosis》;AVMA《Finding lead in pets》"
+    },
+    {
+      "category": "家用化学/杀鼠灭虫",
+      "item": "强酸/强碱腐蚀性清洁剂(管道疏通剂 / 洁厕灵 / 漂白剂等)",
+      "aliases": "管道疏通剂/通渠水、洁厕灵、洁厕剂、漂白水/84消毒液、烤箱清洁剂、除锈/除垢剂、烧碱/氢氧化钠、洗碗机洗涤块、泳池消毒/藻类剂;用户说\"舔/打翻了强力清洁剂\"\"嘴里、舌头烂了\"",
+      "species": "both",
+      "danger": "腐蚀性化学灼伤(非全身\"中毒\")。碱性剂(通渠水/洁厕碱/烧碱/漂白剂/洗碗块)尤其危险:接触时不痛→暴露时间长→更深更广的液化性坏死灼伤,且碱灼伤可延迟至接触后约12小时才显现。口腔/食道/胃灼伤、流涎、拒食、呕吐、吞咽困难、扒嘴",
+      "action": "【急诊】绝对不要催吐(腐蚀物反流二次灼伤食道口腔),不要洗胃。皮肤/眼沾染:立即大量清水冲洗(眼部冲洗后必须就医)。口腔摄入:可给少量清水或牛奶稀释,立即送医。任何强碱暴露/眼部暴露都须兽医处理。碱灼伤即使初看不重也要就医观察(延迟显现)",
+      "source": "Merck/MSD Vet Manual《Toxicoses From Household Cleaners and Personal Care Products in Animals》;Pet Poison Helpline《Alkalis》;ASPCApro《Ingredients & Toxicities of Cleaning Products》"
+    },
+    {
+      "category": "食物",
+      "item": "巧克力 / 可可(甲基黄嘌呤:可可碱+咖啡因)",
+      "aliases": "巧克力、朱古力、可可、黑巧克力、纯巧、代可可脂、可可粉、烘焙巧克力、可可豆、热可可、巧克力蛋糕/饼干/威化;用户常见表达「偷吃了一块德芙/费列罗」「啃了包装里的巧克力」。注意:越黑越苦越毒(黑巧/烘焙巧>牛奶巧>白巧几乎无毒)",
+      "species": "both(犬为绝大多数病例,猫极少主动吃但同样中毒);非物种特异,但按体重小的犬风险高",
+      "danger": "可可碱+咖啡因刺激中枢与心脏,犬代谢极慢(可可碱半衰期~17.5h)。ASPCA APCC 剂量阈值(可可碱+咖啡因合计):轻度~20 mg/kg;严重40–50 mg/kg;抽搐≥60 mg/kg;致死约100–200 mg/kg。含量:牛奶巧~44 mg/oz、半甜巧~150 mg/oz、烘焙/无糖巧~390 mg/oz。表现:呕吐、腹泻、多饮多尿、烦躁、心跳过速/心律失常、肌颤、抽搐、高热。发作可延迟并持续数天",
+      "action": "尽快就诊/急诊。摄入2小时内且无症状可由兽医催吐+活性炭(多次给药因肠肝循环);已抽搐/心律失常按急诊。估算:黑巧/烘焙巧即使几克对小型犬也危险,别等症状。可拨 ASPCA APCC (888)426-4435 / Pet Poison Helpline (855)764-7661",
+      "source": "ASPCA APCC(经 aspcapro toxbrief, Gwaltney-Brant);Merck Vet Manual «Chocolate Toxicosis in Animals» https://www.merckvetmanual.com/toxicology/food-hazards/chocolate-toxicosis-in-animals ;VIN Veterinary Partner"
+    },
+    {
+      "category": "食物",
+      "item": "木糖醇(及所有常见载体)",
+      "aliases": "木糖醇、桦木糖、桦树糖、birch sugar、E967、wood sugar/木糖;真正载体(用户更可能这么描述):无糖口香糖(益达/绿箭无糖款/Trident/Orbit)、无糖薄荷糖、无糖糖果、无糖巧克力、某些「减脂/健身/生酮」花生酱(如 Nuts'n More、P28,主流JIF/四季宝/Skippy一般不含)、无糖烘焙品/蛋糕、部分牙膏、部分保健品/滴剂、部分无糖布丁果冻。用户常见表达「吃了我一片口香糖」——这是Pet Poison Helpline最常见来电源",
+      "species": "dog(犬中毒机制明确且致命);猫目前证据不足、通常不引发犬式低血糖,但仍应避免。物种特异:此毒性主要针对犬",
+      "danger": "犬体内木糖醇强烈刺激胰岛素释放→快速严重低血糖(常15–30分钟内);高剂量致急性肝衰竭/凝血障碍。阈值:>~100 mg/kg(45 mg/lb)可致低血糖;>~500 mg/kg(227 mg/lb)风险肝衰竭。一片含木糖醇口香糖(可含0.3–1g+)就可能让小型犬低血糖。表现:呕吐、虚弱、共济失调、震颤、抽搐、昏迷;肝损可延迟24–72h",
+      "action": "急诊,分秒必争,是最紧急的食物中毒之一。不要在家催吐(已低血糖会加重/误吸);由兽医评估血糖、补糖、监测肝功能与凝血。Pet Poison Helpline (800)213-6680 / (855)764-7661。凡「无糖」产品一律按含木糖醇处置直到排除",
+      "source": "Pet Poison Helpline «Xylitol»;Merck Vet Manual «Xylitol Toxicosis in Dogs» https://www.merckvetmanual.com/toxicology/food-hazards/xylitol-toxicosis-in-dogs ;VCA Hospitals;PMC 案例(急性肝衰)"
+    },
+    {
+      "category": "食物",
+      "item": "葡萄 / 葡萄干(及提子、部分含酒石酸果实)",
+      "aliases": "葡萄、提子、葡萄干、青提、红提、巨峰、无籽葡萄、葡萄籽、raisin;衍生:含葡萄干的面包/麦片/曲奇/能量棒、酿酒葡萄渣。用户常见表达「捡了几颗葡萄」「吃了葡萄干燕麦」。罗望子/tamarind亦被列同类",
+      "species": "dog(犬为已确认物种;猫、雪貂理论上也应避免,证据以犬为主)",
+      "danger": "致急性肾损伤(少尿/无尿性肾衰)。近年研究指向酒石酸及其钾盐(potassium bitartrate)为最可能毒素——犬缺乏有机酸转运体,酒石酸在近端肾小管蓄积。剂量-反应高度个体差异:酒石酸含量因葡萄品种/成熟度不一,有的犬吃几颗即肾衰,有的大量无事——无安全阈值。表现:6–12h呕吐/腹泻,72h内进展至肾衰",
+      "action": "尽快就诊/急诊,按最坏情况处理(不因量少而观望)。摄入早期兽医催吐+活性炭+积极静脉输液护肾+监测肾指标。ASPCA APCC (888)426-4435 / Pet Poison Helpline (855)764-7661",
+      "source": "ASPCApro «Toxic Component in Grapes and Raisins Identified»(酒石酸);Merck Vet Manual «Grape, Raisin, and Tamarind Toxicosis in Dogs»;Cornell Riney Canine Health Center"
+    },
+    {
+      "category": "食物",
+      "item": "洋葱 / 大葱 / 大蒜 / 韭菜 / 葱属植物",
+      "aliases": "洋葱、大葱、小葱、香葱、青葱、大蒜、蒜、蒜末/蒜粉、韭菜、韭黄、火葱/红葱头、leek/大蒜素;隐藏来源:洋葱粉/蒜粉调味、葱油、婴儿食品、火锅底料、含葱蒜的汤/剩菜/肉汤块。用户常见表达「喂了带葱花的饭」「吃了蒜味的肉」。熟的、脱水的、粉末的与生的一样毒",
+      "species": "both;猫更敏感(物种差异)。相对毒性:大蒜比洋葱毒3–5倍",
+      "danger": "含有机硫化物(如N-丙基二硫化物)氧化红细胞→形成海因茨小体→溶血性贫血。参考致病量:猫~5 g/kg;犬~15–30 g/kg(约体重0.5%);大量单次或反复小量累积均可。临床常延迟数天出现:虚弱、黏膜苍白、黄疸、酱油色尿(血红蛋白尿)、心率呼吸加快、虚脱",
+      "action": "尽快就诊。早期兽医催吐+活性炭;溶血期需监测血象数天、必要时输血+护肾输液。别喂任何葱蒜韭调味的人食。ASPCA APCC / Pet Poison Helpline (855)764-7661",
+      "source": "Merck Vet Manual «Garlic and Onion (Allium spp) Toxicosis in Animals»;dvm360/ASPCApro «Allium species poisoning in dogs and cats»(Veterinary Medicine 2005)"
+    },
+    {
+      "category": "食物",
+      "item": "澳洲坚果(夏威夷果)",
+      "aliases": "澳洲坚果、夏威夷果、夏威夷豆、昆士兰果、macadamia;含夏威夷果的曲奇/巧克力/糕点(可能同时叠加巧克力毒)。用户常见表达「吃了几颗夏威夷果」",
+      "species": "dog(犬特有综合征;猫无明确报道)",
+      "danger": "机制未明,影响神经-肌肉功能。低至~2 g/kg(约每2磅体重2g)即可致病;文献2.4 g/kg出现症状。12小时内出现:后肢无力/不能站立、共济失调、震颤、呕吐、体温升高(高热)、精神沉郁。通常24–48h自限、少致命,但会很吓人",
+      "action": "多数轻症自限,但仍建议就诊评估(尤其叠加巧克力/量大时)。早期可催吐+活性炭;高热/剧烈症状需静脉输液+对症降温镇痛。Pet Poison Helpline (855)764-7661",
+      "source": "Pet Poison Helpline «Macadamia Nuts»;Merck Vet Manual «Macadamia Nut Toxicosis in Dogs»;ASPCA"
+    },
+    {
+      "category": "食物",
+      "item": "咖啡因(甲基黄嘌呤)",
+      "aliases": "咖啡、咖啡豆、咖啡渣/咖啡粉、浓缩咖啡、冷萃、速溶咖啡、茶/浓茶、绿茶、红茶、奶茶、能量饮料(红牛/魔爪)、可乐、减肥药/提神药/含咖啡因保健品、可可。用户常见表达「偷喝了咖啡」「翻垃圾吃了咖啡渣」(咖啡渣浓度高危险)",
+      "species": "both;猫更敏感、更低剂量即出症状",
+      "danger": "与可可碱同属甲基黄嘌呤,刺激中枢/心脏;犬代谢慢(半衰期~4.5h)易蓄积。犬阈值:~20 mg/kg轻度、40 mg/kg中度(心血管)、≥60 mg/kg重度(抽搐/虚脱),LD50约140–200 mg/kg;猫更敏感。表现(常1–2h内):烦躁、踱步、心跳过速/高血压、呕吐、震颤、抽搐。1粒提神药/一大杯冷萃对小宠即可危险",
+      "action": "尽快就诊/急诊。早期兽医催吐+活性炭;心律/抽搐按急诊监护。ASPCA APCC (888)426-4435 / Pet Poison Helpline (855)764-7661",
+      "source": "American College of Veterinary Pharmacists «Caffeine» vetmeds.org;VIN «Household Toxins: Dogs and Cats»(WSAVA 2014);与Merck甲基黄嘌呤章节一致"
+    },
+    {
+      "category": "食物",
+      "item": "酒精(乙醇)/ 含酒精食物饮料",
+      "aliases": "酒、白酒、啤酒、红酒/葡萄酒、料酒、米酒、鸡尾酒、酒心巧克力、醉虾醉蟹、含酒精甜点/提拉米苏、发酵未烤的面团(见「生面团」)、漱口水/部分香水/免洗洗手液(乙醇来源)。用户常见表达「舔了洒的酒」「吃了酒酿/醪糟」",
+      "species": "both;体型小者风险高",
+      "danger": "乙醇快速吸收→中枢抑制+代谢性酸中毒+低血糖+低体温。表现:共济失调、精神沉郁、呕吐、流涎、定向障碍、呼吸抑制;严重者昏迷、低血糖、酸中毒、死亡。犬猫对酒精耐受远低于人",
+      "action": "急诊(尤其出现沉郁/呼吸变慢)。不要催吐(中枢抑制/误吸风险);需兽医支持治疗、监测血糖体温与酸碱、必要时静脉输液。ASPCA APCC / Pet Poison Helpline (855)764-7661",
+      "source": "ASPCApro «Drunk and Disorderly: Ethanol and Yeast Dough Intoxications»;Merck Vet Manual(食物性乙醇/面团章节)"
+    },
+    {
+      "category": "食物",
+      "item": "生面团 / 未烤酵母面团",
+      "aliases": "生面团、发面、酵母面团、没烤的面包胚、披萨生胚、包子/馒头生坯、自制发酵面团。用户常见表达「偷吃了正在醒发的面」",
+      "species": "both;深胸大型犬另有胃扭转(GDV)风险",
+      "danger": "双重危害:①面团在温暖湿润胃内继续发酵产CO₂→胃急性膨胀/胀气(可诱发大型犬胃扩张扭转GDV);②酵母产乙醇→酒精中毒(见「酒精」)。表现:腹部膨隆、干呕/无效呕吐、烦躁不安、随后共济失调/沉郁/异常发声(乙醇上头)。死亡多因乙醇代谢紊乱而非单纯胀气",
+      "action": "急诊。腹胀+干呕别拖(排查GDV);兽医处理产气与乙醇中毒、支持治疗。Pet Poison Helpline (855)764-7661",
+      "source": "Merck Vet Manual «Bread Dough Toxicosis in Animals»;Pet Poison Helpline «Bread Dough»;ASPCApro;VIN"
+    },
+    {
+      "category": "食物",
+      "item": "盐 / 高盐食物 / 自制盐面团玩具",
+      "aliases": "食盐、高盐零食、腌制品、咸鱼咸肉、火腿、酱料、薯片、坚果零食(咸味);非食物高盐源:自制盐面团/咸面塑手工、圣诞盐面团挂饰、融雪剂/化冰盐、海水(在海边喝多)。用户常见表达「吃了一大把咸的」「玩咸面团吞了」",
+      "species": "both",
+      "danger": "钠中毒/高钠血症→脑细胞脱水与神经症状。参考量:~2–3 g/kg氯化钠可中毒,~4 g/kg可致命(自制盐面团约1.9 g/kg即可能中毒)。表现(常3h内):呕吐(常最先)、腹泻、口渴、精神沉郁、步态不稳、震颤、抽搐、虚脱。只要有正常饮水+肾功能正常,单纯食物盐一般不易中毒,但盐面团/化冰盐等高浓度源需警惕",
+      "action": "尽快就诊(有神经症状按急诊)。切勿自行大量灌水或快速降钠——纠正过快致脑水肿,须兽医缓慢纠正电解质。Pet Poison Helpline / ASPCA APCC",
+      "source": "Pet Poison Helpline «Salt» / «Homemade Play Dough»;Merck Vet Manual «Salt Toxicosis in Animals»;FDA宠物节日安全"
+    },
+    {
+      "category": "食物",
+      "item": "鳄梨(牛油果)",
+      "aliases": "鳄梨、牛油果、油梨、酪梨、avocado、含牛油果的沙拉/牛油果酱(guacamole,常另含洋葱大蒜叠加毒)、果核、果皮。用户常见表达「吃了牛油果」",
+      "species": "犬猫:persin毒性低(无确证致死);鸟类/兔/马/反刍动物:高度敏感可致命(物种特异,给这些别喂)",
+      "danger": "对犬猫而言persin毒性有限,主要风险是:①胃肠不适(呕吐/腹泻);②高脂→可诱发胰腺炎;③硕大果核=严重噎呛与肠道梗阻风险。对鸟/兔/马:心血管损伤、虚弱、死亡。ASPCA与Pet Poison Helpline均建议犬猫不喂",
+      "action": "犬猫误食少量果肉:居家观察胃肠道,持续呕吐/腹泻或疑吞果核(可能梗阻)→就诊。鸟/兔等异宠误食→急诊。ASPCA APCC (888)426-4435",
+      "source": "ASPCA «The Scoop on Avocado and Your Pets»;Merck Vet Manual «Avocado (Persea spp) Toxicosis in Animals»;Pet Poison Helpline «Avocado»"
+    },
+    {
+      "category": "食物",
+      "item": "骨头(尤其煮熟的骨/禽骨)",
+      "aliases": "熟骨头、鸡骨、鸭骨、排骨、大棒骨、鱼骨/鱼刺、猪骨、剩骨头;用户常见表达「喂了啃剩的鸡骨头」「吃了排骨」。煮熟骨最危险(变脆易碎成尖片)",
+      "species": "both(犬更常见)",
+      "danger": "非化学中毒而是物理伤害:①碎裂尖片刺穿/割伤口腔、食道、胃肠→肠穿孔→腹膜炎(可致命);②卡喉/食道=噎呛急症;③肠道梗阻;④牙齿断裂。加热去除水分与胶原使骨变脆更易碎裂。FDA与多数兽医不建议给任何骨头(生熟均有风险)",
+      "action": "卡喉/呼吸困难=急诊。已吞:观察有无干呕、流涎、拒食、呕吐、腹痛、黑便/血便、便秘/里急后重——出现任一→就诊(可能需影像评估梗阻/穿孔)。不要自行催吐尖锐骨片(二次划伤)。ASPCA / 就近急诊",
+      "source": "FDA «No Bones About It»(反对喂骨);Animal Emergency Service;PetMD «Can Dogs Eat Bones»;临床共识(穿孔/梗阻/腹膜炎)"
+    },
+    {
+      "category": "食物",
+      "item": "发霉食物 / 霉变坚果 / 厨余堆肥(震颤性霉菌毒素)",
+      "aliases": "发霉的食物、长毛的面包/坚果/奶酪、霉花生霉核桃、变质剩饭、垃圾桶/厨余/堆肥、霉变谷物。用户常见表达「翻垃圾吃了发霉的东西」「吃了长毛的核桃/面包」",
+      "species": "both(犬因翻食垃圾更常见)",
+      "danger": "青霉菌等产震颤性霉菌毒素(penitrem A、roquefortine C等),亲脂过血脑屏障→快速全身肌颤与抽搐。表现(常摄入1–2h,亦可延迟):全身肌肉震颤、呕吐、发热、共济失调、抽搐、过度敏感。及时处理预后一般良好,恢复需24–48h",
+      "action": "急诊。震颤/抽搐需兽医用地西泮或美索巴莫控制+去污+支持。别让宠物翻垃圾/堆肥。Pet Poison Helpline (855)764-7661",
+      "source": "Merck Vet Manual «Tremorgenic Neuromycotoxicosis in Dogs»;ASPCApro toxbrief(Schell);Today's Veterinary Practice"
+    },
+    {
+      "category": "食物",
+      "item": "高脂 / 油腻食物 / 剩菜(胰腺炎风险)",
+      "aliases": "肥肉、肥油、培根、烤肉/烧烤、鸡皮鸭皮、黄油、猪油、油炸食品、火锅油、剩饭剩菜、骨头汤上的油、节日大餐边角料。用户常见表达「过节喂多了油腻的」「舔了培根油」",
+      "species": "both(某些犬种如迷你雪纳瑞更易发)",
+      "danger": "高脂餐可诱发急性胰腺炎——胰酶在胰腺内提前激活致剧痛与炎症。表现:剧烈腹痛(常「祈祷姿势」)、呕吐、腹泻、精神沉郁、厌食、脱水;重症可致命。即使少量对易感犬也可诱发",
+      "action": "持续呕吐/腹痛/沉郁→就诊(可能需血检+影像+住院支持)。预防为主:别喂人类油腻食物/剩菜。ASPCA / 就近就诊",
+      "source": "多家兽医院临床共识(Falls Village Vet、Oak West Animal Clinic等);与Merck胰腺炎章节一致;临床公认高脂-胰腺炎关联"
+    },
+    {
+      "category": "食物",
+      "item": "果核 / 核仁(蔷薇属氰化物:桃杏樱李苹果籽)",
+      "aliases": "桃核、杏核、樱桃核、李子/梅核、苹果籽、枇杷核、青梅核;用户常见表达「啃了桃核/樱桃核」。蔷薇属(Prunus)果核仁+叶/茎含氰苷",
+      "species": "both",
+      "danger": "核仁含苦杏仁苷(amygdalin),被咬碎/嚼开后分解出氢氰酸。需咬碎果核才释放——整颗吞下通常氰化物风险低,但整颗大核另有肠梗阻/噎呛风险。氰化物中毒表现:流涎、呼吸急促/困难、黏膜鲜红、抽搐、瘫痪——严重时数分钟内致命",
+      "action": "咬碎大量核仁/出现呼吸窘迫=急诊(氰化物有解毒药,须立即兽医处理)。整颗吞大核→观察/评估梗阻。ASPCA APCC (888)426-4435",
+      "source": "ASPCA 有毒植物库(Prunus 属含氰);PetMD «Dangers of Stone Fruits for Dogs»;Vetlexicon «cyanide poisoning in dogs»"
+    },
+    {
+      "category": "食物",
+      "item": "生土豆 / 青(未熟)番茄 / 发芽土豆(龙葵素)",
+      "aliases": "生土豆、发芽土豆、青皮土豆、土豆芽、青番茄/未熟番茄、番茄的叶茎藤;龙葵素/solanine、茄碱。用户常见表达「啃了生土豆/发芽的土豆」「吃了没熟的青番茄」。成熟红番茄果肉、煮熟去皮白土豆少量一般安全",
+      "species": "both",
+      "danger": "茄科生物碱(龙葵素solanine、茄碱)集中在绿色/发芽部位与未熟果、叶茎。表现:流涎、恶心、呕吐、腹泻、精神沉郁、厌食;大量可致神经/心脏影响。多为胃肠道为主的轻中度症状",
+      "action": "少量→居家观察胃肠道;大量摄入或出现神经症状/持续呕吐→就诊。别喂生的/发芽/发青的土豆与青番茄及其茎叶。ASPCA APCC / Pet Poison Helpline",
+      "source": "ASPCA;Pet Poison Helpline «Are Tomatoes Poisonous to Dogs»;PETSVETCHECK(茄科龙葵素);临床共识"
+    },
+    {
+      "category": "食物",
+      "item": "肉豆蔻(及大量肉桂)",
+      "aliases": "肉豆蔻、nutmeg、玉果;常见于烘焙/南瓜派/蛋奶酒/圣诞香料;大量肉桂/肉桂粉亦刺激。用户常见表达「吃了撒肉豆蔻的糕点」",
+      "species": "both",
+      "danger": "肉豆蔻含肉豆蔻醚(myristicin),大量摄入可致:呕吐、口干、烦躁、瞳孔散大或缩小、心率加快、行走站立困难、幻觉,甚至抽搐。毒性剂量参考:少至~1茶匙肉豆蔻粉或2–3整颗即可。烘焙品中的微量调味通常仅轻度胃肠刺激",
+      "action": "大量摄入/出现神经-心脏症状→就诊。少量调味→观察。Pet Poison Helpline (855)764-7661",
+      "source": "Pet Poison Helpline «Nutmeg and Cinnamon Toxicity»;Animal Emergency & Referral Center of MN «Nutmeg Toxicity in Pets»"
+    },
+    {
+      "category": "食物",
+      "item": "啤酒花(自酿原料)",
+      "aliases": "啤酒花、酒花、hops、自酿啤酒的花/酒糟/spent hops;家庭精酿越来越多故风险上升。用户常见表达「翻了自酿啤酒的料」",
+      "species": "both(犬有明确报道;某些品种如灵缇/易恶性高热体质更危险)",
+      "danger": "可致恶性高热样反应——体温危险性升高。表现:喘息、高热、呕吐、烦躁不安、心跳过速、黏膜充血、震颤、抽搐,可致死。急性、进展快",
+      "action": "急诊(疑似即刻处理,快速降温+支持)。自酿爱好者务必把酒花/酒糟远离宠物。ASPCA APCC (888)426-4435 / Pet Poison Helpline «Hops»",
+      "source": "ASPCA «Dogs + Beer: Getting to the Bottom of Hops Toxicity»;ASPCApro «Rising Danger of Hops Ingestion»;Pet Poison Helpline «Hops»"
+    },
+    {
+      "category": "食物",
+      "item": "生鱼 / 生的鱼内脏(硫胺素酶)",
+      "aliases": "生鱼、生鱼片、刺身、生的鱼杂/鱼内脏、常喂猫的生海鱼。用户常见表达「一直喂生鱼/生鱼片」",
+      "species": "cat(猫尤其敏感;长期喂生鱼致维生素B1缺乏);犬长期大量亦有风险",
+      "danger": "生鱼(及某些鱼内脏)含硫胺素酶,分解破坏维生素B1(硫胺素)。长期以生鱼为主食→硫胺素缺乏→严重神经症状:抽搐、共济失调、昏迷,严重致命。是慢性/累积性风险,非单次急性中毒",
+      "action": "非急诊单次事件,但需纠正喂养:停止以生鱼为主食、改均衡熟食/正规猫粮;已出现神经症状(抽搐/走路异常)→就诊补充硫胺素。参考 Merck 小动物营养",
+      "source": "Merck Vet Manual «Nutritional Requirements of Small Animals»;WebMD Pets;临床共识(硫胺素酶)"
+    },
+    {
+      "category": "食物",
+      "item": "生蛋清(抗生物素蛋白 avidin)",
+      "aliases": "生鸡蛋、生蛋清、生蛋白、常见于「自制生食/给猫狗打生鸡蛋」。用户常见表达「每天给拌个生鸡蛋」",
+      "species": "both(长期大量)",
+      "danger": "生蛋清含抗生物素蛋白(avidin),结合并抑制生物素(维生素B7)吸收。长期大量→生物素缺乏:皮肤问题、被毛差。另生蛋有沙门氏菌污染风险(见「生肉」)。属慢性营养风险,非急性中毒",
+      "action": "非急诊;调整喂养:蛋煮熟后avidin失活即无此问题。皮肤/被毛异常且长期喂生蛋→就诊评估。参考 Four Paws / WebMD",
+      "source": "Four Paws «Dangerous Foods for Cats»;WebMD Pets(avidin/生物素);临床共识"
+    },
+    {
+      "category": "食物",
+      "item": "生肉 / 生食(细菌与寄生虫污染)",
+      "aliases": "生肉、生食、BARF生骨肉、自制生食、未煮熟的肉/内脏/生鸡。用户常见表达「喂生骨肉/生食」",
+      "species": "both(幼龄、老年、免疫低下者风险更高;有人畜共患传染风险)",
+      "danger": "非化学毒物,而是病原污染:沙门氏菌、弯曲杆菌、梭菌、大肠杆菌、李斯特菌等,以及寄生虫。表现:呕吐、腹泻(可带血)、发热、脱水;可传染给家中人类(尤其儿童/老人)。AVMA不建议饲喂未经灭菌处理的生动物蛋白",
+      "action": "出现呕吐腹泻/发热/脱水→就诊。生食务必来源可靠、处理卫生、与人食分开操作;高风险家庭建议改熟食。参考 AVMA / VIN",
+      "source": "AVMA «Raw or undercooked animal-source protein in cat and dog diets»;VIN «Raw Food, the FDA, and Salmonella»;Merck营养章节"
+    },
+    {
+      "category": "食物",
+      "item": "牛奶 / 乳制品(乳糖不耐)",
+      "aliases": "牛奶、纯牛奶、奶油、奶酪、冰淇淋、酸奶(部分);用户常见表达「给猫喝了牛奶」。「猫爱喝牛奶」是常见误区",
+      "species": "both(多数成年犬猫乳糖酶不足)",
+      "danger": "非中毒,属乳糖不耐:多数成年犬猫缺乏乳糖酶,乳糖发酵→胃肠不适:腹泻、胀气、呕吐、腹部不适。奶油/冰淇淋另高脂高糖(叠加胰腺炎/肥胖风险)。程度多为轻度自限",
+      "action": "居家观察,腹泻通常自限;持续或严重腹泻/脱水→就诊。别把牛奶当水给;需补水给清水,幼崽用专用宠物奶。属低危提示项",
+      "source": "ASPCApro «People Foods Pets Should Never Eat»;临床共识(成年犬猫乳糖不耐);标注:剂量阈值无——个体差异,轻度为主"
+    },
+    {
+      "category": "食物",
+      "item": "整颗坚果/大块食物/玉米棒(高脂+梗阻/噎呛)",
+      "aliases": "核桃、腰果、杏仁、开心果、榛子、花生(带壳)、整颗坚果;玉米棒/玉米芯、大块果核、桃核、水蜜桃核;用户常见表达「吞了整个玉米棒/一把坚果」。霉变坚果另见「发霉食物」",
+      "species": "both",
+      "danger": "非特异化学毒(澳洲坚果除外,见专条),主要为:①高脂→胃肠不适/胰腺炎;②整颗/带壳=噎呛与肠道梗阻(玉米棒是经典的犬肠梗阻异物,X光常难显影);③霉变坚果含震颤性霉菌毒素。表现:噎呛/干呕、反复呕吐、拒食、腹痛、便秘",
+      "action": "吞玉米棒/大核/大量坚果→就诊评估梗阻(玉米棒几乎必须影像/手术评估)。噎呛呼吸困难=急诊。ASPCA APCC (888)426-4435",
+      "source": "ASPCA;临床共识(玉米棒/异物肠梗阻、坚果高脂);霉变部分见 Merck «Tremorgenic Neuromycotoxicosis»"
+    }
+  ],
+  "emergencyRedFlags": [
+    {
+      "category": "泌尿消化",
+      "item": "公猫尿道完全梗阻(尿闭 / Feline Urethral Obstruction, 完全型)",
+      "aliases": "用户描述样例:\"公猫尿不出来\"、\"一直蹲砂盆使劲但没尿\"、\"在砂盆里干使劲\"、\"叫得很惨还是尿不出\"、\"肚子硬邦邦、下腹鼓鼓的\"、\"碰肚子就叫/躲\"。晚期:\"不吃不喝、瘫软、吐、叫不动了\"。别名:尿道堵塞、尿闭、\"blocked cat\"、公猫泌尿综合征(FLUTD)急性发作。",
+      "species": "cat(强物种/性别特异:公猫、绝育公猫风险远高于母猫;母猫尿道粗极少梗阻)。危险人群:2-4岁、肥胖、纯室内、多猫家庭。",
+      "danger": "尿道被结晶/尿栓/结石堵死→尿排不出→急性肾后性肾衰、高钾血症(可致命性心律失常/心脏骤停)、膀胱可破裂。这是分秒级真急症。梗阻>24小时即出现呕吐、厌食、精神差、虚弱、木僵、体温下降、休克。未治疗常在24-48小时内死亡。",
+      "action": "急诊——立即送医,不要等、不要观察、不要\"明天再看\"。夜里也要送24h急诊。到院常需导尿解除梗阻+纠正高钾+输液。切勿在家挤压膀胱(可致膀胱破裂)。分诊话术:出现\"公猫反复进砂盆使劲却尿不出+精神差/呕吐/下腹硬胀\"=最高优先级。",
+      "source": "Merck Veterinary Manual, Obstructive Uropathy in Dogs and Cats (merckvetmanual.com); Today's Veterinary Practice, Managing Feline Urethral Obstruction; 2025 iCatCare consensus guidelines on lower urinary tract diseases (PMC11816079)"
+    },
+    {
+      "category": "泌尿消化",
+      "item": "公猫尿道梗阻【早期/部分梗阻】预警(Impending / Partial Urethral Obstruction)",
+      "aliases": "关键早期用户描述样例:\"尿频尿少\"、\"一趟一趟往砂盆跑\"、\"蹲很久只滴几滴\"、\"反复进砂盆\"、\"频繁做小便姿势\"、\"总在舔小鸡鸡/舔下面\"、\"尿里带血/粉红\"、\"尿在砂盆外/乱尿\"、\"进砂盆叫唤\"、\"烦躁不安来回走\"。医学词:pollakiuria(尿频)、stranguria(努责排尿困难)、periuria(乱尿)、dysuria(排尿痛)、hematuria(血尿)。",
+      "species": "cat(公猫/绝育公猫)。此阶段最容易被用户当\"便秘\"或\"闹脾气\"忽略。",
+      "danger": "临床进展极快,可在数小时内从\"只是尿频尿少带血\"恶化为完全尿闭+全身中毒。早期识别=救命窗口。部分梗阻随时可转为完全梗阻。",
+      "action": "尽快就诊(当天,勿拖过夜)——即使猫看起来精神尚可。对公猫,\"频繁跑砂盆+每次只有几滴/带血/一直舔下体\"必须按急症对待,当天面诊评估是否已梗阻。产品应把公猫这组早期信号单列为高危红旗,主动提示\"这不是普通尿路感染,可能是致命梗阻前兆\"。",
+      "source": "Today's Veterinary Practice, Feline Urethral Obstruction: Diagnosis and Management; Merck Veterinary Manual, Obstructive Uropathy in Dogs and Cats; 2025 iCatCare consensus guidelines (journals.sagepub.com/doi/10.1177/1098612X241309176)"
+    },
+    {
+      "category": "泌尿消化",
+      "item": "胃扩张扭转(GDV / 胃扭转 / \"翻胃\"、\"起子\" 俗称胀气翻转)",
+      "aliases": "用户描述样例:\"餐后肚子突然鼓得像鼓/胀大\"、\"想吐吐不出来、干呕但没东西出来\"、\"一直恶心流口水\"、\"坐立不安、来回走、趴不下\"、\"哼唧、烦躁、痛苦\"、\"敲肚子邦邦响\"。晚期:\"牙龈发白、瘫倒、喘\"。别名:胃扭转、扭胃、bloat、胀气(注意:真GDV≠普通胀气)。",
+      "species": "dog(强特异:深胸大型/巨型犬——大丹、德牧、魏玛、圣伯纳、标准贵宾、拉布拉多等;猫罕见)。诱因:餐后、大量进食/饮水后运动。",
+      "danger": "胃充气扩张并沿系膜轴扭转→堵住入口出口、压迫大血管→数小时内低血容量休克、胃壁坏死、脾扭转、心律失常、死亡。是犬最急、最快致命的急症之一,可在数小时内夺命。无效干呕(想吐吐不出)+腹胀是最经典组合。",
+      "action": "急诊——立即送医,一刻不等,夜间也送24h急诊。路上保持安静、勿喂食喂水。到院需胃减压+抗休克+手术复位固定(胃固定术)。分诊话术:\"深胸大型犬 + 餐后腹胀 + 无效干呕 + 烦躁流口水\"= 最高优先级红旗,直接指向GDV。",
+      "source": "Merck Veterinary Manual, Gastric Dilation and Volvulus in Small Animals (merckvetmanual.com); Today's Veterinary Practice, Gastric Dilatation and Volvulus: Stabilization and Surgery; Univ. of Illinois Vet Med, GDV in Dogs"
+    },
+    {
+      "category": "泌尿消化",
+      "item": "线状异物(String / Linear Foreign Body)",
+      "aliases": "用户描述样例:\"猫吞了线/毛线/缝纫线/牙线/圣诞树彩带/橡皮筋/丝带\"、\"舌头底下缠着线/嘴里挂着线\"、\"屁股拖出一根线\"(关键警告)、\"一直吐、不吃、缩着躲\"、\"肚子一碰就疼/不让摸\"、\"使劲拉又拉不出\"。",
+      "species": "both,但猫更常见更危险(猫爱玩线,更易发生肠梗阻)。犬也会发生。",
+      "danger": "线一端锚定(常在舌根下或幽门),另一端被肠道蠕动往下拽→肠管像手风琴一样堆叠(X线\"串珠/褶皱\"征),线勒进肠壁→切割、穿孔、腹膜炎、脓毒症,可致命。比普通异物更凶险。",
+      "action": "急诊/尽快就诊——按急症处理,立即联系医院。极重要:若看到线从口腔(舌下)或肛门露出,千万不要往外拉扯——可能已勒进肠壁,硬拉会撕裂肠道致命,只剪断可见端也不安全,直接送医。切勿在家催吐。到院需影像评估+多数需手术取出。",
+      "source": "Merck Veterinary Manual, Gastrointestinal Obstruction in Small Animals; VCA Animal Hospitals, Linear Foreign Body in Cats; Veterinary Partner (VIN), Linear Foreign Bodies in Dogs and Cats"
+    },
+    {
+      "category": "泌尿消化",
+      "item": "误食尖锐物 / 中毒物(Sharp or Dangerous Object Ingestion:针、别针、鱼钩、碎骨、碎玻璃、钉子、纽扣电池、磁铁、竹签)",
+      "aliases": "用户描述样例:\"狗吞了缝衣针/鱼钩/鸡骨头/碎玻璃/牙签/竹签/钉子\"、\"吞了纽扣电池\"、\"吞了磁铁/两颗磁珠\"、\"嘴里/嘴唇流血\"、\"吞完一直干呕、流口水、想吐\"、\"不敢吞咽、伸脖子\"。",
+      "species": "both(犬更常见误食异物;猫也会)。",
+      "danger": "尖锐物可划伤/穿孔食道、胃、肠→出血、纵隔炎/腹膜炎。纽扣电池=急症中的急症(电流灼伤食道、数小时内穿孔)。多颗磁铁分处肠段会相吸夹坏肠壁坏死穿孔。碎骨可splinter刺穿。",
+      "action": "急诊,并立即电话联系兽医/宠物中毒热线。绝对不要自行催吐——尖锐物、骨头、玻璃在吐出途中会再割伤食道和胃;催吐只能在兽医明确指示下进行。检查嘴唇舌头有无划伤出血并记录。记下吞了什么、何时、量多少。纽扣电池/多颗磁铁=最高优先级立即急诊。",
+      "source": "PetMD, What to Do If Your Dog Swallowed Something They Shouldn't; VCA Animal Hospitals, Ingestion of Foreign Bodies in Dogs; Merck Veterinary Manual, Gastrointestinal Obstruction in Small Animals; ASPCA Animal Poison Control (APCC) 通用建议:误食异物先联系专业热线,勿盲目催吐"
+    },
+    {
+      "category": "泌尿消化",
+      "item": "胃肠道异物梗阻(GI Foreign Body Obstruction,非线状/非尖锐的普通异物)",
+      "aliases": "用户描述样例:\"吞了袜子/毛巾/玩具/塑料/桃核/骨头/尿不湿/球\"、\"喷射状呕吐/喷着吐\"、\"吃啥吐啥、喝水也吐\"、\"完全不吃、没精神\"、\"好几天不拉/拉不出\"、\"肚子胀、一按就疼\"、\"缩着不动/不让碰肚子\"。",
+      "species": "both(犬更易吞异物;猫更易线状异物梗阻)。",
+      "danger": "异物堵住胃或肠道→持续呕吐、脱水、电解质紊乱;完全性小肠梗阻常见喷射状呕吐并快速恶化。肠段可缺血坏死、穿孔→腹膜炎、脓毒性休克致命。胃内异物可能间歇发作数周,小肠梗阻则快速恶化。",
+      "action": "急诊/尽快就诊——尤其\"反复呕吐+完全不吃+腹痛/腹胀\"或\"已知吞了东西\"。切勿在家催吐(不知是否尖锐/线状)。到院需X线或超声定位,多数需内镜或手术取出。喷射状呕吐+已知误食史=高优先级。",
+      "source": "Merck Veterinary Manual, Gastrointestinal Obstruction in Small Animals; Cornell Univ. College of Veterinary Medicine, GI Foreign Body Obstruction in Dogs; MedVet, Gastrointestinal Foreign Bodies in Cats and Dogs"
+    },
+    {
+      "category": "泌尿消化",
+      "item": "频繁剧烈呕吐(Frequent / Severe Vomiting)",
+      "aliases": "用户描述样例:\"一直吐、停不下来\"、\"一天吐好多次\"、\"吃啥吐啥、连水都吐\"、\"吐了还干呕\"、\"吐得站不稳、没精神了\"、\"吐+拉一起来\"。判断阈值:24小时内呕吐超过3次,或持续呕吐无法进水。",
+      "species": "both。",
+      "danger": "频繁呕吐本身导致脱水、电解质/酸碱紊乱;更重要是它是众多致命急症的共同表现——梗阻、GDV、胰腺炎、尿道梗阻(公猫)、中毒、肾衰、腹膜炎、异物。无法留住水分会快速脱水,幼猫幼犬尤快。",
+      "action": "尽快就诊(24h内吐>3次、或吐到喝水都吐、或伴精神差/腹痛/腹胀/血)。若同时有:无效干呕+腹胀(→GDV)、公猫尿不出(→尿道梗阻)、呕血/咖啡渣样物、剧烈腹痛拱背、已知误食异物/中毒——升级为急诊立即送。幼年动物/糖尿病史动物门槛更低。切勿盲目自行喂止吐药或催吐。",
+      "source": "PetMD, Pancreatitis in Dogs (呕吐>3次/24h为恶化红旗); Merck Veterinary Manual (呕吐为多种腹部急症共同表现); GSVS 急诊指南 Pancreatitis Urgent Signs"
+    },
+    {
+      "category": "泌尿消化",
+      "item": "呕血(Hematemesis:吐血 / 咖啡渣样呕吐物)",
+      "aliases": "用户描述样例:\"吐的东西带血/有血丝\"、\"吐鲜红的血\"、\"吐出来像咖啡渣/黑褐色渣渣\"、\"吐的像酱油色/深褐色\"、\"吐血还没精神/牙龈发白\"。医学:鲜红=近端出血;咖啡渣样(coffee-ground)=血被胃酸部分消化,提示胃/上消化道出血。",
+      "species": "both。",
+      "danger": "呕吐物带血永远不正常。提示消化道出血——胃溃疡(常因NSAID类止痛药、应激、疾病)、尖锐异物划伤、中毒(如灭鼠药抗凝)、严重感染、肿瘤、凝血障碍。伴苍白牙龈=失血/休克,伴虚弱瘫倒=严重失血。",
+      "action": "急诊/尽快就诊——呕血一律需兽医处理,不要等到上班时间。出现以下任一即立即急诊:多次呕血、咖啡渣样物、牙龈苍白、虚弱/瘫倒、腹痛。若近期喂过人用止痛药(布洛芬/对乙酰氨基酚/阿司匹林)或可能误食灭鼠药,务必主动告知兽医。",
+      "source": "PetMD, Why Is My Dog Throwing Up Blood?; Dial A Vet, Why Is My Cat Vomiting Blood (Vet-Reviewed); GSVS 急诊指南 Dog Vomiting Blood"
+    },
+    {
+      "category": "泌尿消化",
+      "item": "黑便 / 柏油样便(Melena:上消化道出血)",
+      "aliases": "用户描述样例:\"拉黑色的便便\"、\"大便黑得像柏油/沥青\"、\"黑色发亮、黏糊糊、有腥臭\"、\"便便像油/像焦油\"。注意区分:不是深棕色正常便,是黑亮如柏油。",
+      "species": "both。",
+      "danger": "黑柏油样便=血液在上消化道(胃/小肠)出血后被消化变黑。常见于胃溃疡(NSAID药物、应激、疾病)、异物划伤、中毒(灭鼠药/抗凝)、凝血障碍、肿瘤、寄生虫、术后并发症、误吞血液。黑便容易被忽视,却始终应按紧急对待。",
+      "action": "尽快就诊(当天)——黑便易漏诊,一旦确认应视为紧急。若同时苍白牙龈、虚弱、瘫软、呕血、腹痛=急诊立即送(提示大量失血/休克)。主动告知兽医近期用药(止痛药)和可能的灭鼠药接触史。",
+      "source": "PetUltimates, Melena in Dogs; ScienceDirect Veterinary, Melena overview; NorthCare Animal Hospital, Bloody Vomit or Stool Red Flags"
+    },
+    {
+      "category": "泌尿消化",
+      "item": "血便 / 便血(Hematochezia:鲜红血便,下消化道)",
+      "aliases": "用户描述样例:\"便便带鲜红血/血丝\"、\"拉血\"、\"便便表面有血/滴血\"、\"拉稀带血\"、\"果冻状带血的便\"。医学:鲜红未消化血=结肠/直肠等下消化道出血。",
+      "species": "both。",
+      "danger": "鲜红血便提示下消化道出血——结肠炎、寄生虫(球虫/钩虫)、AHDS/HGE、直肠肛门损伤、异物、中毒、肿瘤、息肉、凝血障碍。少量血丝可能不急,但大量鲜血、血块,或伴随呕吐/脱水/精神差/苍白/腹痛则是急症。幼犬便血须警惕细小(parvo)。",
+      "action": "同天联系兽医评估;若出现大量鲜血/血块、反复呕吐、精神萎靡、牙龈苍白、腹痛、瘫软,或幼犬/未免疫犬——升级为急诊立即送。幼犬急性血便+呕吐务必查细小病毒。",
+      "source": "Vetster, Bloody Stool in Cats; Petcro, Bloody Stool in Dogs Red vs Black; NorthCare Animal Hospital, Bloody Vomit or Stool Red Flags"
+    },
+    {
+      "category": "泌尿消化",
+      "item": "急性出血性腹泻综合征(AHDS / 旧称HGE:大量血性腹泻+呕吐)",
+      "aliases": "用户描述样例:\"突然拉大量血水/血便\"、\"拉的像草莓酱/覆盆子果酱\"、\"又吐又拉血、一下子就蔫了\"、\"上午还好好的、下午就瘫了\"、\"拉稀带血还脱水\"。别名:出血性肠胃炎(HGE)、AHDS。",
+      "species": "dog(经典;小型犬如迷你雪纳瑞、玩具贵宾多见,但任何犬可发)。",
+      "danger": "突发大量血样水泻(约50%伴呕吐),血浆大量渗漏→数小时内严重脱水、血液浓缩、休克,即使当天早上还正常。可在12小时内从健康变危重。需与细小、寄生虫、异物、阿迪森病、胰腺炎、中毒、凝血障碍鉴别。",
+      "action": "急诊——立即送医,不要在家等\"止泻\"。到院需快速补液抗休克+止吐+镇痛+查PCV/血常规,并排查细小(幼犬/未免疫犬尤其)。多数及时治疗24小时内好转、2-4天恢复,但延误可致命。",
+      "source": "VCA Animal Hospitals, Acute Hemorrhagic Diarrhea Syndrome in Dogs; Veterinary Partner (VIN), AHDS/HGE; AKC Expert Advice, HGE in Dogs"
+    },
+    {
+      "category": "泌尿消化",
+      "item": "剧烈腹泻致脱水(Severe Diarrhea with Dehydration)",
+      "aliases": "用户描述样例:\"拉个不停/喷着拉水\"、\"拉稀好几天了/一天拉十几次\"、\"又吐又拉、没精神\"、\"眼窝凹、皮肤捏起来弹不回去\"、\"牙龈干干黏黏的\"、\"没力气、缩着、不喝水\"、\"尿少/不尿\"。脱水体征:皮肤回弹慢、口腔干黏、眼窝凹陷、精神萎靡。",
+      "species": "both(幼年、小体型、老年、糖尿病动物脱水更快更危险)。",
+      "danger": "持续腹泻→大量丢失水和电解质→脱水、低血容量、休克、酸碱紊乱。伴呕吐时脱水更快。可能是感染(细小/寄生虫)、中毒、AHDS、胰腺炎、异物梗阻等致命病的表现。幼猫幼犬可在半天到一天内脱水危及生命。",
+      "action": "尽快就诊;若出现血性腹泻、反复呕吐、明显脱水体征(皮肤回弹慢/眼窝凹/极度萎靡)、瘫软、牙龈苍白或幼年动物——升级急诊立即送。切勿仅靠人用止泻药/止痛药自行处理。补液是核心治疗。",
+      "source": "Merck Veterinary Manual, Diarrhea in Small Animals; VCA / AKC AHDS 指南(脱水与休克进展);PetMD 相关腹泻急症条目"
+    },
+    {
+      "category": "泌尿消化",
+      "item": "剧烈腹痛 / 拱背祈祷姿势(Acute Abdomen / \"Praying Position\" / 拱背蜷缩)",
+      "aliases": "用户描述样例:\"弓着背/拱着腰不敢动\"、\"前腿趴下屁股撅起来\"(祈祷/拜姿 prayer position)、\"缩成一团/蜷着\"、\"一碰肚子就叫/躲/龇牙\"、\"肚子硬邦邦、鼓胀\"、\"哼唧呻吟、坐立不安、趴不下\"、\"走路僵硬弓腰\"。",
+      "species": "both(犬\"祈祷姿势\"最典型,常见于胰腺炎)。",
+      "danger": "\"祈祷/拱背姿势\"是动物试图缓解剧烈腹痛的典型表现。背后常是致命急症:急性胰腺炎、GDV胃扭转、肠梗阻、腹膜炎、中毒、内出血、公猫尿道梗阻。这些都可能危及生命。伴腹胀、苍白牙龈、瘫倒者提示已进入休克。",
+      "action": "急诊/尽快就诊——剧烈腹痛+拱背/祈祷姿势本身就是红旗,尤其伴呕吐、腹胀、不吃、萎靡时立即送医。切勿自行给人用止痛药(布洛芬/对乙酰氨基酚对犬猫有毒、可致命)。到院需查明病因(影像/血检)。深胸犬拱背+腹胀+干呕务必排GDV。",
+      "source": "PetMD, Pancreatitis in Dogs (\"prayer position\" 为剧烈腹痛红旗); GSVS 急诊指南 Pancreatitis Urgent Signs; VCA Animal Hospitals, Pancreatitis in Dogs"
+    },
+    {
+      "category": "呼吸循环",
+      "item": "猫张口呼吸(open-mouth breathing / panting in cats)",
+      "aliases": "用户描述样例:「猫张着嘴喘气」「像狗一样吐舌头哈气」「张嘴呼吸」「嘴巴一张一合喘」。注意:猫和狗不同,健康猫几乎从不张口喘气;用户常误以为「猫玩累了喘一下正常」——这是危险误区,必须纠正。",
+      "species": "cat(物种特异:猫张口呼吸/喘几乎总是异常,与狗剧烈运动/炎热后张口喘不同)",
+      "danger": "猫任何静息状态下的张口呼吸/panting几乎总是病理性的,提示重度呼吸/循环受损。Merck明确将张口呼吸+黏膜颜色异常列为「反映肺功能重度损害、可能先于呼吸骤停」的信号。最常见病因:肥厚性心肌病(HCM)致胸腔/肺积液、哮喘、胸腔积液、严重贫血。可在数十分钟内进展到呼吸骤停。",
+      "action": "【急诊·立即】视为分秒必争的急症,立刻送最近的急诊动物医院。途中:最大限度减少抓握与应激(应激可致濒死猫当场死亡),把猫放通风的敞开航空箱,勿强行喂食/喂水/喂药,勿强行保定检查口腔。边走边电话通知医院准备氧舱。不适用催吐(非中毒范畴)。",
+      "source": "Merck Veterinary Manual, Clinical Signs of Respiratory Disease in Animals (merckvetmanual.com/respiratory-system/.../clinical-signs-of-respiratory-disease-in-animals);Merck 影像库 Open-mouth breathing, oxygen cage, cat"
+    },
+    {
+      "category": "呼吸循环",
+      "item": "舌/牙龈发绀发紫(cyanosis,中央性)",
+      "aliases": "用户描述样例:「舌头发紫/发青/发黑」「牙龈发蓝」「嘴唇乌了」「舌头颜色不对、乌青」。夜间灯光下易漏看,提醒用户在明亮处看舌头和牙龈。",
+      "species": "both(猫狗均是急症)",
+      "danger": "发绀=血液氧含量严重不足,脱氧血呈暗蓝色透出黏膜。「Cyanosis is always an emergency」。中央性发绀(舌/牙龈/口唇整体发蓝)提示心肺本身重度衰竭(严重肺水肿、胸腔积液、重度哮喘、先心病右向左分流、重度肺炎、气道梗阻、某些中毒如对乙酰氨基酚致猫高铁血红蛋白血症)。是紧邻呼吸/循环骤停的终末信号,器官会在数分钟内因缺氧受损。",
+      "action": "【急诊·分秒必争】立即送急诊,途中保持绝对安静减少氧耗,勿保定挣扎。若用户家有宠物氧源可低流量供氧但绝不因此延误就医。若怀疑对乙酰氨基酚(泰诺/扑热息痛)中毒致猫舌发绀,务必告知医院药名与剂量。勿喂食喂水。",
+      "source": "VCA Animal Hospitals, Cyanosis in Cats / Cyanosis in Dogs;PetMD, Cyanosis in Dogs / in Cats;Merck Veterinary Manual, Clinical Signs of Respiratory Disease in Animals"
+    },
+    {
+      "category": "呼吸循环",
+      "item": "呼吸急促费力 / 腹式呼吸(dyspnea, labored & abdominal breathing effort)",
+      "aliases": "用户描述样例:「喘得很费劲」「肚子一鼓一鼓、一起一伏很快」「呼吸时肚子用力、胸腹跟着抽动」「像抽风一样喘」「呼吸带响/呼哧呼哧」「喘不上气」。「腹式呼吸」用户一般说成「用肚子呼吸/肚子扇得厉害」。",
+      "species": "both",
+      "danger": "呼吸困难(dyspnea)=用明显额外力气呼吸;动用腹肌辅助呼吸(腹式/paradoxical)是呼吸窘迫加重的客观体征,提示肺或胸腔严重病变(肺水肿、胸腔积液、气胸、重度肺炎/ARDS、气道梗阻)。伴颈部前伸、鼻翼扇动、拒绝躺下时距呼吸衰竭已近。",
+      "action": "【急诊·立即】立刻送急诊。保持安静、少搬动、勿保定挣扎,勿强行喂食喂水喂药(会诱发误吸或呛咳加重缺氧)。运输时让宠物自选最舒服体位(常为端坐/胸卧),勿强行仰翻或抱压胸腹。",
+      "source": "Merck Veterinary Manual, Clinical Signs of Respiratory Disease in Animals(tachypnea and labored breathing);VEC / GSVS 急诊指南(abdominal muscles to force air)"
+    },
+    {
+      "category": "呼吸循环",
+      "item": "静息/睡眠呼吸频率持续>30 次/分(elevated resting/sleeping respiratory rate)",
+      "aliases": "用户描述样例:「睡着了还喘得快」「趴着不动呼吸也很快」「数了一分钟三十多次」。教用户方法:趁猫狗安静睡觉时数胸廓起伏一分钟(一起一伏算一次)。",
+      "species": "both(尤其猫HCM的最早预警,也适用犬二尖瓣病)",
+      "danger": "健康及病情受控的猫狗睡眠/静息呼吸频率为15-30次/分;持续>30次/分为异常,常是心力衰竭/肺水肿最早、最先于外在症状出现的信号(尤其猫HCM)。是「还能在家观察 vs 已需就医」的关键量化分界。区别于一过性做梦/刚活动后的快呼吸——要求安静静息状态、多次测量。",
+      "action": "【尽快就诊/急诊分级】静息睡眠呼吸持续>30(尤其伴逐日升高趋势、或既往有心脏杂音/心脏病史)当天联系兽医;若>40-50或伴张口呼吸、发绀、精神差,则转【急诊立即】。建议用户长期记录睡眠呼吸频率作为居家监测。",
+      "source": "VCA Animal Hospitals, Home Breathing Rate Evaluation;Tufts/Cornell 心脏科居家呼吸监测建议"
+    },
+    {
+      "category": "呼吸循环",
+      "item": "持续咳嗽伴呼吸困难(cough with dyspnea,提示充血性心衰/肺水肿)",
+      "aliases": "用户描述样例:「一直咳、还喘」「咳嗽像要吐、夜里/躺下更厉害」「湿咳、咳出粉红泡沫」「休息或睡觉时也咳」。犬多见;猫心脏病少咳嗽,猫更多表现为直接喘而非咳。",
+      "species": "both,但物种差异明显:犬充血性心衰典型表现为咳嗽+呼吸困难;猫心脏病少见咳嗽,猫出现咳嗽/喘更需警惕哮喘或直接的呼吸窘迫",
+      "danger": "犬充血性心衰(CHF)最常见征象为持续咳嗽伴呼吸困难,机制为二尖瓣返流→左房压升高→肺水肿(肺内积液)。伴静息呼吸增快、乏力、腹围增大(腹水)、牙龈苍白或发绀。咳出粉红色泡沫痰=急性肺水肿,肺已无法有效换气,是急症。",
+      "action": "【急诊·立即(伴呼吸困难/粉红泡沫痰时)】立即送急诊。单纯偶发干咳无呼吸困难可【尽快就诊】排查,但一旦叠加喘、静息呼吸>30、舌龈变色、无法躺下即升级急诊。勿自行给人用止咳药(可能含对乙酰氨基酚/可待因,对宠物危险)。",
+      "source": "VCA Animal Hospitals, Congestive Heart Failure in Dogs;Small Door Veterinary, CHF in Dogs;Tufts HeartSmart, Coughing"
+    },
+    {
+      "category": "呼吸循环",
+      "item": "颈部前伸 / 肘外展蹲伏、拒绝躺下的呼吸姿势(orthopnea posture)",
+      "aliases": "用户描述样例:「脖子伸得直直的张嘴喘」「趴着不敢躺、一躺就更喘」「站着/蹲着喘、两个前腿撑开」「像僵住一样端着身子呼吸」。",
+      "species": "both",
+      "danger": "端坐呼吸(orthopnea)是重度呼吸窘迫的姿势代偿:动物为最大化气道开放和肺扩张而颈伸头前、肘部外展、胸卧或端坐,拒绝侧躺(躺下加重缺氧)。Merck将此类体位适应列为需即刻处理的重度呼吸障碍信号,常紧邻呼吸衰竭。",
+      "action": "【急诊·立即】立即送急诊。切勿强迫它躺下或翻身,让其保持自选的直立/端坐体位运输,减少一切应激与搬动,勿喂食喂水。",
+      "source": "Merck Veterinary Manual, Clinical Signs of Respiratory Disease in Animals(orthopnea / postural adaptation)"
+    },
+    {
+      "category": "呼吸循环",
+      "item": "虚脱倒地 / 突然瘫软无力(acute collapse)",
+      "aliases": "用户描述样例:「突然瘫倒站不起来」「一下子软了、腿撑不住」「走着走着趴下起不来」「浑身没劲、抬不起头」。",
+      "species": "both",
+      "danger": "急性虚脱是全身循环/氧供崩溃的表现,病因谱广且多凶险:内出血(脾/肝肿瘤破裂——尤其中老年大型犬)、心律失常或结构性心脏病致心输出骤降、严重贫血、过敏性休克、内分泌危象(阿狄森氏病)、低血糖、重度脱水/感染性休克、体温过高/过低。常伴牙龈苍白或发绀、四肢冰凉、呼吸急促。",
+      "action": "【急诊·立即】立即送急诊,视为休克处理。搬运时平托身体、减少颠簸;保暖(若四肢冰凉)但勿用过热水袋直接贴皮;记录发作时间、持续时长、当时在做什么、有无呕吐/腹胀,供医生判断。勿喂食喂水(可能需麻醉/手术)。",
+      "source": "PetPlace, Acute Collapse in Dogs;PetMD/VCA, Syncope (Fainting) in Dogs;Dogster, Why Is My Dog Collapsing (Vet)"
+    },
+    {
+      "category": "呼吸循环",
+      "item": "晕厥后自行恢复(syncope,提示心律失常/内出血/心源性)",
+      "aliases": "用户描述样例:「晕过去一下又醒了」「突然倒下十几秒就自己站起来了、跟没事一样」「激动/运动/咳嗽/排便用力时一下子软倒」「翻白眼、腿僵、很快缓过来」。用户常轻描淡写为「就晕了一下没事了」——这是危险误区。",
+      "species": "both(犬更常报告,心源性为主)",
+      "danger": "晕厥(syncope)=脑供血一过性不足致短暂意识丧失,典型特征:突发无预兆(常在运动/激动/咳嗽/排尿排便用力时)、持续<10-20秒、恢复后立即恢复正常。犬最常见根因为心脏病——心律失常(过快/过慢)或结构性心脏病致心输出骤降;也见于严重内出血致血压骤降。「跟没事一样」的快速恢复恰是它与癫痫的区别,且不代表没危险,反复发作可猝死。需与癫痫发作(常有抽搐、意识恢复慢、发作后迷糊)鉴别。",
+      "action": "【急诊/当天尽快就诊】即使已恢复也必须就医,不可因「缓过来了」而观望。尽量拍视频记录发作过程(对区分晕厥vs癫痫极有价值),记录诱因、频率、持续时间。检查通常含心电图/24h Holter/心脏超声。反复发作或伴牙龈苍白发绀→急诊立即。",
+      "source": "VCA Animal Hospitals, Syncope (Fainting) in Dogs;PetMD, Syncope (Fainting) in Dogs;dvm360, Collapsing dogs: common causes of collapse or syncope"
+    },
+    {
+      "category": "呼吸循环",
+      "item": "牙龈苍白 / 发白(pale mucous membranes,提示休克/贫血/内出血)",
+      "aliases": "用户描述样例:「牙龈发白/没血色」「舌头淡得像纸」「翻开嘴唇里面白白的」。教用户对照:健康为粉红色;按压后不易回粉。",
+      "species": "both(猫牙龈苍白尤其罕见且总是急症)",
+      "danger": "苍白黏膜=组织血流/供氧骤减,由血管收缩(低血容量性或心源性休克)或红细胞减少(贫血)引起。是休克与内出血(脾破裂、创伤、抗凝灭鼠药中毒)、重度贫血(溶血、失血、洋葱/大蒜中毒、跳蚤重度感染幼猫)、心衰的核心红旗。「Pale gums are always an emergency, especially in cats」。常伴虚弱、心率快、呼吸急、四肢冰凉。",
+      "action": "【急诊·立即】立即送急诊。若怀疑抗凝灭鼠药(溴敌隆等)或洋葱/大蒜误食,带上包装并告知医院。保暖、减少活动、平稳运输,勿喂食喂水(可能需输血/手术)。",
+      "source": "Vetster, Pale Gums (Mucous Membrane Pallor) in Cats;PetMD, Pale Gums in Dogs;vets-now, Pale gums in dogs (dog gum colour chart)"
+    },
+    {
+      "category": "呼吸循环",
+      "item": "牙龈灰白 / 泥灰 / 暗砖红(gray, muddy, or brick-red mucous membranes)",
+      "aliases": "用户描述样例:「牙龈发灰、脏兮兮的颜色」「泥巴色」「暗红发脏、不是正常粉红」。用户难以描述,建议要求发牙龈照片。",
+      "species": "both",
+      "danger": "灰色/泥灰色黏膜提示重度循环衰竭/氧合崩溃(常见于失代偿性休克、脓毒症),Merck将灰或暗粉黏膜与张口呼吸、发绀并列为「反映肺功能重度损害、可能先于呼吸骤停」的终末信号。暗砖红/砖红色则提示脓毒症、一氧化碳中毒或严重充血。任一异色都需即刻处理。",
+      "action": "【急诊·分秒必争】立即送急诊,按休克/呼吸衰竭前兆处理。途中减少应激与搬动,勿喂食喂水。尽量拍牙龈照片/视频供医院预判。",
+      "source": "Merck Veterinary Manual, Clinical Signs of Respiratory Disease in Animals(gray or dark pink mucous membrane discoloration … might precede respiratory arrest)"
+    },
+    {
+      "category": "呼吸循环",
+      "item": "毛细血管再充盈时间延长(prolonged capillary refill time, CRT,用户可自查的循环指标)",
+      "aliases": "用户描述样例:「按牙龈半天不回血」「压一下白印子好久才变回粉」。教法:手指按压上牙龈1-2秒后松开,数颜色恢复粉红的秒数。",
+      "species": "both",
+      "danger": "正常CRT约1-2秒;>2秒提示外周灌注不足(休克、脱水、低血压、心输出下降);过快(<1秒)或黏膜暗红则提示脓毒/充血。CRT是用户能在家做的少数客观循环评估之一,配合牙龈颜色可快速分诊。CRT延长+苍白+四肢冰凉=典型休克三联,极危险。",
+      "action": "【急诊·立即(CRT>2秒伴苍白/虚弱时)】立即送急诊按休克处理。作为分诊工具:CRT正常+精神好可降低紧迫度,但不能单凭一项排除急症;有任何其他红旗即以最重者为准。",
+      "source": "Petriage, Your Pet's Mucous Membranes;North Mankato Animal Hospital, Normal Vital Signs(CRT 1-2 s)"
+    },
+    {
+      "category": "呼吸循环",
+      "item": "四肢/耳尖冰凉伴虚弱(cold extremities,休克/低体温/外周灌注不足)",
+      "aliases": "用户描述样例:「爪子/耳朵/尾巴尖冰凉」「摸着身上凉、没精神」「肉垫发凉」。常与瘫软、牙龈苍白同时被用户注意到。",
+      "species": "both",
+      "danger": "两种危险指向:(1)休克——身体为保核心器官而收缩外周血管、把血流从四肢耳尾撤回,故末梢先凉,伴苍白、CRT延长、心率快、虚弱;(2)低体温——猫核心温<35°C(95°F)即危险、<32°C(90°F)为重度,可致意识模糊、发绀、呼吸心率减慢、僵硬、昏迷。两者都是危及生命的循环/代谢崩溃。",
+      "action": "【急诊·立即】立即送急诊。途中用毛毯/保暖包裹(尤其低体温),但勿用过热的水袋/电热毯直接贴皮肤(重度低体温快速加温有害,需兽医控制复温)。若伴苍白/发绀/瘫软按休克优先处理。勿喂食喂水(意识不清有误吸风险)。",
+      "source": "GSVS, Severe Hypothermia in Cats;Small Door Veterinary, Hypothermia & Frostbite in Cats and Dogs;WSU Veterinary Teaching Hospital 低温阈值"
+    },
+    {
+      "category": "呼吸循环",
+      "item": "濒死呼吸 / 喘息样呼吸 / 呼吸暂停(agonal gasping, impending respiratory arrest)",
+      "aliases": "用户描述样例:「大口大口喘、间隔很久才喘一下」「像叹气/打嗝一样张大嘴」「呼吸忽然停一下又喘」「喘得越来越慢、要断气的样子」「叫不醒还发绀」。",
+      "species": "both",
+      "danger": "缓慢、张大口的喘息样(agonal)呼吸或呼吸间歇延长/暂停,是呼吸即将/正在停止的终末信号,常伴发绀、意识丧失、瞳孔散大。Merck指出张口呼吸+黏膜异色「可能先于呼吸骤停」。此阶段可在数分钟内进展为心肺骤停。",
+      "action": "【急诊·分秒必争·边走边救】立即冲急诊并全程电话指导。若宠物已无意识且呼吸停止,可在运输中行CPR(胸外按压+清理口腔异物),但需一人开车不中断转运。到院前不要为「先处理」而滞留。此为超越居家观察的最高优先级。",
+      "source": "Merck Veterinary Manual, Clinical Signs of Respiratory Disease in Animals(may precede respiratory arrest);急诊呼吸窘迫处置共识(VEC Online, Respiratory Distress in Cats and Dogs)"
+    },
+    {
+      "category": "神经/创伤/产科/眼/中暑/过敏",
+      "item": "癫痫持续状态 / 群集性抽搐 (Status Epilepticus / Cluster Seizures)",
+      "aliases": "抽风、抽搐、抽了、四肢划水/蹬腿、口吐白沫、倒地打摆子/发抖僵硬、翻白眼、突然倒地失去意识、发作时大小便失禁、\"一直抽停不下来\"、\"抽了好几次中间都不醒\"",
+      "species": "both(猫犬均可)",
+      "danger": "单次发作持续>5分钟(癫痫持续状态),或短时间内反复发作、两次发作间意识不恢复(群集性)。持续抽搐会因高热(继发中暑)、酸中毒、脑低灌注与缺氧导致死亡或不可逆脑损伤。伴颅内压增高(脑肿瘤/颅脑外伤)时更危险。",
+      "action": "急诊。发作>5分钟或反复成串发作立即送医,若3分钟仍不停即开始转运。切勿把手伸进嘴里(不会吞舌,只会被咬伤);移开周围硬物防撞;记录发作时长并录像;发作刚停(发作后期)神志未清时不要强行喂食喂水。即使单次<2分钟很快清醒,也应尽快(非拖到深夜)就诊查因。",
+      "source": "Merck/MSD Vet Manual - Anticonvulsants for Emergency Treatment of Seizures in Dogs and Cats (merckvetmanual.com/pharmacology/.../anticonvulsants-for-emergency-treatment-of-seizures-in-dogs-and-cats);Cornell Riney Canine Health Center - Managing Seizures"
+    },
+    {
+      "category": "神经/创伤/产科/眼/中暑/过敏",
+      "item": "突发后躯瘫痪/无力 — 椎间盘疾病 (IVDD)",
+      "aliases": "后腿突然瘫了/站不起来、拖着后腿走、后半身没知觉、走路踩空/两条后腿交叉、一碰腰就尖叫/弓背发抖不敢动、突然尿失禁尿不出、腊肠犬/柯基/法斗\"闪了腰\"",
+      "species": "both(犬远多于猫;软骨营养障碍型品种高发:腊肠、柯基、北京犬、比格、法斗、贵宾)",
+      "danger": "椎间盘突出/脱出急性压迫脊髓,可在数小时内从\"能走但疼\"恶化为完全截瘫;后爪深部痛觉(deep pain)是否存在是预后分水岭,痛觉消失预后骤降。",
+      "action": "急诊,越快越好。手术减压黄金窗口在瘫痪/深痛觉丧失后约24–72小时内,越拖恢复行走概率越低。转运时严格限制活动、用硬板/卷起的毛巾托住并保持脊柱水平、别扭动、别自行按摩热敷、切勿给人用止痛药(布洛芬/对乙酰氨基酚对宠物有毒)。",
+      "source": "Merck/MSD Vet Manual - Intervertebral Disk Disease in Small Animals;Dallas Veterinary Surgical Center - When Is Back Pain a Surgical Emergency?(dvsc.com)。24–72h手术窗口为公认兽医神经外科共识"
+    },
+    {
+      "category": "神经/创伤/产科/眼/中暑/过敏",
+      "item": "急性前庭综合征 — 歪头/转圈/眼球震颤 (Vestibular Syndrome)",
+      "aliases": "头突然歪向一边、原地打转/总往一侧转圈、走路像喝醉东倒西歪站不稳、眼珠子快速左右或上下抖(眼球震颤)、滚来滚去起不来、恶心流口水呕吐不敢睁眼、一侧脸/嘴角耷拉(面瘫)",
+      "species": "both(老年犬特发性\"老狗前庭\"常见;猫也可发生)",
+      "danger": "提示前庭系统(外周:内耳/中耳;或中枢:脑干)受累。多数特发性前庭综合征预后良好、常在72小时内好转;但须与中枢病变(脑干肿瘤/出血/炎症)、中耳内耳感染、耳毒性药物中毒鉴别。伴意识改变、多条脑神经缺失、或外伤史提示中枢/危重病因。外观酷似\"中风\"易吓到用户。",
+      "action": "尽快就诊(当天)。虽多数良性,仍需兽医区分外周与中枢、排查耳部感染/中毒。防止摔倒受伤、呕吐者防误吸、暂不强行喂食;若伴意识改变、多处神经异常或近期头部外伤,按急诊处理。",
+      "source": "Cornell Feline Health Center - Vestibular Syndrome(vet.cornell.edu);Davies Veterinary Specialists - Vestibular Syndrome in Dogs & Cats Fact Sheet"
+    },
+    {
+      "category": "神经/创伤/产科/眼/中暑/过敏",
+      "item": "意识改变 / 头部外伤 (颅脑损伤 TBI)",
+      "aliases": "叫不醒/昏迷、眼神发直反应迟钝、突然不认人乱撞墙、瞳孔一大一小或对光没反应、头部流血、被撞到头/从高处摔下、抽搐后一直不清醒",
+      "species": "both",
+      "danger": "颅内出血或脑水肿导致颅内压升高,可迅速致命。瞳孔不等大、对光反射消失、意识进行性下降、呼吸节律异常是脑疝的危险信号。",
+      "action": "急诊立即送医。转运时头部略抬高约30°、保持头颈与躯干成直线、不要压迫颈部/颈静脉、不要喂食喂水;昏迷者侧卧保持气道通畅并监测呼吸。先电话通知急诊。",
+      "source": "Merck/MSD Vet Manual - What to Do in a Dog or Cat Emergency(merckvetmanual.com/special-pet-topics/emergencies/what-to-do-in-a-dog-or-cat-emergency)"
+    },
+    {
+      "category": "神经/创伤/产科/眼/中暑/过敏",
+      "item": "车祸/高坠等严重外伤 + 创伤性休克",
+      "aliases": "被车撞了、从楼上/窗台/高处摔下来、被门夹、被大狗咬穿、走路瘸拖着腿、牙龈发白、身体发凉发抖、呼吸又快又浅、\"看着没外伤但突然很蔫不动\"",
+      "species": "both",
+      "danger": "内出血、气胸、膈疝、膀胱破裂、骨盆/脊柱骨折等可无明显体表伤口。休克(牙龈苍白、脉搏细弱、四肢发凉、精神沉郁)可致死;内伤症状可延迟12–72小时才显现。",
+      "action": "急诊——即使\"看起来没事\"也须在24–72小时内由兽医评估。转运用硬板/毛巾担架保持脊柱稳定、盖毯保暖抗休克、暂不喂食喂水(可能需麻醉手术);疼痛宠物可能咬人需小心,但呼吸困难或呕吐时不要给它戴口罩/绑嘴。先电话通知急诊做好准备。",
+      "source": "PetMD - What To Do if Your Dog Is Hit by a Car;American Red Cross - Pet First Aid: Car Accidents;Merck/MSD Vet Manual - Emergencies"
+    },
+    {
+      "category": "神经/创伤/产科/眼/中暑/过敏",
+      "item": "难产 (母犬/母猫 Dystocia)",
+      "aliases": "生不出来、使劲/努责超过30–60分钟没生出崽、破水或见绿色/暗绿色分泌物后超15–30分钟还没幼崽、两只之间隔超过2–4小时、胎儿卡在产道露一半出不来、生产中大声哀叫打颤虚脱、超过预产期(犬约怀孕63天/猫约65天)迟迟不发动",
+      "species": "both(犬猫;短头/大头品种如法斗、英斗、波士顿㹴、巴哥、波斯猫风险最高)",
+      "danger": "出现绿色/暗绿色分泌物却无幼崽娩出,常提示胎盘已剥离、胎儿窘迫(缺氧);可因原发/继发宫缩乏力、胎位或胎儿过大梗阻。拖延数小时→母子死亡率极高,并可继发子宫破裂、产后低钙、败血。",
+      "action": "急诊。出现下列任一立即送医:强力努责30–60分钟无产出;见绿色分泌物后约15分钟(犬)仍无幼崽;两胎间隔>2小时且仍在努责;孕犬>64–65天未发动;母体虚脱/浑身发抖(警惕产后低钙抽搐)。切勿自行往外拉拽幼崽;切勿自行使用催产素/缩宫素——在胎位异常或产道梗阻未排除前会导致子宫破裂。",
+      "source": "Merck/MSD Vet Manual - Dystocia in Small Animals(merckvetmanual.com/reproductive-system/.../dystocia-in-small-animals);Cornell Riney Canine Health Center - Dystocia in Dogs"
+    },
+    {
+      "category": "神经/创伤/产科/眼/中暑/过敏",
+      "item": "眼球脱出/突出 (Proptosis)",
+      "aliases": "眼珠子掉出来了/凸出来卡在眼皮外面回不去、打架或被撞后眼球暴出、扁脸犬(八哥/西施/北京犬/波士顿㹴/斗牛)被拎脖子或一使劲眼球就脱出",
+      "species": "both(短头、浅眼眶犬极易发生,轻微外力即可;猫多为重度外伤所致,保眼与视力预后差)",
+      "danger": "角膜暴露后数分钟内开始干燥坏死,视神经与眼外肌被牵拉缺血,视力与保眼机会随时间每小时下降。犬约25%可恢复视力,猫预后极差。",
+      "action": "急诊立即送医。用干净纱布/毛巾以清水、生理盐水或人工泪液(也可用隐形眼镜护理液/凡士林类保湿)持续湿敷覆盖眼球保持湿润;戴伊丽莎白圈防抓挠。绝对不要自行把眼球往回推(会造成更大损伤,须由兽医在麻醉下复位)。",
+      "source": "Merck/MSD Vet Manual - Proptosis in Small Animals(merckvetmanual.com/emergency-medicine-and-critical-care/ophthalmic-emergencies-in-small-animals/proptosis-in-small-animals);VIN Veterinary Partner - Eye Injuries: First Aid"
+    },
+    {
+      "category": "神经/创伤/产科/眼/中暑/过敏",
+      "item": "中暑 / 热射病 (Heatstroke)",
+      "aliases": "大热天/闷在车里/暴晒或剧烈运动后一直张嘴大喘停不下来、狂喘、流大量口水、舌头发红发紫、走路打晃虚脱、呕吐或拉血、牙龈鲜红、摸着烫手、叫不醒抽搐",
+      "species": "both(犬更常见;短头品种法斗/巴哥/英斗、肥胖、厚毛双层被毛、幼年老年、高温高湿或车内环境高危)",
+      "danger": "核心体温常>41°C(106°F)(正常直肠温约38.3–39.2°C)。高热直接损伤全身器官→弥散性血管内凝血(DIC)、急性肾衰、脑水肿、肠屏障崩溃,可迅速致命。就诊前先降温可将存活率从约50%提升到约80%。",
+      "action": "急诊。立即脱离高温环境;用凉水(非冰水)浇淋全身,重点腹股沟、腋下、颈部,并吹风扇促进蒸发散热;一边降温一边送医。不要用冰水浸泡或用湿毛巾裹紧闷住(反而阻碍散热);体温降到约39.4–40°C即停止主动降温,避免降过头(反跳性低体温)。不要强行灌水。",
+      "source": "Merck/MSD Vet Manual - What to Do in a Dog or Cat Emergency;Cornell Riney Canine Health Center - Heatstroke: A Medical Emergency;Today's Veterinary Practice - Heatstroke in Dogs(停止降温阈值39.4–40°C)"
+    },
+    {
+      "category": "神经/创伤/产科/眼/中暑/过敏",
+      "item": "过敏性休克 / 严重过敏反应 (Anaphylaxis)",
+      "aliases": "脸突然肿起来(嘴唇/眼睛/口鼻肿成一团)、身上起大片疙瘩/风团(荨麻疹)、打疫苗或打针后不对劲、被蜂蜇/虫咬/吃了新食物后、突然狂吐拉稀、牙龈发白、呼吸困难喘不上气、瘫软虚脱、全身抓挠",
+      "species": "both(犬:肝/胃肠为主要休克器官,常见突发呕吐腹泻;猫:以呼吸道/喉水肿为主)",
+      "danger": "I型超敏反应,接触过敏原后可在数分钟内发展为过敏性休克——血压骤降、气道水肿,数分钟内即可致死。单纯局部面部肿胀/荨麻疹通常较轻,但可迅速进展为全身反应。",
+      "action": "面部肿胀/荨麻疹伴以下任一按急诊立即送医:呼吸困难、虚脱、持续呕吐加牙龈苍白、意识改变。即使仅局部肿或风团也应尽快联系兽医(可能给抗组胺/糖皮质激素),并在20–60分钟内密切观察是否恶化。不要自行给剂量不明的人用抗过敏药。兽医用肾上腺素(adrenalin)抢救。",
+      "source": "Merck/MSD Vet Manual - Disorders Involving Anaphylactic Reactions (Type I) in Dogs;AKC - Anaphylaxis in Dogs;VCA - Anaphylaxis in Dogs(症状20–60分钟内可急剧恶化)"
+    },
+    {
+      "category": "神经/创伤/产科/眼/中暑/过敏",
+      "item": "误食异物 / 胃肠道梗阻 (GI Foreign Body Obstruction)",
+      "aliases": "吞了袜子/绳子/毛线/骨头/玩具/桃核枣核/球/针线、\"吃了不该吃的\"、一直吐吃啥吐啥/吐水、不吃不喝没精神、肚子疼一碰就叫弓着背、拉不出便秘、有线头挂在嘴里或屁股上(别拉!)、幼犬幼猫吞东西",
+      "species": "both(犬更常吞异物;幼年大型犬、幼猫高发;线状异物猫更多见)",
+      "danger": "完全梗阻→顽固呕吐、脱水、电解质与酸碱紊乱;受累肠段血供中断仅数小时即坏死→穿孔、腹膜炎、内毒素血症、低血容量休克。线状异物(缝衣线/毛线)可像锯子切割肠壁,极危险;若含纽扣电池、磁铁、尖锐物或大量吸水膨胀物更紧急。",
+      "action": "尽快至急诊评估(需影像)。若目击刚吞下、且异物无毒/非尖锐/非腐蚀性,可能存在催吐窗口——但必须先电话咨询兽医或宠物中毒热线,不要盲目催吐(尖锐物、腐蚀剂、已梗阻或已在呕吐者禁止催吐)。若绳线一端卡在口腔或肛门,绝对不要往外拽(会拉伤/切割肠道)。不要喂食喂水试图\"催它排出\"。",
+      "source": "Merck/MSD Vet Manual - Gastrointestinal Obstruction in Small Animals(merckvetmanual.com/digestive-system/.../gastrointestinal-obstruction-in-small-animals);Cornell - GI Foreign Body Obstruction in Dogs;VCA - Ingestion of Foreign Bodies in Dogs"
+    },
+    {
+      "category": "神经/创伤/产科/眼/中暑/过敏",
+      "item": "胃扩张扭转 / 胃扭转 (GDV / \"Bloat\" 胀气)",
+      "aliases": "肚子突然鼓胀发硬像个鼓、干呕/想吐吐不出来(反复空呕)、不停流口水、坐立不安来回踱步哼唧、大型深胸犬吃饱或运动后突然涨肚、喘、牙龈发白瘫软",
+      "species": "dog(几乎只见于犬;大型深胸犬极高危:大丹、德牧、魏玛、圣伯纳、罗威纳、标准贵宾、寻血猎犬;猫罕见)",
+      "danger": "胃充满气体扩张并沿轴扭转→阻断自身血供与静脉回流,数小时内即致休克、胃壁坏死穿孔、心律失常、死亡。若不治疗常在数小时内死亡,是分秒必争的外科急症。",
+      "action": "立即急诊,不要观望等待。不要喂食喂水、不要自行催吐,尽快送医;兽医需先胃减压(插胃管或穿刺放气)再手术复位并做胃固定。高危犬主应牢记\"反复空呕+腹部胀大+坐立不安\"三联征即刻就医。",
+      "source": "Merck/MSD Vet Manual - Gastric Dilation and Volvulus in Small Animals(merckvetmanual.com/digestive-system/.../gastric-dilation-and-volvulus-in-small-animals);University of Florida Small Animal Hospital - Bloat/GDV;Cornell - GDV or Bloat"
+    }
+  ],
+  "dangerPatterns": [
+    {
+      "category": "危险语义模式",
+      "item": "老年猫:消瘦 + 食欲不减反而亢进 + 多饮多尿(甲亢/糖尿病)",
+      "aliases": "用户描述样例:「越来越瘦但特别能吃/一直喊饿/半夜叫着要饭」「喝水像牛饮/猫砂盆尿坨越来越大越来越多」「毛乱了、有点凶/爱叫、瘦得脊梁骨都摸到了」「养了十几年的老猫」。注意:用户往往因为「能吃」而判断『没事』——这是最危险的错觉。",
+      "species": "cat(猫特异性高发,中老年猫)。甲亢几乎只见于中老年猫;糖尿病猫犬皆有。",
+      "danger": "为何危险:体重进行性下降在『食欲亢进』背景下,几乎排除单纯营养/挑食,强烈指向甲亢或糖尿病。甲亢=良性甲状腺瘤致代谢亢进,不治会继发肥厚性心肌病/充血性心衰、高血压致视网膜脱离失明、肾损伤。糖尿病不治会走向糖尿病酮症酸中毒(DKA)致死。为何关键词匹配会漏:任何单一症状('能吃''喝水多''瘦了')单看都像良性;致命信号藏在『消瘦 vs 食欲亢进』这个反常组合里,必须语义识别多症状的'矛盾共现',而非命中某个危险词。用户主诉常是模糊的『变瘦了』或甚至『胃口好得很』。",
+      "action": "尽快就诊(数天内,非即刻急诊):建议兽医查甲状腺T4 + 血糖/果糖胺 + 肾指标(SDMA/肌酐)+ 血压。若同时出现呕吐/精神萎靡/不吃了→升级为急诊(可能已进展为DKA或甲亢危象)。Agent不得因『食欲好』而判为无需就诊。",
+      "source": "Merck/MSD Vet Manual «Hyperthyroidism in Animals»(消瘦伴食欲亢进+多饮多尿为典型)https://www.merckvetmanual.com/endocrine-system/the-thyroid-gland/hyperthyroidism-in-animals ;«Diabetes Mellitus in Dogs and Cats» https://www.merckvetmanual.com/endocrine-system/the-pancreas/diabetes-mellitus-in-dogs-and-cats ;Today's Veterinary Practice «Stepwise Approach to PU/PD»"
+    },
+    {
+      "category": "危险语义模式",
+      "item": "老年猫:消瘦 + 多饮多尿 + 食欲下降/挑食 + 间歇呕吐 + 口臭(氨味)(慢性肾病 CKD)",
+      "aliases": "用户描述样例:「老猫越来越瘦、没精神、爱躲」「挑食了、以前爱吃的也不吃了/吃两口就走」「嘴巴有股臭味/氨水味」「总趴在水碗边喝水」「时不时吐、吐水/吐毛」。与甲亢的关键区别:CKD 是食欲『下降』,甲亢/糖尿病是食欲『亢进』——方向相反。",
+      "species": "cat(老年猫头号慢性杀手;犬亦有但猫更典型)。",
+      "danger": "为何危险:CKD 是老年猫最常见的致命慢性病,早期几乎无症状,出现明显消瘦+多饮多尿时肾功能常已丧失>2/3,不可逆。会进展为尿毒症(呕吐、脱水、厌食、贫血、高血压)。为何关键词匹配会漏:'喝水多''瘦''挑食''偶尔吐'每一条都极常见、极易被当成老龄正常或肠胃小毛病;致命性在于这些温和症状『同时、渐进、在老猫身上』出现的组合,以及与甲亢/糖尿病需靠食欲方向+化验鉴别。三者(CKD/甲亢/糖尿病)症状高度重叠,消费端不可能凭主诉区分——必须都导向就诊化验。",
+      "action": "尽快就诊(数天内):肾指标(SDMA/肌酐/尿素)+ 尿比重 + 血压 + 甲状腺T4(排除并存甲亢)。若已出现频繁呕吐/完全不吃/明显脱水(皮肤回弹慢)/口腔溃疡→急诊。Agent 对『老猫+消瘦+多饮多尿』组合应一律建议就诊,不做居家观察兜底。",
+      "source": "Merck/MSD Vet Manual «Renal Dysfunction in Dogs and Cats» https://www.merckvetmanual.com/urinary-system/noninfectious-diseases-of-the-urinary-system-in-small-animals/renal-dysfunction-in-dogs-and-cats ;Cornell Feline Health Center «Chronic Kidney Disease» https://www.vet.cornell.edu/departments-centers-and-institutes/cornell-feline-health-center/health-information/feline-health-topics/chronic-kidney-disease"
+    },
+    {
+      "category": "危险语义模式",
+      "item": "猫连续 >2–3 天几乎不吃东西(任何原因)→ 继发肝脂沉积(脂肪肝)的致死风险",
+      "aliases": "用户描述样例:「猫这两三天不怎么吃/几乎没动过食盆」「换了新猫粮它绝食抗议」「搬家/新猫/生病后不吃了」「本来挺胖的猫突然不吃、开始蔫」「闻闻就走、只喝水不吃」。特别高危:偏胖的猫 + 有应激事件(搬家/换粮/寄养/另一只宠物)。",
+      "species": "cat(强物种特异性!是猫独有的致命机制,犬无此病)。肥胖猫风险最高。",
+      "danger": "为何危险:猫一旦停食,机体动员外周脂肪超过肝脏处理能力,脂肪堆积于肝细胞→肝脂沉积(hepatic lipidosis),是猫最常见、可致死的获得性肝病。可在短短几天绝食后启动,若不干预会进展为肝衰竭。此时进入『不吃→肝损→更恶心更不吃』的死亡螺旋。为何关键词匹配会漏:'不吃饭'本身听起来根本不像急症,用户普遍认为『饿一饿没事/它挑食/过两天就好』——这正是致命延误的根源。危险不在某个可怕症状词,而在『猫』+『持续不进食的时长』这个时间语义,必须让 Agent 把『猫超过2–3天不吃』本身当作红旗,而不是等到出现黄疸/呕吐才警觉。",
+      "action": "≥2–3天不进食即应就诊评估;若为肥胖猫或已出现精神沉郁/呕吐/黄疸(牙龈耳廓发黄)→急诊。核心是绝不能建议『再饿一饿观察』。就诊需查肝指标+胆红素,治疗核心是尽快恢复营养摄入(常需食道/鼻饲管)+输液纠正。Agent 对『猫多日不吃』绝不可给出居家继续观察的兜底建议。",
+      "source": "Merck/MSD Vet Manual «Feline Hepatic Lipidosis» https://www.merckvetmanual.com/digestive-system/hepatic-diseases-of-small-animals/feline-hepatic-lipidosis ;Cornell Feline Health Center «Hepatic Lipidosis» https://www.vet.cornell.edu/departments-centers-and-institutes/cornell-feline-health-center/health-information/feline-health-topics/hepatic-lipidosis ;Univ. of Illinois Vet Med «Hepatic Lipidosis When Cats Don't Eat»"
+    },
+    {
+      "category": "危险语义模式",
+      "item": "未免疫/未打全疫苗的幼犬:呕吐 + 厌食 + 精神差 + 软便/腹泻(常带血、有腥臭味)→ 犬细小病毒(parvo)",
+      "aliases": "用户描述样例:「刚买/刚领养的小狗、疫苗还没打完就这样了」「拉稀、后来拉血水/番茄汁样、超臭」「吐、不吃、蔫得不行、缩在角落」「刚到家几天就病了/接触过别的狗后」。早期极易被当『吃坏肚子/换粮不适/晕车』。",
+      "species": "dog(幼犬,尤<5月龄未免疫者最凶险)。",
+      "danger": "为何危险:细小是幼犬高致死、高传染的病毒性肠炎。早期(前1–2天)症状不特异——只是精神差、厌食、发热,极像普通肠胃不适;24–48小时内急转为剧烈呕吐+出血性腹泻→脱水、休克、败血症、死亡,幼犬进展极快。为何关键词匹配会漏:『拉稀』『吐』『没胃口』是最普通不过的症状词,单看毫无警示度;致命信号是『未免疫幼犬』这个宿主语境 + 多症状聚集 + 快速进展的组合。关键鉴别变量(疫苗状态、年龄)往往需要 Agent 主动追问,而非出现在主诉里。",
+      "action": "急诊/当天就诊。对『未打全疫苗的幼犬 + 呕吐/腹泻/厌食』组合应默认按细小紧急处理,建议立即就医并做粪便抗原快检;不可建议居家观察或喂益生菌了事。就诊前隔离(强传染)、少量补水防脱水。Agent 应主动询问疫苗接种史与年龄以触发升级。",
+      "source": "Merck/MSD Vet Manual «Canine Parvovirus Infection (Parvoviral Enteritis in Dogs)» https://www.merckvetmanual.com/digestive-system/infectious-diseases-of-the-gastrointestinal-tract-in-small-animals/canine-parvovirus-infection-parvoviral-enteritis-in-dogs ;Cornell Riney Canine Health «Parvovirus»;AVMA «Canine parvovirus»"
+    },
+    {
+      "category": "危险语义模式",
+      "item": "未绝育母犬,发情结束后 4–8 周:多饮多尿 + 精神差 + 食欲下降/呕吐(±外阴脓性血性分泌物)→ 子宫蓄脓(pyometra)",
+      "aliases": "用户描述样例:「没做绝育的母狗、上次发情/来月经后一个多月」「突然特别能喝水、老想尿」「没精神、不吃、爱吐」「外阴/私处流脓/流粉红色臭水」(闭合型无分泌物,更危险)「肚子好像鼓鼓的」。多见于中老年未绝育母犬。",
+      "species": "dog(未绝育母犬;猫亦可发生但较少)。物种/性别/绝育状态特异。",
+      "danger": "为何危险:子宫蓄脓是子宫内积脓的细菌感染,是危及生命的急症,可迅速进展为脓毒性休克、肾衰、子宫破裂腹膜炎、死亡。『闭合型』(宫颈闭合、无外流分泌物)最凶险——没有肉眼可见的脓,毒素在体内蓄积,用户更容易低估。为何关键词匹配会漏:早期只有『多喝水、没精神、想吐』这类极普通的非特异症状,极易与肠胃不适/CKD/糖尿病混淆;致命的鉴别信息是『未绝育母犬 + 距上次发情数周』这一繁殖史/时间语境,几乎从不出现在用户的初始主诉里,必须由 Agent 追问绝育状态与发情史才能识别。",
+      "action": "急诊(尤其闭合型:多饮多尿+萎靡+呕吐却无分泌物时,危险度更高不可放松)。对『未绝育母犬 + 近期发情后 + PU/PD 或精神食欲差』组合应建议立即就诊,超声/血象确诊,治疗多需急诊手术切除子宫卵巢 + 输液抗感染。Agent 应主动询问是否绝育、上次发情时间。",
+      "source": "Merck/MSD Vet Manual «Cystic Endometrial Hyperplasia–Pyometra Complex in Small Animals» https://www.merckvetmanual.com/reproductive-system/reproductive-diseases-of-the-female-small-animal/cystic-endometrial-hyperplasia-pyometra-complex-in-small-animals ;Cornell Riney Canine Health «Pyometra»"
+    },
+    {
+      "category": "危险语义模式",
+      "item": "中老年犬:多饮多尿 + 食欲亢进(总喊饿) + 腹部膨大『啤酒肚/水桶腰』 + 对称性脱毛/皮肤变薄 + 喘 → 库欣综合征(肾上腺皮质功能亢进)",
+      "aliases": "用户描述样例:「老狗肚子越来越大像怀孕/啤酒肚,但四肢反而变细」「特别能吃能喝、尿特别多、憋不住在家尿」「背上两侧对称掉毛、皮肤变薄能看到血管」「总是大口喘气」「反复皮肤病/尿路感染老不好」。用户常误以为只是『老了发福/馋』。",
+      "species": "dog(中老年犬常见;猫罕见且常继发于糖尿病)。",
+      "danger": "为何危险:库欣=皮质醇长期过高,虽进展较慢但会显著增加高血压、蛋白尿肾损、糖尿病、胰腺炎、肺血栓栓塞(可猝死)风险,并使免疫低下致慢性感染。为何关键词匹配会漏:核心表现『能吃、能喝、发福』在用户眼里全是『健康/正常老龄』的正面词,毫无危险联想;必须靠语义识别一组看似矛盾的共现——食欲旺盛却肌肉流失、肚子鼓大却四肢消瘦、多饮多尿。与糖尿病、CKD 的 PU/PD 高度重叠,须化验鉴别。",
+      "action": "尽快就诊(非即刻急诊):建议查血常规生化+尿检+肾上腺功能试验(ACTH刺激/低剂量地塞米松抑制)+血压。若并发糖尿病并出现呕吐/萎靡/不吃→按 DKA 急诊。Agent 不应把『能吃能喝、发福』当作健康信号。",
+      "source": "Merck/MSD Vet Manual «Cushing Disease (Pituitary-Dependent Hyperadrenocorticism) in Animals» https://www.merckvetmanual.com/endocrine-system/the-pituitary-gland/cushing-disease-pituitary-dependent-hyperadrenocorticism-in-animals ;AAHA «Canine Hypercortisolism (Cushing's Syndrome) Guidelines»"
+    },
+    {
+      "category": "危险语义模式",
+      "item": "已知/疑似糖尿病的犬猫,突然:不吃 + 呕吐 + 明显萎靡/虚弱 + 呼吸有甜味/指甲油(丙酮)味 → 糖尿病酮症酸中毒(DKA),即刻致命",
+      "aliases": "用户描述样例:「本来就多喝多尿最近确诊/怀疑糖尿病,今天突然不吃了、一直吐、站不稳」「嘴里/喘气有股烂苹果甜味或洗甲水味」「快速消瘦后突然特别蔫、叫不太应」「打胰岛素的猫/狗突然状态崩了」。这是慢性糖尿病急转直下的『引爆点』。",
+      "species": "both(犬猫皆可;是糖尿病最危险的急性并发症)。",
+      "danger": "为何危险:DKA 是糖尿病失控的致命急症——酮酸+高血糖蓄积致脱水、代谢性酸中毒、电解质紊乱、休克,即使治疗死亡率仍约30%,不治近乎必死。为何关键词匹配会漏:触发症状('不吃''吐''没精神')全是最普通的词,单看毫无急症感;真正的红旗是『在糖尿病/多饮多尿背景上、原本能吃突然拒食+呕吐+萎靡』这一状态骤变的语义,加上易被忽略的『呼吸甜味/洗甲水味』特异线索。用户常延误,以为只是普通肠胃不适。",
+      "action": "立即急诊(数小时内可恶化死亡)。对『糖尿病史或多饮多尿背景 + 新发拒食/呕吐/虚脱/呼吸有甜味』组合应判为最高优先急诊,不得建议居家观察。就诊需血糖/血酮/血气/电解质,治疗为急诊输液+胰岛素+补钾。",
+      "source": "Merck/MSD Vet Manual «Diabetes Mellitus in Dogs and Cats»(含 DKA 病理与临床)https://www.merckvetmanual.com/endocrine-system/the-pancreas/diabetes-mellitus-in-dogs-and-cats ;Today's Veterinary Nurse «Diabetic Ketoacidosis: Causes, Recognition, and Treatment»;VIN Veterinary Partner «Diabetic Ketoacidosis in Dogs and Cats»"
+    },
+    {
+      "category": "危险语义模式",
+      "item": "进行性加重的神经症状(数天至数周内一步步恶化):转圈/头歪/走路踉跄/共济失调、性格行为改变、抽搐、头顶墙、单侧无力、视力变差 → 脑肿瘤/脑(膜)炎等颅内病变",
+      "aliases": "用户描述样例:「一直朝一个方向转圈/绕圈」「头一直歪着、走路东倒西歪像喝醉」「性格大变、发呆、对着墙角顶着头站着」「突然抽了/口吐白沫/四肢划水」「撞家具、好像看不见了」「一次比一次严重,不像偶尔一下」。关键语义是『进行性、逐步加重』而非一次性发作后恢复。",
+      "species": "both(中老年犬猫脑肿瘤更常见;各年龄可发生脑炎/脑膜脑炎,某些犬种如巴哥、马尔济斯、约克夏易患特发性脑炎)。",
+      "danger": "为何危险:进行性神经症状提示颅内占位/炎症/进展性结构病变,可致颅内压升高、脑疝而死亡;脑炎类若为感染性或免疫性,不及时治疗迅速恶化。癫痫首次发作、丛集性发作或持续状态本身即急症。为何关键词匹配会漏:单个『转圈』『头歪』可能被当成『耳朵痒/前庭一过性小毛病』,单次抽搐易被认为『抽完好了就没事』;致命性藏在『时间趋势——一次比一次重、不缓解、多种神经症状叠加』的语义中。必须识别『进行性加重』这一动态模式,而非匹配某个孤立症状词。",
+      "action": "尽快就诊神经/内科评估;若出现持续抽搐>5分钟、短时间内反复抽搐(丛集)、意识丧失不恢复、或急性剧烈恶化→即刻急诊。需神经学检查+可能 MRI/CSF。Agent 应主动询问症状是否在『逐步加重』并据此升级,而非以『现在看起来缓过来了』收尾。",
+      "source": "Merck/MSD Vet Manual «Neoplasia of the Nervous System in Small Animals» https://www.merckvetmanual.com/nervous-system/neoplasia-of-the-nervous-system/neoplasia-of-the-nervous-system-in-small-animals ;«Epilepsy in Small Animals» https://www.merckvetmanual.com/nervous-system/epilepsy-in-small-animals/epilepsy-in-small-animals ;NC State Vet Hospital «Brain Tumors in Dogs and Cats»"
+    },
+    {
+      "category": "危险语义模式",
+      "item": "体重进行性下降,而食欲正常甚至良好、无明显其他症状 → 隐匿性肿瘤(尤其胃肠淋巴瘤)、内分泌病、慢性器官病的早期唯一信号",
+      "aliases": "用户描述样例:「吃得跟平时一样多、也挺有精神,可就是一个月比一个月瘦」「抱起来轻了、脊背和胯骨硌手」「没别的毛病就是掉膘」「老猫/老狗慢慢瘦下去」。因为『能吃、精神也还行』,用户几乎不会警觉。",
+      "species": "both(淋巴瘤是犬猫最常见肿瘤之一,猫胃肠型尤为隐匿;甲亢/糖尿病亦以消瘦起病)。",
+      "danger": "为何危险:非自愿的进行性体重下降,即使食欲正常,也可能是恶性肿瘤(如低级别胃肠淋巴瘤——可能『唯一』表现就是消瘦)、癌性恶病质(摄食足够仍消耗)、或甲亢/糖尿病/慢性器官衰竭的早期信号。早发现常是可治与不可治的分界。为何关键词匹配会漏:这里根本没有任何『危险词』——没有呕吐、没有出血、没有疼痛,连食欲都正常;唯一线索是跨时间的体重趋势,而单次对话里用户往往只字不提『瘦』或轻描淡写。必须靠语义把『渐进消瘦 + 食欲/精神正常』识别为矛盾红旗,并主动追问体重变化。",
+      "action": "尽快就诊做全面排查(血常规生化+甲状腺+影像±细针穿刺)。凡『进行性、非自愿消瘦』即便其他一切正常也应建议就诊,不可因『能吃、精神好』判为无需处理。Agent 宜主动询问近1–3个月体重变化以捕捉此模式。",
+      "source": "AAHA «Signs of Cancer in Dogs and Cats: When to See Your Veterinarian» https://www.aaha.org/resources/does-my-pet-have-cancer-signs-of-cancer-in-pets/ ;VetTimes «Low-grade alimentary lymphoma»(消瘦可为唯一表现,食欲可正常/增/减);Cornell «Oncology: Medical Conditions»"
+    },
+    {
+      "category": "危险语义模式",
+      "item": "黄疸/发黄:牙龈、耳廓内侧、眼白(巩膜)、皮肤或尿液发黄 → 溶血 / 肝病 / 胆道梗阻,均为需即刻查因的红旗",
+      "aliases": "用户描述样例:「牙龈/牙床发黄」「耳朵里面、眼白、肚皮皮肤黄黄的」「尿变成深黄/橙色/浓茶色」「猫不吃好几天后开始发黄」(高度提示脂肪肝)「精神差、呕吐、拉的便颜色变浅」。用户可能只说『看着有点黄/没精神』,需 Agent 引导查看牙龈眼白。",
+      "species": "both。猫的黄疸常与肝脂沉积/胆管肝炎相关;犬需高度警惕免疫介导溶血性贫血(IMHA)、钩端螺旋体、中毒。",
+      "danger": "为何危险:黄疸=胆红素蓄积,提示三类严重病因之一:①溶血(红细胞被大量破坏,如免疫介导溶血、洋葱/大蒜致海因茨小体、锌中毒、血液寄生虫)——可迅速致命性贫血;②肝细胞损伤(脂肪肝、胆管肝炎、FeLV/FIP、肿瘤、中毒);③胆道梗阻(胆结石、胰腺炎压迫、胆囊黏液囊肿,胆汁漏入腹腔为外科急症)。任一都属重症。为何关键词匹配会漏:用户常不知道『黄』意味着什么,主诉可能只是『没精神/不吃/尿黄』这类普通词,或根本没提到颜色;必须靠 Agent 主动提示检查牙龈/眼白/皮肤这一体征,并把任何部位『发黄』识别为高危信号——它跨越溶血、肝、胆三大类致命病因,消费端无法自行区分。",
+      "action": "急诊/当天就诊查因(血常规看贫血/再生象、肝指标+胆红素、超声看肝胆胰、必要时溶血相关检测)。任何真实的黄疸都不应居家观察。Agent 遇模糊主诉时应主动引导用户查看牙龈、眼白、耳廓、皮肤颜色以捕捉此体征;确认发黄即建议尽快就医。",
+      "source": "Merck/MSD Vet Manual «Jaundice in Small Animals» https://www.merckvetmanual.com/digestive-system/pathophysiology-of-hepatic-disease-in-small-animals/jaundice-in-small-animals ;VCA «Icterus (Jaundice) in Cats» https://vcahospitals.com/know-your-pet/jaundice-in-cats"
+    },
+    {
+      "category": "危险语义模式",
+      "item": "慢性、进行性加重的咳嗽(数周以上、越来越频繁或夜间/活动后加重) → 充血性心衰、心丝虫、气管塌陷、肺部肿瘤等,而非『普通感冒』",
+      "aliases": "用户描述样例:「咳了好几周还不好、越来越勤」「晚上/半夜或一激动、一运动就咳」「像鹅叫/干呕/嗓子卡东西一样咳」(气管塌陷,多见小型犬)「软软湿湿的咳、还带喘、舌头/牙龈发紫」(提示心衰肺水肿,急症)「老年小型犬」「运动后累、喘、咳」。用户常自判『嗓子发炎/上火/感冒』给不对症处理。",
+      "species": "both(犬更多见;心丝虫犬>猫,但猫心丝虫可致命且难诊断)。老年小型犬:二尖瓣病变致心衰+气管塌陷常见。",
+      "danger": "为何危险:慢性进行性咳嗽背后可能是左心充血性心衰(肺水肿——可急性窒息死亡)、心丝虫(寄生于心肺大血管)、气管塌陷(进行性软骨软化,可急性呼吸窘迫)、慢性支气管炎/肺纤维化/肺肿瘤。这些都是进展性、部分可猝然恶化为呼吸危象的重病。为何关键词匹配会漏:『咳嗽』是最容易被当成小病('感冒''嗓子发炎')的症状词,用户普遍拖延甚至自行喂药;真正的危险信号是『慢性 + 进行性加重 + 特定情境(夜间/运动后/伴喘)』的语义模式,以及是否伴呼吸急促/费力/黏膜发绀这类升级线索。单凭『咳嗽』关键词既会漏重症、又无法分层紧急度。",
+      "action": "尽快就诊(数天内)做胸片+心丝虫检测±心超,明确是心源还是呼吸源。若出现呼吸急促(静息呼吸频率明显增快)、张口呼吸/腹式呼吸费力、舌或牙龈发紫/发白、咳粉红色泡沫→即刻急诊(疑似急性肺水肿)。Agent 对慢性咳嗽应追问病程长短、是否加重、有无气喘/发绀以分层,不可当作普通感冒建议居家。",
+      "source": "Today's Veterinary Practice «Evaluating and Managing Chronic Cough in Dogs» https://todaysveterinarypractice.com/respiratory-medicine/evaluating-and-managing-chronic-cough-in-dogs/ ;Merck/MSD Vet Manual(心衰/心丝虫/呼吸系统相关章节);Cardiac Education Group «Coughing in Dogs: Is it Heart Failure?»"
+    }
+  ]
+}

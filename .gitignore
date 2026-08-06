@@ -68,3 +68,6 @@ htmlcov/
 *.db
 *.sqlite
 *.sqlite3
+
+# 临时目录
+tmp/

@@ -21,7 +21,7 @@ on:
           - repository
           - full
       build_mem0_image:
-        description: "Build Mem0 wrapper image when private base image access is available"
+        description: "Build self-hosted Mem0 wrapper image"
         required: true
         default: false
         type: boolean
@@ -53,6 +53,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: true
 
       - name: Setup Python
         uses: actions/setup-python@v5

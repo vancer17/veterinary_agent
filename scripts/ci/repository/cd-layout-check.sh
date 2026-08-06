@@ -25,7 +25,10 @@ required_files=(
     docker/litellm/template/litellm.dev.env.template
     docker/litellm/template/litellm.prod.env.template
     docker/mem0/Dockerfile
+    docker/mem0/application.yml
     docker/mem0/configure_mem0.py
+    docker/mem0/entrypoint.sh
+    docker/mem0/render_env.py
     docker/mem0/template/mem0.dev.env.template
     docker/mem0/template/mem0.prod.env.template
     docker/postgres/init/10-bootstrap-logical-databases.sh
@@ -67,6 +70,7 @@ while IFS= read -r configuration_file; do
         docker/litellm/litellm.yml|\
         docker/litellm/template/litellm.dev.env.template|\
         docker/litellm/template/litellm.prod.env.template|\
+        docker/mem0/application.yml|\
         docker/mem0/template/mem0.dev.env.template|\
         docker/mem0/template/mem0.prod.env.template|\
         docker/postgres/template/postgres.dev.env.template|\

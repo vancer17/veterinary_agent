@@ -1,0 +1,58 @@
+# =============================================================================
+# 文件: docker/mem0/application.yml
+# 作用: 定义自托管 Mem0 REST Server 的非敏感服务配置。
+# 范围: 覆盖服务监听、LiteLLM 模型代理、pgvector 存储、鉴权开关、遥测与本地历史文件路径。
+# 说明: 密钥、JWT secret、数据库密码等敏感参数不写入本文件，统一通过 mem0.*.env 注入。
+# =============================================================================
+
+server:
+  # Mem0 REST Server 在容器内监听的地址；通常保持 0.0.0.0。
+  host: 0.0.0.0
+  # Mem0 REST Server 在容器内监听的端口；Compose 对外端口映射不在此处配置。
+  port: 8000
+  # uvicorn worker 数；Mem0 服务状态依赖数据库，初版保持 1 以便于排障。
+  workers: 1
+
+llm:
+  # Mem0 使用 OpenAI 兼容协议访问 LiteLLM Proxy，不直接连接上游模型厂商。
+  openai_base_url: http://litellm:4000/v1
+  # 兼容部分 OpenAI SDK 或上游代码读取 OPENAI_API_BASE 的场景。
+  openai_api_base: http://litellm:4000/v1
+  # 默认对话模型，由 LiteLLM 路由到实际模型供应商。
+  default_llm_model: qwen-plus
+  # 默认 embedding 模型，应与 LiteLLM 配置中的模型名保持一致。
+  default_embedder_model: text-embedding-v4
+  # pgvector 向量维度，需与 embedding 模型输出维度保持一致。
+  embedding_model_dims: 1024
+
+database:
+  vector_store:
+    # PostgreSQL 服务名，Compose 内通过 backend 网络解析。
+    host: postgres
+    # PostgreSQL 容器内端口。
+    port: 5432
+    # Mem0 语义记忆向量库。
+    database: mem0_vector
+    # Mem0 访问向量库的数据库用户。
+    user: mem0
+    # Mem0 memories collection 名称。
+    collection_name: vet_agent_memories
+  application:
+    # Mem0 REST Server 用户、API key、请求日志等应用数据所在逻辑库。
+    database: mem0_app
+
+auth:
+  # 生产环境必须保持 false；本项目不通过 Compose environment 覆盖该值。
+  disabled: false
+  # Dashboard 回调地址。当前项目未启用 Dashboard，保留默认值以兼容上游 CORS 配置。
+  dashboard_url: http://localhost:3000
+
+telemetry:
+  # 严肃生产场景默认关闭上游匿名遥测。
+  enabled: false
+  # 遥测本地状态文件路径；关闭遥测时仍保留该路径，便于兼容上游代码。
+  state_path: /app/history/telemetry.json
+
+runtime:
+  # Mem0 上游历史文件路径；容器内 /app/history 由 Compose 挂载持久卷。
+  history_db_path: /app/history/history.db
