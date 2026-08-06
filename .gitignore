@@ -1,4 +1,11 @@
-﻿# Python 字节缓存
+# =============================================================================
+# 文件: .gitignore
+# 作用: 定义仓库忽略规则，防止缓存、构建产物与真实密钥进入版本控制。
+# 范围: 覆盖 Python、uv、Docker 本地环境、日志、测试缓存与本地数据文件。
+# 说明: docker/*.env.template 与 docker/*/template/*.env.template 可提交审查，真实 *.env 仍由下方规则忽略。
+# =============================================================================
+
+# Python 字节缓存
 __pycache__/
 *.py[cod]
 *.class
@@ -34,11 +41,10 @@ var/
 .env.production
 *.env
 
-# deploy/env 目录用于提交可审查的配置模板；真实 *.env 仍被上一条规则忽略
-!deploy/
-!deploy/env/
-!deploy/env/**/
-!deploy/env/**/*.template
+# docker 目录用于提交可审查的容器编排、配置模板与挂载脚本；真实 *.env 仍被上一条规则忽略
+!docker/
+!docker/*.env.template
+!docker/*/template/*.env.template
 
 # 日志
 *.log

@@ -1,3 +1,10 @@
+# =============================================================================
+# 文件: pyproject.toml
+# 作用: 定义兽医 Agent Python 包元信息、依赖解析源与测试基础配置。
+# 范围: 作为 uv、setuptools 与 pytest 的统一项目配置入口。
+# 说明: 依赖解析默认使用清华 PyPI 镜像，以匹配当前生产与 CI 网络环境。
+# =============================================================================
+
 [project]
 name = "agent"
 version = "0.1.0"
@@ -20,13 +27,16 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [[tool.uv.index]]
-# Keep uv resolution and lock generation on the Tsinghua PyPI mirror for China mainland servers.
+# 将 uv 依赖解析与锁文件生成固定到清华 PyPI 镜像，匹配当前国内服务器网络环境。
 name = "tsinghua"
-url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple"
+url = "https://pypi.tuna.tsinghua.edu.cn/simple"
 default = true
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.pytest.ini_options]
+# pytest 仅收集本仓库测试，避免把 vendor 子模块的上游测试作为业务门禁。
 pythonpath = ["src"]
+testpaths = ["tests"]
+norecursedirs = [".git", ".venv", "vendor"]

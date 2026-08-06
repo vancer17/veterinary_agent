@@ -14,13 +14,13 @@ make request-business-all
 没有安装 Make 时：
 
 ```bash
-docker compose -f docker-compose.dev.yml exec -T app python scripts/dev_request.py business-all
+docker compose -f docker/compose.dev.yml exec -T app python scripts/dev_request.py business-all
 ```
 
 查看完整响应：
 
 ```bash
-docker compose -f docker-compose.dev.yml exec -T app python scripts/dev_request.py business-all --full
+docker compose -f docker/compose.dev.yml exec -T app python scripts/dev_request.py business-all --full
 ```
 
 容器内运行时，runner 会读取 app 容器的 `VET_AGENT_API_KEYS`。从宿主机直接调用业务环境时，可以设置：
@@ -51,8 +51,8 @@ make BUSINESS_RUN_ID=case001 request-business-followup-second
 使用 Docker 命令时：
 
 ```bash
-docker compose -f docker-compose.dev.yml exec -T app python scripts/dev_request.py business-followup-first --run-id case001
-docker compose -f docker-compose.dev.yml exec -T app python scripts/dev_request.py business-followup-second --run-id case001
+docker compose -f docker/compose.dev.yml exec -T app python scripts/dev_request.py business-followup-first --run-id case001
+docker compose -f docker/compose.dev.yml exec -T app python scripts/dev_request.py business-followup-second --run-id case001
 ```
 
 ## 原生 curl

@@ -1,0 +1,178 @@
+# =============================================================================
+# 文件: .github/workflows/cd.yml
+# 作用: 基于 GitHub Release 标签发布预编译镜像，并按审批部署正式环境。
+# 范围: 支持 Release 发布触发与 workflow_dispatch 手动部署，不创建自有版本状态文件。
+# 说明: 生产部署只拉取 Release 标签镜像并执行 up --no-build，禁止生产环境现场编译镜像。
+# =============================================================================
+
+name: CD
+
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "GitHub Release tag，例如 v1.2.3"
+        required: true
+        type: string
+      deploy_production:
+        description: "是否部署正式环境"
+        required: true
+        default: false
+        type: boolean
+      run_migration:
+        description: "是否执行 Alembic 迁移"
+        required: true
+        default: true
+        type: boolean
+      run_health_check:
+        description: "是否执行生产 HTTP 健康检查"
+        required: true
+        default: true
+        type: boolean
+
+concurrency:
+  group: cd-${{ github.workflow }}-${{ github.event.release.tag_name || inputs.release_tag }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+  CD_REGISTRY_HOST: crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com
+  CD_REGISTRY_IMAGE: crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com/vancer-saas/veterinary_agent
+  CD_MEM0_REGISTRY_IMAGE: crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com/vancer-saas/veterinary_agent-mem0
+  CD_RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
+  CD_BUILD_MEM0_IMAGE: "true"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Release 输入校验
+  # ---------------------------------------------------------------------------
+  # 所有触发方式都必须先检出目标 Release tag，并确认该 tag 在当前仓库可解析。
+  # 手动触发因此可以用于回滚或重复部署已发布版本，但不会重新覆盖镜像标签。
+  # ---------------------------------------------------------------------------
+  verify-release:
+    name: Verify Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.release_tag }}
+          fetch-depth: 0
+
+      - name: Verify release input
+        run: bash scripts/cd/common/verify-release-input.sh
+
+      - name: Resolve release images
+        run: bash scripts/cd/common/resolve-release-images.sh
+
+  # ---------------------------------------------------------------------------
+  # 发布镜像
+  # ---------------------------------------------------------------------------
+  # 只有 GitHub Release published 事件允许生成镜像，确保同一个 Release tag
+  # 不会被 workflow_dispatch 重新构建并覆盖。手动流程只消费已经存在的标签镜像。
+  # ---------------------------------------------------------------------------
+  build-images:
+    name: Build Release Images
+    runs-on: ubuntu-latest
+    needs: verify-release
+    if: ${{ github.event_name == 'release' }}
+    outputs:
+      release_tag: ${{ steps.resolve.outputs.release_tag }}
+      app_image: ${{ steps.resolve.outputs.app_image }}
+      mem0_image: ${{ steps.resolve.outputs.mem0_image }}
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0
+
+      - name: Resolve release images
+        id: resolve
+        run: bash scripts/cd/common/resolve-release-images.sh
+
+      - name: Build and push images
+        env:
+          CD_REGISTRY_USERNAME: ${{ secrets.CD_REGISTRY_USERNAME }}
+          CD_REGISTRY_PASSWORD: ${{ secrets.CD_REGISTRY_PASSWORD }}
+        run: bash scripts/cd/common/build-and-push-images.sh
+
+  # ---------------------------------------------------------------------------
+  # 部署正式环境
+  # ---------------------------------------------------------------------------
+  # workflow_dispatch 默认不部署生产；GitHub Release 发布后会进入 production
+  # environment 审批。同步和部署位于同一个受保护 job 内，避免审批前修改生产编排包。
+  # ---------------------------------------------------------------------------
+  deploy-production:
+    name: Deploy Production
+    runs-on: ubuntu-latest
+    needs:
+      - verify-release
+      - build-images
+    if: >-
+      ${{
+        always() &&
+        needs.verify-release.result == 'success' &&
+        (
+          (github.event_name == 'release' && needs.build-images.result == 'success') ||
+          (github.event_name == 'workflow_dispatch' && inputs.deploy_production && needs.build-images.result == 'skipped')
+        )
+      }}
+    environment: production
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.release_tag }}
+          fetch-depth: 0
+
+      - name: Prepare SSH key
+        env:
+          CD_PROD_SSH_PRIVATE_KEY: ${{ secrets.CD_PROD_SSH_PRIVATE_KEY }}
+          CD_PROD_SSH_KNOWN_HOSTS: ${{ secrets.CD_PROD_SSH_KNOWN_HOSTS }}
+        run: |
+          if [ -z "$CD_PROD_SSH_PRIVATE_KEY" ]; then
+            echo "缺少 production environment secret: CD_PROD_SSH_PRIVATE_KEY。" >&2
+            exit 1
+          fi
+          if [ -z "$CD_PROD_SSH_KNOWN_HOSTS" ]; then
+            echo "缺少 production environment secret: CD_PROD_SSH_KNOWN_HOSTS。" >&2
+            exit 1
+          fi
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$CD_PROD_SSH_PRIVATE_KEY" > "$RUNNER_TEMP/cd_production_key"
+          chmod 600 "$RUNNER_TEMP/cd_production_key"
+          printf '%s\n' "$CD_PROD_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Sync production bundle
+        env:
+          CD_PROD_SSH_HOST: ${{ secrets.CD_PROD_SSH_HOST }}
+          CD_PROD_SSH_PORT: ${{ secrets.CD_PROD_SSH_PORT }}
+          CD_PROD_SSH_USER: ${{ secrets.CD_PROD_SSH_USER }}
+          CD_PROD_SSH_KEY_PATH: ${{ runner.temp }}/cd_production_key
+          CD_PROD_DEPLOY_PATH: ${{ vars.CD_PROD_DEPLOY_PATH }}
+        run: bash scripts/cd/repository/sync-production-bundle.sh
+
+      - name: Deploy selected release
+        env:
+          CD_REGISTRY_USERNAME: ${{ secrets.CD_REGISTRY_USERNAME }}
+          CD_REGISTRY_PASSWORD: ${{ secrets.CD_REGISTRY_PASSWORD }}
+          CD_PROD_SSH_HOST: ${{ secrets.CD_PROD_SSH_HOST }}
+          CD_PROD_SSH_PORT: ${{ secrets.CD_PROD_SSH_PORT }}
+          CD_PROD_SSH_USER: ${{ secrets.CD_PROD_SSH_USER }}
+          CD_PROD_SSH_KEY_PATH: ${{ runner.temp }}/cd_production_key
+          CD_PROD_DEPLOY_PATH: ${{ vars.CD_PROD_DEPLOY_PATH }}
+          CD_RUN_MIGRATION: ${{ github.event_name == 'release' && 'true' || (inputs.run_migration && 'true' || 'false') }}
+        run: bash scripts/cd/repository/deploy-production.sh
+
+      - name: Production health check
+        env:
+          CD_RUN_HEALTH_CHECK: ${{ github.event_name == 'release' && 'true' || (inputs.run_health_check && 'true' || 'false') }}
+          CD_PROD_BASE_URL: ${{ vars.CD_PROD_BASE_URL }}
+        run: bash scripts/cd/repository/health-check.sh
