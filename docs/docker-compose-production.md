@@ -115,7 +115,7 @@ CD_PROD_DEPLOY_PATH
 CD_PROD_BASE_URL
 ```
 
-CD 只同步 `docker/compose.yml`、正式 env 模板、`docker/litellm/litellm.yml` 和必要挂载脚本。生产真实 `docker/*/template/*.prod.env` 文件保留在服务器本地，不进入 Git，不由同步任务覆盖。
+CD 只同步 `docker/compose.yml`、正式 env 模板、`docker/litellm/litellm.yml`、`docker/mem0/application.yml` 和必要挂载脚本。生产真实 `docker/*/template/*.prod.env` 文件保留在服务器本地，不进入 Git，不由同步任务覆盖；生产服务器只拉取 Release tag 对应的预编译镜像，不现场执行 Mem0 镜像构建。
 
 ## 常用运维命令
 
@@ -194,7 +194,7 @@ mem0_vector -> vector
 - `app`: FastAPI Agent API
 - `postgres`: 共享 PostgreSQL + pgvector，内部按逻辑库隔离 Agent、LiteLLM 和 Mem0
 - `litellm`: LiteLLM Proxy，持有通义千问 API Key
-- `mem0`: 官方 Mem0 REST Server
+- `mem0`: 基于 `vendor/mem0/server` 封装的自托管 Mem0 REST Server，镜像内核心 `mem0ai` 包同样来自 `vendor/mem0` 子模块源码
 - `migrate`: 一次性 Alembic 迁移任务
 - `seed`: 一次性规则/RAG seed 任务
 

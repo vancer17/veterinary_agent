@@ -40,8 +40,10 @@ x-mem0-build: &mem0-build
   context: ..
   dockerfile: docker/mem0/Dockerfile
   args:
-    # 上游 Mem0 镜像由私有仓库或镜像站提供；本项目只在其上补齐 PostgreSQL 驱动。
-    MEM0_BASE_IMAGE: ${MEM0_BASE_IMAGE:-crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com/vancer-saas/mem0:latest}
+    # Mem0 服务镜像基于 git submodule 中的 vendor/mem0/server 多阶段构建。
+    PYTHON_BASE_IMAGE: ${MEM0_PYTHON_BASE_IMAGE:-python:3.12-slim-bookworm}
+    # 将子模块提交写入镜像元数据，便于从运行镜像反查对应上游源码版本。
+    MEM0_SOURCE_COMMIT: ${MEM0_SOURCE_COMMIT:-unknown}
 
 name: ${COMPOSE_PROJECT_NAME:-vet-agent-dev}
 
@@ -115,20 +117,7 @@ services:
       - "${MEM0_PORT:-8001}:8000"
     volumes:
       - vet_agent_dev_mem0_history:/app/history
-      - ./mem0/configure_mem0.py:/app-bootstrap/configure_mem0.py:ro
-    command: >
-      sh -c "alembic upgrade head
-      && python /app-bootstrap/configure_mem0.py
-      && uvicorn main:app --host 0.0.0.0 --port 8000"
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/docs', timeout=3).read()\"",
-        ]
-      interval: 10s
-      timeout: 5s
-      retries: 30
+      - ./mem0/application.yml:/app/config/application.yml:ro
 
   app:
     image: ${VET_AGENT_IMAGE:-vet-agent:dev}

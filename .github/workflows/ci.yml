@@ -42,6 +42,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: true
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -57,7 +59,7 @@ jobs:
   # ---------------------------------------------------------------------------
   # 仓库特色门禁
   # ---------------------------------------------------------------------------
-  # 该 job 绑定兽医 Agent 业务语义：CD 文件树约束、pgvector 初始化与 Alembic 迁移。
+  # 该 job 绑定兽医 Agent 业务语义：CD 文件树约束、pgvector 初始化、Alembic 迁移与 Mem0 封装镜像。
   # 仓库内 seed、RAG chunk 等静态资产样式尚未稳定，暂不作为 CI 门禁依据。
   # ---------------------------------------------------------------------------
   repository-gate:
@@ -66,6 +68,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          submodules: true
 
       - name: Setup Python
         uses: actions/setup-python@v5

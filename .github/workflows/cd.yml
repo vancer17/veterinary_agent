@@ -64,6 +64,7 @@ jobs:
         with:
           ref: ${{ github.event.release.tag_name || inputs.release_tag }}
           fetch-depth: 0
+          submodules: true
 
       - name: Verify release input
         run: bash scripts/cd/common/verify-release-input.sh
@@ -92,6 +93,7 @@ jobs:
         with:
           ref: ${{ github.event.release.tag_name }}
           fetch-depth: 0
+          submodules: true
 
       - name: Resolve release images
         id: resolve
@@ -131,6 +133,7 @@ jobs:
         with:
           ref: ${{ github.event.release.tag_name || inputs.release_tag }}
           fetch-depth: 0
+          submodules: true
 
       - name: Prepare SSH key
         env:
