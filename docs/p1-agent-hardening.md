@@ -80,7 +80,7 @@ make request-rag-stats
 make request-rag-chunks
 ```
 
-没有 `make` 时，直接使用 `docker compose -f docker-compose.dev.yml exec -T app python scripts/dev_request.py <scenario>`。
+没有 `make` 时，直接使用 `docker compose -f docker/compose.dev.yml exec -T app python scripts/dev_request.py <scenario>`。
 
 ## 新增迁移
 

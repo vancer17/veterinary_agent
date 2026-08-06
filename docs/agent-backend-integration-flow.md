@@ -750,7 +750,7 @@ networks:
 生产命令需同时带：
 
 ```bash
--f docker-compose.yml -f docker-compose.prod.override.yml
+-f docker/compose.yml -f docker/compose.prod.override.yml
 ```
 
 不要使用 `docker compose down -v`，否则会删除 PostgreSQL 数据卷。

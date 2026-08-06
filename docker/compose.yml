@@ -1,0 +1,198 @@
+# =============================================================================
+# 文件: docker/compose.yml
+# 作用: 编排兽医 Agent 正式环境运行拓扑。
+# 范围: 只拉取并运行 GitHub Release 标签对应的预编译镜像，不声明 build。
+# 说明: 生产镜像由 CD 根据 Release tag 注入 VET_AGENT_IMAGE 与 MEM0_IMAGE。
+# =============================================================================
+
+name: ${COMPOSE_PROJECT_NAME:-vet-agent-prod}
+
+# 正式环境真实 *.env 文件由人工或 GitHub Environment 安全下发；模板只提供可审查结构。
+x-postgres-env-files: &postgres-env-files
+  - path: ./postgres/template/postgres.prod.env.template
+    required: true
+  - path: ./postgres/template/postgres.prod.env
+    required: false
+
+x-litellm-env-files: &litellm-env-files
+  - path: ./litellm/template/litellm.prod.env.template
+    required: true
+  - path: ./litellm/template/litellm.prod.env
+    required: false
+
+x-mem0-env-files: &mem0-env-files
+  - path: ./mem0/template/mem0.prod.env.template
+    required: true
+  - path: ./mem0/template/mem0.prod.env
+    required: false
+
+x-app-env-files: &app-env-files
+  - path: ./app/template/app.prod.env.template
+    required: true
+  - path: ./app/template/app.prod.env
+    required: false
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: ${LOG_MAX_SIZE:-20m}
+    max-file: ${LOG_MAX_FILE:-5}
+
+x-app-common: &app-common
+  image: ${VET_AGENT_IMAGE:?请通过 GitHub Release 标签注入 VET_AGENT_IMAGE}
+  env_file: *app-env-files
+  networks:
+    - backend
+  logging: *default-logging
+
+services:
+  postgres:
+    image: ${PGVECTOR_IMAGE:-pgvector/pgvector:pg16}
+    restart: unless-stopped
+    shm_size: "256mb"
+    env_file: *postgres-env-files
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    networks:
+      - backend
+    logging: *default-logging
+
+  postgres-extensions:
+    image: ${PGVECTOR_IMAGE:-pgvector/pgvector:pg16}
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file: *postgres-env-files
+    volumes:
+      - ./postgres/ops/ensure-extensions.sh:/usr/local/bin/ensure-postgres-extensions:ro
+    command: ["bash", "/usr/local/bin/ensure-postgres-extensions"]
+    networks:
+      - backend
+    logging: *default-logging
+
+  litellm:
+    image: ${LITELLM_IMAGE:-ghcr.io/berriai/litellm:main-stable}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file: *litellm-env-files
+    volumes:
+      - ./litellm/litellm.yml:/app/config.yaml:ro
+    command: ["--config", "/app/config.yaml", "--port", "4000", "--num_workers", "${LITELLM_WORKERS:-2}"]
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/readiness', timeout=3).read()\"",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 30
+    networks:
+      - backend
+    logging: *default-logging
+
+  mem0:
+    image: ${MEM0_IMAGE:?请通过 GitHub Release 标签注入 MEM0_IMAGE}
+    restart: unless-stopped
+    depends_on:
+      litellm:
+        condition: service_healthy
+      postgres-extensions:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    env_file: *mem0-env-files
+    volumes:
+      - mem0_history:/app/history
+      - ./mem0/configure_mem0.py:/app-bootstrap/configure_mem0.py:ro
+    command: >
+      sh -c "alembic upgrade head
+      && python /app-bootstrap/configure_mem0.py
+      && uvicorn main:app --host 0.0.0.0 --port 8000"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/docs', timeout=3).read()\"",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 30
+    networks:
+      - backend
+    logging: *default-logging
+
+  migrate:
+    <<: *app-common
+    restart: "no"
+    depends_on:
+      postgres-extensions:
+        condition: service_completed_successfully
+    command: ["alembic", "upgrade", "head"]
+    profiles: ["ops"]
+
+  seed:
+    <<: *app-common
+    restart: "no"
+    depends_on:
+      postgres-extensions:
+        condition: service_completed_successfully
+      litellm:
+        condition: service_healthy
+    command: >
+      sh -c 'if [ "$${SEED_WITH_EMBEDDINGS:-false}" = "true" ]; then
+      python scripts/seed_database.py --with-embeddings;
+      else
+      python scripts/seed_database.py;
+      fi'
+    profiles: ["ops"]
+
+  app:
+    <<: *app-common
+    restart: unless-stopped
+    init: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+      litellm:
+        condition: service_healthy
+      mem0:
+        condition: service_healthy
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    command:
+      [
+        "uvicorn",
+        "vet_agent.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--workers",
+        "${APP_WORKERS:-2}",
+      ]
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).read()\"",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 30
+
+networks:
+  backend:
+
+volumes:
+  postgres_data:
+  mem0_history:

@@ -13,20 +13,35 @@
 
 ```bash
 # 必填: 复制开发运行时 env 模板并填入真实 DASHSCOPE_API_KEY
-cp deploy/env/dev/services/litellm.env.template deploy/env/dev/services/litellm.env
+cp docker/litellm/template/litellm.dev.env.template docker/litellm/template/litellm.dev.env
 make dev-up
 ```
 
-Compose 拓扑文件只描述服务、网络、卷、端口和依赖；容器运行时配置集中在 `deploy/env/*/services/*.env*`。
+Compose 拓扑文件只描述服务、网络、卷、端口和依赖；编排层参数位于 `docker/compose.*.env*`，服务运行时配置位于 `docker/{service}/template/*.env*`。
 开发和正式环境模板均默认启用真实 LiteLLM、Mem0、PostgreSQL 与 RAG embedding 链路。
 
 配置文件树：
 
 ```text
-deploy/env/dev/compose.env.template
-deploy/env/dev/services/{postgres,litellm,mem0,app}.env.template
-deploy/env/prod/compose.env.template
-deploy/env/prod/services/{postgres,litellm,mem0,app}.env.template
+docker/compose.dev.yml
+docker/compose.dev.env.template
+docker/compose.yml
+docker/compose.prod.env.template
+docker/app/Dockerfile
+docker/app/Dockerfile.dev
+docker/app/template/app.dev.env.template
+docker/app/template/app.prod.env.template
+docker/litellm/litellm.yml
+docker/litellm/template/litellm.dev.env.template
+docker/litellm/template/litellm.prod.env.template
+docker/mem0/Dockerfile
+docker/mem0/configure_mem0.py
+docker/mem0/template/mem0.dev.env.template
+docker/mem0/template/mem0.prod.env.template
+docker/postgres/init/10-bootstrap-logical-databases.sh
+docker/postgres/ops/ensure-extensions.sh
+docker/postgres/template/postgres.dev.env.template
+docker/postgres/template/postgres.prod.env.template
 ```
 
 健康检查:
@@ -57,21 +72,27 @@ SSE 流式响应将 `stream` 设为 `true`。
 
 ## 生产 Compose
 
-生产部署使用 [docker-compose.yml](docker-compose.yml) 和 [docker-compose-production.md](docs/docker-compose-production.md)：
+生产部署使用 [docker/compose.yml](docker/compose.yml) 和
+[docker-compose-production.md](docs/docker-compose-production.md)：
 
 ```bash
-cp deploy/env/prod/compose.env.template deploy/env/prod/compose.env
-cp deploy/env/prod/services/postgres.env.template deploy/env/prod/services/postgres.env
-cp deploy/env/prod/services/litellm.env.template deploy/env/prod/services/litellm.env
-cp deploy/env/prod/services/mem0.env.template deploy/env/prod/services/mem0.env
-cp deploy/env/prod/services/app.env.template deploy/env/prod/services/app.env
+cp docker/compose.prod.env.template docker/compose.prod.env
+cp docker/postgres/template/postgres.prod.env.template docker/postgres/template/postgres.prod.env
+cp docker/litellm/template/litellm.prod.env.template docker/litellm/template/litellm.prod.env
+cp docker/mem0/template/mem0.prod.env.template docker/mem0/template/mem0.prod.env
+cp docker/app/template/app.prod.env.template docker/app/template/app.prod.env
 # 填写上述 .env 文件中的数据库密码、DASHSCOPE_API_KEY、LiteLLM/Mem0/API 鉴权 key
+export VET_AGENT_IMAGE="crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com/vancer-saas/veterinary_agent:v1.2.3"
+export MEM0_IMAGE="crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com/vancer-saas/veterinary_agent-mem0:v1.2.3"
 make prod-config
 make prod-up
 make prod-ready
 ```
 
-生产 Compose 不挂载源码，不依赖平台专用运维脚本，数据库迁移和 seed 通过 `make prod-migrate` / `make prod-seed` 显式执行。
+生产 Compose 不挂载源码，不声明 `build`，不依赖平台专用运维脚本；正式 CD 从 GitHub
+Release tag 解析并推送预编译镜像，生产服务器只执行镜像拉取、迁移和
+`docker compose up --no-build`。`seed` 不属于 CI/CD 门禁，需经过业务审核后通过
+`make prod-seed` 显式执行。
 
 ## 逐轮问诊状态
 
@@ -114,14 +135,14 @@ Compose 使用一个 `pgvector/pgvector` PostgreSQL 容器，并在首次初始�
 启动数据库:
 
 ```bash
-docker compose -f docker-compose.dev.yml up -d postgres
+docker compose --env-file docker/compose.dev.env.template -f docker/compose.dev.yml up -d postgres
 ```
 
 如果默认镜像拉取慢或失败，可以换成镜像站同步过的 pgvector 镜像:
 
 ```bash
 export PGVECTOR_IMAGE="你的镜像站/pgvector/pgvector:pg16"
-docker compose -f docker-compose.dev.yml up -d postgres
+docker compose --env-file docker/compose.dev.env.template -f docker/compose.dev.yml up -d postgres
 ```
 
 设置连接串，执行 Alembic 迁移，再初始化规则/知识数据:
@@ -194,11 +215,11 @@ uv run uvicorn vet_agent.main:app --host 127.0.0.1 --port 8000
 Mem0 语义记忆:
 
 ```bash
-docker compose --env-file deploy/env/dev/compose.env.template -f docker-compose.dev.yml pull mem0
-docker compose --env-file deploy/env/dev/compose.env.template -f docker-compose.dev.yml up -d postgres litellm mem0
+docker compose --env-file docker/compose.dev.env.template -f docker/compose.dev.yml build mem0
+docker compose --env-file docker/compose.dev.env.template -f docker/compose.dev.yml up -d postgres litellm mem0
 ```
 
-Mem0 通过 `MEM0_BASE_URL` 接入 REST Server，默认使用 `MEM0_IMAGE` 指向私有仓库镜像，并使用 pgvector PostgreSQL 作为语义记忆存储；`pet_memory_facts` 仍是医疗事实、用户纠正和删除治理的可信事实源。
+Mem0 通过 `MEM0_BASE_URL` 接入 REST Server。开发环境默认构建 `docker/mem0/Dockerfile` 薄封装镜像，生产环境由 CD 使用 `MEM0_IMAGE` 指向 GitHub Release tag 对应的私有仓库镜像；`pet_memory_facts` 仍是医疗事实、用户纠正和删除治理的可信事实源。
 
 迁移说明:
 

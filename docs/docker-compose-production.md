@@ -6,41 +6,41 @@ Database topology: One pgvector PostgreSQL instance with isolated logical databa
 
 # Docker Compose Production
 
-生产环境使用 `docker-compose.yml`，不挂载宿主机源码，不依赖平台专用脚本，不在 app 容器启动时自动迁移数据库。迁移和 seed 由 Make 的显式步骤执行。
+生产环境使用 `docker/compose.yml`，不挂载宿主机源码，不声明 `build`，不依赖平台专用脚本。正式 CD 通过 GitHub Release tag 注入 `VET_AGENT_IMAGE` 与 `MEM0_IMAGE`，生产服务器只拉取预编译镜像并执行迁移与启动。
 
 ## 准备环境文件
 
 ```bash
-cp deploy/env/prod/compose.env.template deploy/env/prod/compose.env
-cp deploy/env/prod/services/postgres.env.template deploy/env/prod/services/postgres.env
-cp deploy/env/prod/services/litellm.env.template deploy/env/prod/services/litellm.env
-cp deploy/env/prod/services/mem0.env.template deploy/env/prod/services/mem0.env
-cp deploy/env/prod/services/app.env.template deploy/env/prod/services/app.env
+cp docker/compose.prod.env.template docker/compose.prod.env
+cp docker/postgres/template/postgres.prod.env.template docker/postgres/template/postgres.prod.env
+cp docker/litellm/template/litellm.prod.env.template docker/litellm/template/litellm.prod.env
+cp docker/mem0/template/mem0.prod.env.template docker/mem0/template/mem0.prod.env
+cp docker/app/template/app.prod.env.template docker/app/template/app.prod.env
 ```
 
-`Makefile` 会优先使用 `deploy/env/prod/compose.env`；如果该文件不存在，则回退到 `compose.env.template` 仅用于配置检查。真实生产启动前必须创建上述 `.env` 文件。
+`Makefile` 会优先使用 `docker/compose.prod.env`；如果该文件不存在，则回退到 `docker/compose.prod.env.template` 仅用于配置检查。真实生产启动前必须创建上述 `.env` 文件。
 
 必须填写：
 
 ```text
-deploy/env/prod/services/postgres.env:
+docker/postgres/template/postgres.prod.env:
   POSTGRES_PASSWORD
   VET_AGENT_POSTGRES_PASSWORD
   LITELLM_POSTGRES_PASSWORD
   MEM0_POSTGRES_PASSWORD
 
-deploy/env/prod/services/litellm.env:
+docker/litellm/template/litellm.prod.env:
   DATABASE_URL
   LITELLM_MASTER_KEY
   DASHSCOPE_API_KEY
 
-deploy/env/prod/services/mem0.env:
+docker/mem0/template/mem0.prod.env:
   OPENAI_API_KEY
   ADMIN_API_KEY
   JWT_SECRET
   POSTGRES_PASSWORD
 
-deploy/env/prod/services/app.env:
+docker/app/template/app.prod.env:
   DATABASE_URL
   LITELLM_API_KEY
   MEM0_API_KEY
@@ -65,7 +65,11 @@ SEED_WITH_EMBEDDINGS=true
 
 ## 上线
 
+生产真实 env 文件由人工或基础设施基线预先放置在部署目录，不由 GitHub Actions 覆盖。手动执行生产 Compose 前，必须先指定同一个 GitHub Release tag 对应的两个业务镜像：
+
 ```bash
+export VET_AGENT_IMAGE="crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com/vancer-saas/veterinary_agent:v1.2.3"
+export MEM0_IMAGE="crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com/vancer-saas/veterinary_agent-mem0:v1.2.3"
 make prod-config
 make prod-up
 make prod-ready
@@ -74,16 +78,44 @@ make prod-ready
 `make prod-up` 会按顺序执行：
 
 ```text
-prod-build -> prod-deps -> prod-migrate -> prod-seed -> start app
+prod-pull -> prod-deps -> prod-migrate -> start app
 ```
 
-如果只需要执行迁移或 seed：
+该链路不会在生产主机执行镜像构建，也不会自动导入 seed 或 RAG 静态资产。如果只需要执行迁移或经过审核的 seed：
 
 ```bash
 make prod-db-extensions
 make prod-migrate
 make prod-seed
 ```
+
+## GitHub Actions CD
+
+`.github/workflows/cd.yml` 支持两种触发方式：
+
+- 发布 GitHub Release：检出 Release tag，在 GitHub Runner 构建并推送应用和 Mem0 镜像，进入 `production` environment 审批后同步正式编排包并部署。
+- 手动 `workflow_dispatch`：输入已存在的 `release_tag`；仅当 `deploy_production=true` 时进入生产审批，直接拉取该 Release tag 的既有镜像，不重新构建或覆盖镜像标签。
+
+GitHub `production` environment 需要配置以下 Secrets：
+
+```text
+CD_REGISTRY_USERNAME
+CD_REGISTRY_PASSWORD
+CD_PROD_SSH_HOST
+CD_PROD_SSH_PORT
+CD_PROD_SSH_USER
+CD_PROD_SSH_PRIVATE_KEY
+CD_PROD_SSH_KNOWN_HOSTS
+```
+
+需要配置以下 Variables：
+
+```text
+CD_PROD_DEPLOY_PATH
+CD_PROD_BASE_URL
+```
+
+CD 只同步 `docker/compose.yml`、正式 env 模板、`docker/litellm/litellm.yml` 和必要挂载脚本。生产真实 `docker/*/template/*.prod.env` 文件保留在服务器本地，不进入 Git，不由同步任务覆盖。
 
 ## 常用运维命令
 
@@ -123,17 +155,15 @@ curl -X POST http://127.0.0.1:8000/agent/turns \
 
 ## 镜像站
 
-如果生产主机拉取镜像较慢，在 `deploy/env/prod/compose.env` 中覆盖：
+如果生产主机拉取公共中间件镜像较慢，可在 `docker/compose.prod.env` 中覆盖：
 
 ```text
-deploy/env/prod/compose.env:
-PYTHON_BASE_IMAGE=你的镜像站/astral-sh/uv:python3.12-bookworm
+docker/compose.prod.env:
 PGVECTOR_IMAGE=你的镜像站/pgvector/pgvector:pg16
-MEM0_IMAGE=你的镜像站/vancer-saas/mem0:latest
 LITELLM_IMAGE=你的镜像站/berriai/litellm:main-stable
 ```
 
-`MEM0_IMAGE` 默认指向私有仓库中的 Mem0 REST Server 镜像；`make prod-build` 只构建 Agent app，Mem0 不再依赖本地 Mem0 源码缓存，也不会在启动前拉取 GitHub 仓库。
+`VET_AGENT_IMAGE` 与 `MEM0_IMAGE` 不在 compose env 文件中维护，由 CD 使用 GitHub Release tag 直接注入。生产 Compose 不包含任何 `build` 配置。
 
 ## 数据库拓扑
 
