@@ -1,0 +1,69 @@
+[
+  {
+    "code": "EMERGENCY_RED_FLAG",
+    "rule_type": "emergency_red_flag",
+    "match_type": "keyword",
+    "patterns": ["呼吸困难", "喘不上气", "张口呼吸", "抽搐", "癫痫", "持续呕吐", "一直吐", "血便", "便血", "误食", "中毒", "大出血", "无法站立", "站不起来", "腹胀", "肚子鼓", "昏迷", "休克", "尿不出", "难产", "高处坠落", "车祸", "暴瘦", "突然不吃"],
+    "severity": "urgent",
+    "message": "命中急症或医疗红旗症状。",
+    "response_template": "你描述里有急症红旗: {matched}。这种情况不建议先在线上反复追问，请尽快去线下兽医医院，若症状正在发生或加重请按急诊处理。\n\n路上尽量保持宠物安静和保暖，不要自行喂人药或给不确定的药物。"
+  },
+  {
+    "code": "TOXIC_SUBSTANCE",
+    "rule_type": "toxic_substance",
+    "match_type": "keyword",
+    "patterns": ["布洛芬", "ibuprofen", "对乙酰氨基酚", "acetaminophen", "paracetamol", "扑热息痛", "泰诺", "阿司匹林", "巧克力", "葡萄", "葡萄干", "木糖醇", "洋葱", "大蒜", "酒精", "咖啡因", "夏威夷果", "澳洲坚果"],
+    "severity": "urgent",
+    "message": "命中宠物有毒食物或危险人药黑名单。",
+    "response_template": "你提到的 {matched} 对宠物可能有毒或存在高风险。请不要自行喂药、催吐或等待观察，建议立即联系线下兽医或急诊医院，并带上包装、剂量信息和误食时间。\n\n这是辅助参考，请以线下兽医诊断为准。"
+  },
+  {
+    "code": "MEDICATION_SCOPE",
+    "rule_type": "medication_scope",
+    "match_type": "keyword",
+    "patterns": ["用药", "吃药", "药", "消炎药", "抗生素", "止痛药", "驱虫药", "剂量", "多少毫克", "mg", "ml"],
+    "severity": "caution",
+    "message": "涉及用药，只能给方向，不能输出具体剂量。"
+  },
+  {
+    "code": "RADIOLOGY_GATE",
+    "rule_type": "radiology_gate",
+    "match_type": "attachment_purpose",
+    "patterns": ["radiology", "xray", "x_ray", "ultrasound", "ct", "mri", "影像", "片子"],
+    "severity": "blocked",
+    "message": "第一阶段不开放 X 光/B 超/CT/MRI 等影像判读。",
+    "response_template": "这类 X 光/B 超/CT/MRI 等片子，第一阶段我不能做影像判读，也不会给出影像诊断结论。请把原片和报告交给线下兽医或专科影像兽医评估。\n\n如果宠物同时有呼吸困难、无法站立、持续呕吐、剧烈疼痛、腹胀或外伤出血，请立即急诊。"
+  },
+  {
+    "code": "RADIOLOGY_GATE",
+    "rule_type": "radiology_gate",
+    "match_type": "storage_keyword",
+    "patterns": ["xray", "x-ray", "ultrasound", "ct", "mri"],
+    "severity": "blocked",
+    "message": "第一阶段不开放 X 光/B 超/CT/MRI 等影像判读。"
+  },
+  {
+    "code": "DOSAGE_REMOVED",
+    "rule_type": "dosage_output",
+    "match_type": "regex",
+    "patterns": ["\\b\\d+(\\.\\d+)?\\s*(mg/kg|毫克/公斤|毫克每公斤)\\b", "\\b\\d+(\\.\\d+)?\\s*(mg|毫克|g|克|ml|毫升|片|粒|滴)\\b", "每(天|日|次)\\s*\\d+(\\.\\d+)?\\s*(次|片|粒|ml|毫升)"],
+    "severity": "caution",
+    "message": "输出安全审查移除了具体剂量表达。"
+  },
+  {
+    "code": "MEDICAL_OUTPUT_MARKER",
+    "rule_type": "medical_output_marker",
+    "match_type": "keyword",
+    "patterns": ["症状", "就医", "诊断", "分诊", "用药", "呕吐", "腹泻", "疼", "咳", "呼吸"],
+    "severity": "info",
+    "message": "输出涉及医疗语境，需要线下兽医兜底。"
+  },
+  {
+    "code": "MEDICATION_OUTPUT_MARKER",
+    "rule_type": "medication_output_marker",
+    "match_type": "keyword",
+    "patterns": ["用药", "药物", "消炎", "抗生素"],
+    "severity": "info",
+    "message": "输出涉及用药语境，需要说明书/兽医指导提示。"
+  }
+]

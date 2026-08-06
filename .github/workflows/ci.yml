@@ -1,0 +1,94 @@
+# =============================================================================
+# 文件: .github/workflows/ci.yml
+# 作用: 为兽医 Agent 业务仓库提供 Pull Request 与主干 push 的严格 CI 门禁。
+# 范围: 拆分为可分发的通用门禁和本仓库特色门禁，最后由 CI Gate 汇总。
+# 说明: 具体检查逻辑沉到 scripts/ci/common 与 scripts/ci/repository，本文件只负责远端 Runner 编排。
+# =============================================================================
+
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+env:
+  PYTHON_VERSION: "3.12"
+  UV_PYTHON_DOWNLOADS: automatic
+  UV_LINK_MODE: copy
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 通用门禁
+  # ---------------------------------------------------------------------------
+  # 该 job 只依赖业务仓库通用约定，可分发到其他 Python + Compose 业务仓库：
+  # 静态检查、Python 快速检查、Compose 解析、密钥边界和主应用镜像构建。
+  # ---------------------------------------------------------------------------
+  common-gate:
+    name: Common Gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv
+        run: python -m pip install --upgrade --index-url https://pypi.tuna.tsinghua.edu.cn/simple uv
+
+      - name: Run common gate
+        run: bash scripts/ci/common/run-common-gate.sh
+
+  # ---------------------------------------------------------------------------
+  # 仓库特色门禁
+  # ---------------------------------------------------------------------------
+  # 该 job 绑定兽医 Agent 业务语义：CD 文件树约束、pgvector 初始化与 Alembic 迁移。
+  # 仓库内 seed、RAG chunk 等静态资产样式尚未稳定，暂不作为 CI 门禁依据。
+  # ---------------------------------------------------------------------------
+  repository-gate:
+    name: Repository Gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv
+        run: python -m pip install --upgrade --index-url https://pypi.tuna.tsinghua.edu.cn/simple uv
+
+      - name: Run repository gate
+        run: bash scripts/ci/repository/run-repository-gate.sh
+
+  # ---------------------------------------------------------------------------
+  # 汇总门禁
+  # ---------------------------------------------------------------------------
+  # 分支保护建议只选择该检查项作为 required status check，降低规则维护成本。
+  # ---------------------------------------------------------------------------
+  ci-gate:
+    name: CI Gate
+    runs-on: ubuntu-latest
+    needs:
+      - common-gate
+      - repository-gate
+    steps:
+      - name: All checks passed
+        run: echo "All CI jobs passed."

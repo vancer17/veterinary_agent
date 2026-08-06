@@ -1,0 +1,13 @@
+{
+  "input": "狗误食了巧克力，还能先观察一下吗？",
+  "stream": false,
+  "vet_context": {
+    "user_id": "dev_user_safety",
+    "session_id": "dev_session_safety",
+    "pet_id": "dev_pet_safety",
+    "pet_info": {
+      "species": "狗",
+      "weight_kg": 12
+    }
+  }
+}

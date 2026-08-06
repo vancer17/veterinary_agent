@@ -1,0 +1,19 @@
+{
+  "input": "最近有三件事想一起确认：便盆里留下的东西比以前更稀，夜间独处时会在门边持续发声，原来的主食快用完了，我想逐步过渡到另一款。请分别告诉我需要补充什么信息。",
+  "stream": false,
+  "metadata": {
+    "scenario": "business_multitask",
+    "keyword_strategy": "semantic_paraphrase"
+  },
+  "vet_context": {
+    "user_id": "business_user_multitask_001",
+    "session_id": "business_session_multitask_001",
+    "pet_id": "business_pet_multitask_001",
+    "pet_info": {
+      "species": "canine",
+      "breed": "corgi",
+      "age": "3 years",
+      "weight_kg": 12
+    }
+  }
+}

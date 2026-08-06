@@ -1,0 +1,18 @@
+{
+  "input": "我家狗今天有点拉稀，精神食欲正常，没有呕吐，可以怎么观察？",
+  "stream": false,
+  "vet_context": {
+    "user_id": "dev_user_idem",
+    "session_id": "dev_session_idem",
+    "pet_id": "dev_pet_idem",
+    "pet_info": {
+      "species": "狗",
+      "breed": "柯基",
+      "age": "3岁",
+      "weight_kg": 12
+    }
+  },
+  "turn_options": {
+    "idempotency_key": "dev-idem-001"
+  }
+}

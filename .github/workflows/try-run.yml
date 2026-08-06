@@ -1,0 +1,66 @@
+# =============================================================================
+# 文件: .github/workflows/try-run.yml
+# 作用: 提供手动触发的 CI try-run / dry-run 验证入口。
+# 范围: 支持 dry-run、通用门禁、仓库特色门禁和全量门禁，不自动推送镜像或部署环境。
+# 说明: 用于 PR 合并前、主干合并后、生产手动部署前的人工加严验证。
+# =============================================================================
+
+name: Try Run
+
+on:
+  workflow_dispatch:
+    inputs:
+      gate_scope:
+        description: "Gate scope"
+        required: true
+        default: "dry-run"
+        type: choice
+        options:
+          - dry-run
+          - common
+          - repository
+          - full
+      build_mem0_image:
+        description: "Build Mem0 wrapper image when private base image access is available"
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: try-run-${{ github.workflow }}-${{ github.ref }}-${{ inputs.gate_scope }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+  UV_PYTHON_DOWNLOADS: automatic
+  UV_LINK_MODE: copy
+  CI_TRY_RUN_SCOPE: ${{ inputs.gate_scope }}
+  CI_BUILD_MEM0_IMAGE: ${{ inputs.build_mem0_image }}
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 手动 try-run
+  # ---------------------------------------------------------------------------
+  # dry-run 只解析配置并校验 CD 布局，不启动数据库、不构建镜像。
+  # common/repository/full 会按脚本入口执行对应强度。
+  # ---------------------------------------------------------------------------
+  try-run:
+    name: Try Run
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv
+        run: python -m pip install --upgrade --index-url https://pypi.tuna.tsinghua.edu.cn/simple uv
+
+      - name: Run selected gate scope
+        run: bash scripts/ci/try-run.sh

@@ -1,0 +1,26 @@
+{
+  "safety_net_text": "如果已经出现呼吸困难、抽搐、持续呕吐、血便、误食毒物、无法站立、明显腹胀或大出血，请不要等待线上追问，直接去线下兽医急诊。",
+  "domains": [
+    {"domain": "gastrointestinal", "classifier_keywords": ["拉稀", "腹泻", "软便", "呕吐", "吐", "便血", "不吃", "食欲"], "required_slots": ["species", "onset", "mental_status", "appetite", "vomiting", "stool"]},
+    {"domain": "respiratory", "classifier_keywords": ["咳", "喘", "呼吸", "打喷嚏", "流鼻涕"], "required_slots": ["species", "onset", "mental_status", "breathing"]},
+    {"domain": "mobility", "classifier_keywords": ["跛", "瘸", "站不稳", "走路", "关节", "疼"], "required_slots": ["species", "onset", "mental_status", "pain_or_mobility"]},
+    {"domain": "behavior", "classifier_keywords": ["乱叫", "拆家", "咬", "护食", "焦虑", "行为", "转圈"], "required_slots": ["species", "onset", "mental_status", "appetite", "behavior_context"]},
+    {"domain": "feeding", "classifier_keywords": ["喂", "粮", "换粮", "吃什么", "零食", "饮食"], "required_slots": ["species", "life_stage_or_age", "weight", "current_food"]},
+    {"domain": "general", "classifier_keywords": [], "required_slots": ["species", "onset", "mental_status", "appetite", "symptom_detail"]}
+  ],
+  "slots": [
+    {"slot_name": "species", "label": "物种", "question": "它是猫还是狗？如果是其他宠物，也请直接说物种。", "extraction_rules": [{"match_type": "keyword", "patterns": ["猫", "猫咪"], "value": "猫"}, {"match_type": "keyword", "patterns": ["狗", "犬", "小狗"], "value": "犬"}]},
+    {"slot_name": "life_stage_or_age", "label": "年龄/生命阶段", "question": "它大概多大了？是幼年、成年还是老年？", "extraction_rules": [{"match_type": "regex", "pattern": "(\\d+|一|二|两|三|四|五|六|七|八|九|十)[岁个月]+"}, {"match_type": "keyword_value", "patterns": ["幼犬", "幼猫", "成年", "老年"]}]},
+    {"slot_name": "weight", "label": "体重", "question": "最近体重大约是多少？如果不确定，可以给一个大概范围。", "extraction_rules": [{"match_type": "regex", "pattern": "(\\d+(\\.\\d+)?)\\s*(kg|公斤|斤)"}]},
+    {"slot_name": "onset", "label": "起病时间", "question": "这个情况从什么时候开始的？是突然发生还是慢慢出现的？", "extraction_rules": [{"match_type": "regex", "pattern": "(刚刚|今天|昨天|前天|昨晚|早上|中午|晚上|半小时|一小时|\\d+\\s*(分钟|小时|天|周|个月))"}]},
+    {"slot_name": "mental_status", "label": "精神状态", "question": "现在精神状态和平时比怎么样？正常、变差，还是明显萎靡？", "extraction_rules": [{"match_type": "regex_value", "pattern": "精神.{0,6}正常", "value": "精神基本正常"}, {"match_type": "keyword", "patterns": ["精神正常", "精神还行", "精神可以", "精神很好", "活跃"], "value": "精神基本正常"}, {"match_type": "keyword", "patterns": ["没精神", "精神差", "萎靡", "嗜睡", "趴着不动"], "value": "精神变差"}]},
+    {"slot_name": "appetite", "label": "食欲饮水", "question": "食欲和饮水怎么样？和平时比有没有明显减少？", "extraction_rules": [{"match_type": "keyword", "patterns": ["食欲正常", "吃喝正常", "能吃", "正常吃", "胃口正常"], "value": "食欲/饮水基本正常"}, {"match_type": "keyword", "patterns": ["不吃", "食欲差", "食欲下降", "不喝水", "吃得少"], "value": "食欲或饮水下降"}]},
+    {"slot_name": "vomiting", "label": "呕吐情况", "question": "有没有呕吐？如果有，今天大概吐了几次？", "extraction_rules": [{"match_type": "keyword", "patterns": ["没有呕吐", "没吐", "不吐", "无呕吐"], "value": "无呕吐"}, {"match_type": "keyword", "patterns": ["呕吐", "吐了", "一直吐"], "value": "有呕吐"}]},
+    {"slot_name": "stool", "label": "大便情况", "question": "大便是什么状态？有没有血、黑便、黏液，排便次数有没有变多？", "extraction_rules": [{"match_type": "keyword", "patterns": ["大便正常", "没有拉稀", "没拉稀", "无腹泻"], "value": "大便基本正常"}, {"match_type": "keyword_value", "patterns": ["便血", "血便", "黑便", "水样便", "拉稀", "腹泻", "软便"]}]},
+    {"slot_name": "breathing", "label": "呼吸情况", "question": "呼吸有没有变快、费力、咳嗽、张口呼吸或喘不上气？", "extraction_rules": [{"match_type": "keyword", "patterns": ["呼吸正常", "不喘", "没有咳", "没咳"], "value": "呼吸未见明显异常"}, {"match_type": "keyword", "patterns": ["咳", "喘", "呼吸快", "呼吸费力", "张口呼吸"], "value": "有呼吸相关异常"}]},
+    {"slot_name": "pain_or_mobility", "label": "疼痛/活动", "question": "走路、站立、跳跃或被触碰时有没有疼痛或异常？", "extraction_rules": [{"match_type": "keyword", "patterns": ["走路正常", "不疼", "没有疼", "能站"], "value": "活动/疼痛未见明显异常"}, {"match_type": "keyword", "patterns": ["疼", "瘸", "跛", "站不稳", "不让碰", "无法站立"], "value": "有疼痛或活动异常"}]},
+    {"slot_name": "behavior_context", "label": "行为场景", "question": "这个行为通常在什么场景发生？比如独处、见陌生人、吃饭、夜里或出门时。", "extraction_rules": [{"match_type": "text_if_keyword", "patterns": ["独处", "陌生人", "吃饭", "夜里", "出门", "关笼", "见狗", "见人"]}]},
+    {"slot_name": "current_food", "label": "当前饮食", "question": "现在主要吃什么粮/食物？最近有没有换粮、加零食或吃到新东西？", "extraction_rules": [{"match_type": "text_if_keyword", "patterns": ["狗粮", "猫粮", "主粮", "罐头", "换粮", "零食", "生骨肉"]}]},
+    {"slot_name": "symptom_detail", "label": "症状补充", "question": "除了你说的情况，还有没有呕吐、腹泻、咳喘、疼痛、排尿排便异常？", "extraction_rules": [{"match_type": "text"}]}
+  ]
+}
