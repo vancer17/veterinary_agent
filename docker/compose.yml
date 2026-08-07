@@ -2,7 +2,7 @@
 # 文件: docker/compose.yml
 # 作用: 编排兽医 Agent 正式环境运行拓扑。
 # 范围: 只拉取并运行 GitHub Release 标签对应的预编译镜像，不声明 build。
-# 说明: 生产镜像由 CD 根据 Release tag 注入 VET_AGENT_IMAGE 与 MEM0_IMAGE。
+# 说明: 生产镜像由 CD 根据 Release tag 注入 VET_AGENT_IMAGE、MEM0_IMAGE 与 MEM0_DASHBOARD_IMAGE。
 # =============================================================================
 
 name: ${COMPOSE_PROJECT_NAME:-vet-agent-prod}
@@ -24,6 +24,12 @@ x-mem0-env-files: &mem0-env-files
   - path: ./mem0/template/mem0.prod.env.template
     required: true
   - path: ./mem0/template/mem0.prod.env
+    required: false
+
+x-mem0-dashboard-env-files: &mem0-dashboard-env-files
+  - path: ./mem0-dashboard/template/mem0-dashboard.prod.env.template
+    required: true
+  - path: ./mem0-dashboard/template/mem0-dashboard.prod.env
     required: false
 
 x-app-env-files: &app-env-files
@@ -114,6 +120,22 @@ services:
     volumes:
       - mem0_history:/app/history
       - ./mem0/application.yml:/app/config/application.yml:ro
+    networks:
+      - backend
+    logging: *default-logging
+
+  mem0-dashboard:
+    image: ${MEM0_DASHBOARD_IMAGE:?请通过 GitHub Release 标签注入 MEM0_DASHBOARD_IMAGE}
+    restart: unless-stopped
+    profiles: ["ops"]
+    depends_on:
+      mem0:
+        condition: service_healthy
+    env_file: *mem0-dashboard-env-files
+    ports:
+      - "127.0.0.1:${MEM0_DASHBOARD_PORT:-3001}:3000"
+    volumes:
+      - ./mem0-dashboard/application.yml:/app/config/application.yml:ro
     networks:
       - backend
     logging: *default-logging

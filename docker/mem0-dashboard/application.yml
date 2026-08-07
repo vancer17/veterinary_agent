@@ -1,0 +1,26 @@
+# =============================================================================
+# 文件: docker/mem0-dashboard/application.yml
+# 作用: 定义 Mem0 运维 Dashboard 的非敏感服务配置。
+# 范围: 覆盖 Dashboard 监听、外部 Nginx 网关 API 路径、内部 Mem0 REST API 地址、实例名称与健康检查路径。
+# 说明: 当前 Dashboard 无必填敏感参数；未来如引入额外密钥，应放入 mem0-dashboard.*.env。
+# =============================================================================
+
+server:
+  # Dashboard 在容器内监听的地址；通常保持 0.0.0.0。
+  host: 0.0.0.0
+  # Dashboard 在容器内监听的端口；Compose 对外端口映射不在此处配置。
+  port: 3000
+
+dashboard:
+  # 运维界面显示的实例名称，用于区分环境和服务归属。
+  instance_name: Veterinary Agent Mem0 Operations
+  # Dashboard 对浏览器暴露的自身访问地址；影响 refresh token cookie 的 secure 策略判断。
+  public_url: http://127.0.0.1:3001
+  # 浏览器访问 Mem0 REST API 的同源路径；该路径需由外部 Nginx 网关转发至内部 Mem0 服务。
+  public_api_url: /api/mem0
+  # Dashboard 服务端访问 Mem0 REST API 的 Compose 内网地址；用于服务端认证刷新与页面中间件。
+  internal_api_url: http://mem0:8000
+
+health:
+  # Dashboard 健康检查路径；由上游 Next.js app/api/health/route.ts 提供。
+  path: /api/health

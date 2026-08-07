@@ -32,4 +32,5 @@ vendor/mem0/evaluation
 vendor/mem0/examples
 vendor/mem0/mem0-ts
 vendor/mem0/tests
-vendor/mem0/server/dashboard
+vendor/mem0/server/dashboard/.next
+vendor/mem0/server/dashboard/node_modules

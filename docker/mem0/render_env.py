@@ -310,6 +310,20 @@ def _build_exports(config: Mem0ApplicationConfig) -> dict[str, ExportValue]:
     return exports
 
 
+def _format_validation_error(error: ValidationError) -> str:
+    """格式化 Pydantic 配置校验错误。
+
+    :param error: Pydantic 配置校验异常。
+    :return: 适合直接输出给运维人员的多行错误文本。
+    """
+    lines = ["Mem0 application.yml 配置校验失败:"]
+    for item in error.errors():
+        location_items = item.get("loc", ())
+        location = ".".join(str(part) for part in location_items) if location_items else "<root>"
+        lines.append(f"- {location}: {item['msg']}")
+    return "\n".join(lines)
+
+
 def _load_config(config_path: Path) -> Mem0ApplicationConfig:
     """读取 YAML 文件并构造已校验的 Mem0 配置模型。
 
@@ -346,9 +360,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         config = _load_config(config_path)
     except ValidationError as error:
-        print(f"Mem0 application.yml 配置校验失败: {error}", file=sys.stderr)
+        print(_format_validation_error(error), file=sys.stderr)
         return 2
-    except (OSError, TypeError, ValueError, yaml.YAMLError) as error:
+    except FileNotFoundError:
+        print(f"Mem0 application.yml 不存在: {config_path}", file=sys.stderr)
+        return 2
+    except yaml.YAMLError as error:
+        print(f"Mem0 application.yml YAML 解析失败: {error}", file=sys.stderr)
+        return 2
+    except (OSError, TypeError, ValueError) as error:
         print(f"Mem0 application.yml 加载失败: {error}", file=sys.stderr)
         return 2
 

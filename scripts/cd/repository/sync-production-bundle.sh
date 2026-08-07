@@ -36,9 +36,11 @@ bundle_paths=(
     docker/app/template/app.prod.env.template
     docker/litellm/template/litellm.prod.env.template
     docker/mem0/template/mem0.prod.env.template
+    docker/mem0-dashboard/template/mem0-dashboard.prod.env.template
     docker/postgres/template/postgres.prod.env.template
     docker/litellm/litellm.yml
     docker/mem0/application.yml
+    docker/mem0-dashboard/application.yml
     docker/postgres/init/10-bootstrap-logical-databases.sh
     docker/postgres/ops/ensure-extensions.sh
 )

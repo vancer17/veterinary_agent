@@ -45,8 +45,10 @@ env:
   CD_REGISTRY_HOST: crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com
   CD_REGISTRY_IMAGE: crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com/vancer-saas/veterinary_agent
   CD_MEM0_REGISTRY_IMAGE: crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com/vancer-saas/veterinary_agent-mem0
+  CD_MEM0_DASHBOARD_REGISTRY_IMAGE: crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com/vancer-saas/veterinary_agent-mem0-dashboard
   CD_RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
   CD_BUILD_MEM0_IMAGE: "true"
+  CD_BUILD_MEM0_DASHBOARD_IMAGE: "true"
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -87,6 +89,7 @@ jobs:
       release_tag: ${{ steps.resolve.outputs.release_tag }}
       app_image: ${{ steps.resolve.outputs.app_image }}
       mem0_image: ${{ steps.resolve.outputs.mem0_image }}
+      mem0_dashboard_image: ${{ steps.resolve.outputs.mem0_dashboard_image }}
     steps:
       - name: Checkout release tag
         uses: actions/checkout@v4
