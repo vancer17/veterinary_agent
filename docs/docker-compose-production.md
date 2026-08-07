@@ -6,7 +6,7 @@ Database topology: One pgvector PostgreSQL instance with isolated logical databa
 
 # Docker Compose Production
 
-生产环境使用 `docker/compose.yml`，不挂载宿主机源码，不声明 `build`，不依赖平台专用脚本。正式 CD 通过 GitHub Release tag 注入 `VET_AGENT_IMAGE` 与 `MEM0_IMAGE`，生产服务器只拉取预编译镜像并执行迁移与启动。
+生产环境使用 `docker/compose.yml`，不挂载宿主机源码，不声明 `build`，不依赖平台专用脚本。正式 CD 通过 GitHub Release tag 注入 `VET_AGENT_IMAGE`、`MEM0_IMAGE` 与 `MEM0_DASHBOARD_IMAGE`，生产服务器只拉取预编译镜像并执行迁移与启动。
 
 ## 准备环境文件
 
@@ -15,6 +15,7 @@ cp docker/compose.prod.env.template docker/compose.prod.env
 cp docker/postgres/template/postgres.prod.env.template docker/postgres/template/postgres.prod.env
 cp docker/litellm/template/litellm.prod.env.template docker/litellm/template/litellm.prod.env
 cp docker/mem0/template/mem0.prod.env.template docker/mem0/template/mem0.prod.env
+cp docker/mem0-dashboard/template/mem0-dashboard.prod.env.template docker/mem0-dashboard/template/mem0-dashboard.prod.env
 cp docker/app/template/app.prod.env.template docker/app/template/app.prod.env
 ```
 
@@ -39,6 +40,9 @@ docker/mem0/template/mem0.prod.env:
   ADMIN_API_KEY
   JWT_SECRET
   POSTGRES_PASSWORD
+
+docker/mem0-dashboard/template/mem0-dashboard.prod.env:
+  当前无必填敏感参数；保留文件用于统一 env 挂载结构
 
 docker/app/template/app.prod.env:
   DATABASE_URL
@@ -65,11 +69,12 @@ SEED_WITH_EMBEDDINGS=true
 
 ## 上线
 
-生产真实 env 文件由人工或基础设施基线预先放置在部署目录，不由 GitHub Actions 覆盖。手动执行生产 Compose 前，必须先指定同一个 GitHub Release tag 对应的两个业务镜像：
+生产真实 env 文件由人工或基础设施基线预先放置在部署目录，不由 GitHub Actions 覆盖。手动执行生产 Compose 前，必须先指定同一个 GitHub Release tag 对应的三个业务镜像：
 
 ```bash
 export VET_AGENT_IMAGE="crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com/vancer-saas/veterinary_agent:v1.2.3"
 export MEM0_IMAGE="crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com/vancer-saas/veterinary_agent-mem0:v1.2.3"
+export MEM0_DASHBOARD_IMAGE="crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com/vancer-saas/veterinary_agent-mem0-dashboard:v1.2.3"
 make prod-config
 make prod-up
 make prod-ready
@@ -115,7 +120,7 @@ CD_PROD_DEPLOY_PATH
 CD_PROD_BASE_URL
 ```
 
-CD 只同步 `docker/compose.yml`、正式 env 模板、`docker/litellm/litellm.yml`、`docker/mem0/application.yml` 和必要挂载脚本。生产真实 `docker/*/template/*.prod.env` 文件保留在服务器本地，不进入 Git，不由同步任务覆盖；生产服务器只拉取 Release tag 对应的预编译镜像，不现场执行 Mem0 镜像构建。
+CD 只同步 `docker/compose.yml`、正式 env 模板、`docker/litellm/litellm.yml`、`docker/mem0/application.yml`、`docker/mem0-dashboard/application.yml` 和必要挂载脚本。生产真实 `docker/*/template/*.prod.env` 文件保留在服务器本地，不进入 Git，不由同步任务覆盖；生产服务器只拉取 Release tag 对应的预编译镜像，不现场执行 Mem0 或 Mem0 Dashboard 镜像构建。
 
 ## 常用运维命令
 
@@ -123,6 +128,8 @@ CD 只同步 `docker/compose.yml`、正式 env 模板、`docker/litellm/litellm.
 make prod-ps
 make prod-logs
 make prod-app-logs
+make prod-mem0-dashboard-up
+make prod-mem0-dashboard-logs
 make prod-litellm-logs
 make prod-mem0-logs
 make prod-mem0-db-logs
@@ -163,7 +170,7 @@ PGVECTOR_IMAGE=你的镜像站/pgvector/pgvector:pg16
 LITELLM_IMAGE=你的镜像站/berriai/litellm:main-stable
 ```
 
-`VET_AGENT_IMAGE` 与 `MEM0_IMAGE` 不在 compose env 文件中维护，由 CD 使用 GitHub Release tag 直接注入。生产 Compose 不包含任何 `build` 配置。
+`VET_AGENT_IMAGE`、`MEM0_IMAGE` 与 `MEM0_DASHBOARD_IMAGE` 不在 compose env 文件中维护，由 CD 使用 GitHub Release tag 直接注入。生产 Compose 不包含任何 `build` 配置。
 
 ## 数据库拓扑
 
@@ -195,7 +202,8 @@ mem0_vector -> vector
 - `postgres`: 共享 PostgreSQL + pgvector，内部按逻辑库隔离 Agent、LiteLLM 和 Mem0
 - `litellm`: LiteLLM Proxy，持有通义千问 API Key
 - `mem0`: 基于 `vendor/mem0/server` 封装的自托管 Mem0 REST Server，镜像内核心 `mem0ai` 包同样来自 `vendor/mem0` 子模块源码
+- `mem0-dashboard`: 基于 `vendor/mem0/server/dashboard` 封装的 Mem0 运维 Dashboard，默认位于 `ops` profile，浏览器侧通过 Nginx 网关的同源 `/api/mem0` 路径访问内部 Mem0 REST API
 - `migrate`: 一次性 Alembic 迁移任务
 - `seed`: 一次性规则/RAG seed 任务
 
-只有 `app` 发布宿主机端口；PostgreSQL、LiteLLM、Mem0 默认仅在 Compose 网络内访问。
+默认只有 `app` 发布宿主机端口；PostgreSQL、LiteLLM、Mem0 默认仅在 Compose 网络内访问。`mem0-dashboard` 仅在启用 `ops` profile 时绑定宿主机回环地址，建议通过 SSH 隧道或内网运维入口访问。

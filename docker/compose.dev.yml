@@ -24,6 +24,12 @@ x-mem0-env-files: &mem0-env-files
   - path: ./mem0/template/mem0.dev.env
     required: false
 
+x-mem0-dashboard-env-files: &mem0-dashboard-env-files
+  - path: ./mem0-dashboard/template/mem0-dashboard.dev.env.template
+    required: true
+  - path: ./mem0-dashboard/template/mem0-dashboard.dev.env
+    required: false
+
 x-app-env-files: &app-env-files
   - path: ./app/template/app.dev.env.template
     required: true
@@ -42,6 +48,15 @@ x-mem0-build: &mem0-build
   args:
     # Mem0 服务镜像基于 git submodule 中的 vendor/mem0/server 多阶段构建。
     PYTHON_BASE_IMAGE: ${MEM0_PYTHON_BASE_IMAGE:-python:3.12-slim-bookworm}
+    # 将子模块提交写入镜像元数据，便于从运行镜像反查对应上游源码版本。
+    MEM0_SOURCE_COMMIT: ${MEM0_SOURCE_COMMIT:-unknown}
+
+x-mem0-dashboard-build: &mem0-dashboard-build
+  context: ..
+  dockerfile: docker/mem0-dashboard/Dockerfile
+  args:
+    # Mem0 运维 Dashboard 基于 git submodule 中的 vendor/mem0/server/dashboard 多阶段构建。
+    NODE_BASE_IMAGE: ${MEM0_DASHBOARD_NODE_BASE_IMAGE:-node:20-bookworm-slim}
     # 将子模块提交写入镜像元数据，便于从运行镜像反查对应上游源码版本。
     MEM0_SOURCE_COMMIT: ${MEM0_SOURCE_COMMIT:-unknown}
 
@@ -118,6 +133,20 @@ services:
     volumes:
       - vet_agent_dev_mem0_history:/app/history
       - ./mem0/application.yml:/app/config/application.yml:ro
+
+  mem0-dashboard:
+    image: ${MEM0_DASHBOARD_IMAGE:-vet-agent-mem0-dashboard:dev}
+    build: *mem0-dashboard-build
+    container_name: vet-agent-dev-mem0-dashboard
+    restart: unless-stopped
+    depends_on:
+      mem0:
+        condition: service_healthy
+    env_file: *mem0-dashboard-env-files
+    ports:
+      - "${MEM0_DASHBOARD_PORT:-3001}:3000"
+    volumes:
+      - ./mem0-dashboard/application.yml:/app/config/application.yml:ro
 
   app:
     image: ${VET_AGENT_IMAGE:-vet-agent:dev}

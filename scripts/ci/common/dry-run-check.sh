@@ -13,6 +13,7 @@ cd "$repo_root"
 
 registry_image="${CI_REGISTRY_IMAGE:-crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com/vancer-saas/veterinary_agent}"
 mem0_registry_image="${CI_MEM0_REGISTRY_IMAGE:-crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com/vancer-saas/veterinary_agent-mem0}"
+mem0_dashboard_registry_image="${CI_MEM0_DASHBOARD_REGISTRY_IMAGE:-crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com/vancer-saas/veterinary_agent-mem0-dashboard}"
 release_tag_example="${CI_RELEASE_TAG_EXAMPLE:-vX.Y.Z}"
 
 bash scripts/ci/common/static-check.sh
@@ -38,6 +39,12 @@ required_paths=(
     docker/mem0/render_env.py
     docker/mem0/template/mem0.dev.env.template
     docker/mem0/template/mem0.prod.env.template
+    docker/mem0-dashboard/Dockerfile
+    docker/mem0-dashboard/application.yml
+    docker/mem0-dashboard/entrypoint.sh
+    docker/mem0-dashboard/render_env.py
+    docker/mem0-dashboard/template/mem0-dashboard.dev.env.template
+    docker/mem0-dashboard/template/mem0-dashboard.prod.env.template
     docker/postgres/init/10-bootstrap-logical-databases.sh
     docker/postgres/ops/ensure-extensions.sh
     docker/postgres/template/postgres.dev.env.template
@@ -53,4 +60,5 @@ done
 
 echo "dry-run 应用镜像模板: ${registry_image}:${release_tag_example}"
 echo "dry-run Mem0 镜像模板: ${mem0_registry_image}:${release_tag_example}"
+echo "dry-run Mem0 Dashboard 镜像模板: ${mem0_dashboard_registry_image}:${release_tag_example}"
 echo "dry-run 不执行镜像构建、镜像推送或环境部署。"

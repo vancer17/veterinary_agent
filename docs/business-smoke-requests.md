@@ -1,6 +1,6 @@
 # 业务模拟请求
 
-这些请求用于检查真实 LiteLLM、Qwen、PostgreSQL、基于 `vendor/mem0/server` 封装的自托管 Mem0 REST Server 和 Agent 编排链路。
+这些请求用于检查真实 LiteLLM、Qwen、PostgreSQL、基于 `vendor/mem0/server` 封装的自托管 Mem0 REST Server 和 Agent 编排链路；Mem0 Dashboard 属于运维配套服务，不参与业务冒烟请求路径。
 请求正文尽量使用语义改写，避开当前规则中的症状、任务分类和毒物直命中词。
 
 ## 一次运行全部场景

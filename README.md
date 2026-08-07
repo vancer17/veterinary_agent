@@ -41,6 +41,12 @@ docker/mem0/entrypoint.sh
 docker/mem0/render_env.py
 docker/mem0/template/mem0.dev.env.template
 docker/mem0/template/mem0.prod.env.template
+docker/mem0-dashboard/Dockerfile
+docker/mem0-dashboard/application.yml
+docker/mem0-dashboard/entrypoint.sh
+docker/mem0-dashboard/render_env.py
+docker/mem0-dashboard/template/mem0-dashboard.dev.env.template
+docker/mem0-dashboard/template/mem0-dashboard.prod.env.template
 docker/postgres/init/10-bootstrap-logical-databases.sh
 docker/postgres/ops/ensure-extensions.sh
 docker/postgres/template/postgres.dev.env.template
@@ -83,10 +89,12 @@ cp docker/compose.prod.env.template docker/compose.prod.env
 cp docker/postgres/template/postgres.prod.env.template docker/postgres/template/postgres.prod.env
 cp docker/litellm/template/litellm.prod.env.template docker/litellm/template/litellm.prod.env
 cp docker/mem0/template/mem0.prod.env.template docker/mem0/template/mem0.prod.env
+cp docker/mem0-dashboard/template/mem0-dashboard.prod.env.template docker/mem0-dashboard/template/mem0-dashboard.prod.env
 cp docker/app/template/app.prod.env.template docker/app/template/app.prod.env
 # 填写上述 .env 文件中的数据库密码、DASHSCOPE_API_KEY、LiteLLM/Mem0/API 鉴权 key
 export VET_AGENT_IMAGE="crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com/vancer-saas/veterinary_agent:v1.2.3"
 export MEM0_IMAGE="crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com/vancer-saas/veterinary_agent-mem0:v1.2.3"
+export MEM0_DASHBOARD_IMAGE="crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com/vancer-saas/veterinary_agent-mem0-dashboard:v1.2.3"
 make prod-config
 make prod-up
 make prod-ready
@@ -222,7 +230,7 @@ docker compose --env-file docker/compose.dev.env.template -f docker/compose.dev.
 docker compose --env-file docker/compose.dev.env.template -f docker/compose.dev.yml up -d postgres litellm mem0
 ```
 
-Mem0 通过 `MEM0_BASE_URL` 接入自托管 REST Server。开发环境默认从 `vendor/mem0/server` 子模块构建 `docker/mem0/Dockerfile`，镜像内的 `mem0ai` 核心包同样从 `vendor/mem0` 子模块源码安装；生产环境由 CD 使用 `MEM0_IMAGE` 指向 GitHub Release tag 对应的私有仓库预编译镜像，并通过镜像标签记录业务仓库 commit 与 Mem0 子模块 commit。Mem0 非敏感服务参数由 `docker/mem0/application.yml` 挂载，密钥由 env 文件注入。`pet_memory_facts` 仍是医疗事实、用户纠正和删除治理的可信事实源。
+Mem0 通过 `MEM0_BASE_URL` 接入自托管 REST Server。开发环境默认从 `vendor/mem0/server` 子模块构建 `docker/mem0/Dockerfile`，镜像内的 `mem0ai` 核心包同样从 `vendor/mem0` 子模块源码安装；生产环境由 CD 使用 `MEM0_IMAGE` 指向 GitHub Release tag 对应的私有仓库预编译镜像，并通过镜像标签记录业务仓库 commit 与 Mem0 子模块 commit。Mem0 非敏感服务参数由 `docker/mem0/application.yml` 挂载，密钥由 env 文件注入。Mem0 Dashboard 由 `docker/mem0-dashboard/Dockerfile` 从 `vendor/mem0/server/dashboard` 构建，生产环境使用 `MEM0_DASHBOARD_IMAGE` 预编译镜像，浏览器侧默认访问 `/api/mem0`，该路径需由正式开发环境或生产环境的 Nginx 网关转发至内部 Mem0 REST API。`pet_memory_facts` 仍是医疗事实、用户纠正和删除治理的可信事实源。
 
 迁移说明:
 

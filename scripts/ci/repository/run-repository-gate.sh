@@ -14,6 +14,9 @@ cd "$repo_root"
 bash scripts/ci/repository/cd-layout-check.sh
 bash scripts/ci/repository/database-migration-check.sh
 
-# Mem0 是本仓库生产交付的一部分，默认在仓库特色门禁中构建；
-# try-run 等轻量场景可通过 CI_BUILD_MEM0_IMAGE=false 显式跳过。
-CI_BUILD_APP_IMAGE=false CI_BUILD_MEM0_IMAGE="${CI_BUILD_MEM0_IMAGE:-true}" bash scripts/ci/common/docker-build-check.sh
+# Mem0 与 Mem0 Dashboard 是本仓库生产交付的一部分，默认在仓库特色门禁中构建；
+# try-run 等轻量场景可通过 CI_BUILD_MEM0_IMAGE=false 或 CI_BUILD_MEM0_DASHBOARD_IMAGE=false 显式跳过。
+CI_BUILD_APP_IMAGE=false \
+CI_BUILD_MEM0_IMAGE="${CI_BUILD_MEM0_IMAGE:-true}" \
+CI_BUILD_MEM0_DASHBOARD_IMAGE="${CI_BUILD_MEM0_DASHBOARD_IMAGE:-true}" \
+bash scripts/ci/common/docker-build-check.sh

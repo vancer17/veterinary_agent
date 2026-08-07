@@ -49,6 +49,7 @@ remote_env=(
     "CD_PROD_DEPLOY_PATH=$(printf '%q' "$deploy_path")"
     "CD_APP_IMAGE=$(printf '%q' "$CD_APP_IMAGE")"
     "CD_MEM0_IMAGE=$(printf '%q' "$CD_MEM0_IMAGE")"
+    "CD_MEM0_DASHBOARD_IMAGE=$(printf '%q' "$CD_MEM0_DASHBOARD_IMAGE")"
     "CD_RUN_MIGRATION=$(printf '%q' "$run_migration")"
 )
 
@@ -67,6 +68,7 @@ required_real_env_files=(
     docker/app/template/app.prod.env
     docker/litellm/template/litellm.prod.env
     docker/mem0/template/mem0.prod.env
+    docker/mem0-dashboard/template/mem0-dashboard.prod.env
     docker/postgres/template/postgres.prod.env
 )
 
@@ -79,6 +81,7 @@ done
 
 export VET_AGENT_IMAGE="$CD_APP_IMAGE"
 export MEM0_IMAGE="$CD_MEM0_IMAGE"
+export MEM0_DASHBOARD_IMAGE="$CD_MEM0_DASHBOARD_IMAGE"
 
 compose_cmd=(
     docker compose
@@ -97,7 +100,7 @@ fi
 trap 'rmdir "$lock_dir" >/dev/null 2>&1 || true' EXIT
 
 # 拉取发布镜像后再启动服务；所有启动命令均使用 --no-build，禁止生产现场构建。
-"${compose_cmd[@]}" pull app mem0
+"${compose_cmd[@]}" pull app mem0 mem0-dashboard
 "${compose_cmd[@]}" up -d --no-build --pull missing --wait postgres litellm mem0
 
 case "$CD_RUN_MIGRATION" in

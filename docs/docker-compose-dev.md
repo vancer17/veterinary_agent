@@ -29,10 +29,11 @@ make dev-ready
 ```text
 PGVECTOR_IMAGE=你的镜像站/pgvector/pgvector:pg16
 MEM0_PYTHON_BASE_IMAGE=你的镜像站/python:3.12-slim-bookworm
+MEM0_DASHBOARD_NODE_BASE_IMAGE=你的镜像站/node:20-bookworm-slim
 LITELLM_IMAGE=你的镜像站/berriai/litellm:main-stable
 ```
 
-Mem0 开发镜像由 `docker/mem0/Dockerfile` 从 `vendor/mem0/server` 构建，核心 `mem0ai` 包从同一子模块源码安装。需要记录本地镜像的子模块版本时，可在执行 build 前导出 `MEM0_SOURCE_COMMIT=$(git -C vendor/mem0 rev-parse HEAD)`。
+Mem0 开发镜像由 `docker/mem0/Dockerfile` 从 `vendor/mem0/server` 构建，核心 `mem0ai` 包从同一子模块源码安装。Mem0 Dashboard 开发镜像由 `docker/mem0-dashboard/Dockerfile` 从 `vendor/mem0/server/dashboard` 构建，浏览器侧默认访问同源 `/api/mem0`，该路径需由正式开发环境 Nginx 网关转发至容器内 Mem0 REST API。需要记录本地镜像的子模块版本时，可在执行 build 前导出 `MEM0_SOURCE_COMMIT=$(git -C vendor/mem0 rev-parse HEAD)`。
 
 修改 Key 后重启中间件和 app：
 
@@ -52,13 +53,14 @@ make dev-app-logs
 ## 常用命令
 
 ```bash
-make dev-up              # 构建并启动 app + postgres + LiteLLM + 自托管 Mem0
+make dev-up              # 构建并启动 app + postgres + LiteLLM + 自托管 Mem0 + Mem0 Dashboard
 make dev-down            # 停止容器
 make dev-clean           # 停止并删除 dev 数据卷
 make dev-app-logs        # 查看 app 日志
 make dev-db-logs         # 查看共享 PostgreSQL 日志
 make dev-litellm-logs    # 查看 LiteLLM 日志
 make dev-mem0-logs       # 查看 Mem0 日志
+make dev-mem0-dashboard-logs # 查看 Mem0 Dashboard 日志
 make dev-mem0-db-logs    # 查看共享 PostgreSQL 日志
 make dev-migrate         # 手动执行 Alembic
 make dev-seed            # 手动导入 seed

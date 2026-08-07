@@ -21,7 +21,7 @@ on:
           - repository
           - full
       build_mem0_image:
-        description: "Build self-hosted Mem0 wrapper image"
+        description: "Build self-hosted Mem0 and Dashboard images"
         required: true
         default: false
         type: boolean
@@ -39,6 +39,7 @@ env:
   UV_LINK_MODE: copy
   CI_TRY_RUN_SCOPE: ${{ inputs.gate_scope }}
   CI_BUILD_MEM0_IMAGE: ${{ inputs.build_mem0_image }}
+  CI_BUILD_MEM0_DASHBOARD_IMAGE: ${{ inputs.build_mem0_image }}
 
 jobs:
   # ---------------------------------------------------------------------------

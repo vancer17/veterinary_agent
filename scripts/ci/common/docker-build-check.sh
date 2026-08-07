@@ -19,6 +19,7 @@ fi
 app_dockerfile="${CI_APP_DOCKERFILE:-docker/app/Dockerfile}"
 app_image_tag="${CI_APP_IMAGE_TAG:-vet-agent-ci-app:${GITHUB_SHA:-local}}"
 mem0_image_tag="${CI_MEM0_IMAGE_TAG:-vet-agent-ci-mem0:${GITHUB_SHA:-local}}"
+mem0_dashboard_image_tag="${CI_MEM0_DASHBOARD_IMAGE_TAG:-vet-agent-ci-mem0-dashboard:${GITHUB_SHA:-local}}"
 
 case "${CI_BUILD_APP_IMAGE:-true}" in
     1|true|TRUE|yes|YES|on|ON)
@@ -52,5 +53,27 @@ case "${CI_BUILD_MEM0_IMAGE:-false}" in
         ;;
     *)
         echo "跳过 Mem0 镜像构建：CI_BUILD_MEM0_IMAGE 未启用。"
+        ;;
+esac
+
+case "${CI_BUILD_MEM0_DASHBOARD_IMAGE:-false}" in
+    1|true|TRUE|yes|YES|on|ON)
+        if [ ! -f vendor/mem0/server/dashboard/package.json ]; then
+            echo "Mem0 git submodule 未初始化，缺少 vendor/mem0/server/dashboard/package.json。" >&2
+            exit 1
+        fi
+
+        mem0_source_commit="$(git -C vendor/mem0 rev-parse HEAD)"
+
+        # Mem0 Dashboard 镜像基于 vendor/mem0/server/dashboard 固定源码构建，用于验证运维配套服务可生成运行产物。
+        docker build \
+            -f docker/mem0-dashboard/Dockerfile \
+            --build-arg "NODE_BASE_IMAGE=${CI_MEM0_DASHBOARD_NODE_BASE_IMAGE:-node:20-bookworm-slim}" \
+            --build-arg "MEM0_SOURCE_COMMIT=${mem0_source_commit}" \
+            -t "$mem0_dashboard_image_tag" \
+            .
+        ;;
+    *)
+        echo "跳过 Mem0 Dashboard 镜像构建：CI_BUILD_MEM0_DASHBOARD_IMAGE 未启用。"
         ;;
 esac

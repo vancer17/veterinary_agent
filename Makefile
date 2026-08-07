@@ -9,7 +9,7 @@ DEV_ENV_FILE ?= $(if $(wildcard docker/compose.dev.env),docker/compose.dev.env,d
 PROD_ENV_FILE ?= $(if $(wildcard docker/compose.prod.env),docker/compose.prod.env,docker/compose.prod.env.template)
 DEV_COMPOSE ?= docker compose --env-file $(DEV_ENV_FILE) -f docker/compose.dev.yml
 PROD_COMPOSE ?= docker compose --env-file $(PROD_ENV_FILE) -f docker/compose.yml
-PROD_IMAGE_ENV = VET_AGENT_IMAGE="$${VET_AGENT_IMAGE:?请先导出 VET_AGENT_IMAGE}" MEM0_IMAGE="$${MEM0_IMAGE:?请先导出 MEM0_IMAGE}"
+PROD_IMAGE_ENV = VET_AGENT_IMAGE="$${VET_AGENT_IMAGE:?请先导出 VET_AGENT_IMAGE}" MEM0_IMAGE="$${MEM0_IMAGE:?请先导出 MEM0_IMAGE}" MEM0_DASHBOARD_IMAGE="$${MEM0_DASHBOARD_IMAGE:?请先导出 MEM0_DASHBOARD_IMAGE}"
 PROD_COMPOSE_CMD = $(PROD_IMAGE_ENV) $(PROD_COMPOSE)
 COMPOSE ?= $(DEV_COMPOSE)
 EXEC ?= $(COMPOSE) exec -T app
@@ -23,7 +23,7 @@ CI_TRY_RUN_SCOPE ?= full
 CD_SCRIPT_DIR ?= scripts/cd
 CD_RELEASE_TAG ?=
 
-.PHONY: ci ci-common ci-repository ci-static ci-python ci-compose ci-secret-boundary ci-cd-layout ci-db ci-image ci-dry-run ci-try-run cd-verify-release cd-resolve-images cd-build-images cd-deploy-production cd-sync-production cd-health-check dev-build dev-up dev-up-no-wait dev-down dev-clean dev-restart dev-ps dev-logs dev-app-logs dev-db-logs dev-litellm-logs dev-mem0-logs dev-mem0-db-logs dev-shell db-shell dev-db-extensions dev-migrate dev-seed dev-test dev-ready dev-url prod-config prod-pull prod-db-extensions prod-deps prod-migrate prod-seed prod-up prod-restart prod-down prod-clean prod-ps prod-logs prod-app-logs prod-litellm-logs prod-mem0-logs prod-mem0-db-logs prod-ready prod-shell prod-db-shell request-all request-curl request-health request-ready request-followup-first request-followup-second request-multitask request-safety-toxic request-idempotency request-profile-memory request-memory-read request-report-parse request-rag-stats request-rag-chunks request-business-all request-business-followup-first request-business-followup-second request-business-multitask request-business-memory request-business-safety-semantic request-business-stream
+.PHONY: ci ci-common ci-repository ci-static ci-python ci-compose ci-secret-boundary ci-cd-layout ci-db ci-image ci-dry-run ci-try-run cd-verify-release cd-resolve-images cd-build-images cd-deploy-production cd-sync-production cd-health-check dev-build dev-up dev-up-no-wait dev-down dev-clean dev-restart dev-ps dev-logs dev-app-logs dev-db-logs dev-litellm-logs dev-mem0-logs dev-mem0-dashboard-logs dev-mem0-db-logs dev-shell db-shell dev-db-extensions dev-migrate dev-seed dev-test dev-ready dev-url prod-config prod-pull prod-db-extensions prod-deps prod-migrate prod-seed prod-up prod-mem0-dashboard-up prod-restart prod-down prod-clean prod-ps prod-logs prod-app-logs prod-litellm-logs prod-mem0-logs prod-mem0-dashboard-logs prod-mem0-db-logs prod-ready prod-shell prod-db-shell request-all request-curl request-health request-ready request-followup-first request-followup-second request-multitask request-safety-toxic request-idempotency request-profile-memory request-memory-read request-report-parse request-rag-stats request-rag-chunks request-business-all request-business-followup-first request-business-followup-second request-business-multitask request-business-memory request-business-safety-semantic request-business-stream
 
 ci:
 	bash $(CI_SCRIPT_DIR)/run-all.sh
@@ -80,7 +80,7 @@ cd-health-check:
 	bash $(CD_SCRIPT_DIR)/repository/health-check.sh
 
 dev-build:
-	$(COMPOSE) build app mem0
+	$(COMPOSE) build app mem0 mem0-dashboard
 
 dev-up:
 	$(COMPOSE) up -d --build --wait
@@ -117,6 +117,9 @@ dev-litellm-logs:
 dev-mem0-logs:
 	$(COMPOSE) logs -f mem0
 
+dev-mem0-dashboard-logs:
+	$(COMPOSE) logs -f mem0-dashboard
+
 dev-mem0-db-logs:
 	$(COMPOSE) logs -f postgres
 
@@ -149,7 +152,7 @@ prod-config:
 	$(PROD_COMPOSE_CMD) config
 
 prod-pull:
-	$(PROD_COMPOSE_CMD) pull app mem0
+	$(PROD_COMPOSE_CMD) pull app mem0 mem0-dashboard
 
 prod-db-extensions:
 	$(PROD_COMPOSE_CMD) up -d --no-build --pull missing --wait postgres
@@ -167,6 +170,9 @@ prod-seed:
 prod-up: prod-pull prod-deps prod-migrate
 	$(PROD_COMPOSE_CMD) up -d --no-build --pull never --no-deps --wait app
 	@echo "Vet Agent prod API: $(BASE_URL)"
+
+prod-mem0-dashboard-up:
+	$(PROD_COMPOSE_CMD) --profile ops up -d --no-build --pull never --wait mem0-dashboard
 
 prod-restart:
 	$(PROD_COMPOSE_CMD) restart app
@@ -191,6 +197,9 @@ prod-litellm-logs:
 
 prod-mem0-logs:
 	$(PROD_COMPOSE_CMD) logs -f mem0
+
+prod-mem0-dashboard-logs:
+	$(PROD_COMPOSE_CMD) logs -f mem0-dashboard
 
 prod-mem0-db-logs:
 	$(PROD_COMPOSE_CMD) logs -f postgres
