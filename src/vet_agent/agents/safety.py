@@ -16,15 +16,17 @@ from vet_agent.repositories import RuleRepository, SafetyRule, compile_regex
 
 @dataclass(frozen=True)
 class SafetyAssessment:
+    """表示一轮输入的安全分诊结果。"""
+
     escalated: bool = False
     blocked: bool = False
     signals: list[SafetySignal] = field(default_factory=list)
 
     @property
     def highest_status(self) -> str:
-        """执行 highest_status 业务逻辑。
+        """返回当前安全评估的最高状态。
 
-        :return: 返回函数执行结果。
+        :return: 返回 `blocked`、`safety_escalated` 或 `ok`。
         """
         if self.blocked:
             return "blocked"
@@ -32,9 +34,34 @@ class SafetyAssessment:
             return "safety_escalated"
         return "ok"
 
+    @classmethod
+    def from_signals(cls, signals: list[SafetySignal]) -> "SafetyAssessment":
+        """根据安全信号列表构造安全评估结果。
+
+        :param signals: 安全信号列表。
+        :return: 返回由信号推导出的安全评估结果。
+        """
+        return cls(
+            escalated=any(signal.severity == "urgent" for signal in signals),
+            blocked=any(signal.severity == "blocked" for signal in signals),
+            signals=signals,
+        )
+
+    @classmethod
+    def merge(cls, *assessments: "SafetyAssessment") -> "SafetyAssessment":
+        """合并多个安全评估结果。
+
+        :param assessments: 待合并的安全评估结果。
+        :return: 返回合并后的安全评估结果。
+        """
+        merged_signals: list[SafetySignal] = []
+        for assessment in assessments:
+            merged_signals.extend(assessment.signals)
+        return cls.from_signals(merged_signals)
+
 
 class SafetyAgent:
-    """Deterministic clinical safety gate that runs before and after LLM calls."""
+    """在模型调用前后执行确定性临床安全分诊与输出审查。"""
 
     def __init__(self, rule_repository: RuleRepository) -> None:
         """初始化当前对象。
@@ -51,7 +78,7 @@ class SafetyAgent:
         :param attachments: 附件引用列表。
         :return: 返回函数执行结果。
         """
-        lowered = text.lower()
+        lowered = re.sub(r"\s+", "", text.lower())
         signals: list[SafetySignal] = []
         rule_matches: dict[str, tuple[SafetyRule, list[str]]] = {}
 
@@ -134,6 +161,23 @@ class SafetyAgent:
             template = self._response_template_for(code)
             if template:
                 return template.format(matched=matched)
+        urgent_signals = [signal for signal in assessment.signals if signal.severity in {"urgent", "blocked"}]
+        if urgent_signals:
+            reasons = "；".join(signal.message for signal in urgent_signals if signal.message)
+            matched = "、".join(
+                term
+                for signal in urgent_signals
+                for term in signal.matched_terms
+            )
+            prefix = "你描述里有需要优先线下处理的高风险信号"
+            if reasons:
+                prefix = f"{prefix}：{reasons}"
+            if matched:
+                prefix = f"{prefix}，命中线索: {matched}"
+            return (
+                f"{prefix}。请尽快去线下兽医医院，若症状正在发生或持续加重，请按急诊处理。\n\n"
+                "路上尽量保持宠物安静和保暖，不要自行喂人药或给不确定的药物。"
+            )
         return "当前信息需要进一步确认。"
 
     def _match_rule(self, rule: SafetyRule, lowered_text: str, attachments: list[AttachmentRef]) -> list[str]:
@@ -145,7 +189,7 @@ class SafetyAgent:
         :return: 返回函数执行结果。
         """
         if rule.match_type == "keyword":
-            return [rule.pattern for _ in [0] if rule.pattern.lower() in lowered_text]
+            return self._match_keyword(rule.pattern, lowered_text)
         if rule.match_type == "regex":
             return [match.group(0) for match in compile_regex(rule.pattern).finditer(lowered_text)]
         if rule.match_type == "attachment_purpose":
@@ -160,6 +204,23 @@ class SafetyAgent:
                 for item in attachments
                 if rule.pattern.lower() in item.storage_ref.lower()
             ]
+        return []
+
+    def _match_keyword(self, pattern: str, lowered_text: str) -> list[str]:
+        """执行关键词规则的命中判断并过滤显性否定表达。
+
+        :param pattern: 待匹配的关键词。
+        :param lowered_text: 已规范化的输入文本。
+        :return: 返回当前关键词命中结果。
+        """
+        keyword = pattern.lower()
+        if not keyword:
+            return []
+        index = lowered_text.find(keyword)
+        while index >= 0:
+            if not self._is_negated_occurrence(lowered_text, index):
+                return [pattern]
+            index = lowered_text.find(keyword, index + len(keyword))
         return []
 
     def _rules_by_type(self, rule_type: str) -> list[SafetyRule]:
@@ -184,6 +245,24 @@ class SafetyAgent:
             if rule.match_type == "regex" and compile_regex(rule.pattern).search(lowered):
                 return True
         return False
+
+    def _is_negated_occurrence(self, lowered_text: str, index: int) -> bool:
+        """判断某个关键词命中位置前是否存在否定上下文。
+
+        :param lowered_text: 已规范化的输入文本。
+        :param index: 关键词起始位置。
+        :return: 如果关键词被否定修饰，则返回 True。
+        """
+        prefix_window = lowered_text[max(0, index - 6) : index]
+        negation_phrases = ("没有", "不是", "并非", "否认", "未见", "不见")
+        if any(phrase in prefix_window for phrase in negation_phrases):
+            return True
+        return any(
+            prefix_window.endswith(prefix)
+            or prefix_window.endswith(f"{prefix}明显")
+            or prefix_window.endswith(f"{prefix}完全")
+            for prefix in ("没", "无", "未")
+        )
 
     def _response_template_for(self, code: str) -> str | None:
         """执行 _response_template_for 内部辅助逻辑。

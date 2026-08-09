@@ -1,63 +1,90 @@
 """
 文件：scripts/seed_database.py
-作用：提供开发、导入与初始化脚本。
-说明：本文件遵循项目标准文件树编排；跨包引用应通过对应包的 __init__.py 暴露能力。
+作用：提供 PostgreSQL 初始化与离线种子数据写入能力。
+说明：本脚本只负责将标准 seed、知识片段与临床安全资产同步到数据库，不承载在线业务逻辑。
 """
-
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from vet_agent import Settings
+from vet_agent.clinical_safety import FileClinicalSafetyRepository
 from vet_agent.db import (
+    ClinicalSafetyAssetModel,
+    ClinicalSafetyChunkModel,
     ConsultationDomainModel,
     ConsultationSlotModel,
     KnowledgeChunkModel,
-    make_session_factory,
     SafetyRuleModel,
+    make_session_factory,
 )
 from vet_agent.runtime import QwenEmbeddingClient
+
+
+def parse_args() -> argparse.Namespace:
+    """解析命令行参数。
+
+    :return: 返回命令行参数对象。
+    """
+    parser = argparse.ArgumentParser(description="Seed PostgreSQL rule, knowledge and clinical safety tables.")
+    parser.add_argument("--database-url", default=os.getenv("DATABASE_URL"))
+    parser.add_argument("--seed-dir", default="assets/seeds")
+    parser.add_argument("--clinical-safety-dir", default="assets/clinical_safety")
+    parser.add_argument("--with-embeddings", action="store_true")
+    parser.add_argument(
+        "--clinical-safety-review-status",
+        default="approved",
+        choices=("approved", "pending"),
+    )
+    return parser.parse_args()
 
 
 def main() -> None:
     """执行命令行入口逻辑。
 
-    :return: 返回函数执行结果。
+    :return: 无返回值。
     """
-    parser = argparse.ArgumentParser(description="Seed PostgreSQL rule and RAG tables.")
-    parser.add_argument("--database-url", default=os.getenv("DATABASE_URL"))
-    parser.add_argument("--seed-dir", default="data/seeds")
-    parser.add_argument("--with-embeddings", action="store_true")
-    args = parser.parse_args()
-
+    args = parse_args()
     if not args.database_url:
         raise SystemExit("DATABASE_URL is required")
 
-    embedding_client = QwenEmbeddingClient(Settings.from_env()) if args.with_embeddings else None
+    settings = Settings.from_env()
+    embedding_client = QwenEmbeddingClient(settings) if args.with_embeddings else None
     seed_dir = Path(args.seed_dir)
+    clinical_safety_dir = Path(args.clinical_safety_dir)
     session_factory = make_session_factory(args.database_url)
     with session_factory() as session:
         seed_safety(session, seed_dir / "safety_rules.json")
         seed_consultation(session, seed_dir / "consultation_rules.json")
         seed_knowledge(session, seed_dir / "knowledge_chunks.json", embedding_client)
+        seed_clinical_safety(
+            session,
+            clinical_safety_dir,
+            embedding_client,
+            embedding_model=settings.qwen_embedding_model,
+            review_status=args.clinical_safety_review_status,
+        )
         session.commit()
 
 
-def seed_safety(session, path: Path) -> None:
-    """执行 seed_safety 业务逻辑。
+def seed_safety(session: Session, path: Path) -> None:
+    """写入安全规则 seed。
 
     :param session: 数据库会话。
-    :param path: 文件或接口路径。
-    :return: 返回函数执行结果。
+    :param path: 安全规则 JSON 文件路径。
+    :return: 无返回值。
     """
     rows = json.loads(path.read_text(encoding="utf-8"))
     for item in rows:
@@ -84,12 +111,12 @@ def seed_safety(session, path: Path) -> None:
             model.metadata_json = item.get("metadata", {})
 
 
-def seed_consultation(session, path: Path) -> None:
-    """执行 seed_consultation 业务逻辑。
+def seed_consultation(session: Session, path: Path) -> None:
+    """写入问诊分流 seed。
 
     :param session: 数据库会话。
-    :param path: 文件或接口路径。
-    :return: 返回函数执行结果。
+    :param path: 问诊规则 JSON 文件路径。
+    :return: 无返回值。
     """
     raw = json.loads(path.read_text(encoding="utf-8"))
     for item in raw.get("domains", []):
@@ -111,13 +138,17 @@ def seed_consultation(session, path: Path) -> None:
         model.priority = int(item.get("priority", 100))
 
 
-def seed_knowledge(session, path: Path, embedding_client: QwenEmbeddingClient | None) -> None:
-    """执行 seed_knowledge 业务逻辑。
+def seed_knowledge(
+    session: Session,
+    path: Path,
+    embedding_client: QwenEmbeddingClient | None,
+) -> None:
+    """写入知识库 seed。
 
     :param session: 数据库会话。
-    :param path: 文件或接口路径。
-    :param embedding_client: 参数 embedding_client。
-    :return: 返回函数执行结果。
+    :param path: 知识 chunk JSON 文件路径。
+    :param embedding_client: 可选的 embedding 客户端。
+    :return: 无返回值。
     """
     rows = json.loads(path.read_text(encoding="utf-8"))
     for item in rows:
@@ -139,6 +170,97 @@ def seed_knowledge(session, path: Path, embedding_client: QwenEmbeddingClient | 
         model.species = item.get("species")
         model.source_url = item.get("source_url")
         model.metadata_json = item.get("metadata", {})
+
+
+def seed_clinical_safety(
+    session: Session,
+    asset_dir: Path,
+    embedding_client: QwenEmbeddingClient | None,
+    *,
+    embedding_model: str,
+    review_status: str = "approved",
+) -> None:
+    """写入临床安全独立表。
+
+    :param session: 数据库会话。
+    :param asset_dir: 标准临床安全资产目录。
+    :param embedding_client: 可选的 embedding 客户端。
+    :param embedding_model: 生成向量时使用的模型名称。
+    :param review_status: 写入数据库时采用的审核状态。
+    :return: 无返回值。
+    """
+    repository = FileClinicalSafetyRepository(asset_dir)
+    assets = repository.assets(published_only=False)
+    chunks = repository.chunks(published_only=False)
+    now = datetime.now(UTC)
+    approved = review_status == "approved"
+
+    for asset in assets:
+        model = session.get(ClinicalSafetyAssetModel, asset.asset_id)
+        if model is None:
+            model = ClinicalSafetyAssetModel(asset_id=asset.asset_id)
+            session.add(model)
+        model.code = asset.resolved_code()
+        model.asset_type = asset.asset_type
+        model.canonical_name = asset.canonical_name
+        model.category = asset.category
+        model.species_scope = list(asset.species_scope)
+        model.sex_scope = list(asset.sex_scope)
+        model.age_scope = list(asset.age_scope)
+        model.severity = asset.severity
+        model.action_class = asset.action_class
+        model.aliases = list(asset.aliases)
+        model.carriers = list(asset.carriers)
+        model.user_expressions = list(asset.user_expressions)
+        model.symptoms = list(asset.symptoms)
+        model.recognition_phrases = list(asset.recognition_phrases)
+        model.required_context = {key: list(value) for key, value in asset.required_context.items()}
+        model.decision_hints = dict(asset.decision_hints)
+        model.clinical_risk_summary = asset.clinical_risk_summary
+        model.triage_message = asset.triage_message
+        model.source = dict(asset.source)
+        model.raw_text = dict(asset.raw_text)
+        model.version = asset.version
+        model.enabled = approved
+        model.review_status = review_status
+        model.published_at = now if approved else None
+        model.metadata_json = dict(asset.metadata)
+
+    for chunk in chunks:
+        model = session.get(ClinicalSafetyChunkModel, chunk.chunk_id)
+        if model is None:
+            model = ClinicalSafetyChunkModel(chunk_id=chunk.chunk_id, asset_id=chunk.asset_id)
+            session.add(model)
+        model.asset_id = chunk.asset_id
+        model.chunk_type = chunk.chunk_type
+        model.title = chunk.title
+        model.embedding_text = chunk.embedding_text
+        model.enabled = approved and chunk.enabled
+        model.review_status = review_status
+        model.version = chunk.version
+        model.metadata_json = dict(chunk.metadata)
+        model.content_hash = chunk.content_hash or _content_hash(chunk.embedding_text)
+        if embedding_client is not None and embedding_client.available:
+            try:
+                embedding = embedding_client.embed(chunk.embedding_text)
+            except Exception:
+                embedding = None
+            model.embedding = embedding
+            model.embedding_model = embedding_model if embedding else None
+            model.embedding_dimension = len(embedding) if embedding else None
+        else:
+            model.embedding = None
+            model.embedding_model = None
+            model.embedding_dimension = None
+
+
+def _content_hash(text: str) -> str:
+    """生成 chunk 内容哈希。
+
+    :param text: 待哈希的 chunk 文本。
+    :return: 返回十六进制摘要。
+    """
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 if __name__ == "__main__":

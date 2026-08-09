@@ -28,6 +28,6 @@ class QuestionPlanner:
         if not any(term in text for term in ("吐", "拉", "咳", "喘", "疼", "尿", "便")):
             questions.append("有没有呕吐、腹泻、咳喘、疼痛、排尿或排便异常？")
 
-        if pet_context.profile.get("weight_kg") in (None, "", "未知"):
+        if pet_context.verified_profile.get("weight_kg") in (None, "", "未知"):
             questions.append("系统里没有可靠体重记录，最近一次体重大约是多少？")
         return questions[:max_questions]

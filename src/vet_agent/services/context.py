@@ -1,6 +1,6 @@
 """
 文件：src/vet_agent/services/context.py
-作用：承载业务服务、记忆、报告解析、权限与治理逻辑。
+作用：组装当前回合可见的宠物上下文，并区分已验证资料与自报资料。
 说明：本文件遵循项目标准文件树编排；跨包引用应通过对应包的 __init__.py 暴露能力。
 """
 
@@ -8,7 +8,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from vet_agent import Evidence, VetContext
@@ -16,7 +15,20 @@ from vet_agent import Evidence, VetContext
 
 @dataclass
 class PetContext:
-    profile: dict[str, Any] = field(default_factory=dict)
+    """表示当前回合可见的宠物上下文。
+
+    :param verified_profile: 服务端已验证的宠物画像。
+    :param reported_profile: 请求侧自报的宠物画像，仅保留审计提示。
+    :param telemetry: 服务端已验证的近期指标。
+    :param algorithm_risks: 服务端已验证的算法风险。
+    :param alerts: 服务端已验证的告警。
+    :param device: 服务端已验证的设备状态。
+    :param evidence: 可对外展示的上下文证据。
+    :return: 无返回值。
+    """
+
+    verified_profile: dict[str, Any] = field(default_factory=dict)
+    reported_profile: dict[str, Any] = field(default_factory=dict)
     telemetry: dict[str, Any] = field(default_factory=dict)
     algorithm_risks: list[dict[str, Any]] = field(default_factory=list)
     alerts: list[dict[str, Any]] = field(default_factory=list)
@@ -24,69 +36,126 @@ class PetContext:
     evidence: list[Evidence] = field(default_factory=list)
 
     def summary(self) -> str:
-        """执行 summary 业务逻辑。
+        """生成可供模型使用的已验证宠物上下文摘要。
 
-        :return: 返回函数执行结果。
+        :return: 返回已验证宠物上下文摘要。
         """
-        profile = self.profile
-        telemetry = self.telemetry
-        risks = ", ".join(
-            f"{risk.get('domain')}={risk.get('level')}({risk.get('confidence')})" for risk in self.algorithm_risks
-        )
-        return (
-            f"宠物画像: 物种={profile.get('species', '未知')}, 品种={profile.get('breed', '未知')}, "
-            f"年龄={profile.get('age', '未知')}, 体重={profile.get('weight_kg', '未知')}kg, "
-            f"性别={profile.get('sex', '未知')}, 绝育={profile.get('neutered', '未知')}。\n"
-            f"近期指标: 静息心率={telemetry.get('resting_hr', '未知')}, "
-            f"呼吸率={telemetry.get('respiratory_rate', '未知')}, 活动量={telemetry.get('activity_level', '未知')}。\n"
-            f"算法风险: {risks or '暂无高风险信号'}。"
-        )
+        profile_line = "宠物画像: 当前暂无服务端已验证资料，相关字段按未知处理。"
+        if self.verified_profile:
+            profile_line = (
+                f"宠物画像: 物种={self.verified_profile.get('species', '未知')}, "
+                f"品种={self.verified_profile.get('breed', '未知')}, "
+                f"年龄={self.verified_profile.get('age', '未知')}, "
+                f"体重={self.verified_profile.get('weight_kg', '未知')}kg, "
+                f"性别={self.verified_profile.get('sex', '未知')}, "
+                f"绝育={self.verified_profile.get('neutered', '未知')}。"
+            )
+
+        telemetry_line = "近期指标: 当前暂无服务端已验证遥测数据。"
+        if self.telemetry:
+            telemetry_line = (
+                f"近期指标: 静息心率={self.telemetry.get('resting_hr', '未知')}, "
+                f"呼吸率={self.telemetry.get('respiratory_rate', '未知')}, "
+                f"活动量={self.telemetry.get('activity_level', '未知')}。"
+            )
+
+        risk_line = "算法风险: 当前暂无服务端已验证风险信号。"
+        if self.algorithm_risks:
+            risks = ", ".join(
+                f"{risk.get('domain')}={risk.get('level')}({risk.get('confidence')})" for risk in self.algorithm_risks
+            )
+            risk_line = f"算法风险: {risks or '暂无高风险信号'}。"
+
+        alert_line = "告警: 当前暂无服务端已验证告警。"
+        if self.alerts:
+            alert_line = "告警: " + ", ".join(str(alert.get("message") or alert.get("code") or "未知告警") for alert in self.alerts) + "。"
+
+        return "\n".join([profile_line, telemetry_line, risk_line, alert_line])
 
 
 class PetContextProvider:
-    """Aggregates existing pet data from trusted backend context."""
+    """组装当前回合可用的宠物上下文。
+
+    说明：当前仅暴露服务端已验证资料；请求侧自报信息只保留为审计提示，不进入临床硬判断。
+    """
 
     async def load(self, vet_context: VetContext, metadata: dict[str, Any]) -> PetContext:
-        """加载结构化数据。
+        """加载当前回合可见的宠物上下文。
 
         :param vet_context: 兽医业务上下文。
         :param metadata: 附加元数据。
-        :return: 返回函数执行结果。
+        :return: 返回仅包含已验证资料的宠物上下文。
         """
-        supplied = vet_context.pet_info or {}
-        profile = {
-            "species": supplied.get("species") or metadata.get("species") or "未知",
-            "breed": supplied.get("breed") or metadata.get("breed") or "未知品种",
-            "age": supplied.get("age") or metadata.get("age") or "未知",
-            "weight_kg": supplied.get("weight_kg") or supplied.get("weight") or metadata.get("weight_kg"),
-            "sex": supplied.get("sex") or metadata.get("sex") or "未知",
-            "neutered": supplied.get("neutered") if supplied.get("neutered") is not None else metadata.get("neutered", "未知"),
-        }
-        telemetry = metadata.get("telemetry") or supplied.get("telemetry") or {}
-        telemetry.setdefault("resting_hr", "暂无")
-        telemetry.setdefault("respiratory_rate", "暂无")
-        telemetry.setdefault("activity_level", "暂无")
-        telemetry.setdefault("data_freshness", "unknown")
+        reported_profile = self._reported_profile(vet_context.pet_info)
+        verified_profile = self._load_verified_profile(vet_context, metadata)
+        evidence = self._build_evidence(vet_context, reported_profile, verified_profile)
+        return PetContext(
+            verified_profile=verified_profile,
+            reported_profile=reported_profile,
+            telemetry={},
+            algorithm_risks=[],
+            alerts=[],
+            device={},
+            evidence=evidence,
+        )
 
-        risks = metadata.get("algorithm_risks") or supplied.get("algorithm_risks") or []
-        alerts = metadata.get("alerts") or supplied.get("alerts") or []
-        device = supplied.get("device") or metadata.get("device") or {
-            "bound": False,
-            "online": "unknown",
-            "last_seen_at": (datetime.now(UTC) - timedelta(days=1)).isoformat(),
-        }
+    def _load_verified_profile(self, vet_context: VetContext, metadata: dict[str, Any]) -> dict[str, Any]:
+        """加载服务端已验证的宠物画像。
 
-        evidence = [
-            Evidence(source="我方宠物画像", detail=f"pet_id={vet_context.pet_id} 的基础资料已加载。"),
-            Evidence(source="我方健康数据", detail="近期生命体征/活动数据已作为上下文输入。"),
+        :param vet_context: 兽医业务上下文。
+        :param metadata: 附加元数据。
+        :return: 当前未接入可信资料源时返回空字典。
+        """
+        # TODO: 接入宠物画像领域后，仅从该领域读取并验证服务端资料。
+        del vet_context, metadata
+        return {}
+
+    def _reported_profile(self, pet_info: dict[str, Any]) -> dict[str, Any]:
+        """整理请求侧自报的宠物画像。
+
+        :param pet_info: 请求侧提交的宠物信息。
+        :return: 返回经过基础筛选的自报宠物画像。
+        """
+        if not pet_info:
+            return {}
+        reported: dict[str, Any] = {}
+        for key in ("species", "breed", "age", "sex", "neutered"):
+            value = pet_info.get(key)
+            if value not in (None, ""):
+                reported[key] = value
+        weight = pet_info.get("weight_kg") or pet_info.get("weight")
+        if weight not in (None, ""):
+            reported["weight_kg"] = weight
+        return reported
+
+    def _build_evidence(
+        self,
+        vet_context: VetContext,
+        reported_profile: dict[str, Any],
+        verified_profile: dict[str, Any],
+    ) -> list[Evidence]:
+        """构造宠物上下文证据。
+
+        :param vet_context: 兽医业务上下文。
+        :param reported_profile: 请求侧自报的宠物画像。
+        :param verified_profile: 服务端已验证的宠物画像。
+        :return: 返回上下文证据列表。
+        """
+        evidence: list[Evidence] = [
+            Evidence(
+                source="可信宠物画像",
+                detail=(
+                    f"pet_id={vet_context.pet_id} 的服务端已验证资料已加载。"
+                    if verified_profile
+                    else "当前未接入服务端已验证宠物画像，相关字段已按未知处理。"
+                ),
+            )
         ]
-        for risk in risks:
-            contribution = risk.get("evidence_contribution") or risk.get("evidence") or "算法风险输出"
+        if reported_profile:
             evidence.append(
                 Evidence(
-                    source="我方健康算法 v2.0",
-                    detail=f"{risk.get('domain', '未知风险域')}: {contribution}",
+                    source="请求自报宠物资料",
+                    detail="本轮收到的 pet_info 仅作为未验证输入保留，不进入临床硬判断。",
                 )
             )
-
-        return PetContext(profile=profile, telemetry=telemetry, algorithm_risks=risks, alerts=alerts, device=device, evidence=evidence)
+        return evidence

@@ -21,7 +21,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 COPY pyproject.toml uv.lock README.md ./
 COPY alembic.ini ./
 COPY alembic ./alembic
-COPY data ./data
+COPY assets ./assets
 COPY scripts ./scripts
 COPY src ./src
 

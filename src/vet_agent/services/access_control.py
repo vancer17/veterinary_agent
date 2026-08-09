@@ -72,7 +72,7 @@ class AccessControlService:
         """执行用户与宠物访问授权。
 
         :param identity: 可信身份信息。
-        :param pet_info: 宠物基础信息。
+        :param pet_info: 请求侧自报宠物资料，仅为接口兼容保留，不写入权威画像。
         :param principal: 认证主体。
         :return: 返回函数执行结果。
         """
@@ -89,9 +89,10 @@ class AccessControlService:
         """执行内部授权逻辑。
 
         :param identity: 可信身份信息。
-        :param pet_info: 宠物基础信息。
+        :param pet_info: 请求侧自报宠物资料，不参与宠物画像写入。
         :return: 返回函数执行结果。
         """
+        del pet_info
         mode = self._mode(self.settings.pet_authorization_mode)
         if mode == "off":
             return
@@ -103,15 +104,14 @@ class AccessControlService:
                 details={"pet_id": identity.pet_id},
             )
         if owner == identity.user_id:
-            if pet_info:
-                await self.store.upsert_pet(identity, pet_info, source="api_refresh")
             return
         if mode == "strict":
             raise ForbiddenError(
                 "pet_id is not registered for this user",
                 details={"pet_id": identity.pet_id, "user_id": identity.user_id},
             )
-        await self.store.upsert_pet(identity, pet_info, source="first_seen")
+        # 首次登记仅建立 user_id 与 pet_id 的归属绑定，不写入请求侧自报资料。
+        await self.store.upsert_pet(identity, {}, source="first_seen")
         owner_after = await self.store.pet_owner(identity.pet_id)
         if owner_after != identity.user_id:
             raise ForbiddenError(

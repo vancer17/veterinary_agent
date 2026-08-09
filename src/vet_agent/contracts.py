@@ -53,12 +53,20 @@ class InputItem(BaseModel):
 
 
 class VetContext(BaseModel):
+    """表示核心业务层使用的兽医上下文。
+
+    说明：``pet_info`` 为请求侧自报资料；已验证宠物画像应由独立宠物资料领域提供。
+    """
+
     model_config = ConfigDict(extra="allow")
 
     user_id: str = Field(min_length=1)
     session_id: str = Field(min_length=1)
     pet_id: str = Field(min_length=1)
-    pet_info: dict[str, Any] = Field(default_factory=dict)
+    pet_info: dict[str, Any] = Field(
+        default_factory=dict,
+        description="请求侧自报宠物资料，禁止作为权威画像或临床硬判断依据。",
+    )
 
 
 class AttachmentRef(BaseModel):

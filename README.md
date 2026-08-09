@@ -12,7 +12,7 @@
 ## 快速启动
 
 ```bash
-# 必填: 复制开发运行时 env 模板并填入真实 DASHSCOPE_API_KEY
+# 必填: 复制开发运行时 env 模板并填入真实 DASHSCOPE_API_KEY、UI 登录信息和加密盐值
 cp docker/litellm/template/litellm.dev.env.template docker/litellm/template/litellm.dev.env
 make dev-up
 ```
@@ -129,14 +129,16 @@ curl -X POST http://127.0.0.1:8000/agent/turns \
 
 - `DASHSCOPE_API_KEY`: 通义千问 API Key，仅注入 LiteLLM 容器
 - `LITELLM_MASTER_KEY`: LiteLLM Proxy master key；app 使用同一个值访问 LiteLLM
+- `LITELLM_SALT_KEY`: LiteLLM 数据库凭据加密盐值；一旦生产数据库中已有加密凭据，不应更换
+- `UI_USERNAME` / `UI_PASSWORD`: LiteLLM Admin UI 登录凭据；生产环境需由密钥管理流程下发
 - `LITELLM_BASE_URL` / `LITELLM_API_KEY`: app 侧 LiteLLM OpenAI-compatible 网关配置，compose 中默认指向 `http://litellm:4000/v1`
 - `POSTGRES_ADMIN_*`: 单 PostgreSQL 容器的初始化管理员配置，仅用于首次创建逻辑库和登录角色
 - `QWEN_MODEL`: 默认 `qwen-plus`
 - `QWEN_VISION_MODEL`: 报告图片解析使用的视觉模型，默认 `qwen-vl-plus`
 - `MEM0_BASE_URL` / `MEM0_API_KEY`: app 侧自托管 Mem0 REST Server 配置，compose 中默认指向 `http://mem0:8000`
 - `VET_AGENT_DATA_DIR`: 记忆和留痕数据目录
-- `DATABASE_URL`: PostgreSQL 连接串；配置后优先读取数据库规则/RAG，失败时回退 `data/seeds`
-- `VET_AGENT_SEED_DIR`: 本地规则和知识 seed 目录，默认 `data/seeds`
+- `DATABASE_URL`: PostgreSQL 连接串；配置后优先读取数据库规则/RAG，失败时回退 `assets/seeds`
+- `VET_AGENT_SEED_DIR`: 本地规则和知识 seed 目录，默认 `assets/seeds`
 - `OSS_BUCKET` / `OSS_PREFIX` / `OSS_ENDPOINT`: 报告解析只接受该 OSS 桶和 endpoint 下的图片地址；Dev 默认 `infra-dev-file-storage` 与 `oss-cn-hangzhou-internal.aliyuncs.com`
 
 ## PostgreSQL + pgvector

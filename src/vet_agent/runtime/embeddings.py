@@ -7,37 +7,57 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Protocol
 
 import httpx
 
 from vet_agent import Settings
 
 
+class EmbeddingClient(Protocol):
+    """定义运行时 embedding 客户端契约。"""
+
+    @property
+    def available(self) -> bool:
+        """检查 embedding 客户端是否具备调用条件。
+
+        :return: 可调用时返回 True，否则返回 False。
+        """
+        ...
+
+    def embed(self, text: str) -> list[float]:
+        """将输入文本转换为 embedding 向量。
+
+        :param text: 待向量化文本。
+        :return: 返回浮点向量列表。
+        """
+        ...
+
+
 class QwenEmbeddingClient:
-    """OpenAI-compatible LiteLLM proxy embedding client."""
+    """通过 LiteLLM 代理调用 Qwen embedding 模型。"""
 
     def __init__(self, settings: Settings) -> None:
-        """初始化当前对象。
+        """初始化 Qwen embedding 客户端。
 
-        :param settings: 应用配置对象。
+        :param settings: 包含 LiteLLM 地址、密钥和模型名的应用配置。
         :return: 无返回值。
         """
         self.settings = settings
 
     @property
     def available(self) -> bool:
-        """执行 available 业务逻辑。
+        """检查 embedding 服务是否具备调用条件。
 
-        :return: 返回函数执行结果。
+        :return: LiteLLM 配置完整时返回 True。
         """
         return self.settings.litellm_configured
 
     def embed(self, text: str) -> list[float]:
-        """执行 embed 业务逻辑。
+        """调用 embedding 接口生成文本向量。
 
-        :param text: 待处理文本。
-        :return: 返回函数执行结果。
+        :param text: 待向量化文本。
+        :return: 返回浮点 embedding 向量。
         """
         if not self.available:
             raise RuntimeError("LiteLLM proxy is not configured")

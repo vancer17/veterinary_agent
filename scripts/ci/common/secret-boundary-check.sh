@@ -49,9 +49,19 @@ if ! grep -qxF "!docker/*/template/*.env.template" .gitignore; then
     exit 1
 fi
 
-if git grep -n -E 'DASHSCOPE_API_KEY=(sk-|ak-|[A-Za-z0-9_-]{24,})' -- \
-    ':!docker/*.env.template' \
-    ':!docker/*/template/*.env.template'; then
-    echo "检测到疑似真实 DASHSCOPE_API_KEY，请改用环境密钥注入。" >&2
-    exit 1
-fi
+# 新增敏感变量后应同步维护本白名单外扫描，避免真实密钥进入仓库正文或脚本。
+secret_patterns=(
+    'DASHSCOPE_API_KEY=(sk-|ak-|[A-Za-z0-9_-]{24,})'
+    'LITELLM_MASTER_KEY=(sk-|[A-Za-z0-9_-]{24,})'
+    'LITELLM_SALT_KEY=(sk-|[A-Za-z0-9_-]{24,})'
+    'UI_PASSWORD=.{16,}'
+)
+
+for secret_pattern in "${secret_patterns[@]}"; do
+    if git grep -n -E "$secret_pattern" -- \
+        ':!docker/*.env.template' \
+        ':!docker/*/template/*.env.template'; then
+        echo "检测到疑似真实敏感配置，请改用环境密钥注入。" >&2
+        exit 1
+    fi
+done

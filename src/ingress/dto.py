@@ -30,12 +30,20 @@ class ReadyResponse(BaseModel):
 
 
 class VetContext(BaseModel):
+    """表示外部请求携带的兽医上下文。
+
+    说明：``pet_info`` 为请求侧自报资料，不作为服务端已验证宠物画像。
+    """
+
     model_config = ConfigDict(extra="allow")
 
     user_id: str = Field(min_length=1)
     session_id: str = Field(min_length=1)
     pet_id: str = Field(min_length=1)
-    pet_info: JsonObject = Field(default_factory=dict)
+    pet_info: JsonObject = Field(
+        default_factory=dict,
+        description="请求侧自报宠物资料，仅供审计与后续受控确认，不可直接用于临床硬判断。",
+    )
 
 
 class AttachmentRef(BaseModel):

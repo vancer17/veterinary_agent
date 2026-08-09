@@ -15,7 +15,7 @@ from typing import Any
 from pydantic import BaseModel, Field, ValidationError
 
 from vet_agent import Settings
-from vet_agent import AgentTurnResponse, TrustedIdentity, VetContext
+from vet_agent import AgentTurnResponse, TrustedIdentity
 from vet_agent.runtime import QwenClient
 
 
@@ -89,7 +89,11 @@ class MemoryWritePolicy:
 
 
 class MemoryExtractionAgent:
-    """Extracts durable pet facts; PostgreSQL remains the authoritative fact store."""
+    """抽取可持久化的宠物事实。
+
+    说明：仅从用户明确表达和受控模型抽取结果生成长期事实；
+    请求侧 ``pet_info`` 不属于权威资料，不能写入长期记忆。
+    """
 
     def __init__(self, qwen: QwenClient, settings: Settings) -> None:
         """初始化当前对象。
@@ -108,7 +112,6 @@ class MemoryExtractionAgent:
         identity: TrustedIdentity,
         user_text: str,
         response: AgentTurnResponse,
-        vet_context: VetContext,
         model: str,
     ) -> list[MemoryFactCandidate]:
         """抽取可持久化的宠物事实。
@@ -116,15 +119,14 @@ class MemoryExtractionAgent:
         :param identity: 可信身份信息。
         :param user_text: 用户输入文本。
         :param response: 响应对象。
-        :param vet_context: 兽医业务上下文。
         :param model: 模型名称。
         :return: 返回函数执行结果。
         """
         if not self.settings.enable_memory_extraction:
             return []
-        candidates = [*self._from_pet_info(vet_context), *self._rule_candidates(user_text)]
+        candidates = self._rule_candidates(user_text)
         if self._llm_enabled():
-            candidates.extend(await self._llm_candidates(identity, user_text, response, vet_context, model))
+            candidates.extend(await self._llm_candidates(identity, user_text, response, model))
         return self.policy.filter(candidates)
 
     def _llm_enabled(self) -> bool:
@@ -133,37 +135,6 @@ class MemoryExtractionAgent:
         :return: 返回函数执行结果。
         """
         return self.settings.enable_llm_memory_extraction and self.qwen.available
-
-    def _from_pet_info(self, vet_context: VetContext) -> list[MemoryFactCandidate]:
-        """执行 _from_pet_info 内部辅助逻辑。
-
-        :param vet_context: 兽医业务上下文。
-        :return: 返回函数执行结果。
-        """
-        profile = vet_context.pet_info or {}
-        mapping = {
-            "species": profile.get("species"),
-            "breed": profile.get("breed"),
-            "age": profile.get("age"),
-            "weight_kg": profile.get("weight_kg") or profile.get("weight"),
-            "sex": profile.get("sex"),
-            "neutered": profile.get("neutered"),
-        }
-        candidates: list[MemoryFactCandidate] = []
-        for key, value in mapping.items():
-            if value is None or value == "":
-                continue
-            candidates.append(
-                MemoryFactCandidate(
-                    fact_type="profile",
-                    fact_key=key,
-                    fact_value=str(value),
-                    confidence=0.95,
-                    source_text="vet_context.pet_info",
-                    metadata={"source": "vet_context"},
-                )
-            )
-        return candidates
 
     def _rule_candidates(self, user_text: str) -> list[MemoryFactCandidate]:
         """执行 _rule_candidates 内部辅助逻辑。
@@ -199,7 +170,6 @@ class MemoryExtractionAgent:
         identity: TrustedIdentity,
         user_text: str,
         response: AgentTurnResponse,
-        vet_context: VetContext,
         model: str,
     ) -> list[MemoryFactCandidate]:
         """执行 _llm_candidates 内部辅助逻辑。
@@ -207,7 +177,6 @@ class MemoryExtractionAgent:
         :param identity: 可信身份信息。
         :param user_text: 用户输入文本。
         :param response: 响应对象。
-        :param vet_context: 兽医业务上下文。
         :param model: 模型名称。
         :return: 返回函数执行结果。
         """
@@ -223,7 +192,7 @@ class MemoryExtractionAgent:
                     },
                     {
                         "role": "user",
-                        "content": self._prompt(identity, user_text, response, vet_context),
+                        "content": self._prompt(identity, user_text, response),
                     },
                 ],
                 model=model,
@@ -250,14 +219,12 @@ class MemoryExtractionAgent:
         identity: TrustedIdentity,
         user_text: str,
         response: AgentTurnResponse,
-        vet_context: VetContext,
     ) -> str:
         """执行 _prompt 内部辅助逻辑。
 
         :param identity: 可信身份信息。
         :param user_text: 用户输入文本。
         :param response: 响应对象。
-        :param vet_context: 兽医业务上下文。
         :return: 返回函数执行结果。
         """
         return json.dumps(
@@ -273,6 +240,7 @@ class MemoryExtractionAgent:
                     "Do not store transient symptoms unless the user says they are chronic or historical.",
                     "Mark requires_confirmation=true when the fact is uncertain, corrected, or conflicts with context.",
                     "Never change user_id or pet_id.",
+                    "Do not convert request-side pet profile fields into durable facts.",
                 ],
                 "schema": {
                     "facts": [
@@ -287,7 +255,6 @@ class MemoryExtractionAgent:
                         }
                     ]
                 },
-                "vet_context_pet_info": vet_context.pet_info,
                 "user_text": user_text[:3000],
                 "assistant_status": response.status,
             },

@@ -13,11 +13,11 @@ from pathlib import Path
 
 
 def _bool_env(name: str, default: bool) -> bool:
-    """执行 _bool_env 内部辅助逻辑。
+    """读取布尔环境变量。
 
-    :param name: 名称。
-    :param default: 参数 default。
-    :return: 返回函数执行结果。
+    :param name: 环境变量名称。
+    :param default: 变量不存在时使用的默认值。
+    :return: 返回解析后的布尔值。
     """
     raw = os.getenv(name)
     if raw is None:
@@ -26,10 +26,10 @@ def _bool_env(name: str, default: bool) -> bool:
 
 
 def _csv_env(name: str) -> tuple[str, ...]:
-    """执行 _csv_env 内部辅助逻辑。
+    """读取逗号分隔环境变量。
 
-    :param name: 名称。
-    :return: 返回函数执行结果。
+    :param name: 环境变量名称。
+    :return: 返回去空白、去空项后的字符串元组。
     """
     raw = os.getenv(name, "")
     values = [item.strip() for item in raw.split(",") if item.strip()]
@@ -46,7 +46,9 @@ class Settings:
     litellm_base_url: str = "http://127.0.0.1:4000/v1"
     request_timeout_seconds: float = 30.0
     data_dir: Path = Path(".data")
-    seed_dir: Path = Path("data/seeds")
+    seed_dir: Path = Path("assets/seeds")
+    clinical_safety_dir: Path = Path("assets/clinical_safety")
+    clinical_safety_vector_min_score: float = 0.35
     database_url: str | None = None
     enable_rag_embeddings: bool = False
     enable_llm_task_splitter: bool = True
@@ -81,9 +83,9 @@ class Settings:
 
     @classmethod
     def from_env(cls) -> "Settings":
-        """执行 from_env 业务逻辑。
+        """从环境变量构造应用配置。
 
-        :return: 返回函数执行结果。
+        :return: 返回完整的应用配置对象。
         """
         return cls(
             default_model=os.getenv("QWEN_MODEL", "qwen-plus"),
@@ -93,7 +95,9 @@ class Settings:
             litellm_base_url=os.getenv("LITELLM_BASE_URL", "http://127.0.0.1:4000/v1").rstrip("/"),
             request_timeout_seconds=float(os.getenv("LITELLM_TIMEOUT_SECONDS", os.getenv("QWEN_TIMEOUT_SECONDS", "30"))),
             data_dir=Path(os.getenv("VET_AGENT_DATA_DIR", ".data")),
-            seed_dir=Path(os.getenv("VET_AGENT_SEED_DIR", "data/seeds")),
+            seed_dir=Path(os.getenv("VET_AGENT_SEED_DIR", "assets/seeds")),
+            clinical_safety_dir=Path(os.getenv("VET_AGENT_CLINICAL_SAFETY_DIR", "assets/clinical_safety")),
+            clinical_safety_vector_min_score=float(os.getenv("CLINICAL_SAFETY_VECTOR_MIN_SCORE", "0.35")),
             database_url=os.getenv("DATABASE_URL"),
             enable_rag_embeddings=_bool_env("ENABLE_RAG_EMBEDDINGS", False),
             enable_llm_task_splitter=_bool_env("ENABLE_LLM_TASK_SPLITTER", True),
@@ -129,16 +133,16 @@ class Settings:
 
     @property
     def litellm_configured(self) -> bool:
-        """执行 litellm_configured 业务逻辑。
+        """判断 LiteLLM 服务配置是否完整。
 
-        :return: 返回函数执行结果。
+        :return: API 地址和密钥均存在时返回 True。
         """
         return bool(self.litellm_api_key and self.litellm_base_url)
 
     @property
     def postgres_configured(self) -> bool:
-        """执行 postgres_configured 业务逻辑。
+        """判断 PostgreSQL 连接是否已配置。
 
-        :return: 返回函数执行结果。
+        :return: 数据库连接串存在时返回 True。
         """
         return bool(self.database_url)
