@@ -10,6 +10,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from vet_agent.clinical_safety import ClinicalSafetySemanticResult
 from vet_agent.repositories import ConsultationRuleSet, RuleRepository, compile_regex
 from vet_agent.services import PetContext
 
@@ -79,6 +80,7 @@ class ConsultationState:
     answerability: dict[str, Any] = field(default_factory=dict)
     user_intent: dict[str, Any] = field(default_factory=dict)
     semantic_extraction: dict[str, Any] = field(default_factory=dict)
+    temporal_context: dict[str, str] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> "ConsultationState":
@@ -100,6 +102,7 @@ class ConsultationState:
             answerability=dict(data.get("answerability") or {}),
             user_intent=dict(data.get("user_intent") or {}),
             semantic_extraction=dict(data.get("semantic_extraction") or {}),
+            temporal_context=dict(data.get("temporal_context") or {}),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -118,6 +121,7 @@ class ConsultationState:
             "answerability": self.answerability,
             "user_intent": self.user_intent,
             "semantic_extraction": self.semantic_extraction,
+            "temporal_context": self.temporal_context,
         }
 
 
@@ -299,6 +303,7 @@ class ConsultationStateAgent:
         pet_context: PetContext,
         *,
         semantic_result: Any | None = None,
+        clinical_safety_semantic: ClinicalSafetySemanticResult | None = None,
         max_questions: int,
     ) -> ConsultationDecision:
         """更新多轮问诊状态并给出本轮回答/追问决策。
@@ -307,6 +312,7 @@ class ConsultationStateAgent:
         :param user_text: 用户输入文本。
         :param pet_context: 宠物上下文。
         :param semantic_result: LLM 语义抽取结果。
+        :param clinical_safety_semantic: 临床安全语义抽取结果。
         :param max_questions: 本轮最多追问数量。
         :return: 返回函数执行结果。
         """
@@ -321,6 +327,7 @@ class ConsultationStateAgent:
         semantic_applied = self._merge_semantic_result(state, semantic_result)
         if not semantic_applied:
             self._extract_semantic_slots(state, text)
+        self._merge_clinical_safety_temporal_context(state, clinical_safety_semantic)
         state.user_intent = self._merge_user_intent(self._detect_user_intent(text), semantic_result)
 
         rules = self.rule_repository.consultation_rules()
@@ -414,7 +421,39 @@ class ConsultationStateAgent:
                 f"语义抽取: {semantic.get('strategy')} / "
                 f"applied={semantic.get('applied_fact_keys') or []}"
             )
+        if state.temporal_context:
+            lines.append(
+                "临床安全时间上下文: "
+                f"{state.temporal_context.get('scope', 'unclear')} / "
+                f"{state.temporal_context.get('resolution_state', 'unknown')} / "
+                f"{state.temporal_context.get('text', '') or '未提供时间原文'}"
+            )
         return "\n".join(lines)
+
+    def _merge_clinical_safety_temporal_context(
+        self,
+        state: ConsultationState,
+        semantic_result: ClinicalSafetySemanticResult | None,
+    ) -> None:
+        """将临床安全时间语义写入问诊状态。
+
+        :param state: 当前问诊状态。
+        :param semantic_result: 临床安全结构化语义结果。
+        :return: 无返回值。
+        """
+        if semantic_result is None:
+            return
+        if semantic_result.temporal_scope == "unclear" and semantic_result.temporal_state in {
+            "unknown",
+            "unclear",
+        }:
+            return
+        state.temporal_context = {
+            "state": semantic_result.temporal_state,
+            "scope": semantic_result.temporal_scope,
+            "resolution_state": semantic_result.resolution_state,
+            "text": semantic_result.temporal_text,
+        }
 
     def _classify_domain(self, text: str, previous_domain: str) -> str:
         """根据关键词识别本轮主要问诊领域。
@@ -438,7 +477,7 @@ class ConsultationStateAgent:
         :param pet_context: 宠物上下文。
         :return: 无返回值。
         """
-        profile = pet_context.profile
+        profile = pet_context.verified_profile
         if profile.get("species") and profile["species"] != "未知":
             state.slots.setdefault("species", str(profile["species"]))
         if profile.get("age") and profile["age"] != "未知":
@@ -657,7 +696,7 @@ class ConsultationStateAgent:
                 "status": "known" if state.chief_complaint or state.slots.get("symptom_detail") else "unknown",
                 "slots": ["chief_complaint", "symptom_detail"],
             },
-            "time_course": self._profile_item(state, ["onset"]),
+            "time_course": self._time_course_profile(state),
             "systemic_status": self._profile_item(state, ["mental_status", "appetite"]),
             "intake_output": self._profile_item(state, ["appetite", "vomiting", "stool"]),
             "domain_specific": self._profile_item(
@@ -666,6 +705,18 @@ class ConsultationStateAgent:
             ),
         }
         profile["unresolved_slots"] = unresolved_slots
+        return profile
+
+    def _time_course_profile(self, state: ConsultationState) -> dict[str, Any]:
+        """构建包含时间槽位和临床安全时间语义的时间证据画像。
+
+        :param state: 当前问诊状态。
+        :return: 返回时间证据画像。
+        """
+        profile = self._profile_item(state, ["onset"])
+        if state.temporal_context:
+            profile["status"] = "known"
+            profile["temporal_context"] = dict(state.temporal_context)
         return profile
 
     def _profile_item(self, state: ConsultationState, slots: list[str]) -> dict[str, Any]:

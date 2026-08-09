@@ -8,6 +8,8 @@
 
 from .models import (
     Base,
+    ClinicalSafetyAssetModel,
+    ClinicalSafetyChunkModel,
     ClinicalConditionCardModel,
     ConsultationDomainModel,
     ConsultationSlotModel,
@@ -31,6 +33,8 @@ from .session import make_engine, make_session_factory, session_scope, sqlalchem
 __all__ = [
     "Base",
     "ClinicalConditionCardModel",
+    "ClinicalSafetyAssetModel",
+    "ClinicalSafetyChunkModel",
     "ConsultationDomainModel",
     "ConsultationSlotModel",
     "ConsultationStateModel",

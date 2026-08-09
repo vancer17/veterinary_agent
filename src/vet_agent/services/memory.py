@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import Any
@@ -28,7 +29,7 @@ class MemoryService:
         self._idempotency_locks: dict[str, asyncio.Lock] = {}
 
     @asynccontextmanager
-    async def turn_lock(self, identity: TrustedIdentity):
+    async def turn_lock(self, identity: TrustedIdentity) -> AsyncIterator[None]:
         """执行 turn_lock 业务逻辑。
 
         :param identity: 可信身份信息。
@@ -141,10 +142,10 @@ class MemoryService:
         identity: TrustedIdentity,
         states: dict[str, Any],
     ) -> None:
-        """执行 save_task_consultation_states 业务逻辑。
+        """替换当前会话仍未完成的多任务问诊状态。
 
         :param identity: 可信身份信息。
-        :param states: 参数 states。
+        :param states: 未完成任务的活跃问诊状态集合。
         :return: 返回函数执行结果。
         """
         data = self.store.load()
@@ -155,8 +156,19 @@ class MemoryService:
         data["pets"][identity.pet_id]["task_consultation_states"] = states
         self.store.save(data)
 
+    async def clear_default_consultation_state(self, identity: TrustedIdentity) -> None:
+        """清理当前会话的默认活跃问诊状态。
+
+        :param identity: 可信身份信息。
+        :return: 返回函数执行结果。
+        """
+        data = self.store.load()
+        data.get("sessions", {}).get(identity.session_id, {}).pop("consultation_state", None)
+        data.get("pets", {}).get(identity.pet_id, {}).pop("consultation_state", None)
+        self.store.save(data)
+
     async def clear_consultation_state(self, identity: TrustedIdentity) -> None:
-        """执行 clear_consultation_state 业务逻辑。
+        """清理当前会话所有活跃问诊状态。
 
         :param identity: 可信身份信息。
         :return: 返回函数执行结果。

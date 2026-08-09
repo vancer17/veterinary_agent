@@ -33,6 +33,9 @@ docker/postgres/template/postgres.prod.env:
 docker/litellm/template/litellm.prod.env:
   DATABASE_URL
   LITELLM_MASTER_KEY
+  LITELLM_SALT_KEY
+  UI_USERNAME
+  UI_PASSWORD
   DASHSCOPE_API_KEY
 
 docker/mem0/template/mem0.prod.env:
@@ -53,7 +56,7 @@ docker/app/template/app.prod.env:
   OSS_ENDPOINT
 ```
 
-`OPENAI_API_KEY`、`LITELLM_MASTER_KEY`、`LITELLM_API_KEY` 应保持同一 LiteLLM master key；`ADMIN_API_KEY` 与 `MEM0_API_KEY` 应保持同一 Mem0 API key。
+`OPENAI_API_KEY`、`LITELLM_MASTER_KEY`、`LITELLM_API_KEY` 应保持同一 LiteLLM master key；`ADMIN_API_KEY` 与 `MEM0_API_KEY` 应保持同一 Mem0 API key。`LITELLM_SALT_KEY` 用于加密 LiteLLM 数据库中保存的供应商凭据，一旦生产数据库中已有加密凭据，不应更换。`UI_USERNAME` 与 `UI_PASSWORD` 用于 LiteLLM Admin UI 登录，必须使用强随机值。
 
 生产默认开启：
 
@@ -200,10 +203,10 @@ mem0_vector -> vector
 
 - `app`: FastAPI Agent API
 - `postgres`: 共享 PostgreSQL + pgvector，内部按逻辑库隔离 Agent、LiteLLM 和 Mem0
-- `litellm`: LiteLLM Proxy，持有通义千问 API Key
+- `litellm`: LiteLLM Proxy，持有通义千问 API Key，并内置 LiteLLM Admin UI
 - `mem0`: 基于 `vendor/mem0/server` 封装的自托管 Mem0 REST Server，镜像内核心 `mem0ai` 包同样来自 `vendor/mem0` 子模块源码
 - `mem0-dashboard`: 基于 `vendor/mem0/server/dashboard` 封装的 Mem0 运维 Dashboard，默认位于 `ops` profile，浏览器侧通过 Nginx 网关的同源 `/api/mem0` 路径访问内部 Mem0 REST API
 - `migrate`: 一次性 Alembic 迁移任务
 - `seed`: 一次性规则/RAG seed 任务
 
-默认只有 `app` 发布宿主机端口；PostgreSQL、LiteLLM、Mem0 默认仅在 Compose 网络内访问。`mem0-dashboard` 仅在启用 `ops` profile 时绑定宿主机回环地址，建议通过 SSH 隧道或内网运维入口访问。
+默认只有 `app` 发布宿主机端口；PostgreSQL、LiteLLM、Mem0 默认仅在 Compose 网络内访问。LiteLLM Admin UI 位于 LiteLLM Proxy 的 `/ui` 路径，生产环境建议由 Nginx 独立运维入口转发到 `litellm:4000`，并对整个 LiteLLM Proxy 运维入口施加内网访问控制。`mem0-dashboard` 仅在启用 `ops` profile 时绑定宿主机回环地址，建议通过 SSH 隧道或内网运维入口访问。

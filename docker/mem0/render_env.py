@@ -39,9 +39,10 @@ DEFAULT_VECTOR_DATABASE: Final[str] = "mem0_vector"
 DEFAULT_POSTGRES_USER: Final[str] = "mem0"
 DEFAULT_COLLECTION_NAME: Final[str] = "vet_agent_memories"
 DEFAULT_APPLICATION_DATABASE: Final[str] = "mem0_app"
-DEFAULT_DASHBOARD_URL: Final[str] = "http://localhost:3000"
+DEFAULT_DASHBOARD_URL: Final[str] = "http://127.0.0.1:3001"
 DEFAULT_TELEMETRY_STATE_PATH: Final[str] = "/app/history/telemetry.json"
 DEFAULT_HISTORY_DATABASE_PATH: Final[str] = "/app/history/history.db"
+DEFAULT_REQUEST_LOG_RETENTION_DAYS: Final[int] = 30
 
 type ExportValue = str | int | bool | Path
 
@@ -228,6 +229,16 @@ class RuntimeConfig(Mem0ConfigModel):
     )
 
 
+class MaintenanceConfig(Mem0ConfigModel):
+    """定义 Mem0 维护任务相关配置。"""
+
+    request_log_retention_days: StrictInt = Field(
+        default=DEFAULT_REQUEST_LOG_RETENTION_DAYS,
+        ge=1,
+        description="Mem0 request_logs 表保留天数，供日志清理任务使用。",
+    )
+
+
 class Mem0ApplicationConfig(Mem0ConfigModel):
     """定义 Mem0 application.yml 的完整非敏感配置结构。"""
 
@@ -250,6 +261,10 @@ class Mem0ApplicationConfig(Mem0ConfigModel):
     telemetry: TelemetryConfig = Field(
         default_factory=TelemetryConfig,
         description="Mem0 匿名遥测配置。",
+    )
+    maintenance: MaintenanceConfig = Field(
+        default_factory=MaintenanceConfig,
+        description="Mem0 维护任务配置。",
     )
     runtime: RuntimeConfig = Field(
         default_factory=RuntimeConfig,
@@ -305,6 +320,7 @@ def _build_exports(config: Mem0ApplicationConfig) -> dict[str, ExportValue]:
         "DASHBOARD_URL": config.auth.dashboard_url,
         "MEM0_TELEMETRY": config.telemetry.enabled,
         "MEM0_TELEMETRY_STATE_PATH": config.telemetry.state_path,
+        "REQUEST_LOG_RETENTION_DAYS": config.maintenance.request_log_retention_days,
         "HISTORY_DB_PATH": config.runtime.history_db_path,
     }
     return exports

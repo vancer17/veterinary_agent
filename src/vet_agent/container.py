@@ -11,6 +11,15 @@ from functools import lru_cache
 
 from vet_agent import Settings
 from vet_agent import VetOrchestrator
+from vet_agent.clinical_safety import (
+    ClinicalSafetyEvaluator,
+    ClinicalSafetySemanticExtractorAgent,
+    ClinicalSafetyRetriever,
+    ClinicalSafetyThresholds,
+    FallbackClinicalSafetyRepository,
+    FileClinicalSafetyRepository,
+    PostgresClinicalSafetyRepository,
+)
 from vet_agent.repositories import (
     FallbackKnowledgeRepository,
     FileKnowledgeRepository,
@@ -46,9 +55,9 @@ from vet_agent.stores import JsonDocumentStore
 
 class Container:
     def __init__(self, settings: Settings) -> None:
-        """初始化当前对象。
+        """组装应用运行所需的仓储、模型客户端和业务服务。
 
-        :param settings: 应用配置对象。
+        :param settings: 当前运行环境的应用配置。
         :return: 无返回值。
         """
         self.settings = settings
@@ -77,6 +86,32 @@ class Container:
         )
         file_rule_repository = FileRuleRepository(settings.seed_dir)
         file_knowledge_repository = FileKnowledgeRepository(settings.seed_dir)
+        file_clinical_safety_repository = FileClinicalSafetyRepository(settings.clinical_safety_dir)
+        clinical_safety_thresholds = ClinicalSafetyThresholds(
+            retrieval_min_score=settings.clinical_safety_vector_min_score,
+        )
+        self.clinical_safety_thresholds = clinical_safety_thresholds
+        self.clinical_safety_repository = (
+            FallbackClinicalSafetyRepository(
+                PostgresClinicalSafetyRepository(settings.database_url),
+                file_clinical_safety_repository,
+            )
+            if settings.database_url
+            else file_clinical_safety_repository
+        )
+        self.clinical_safety_retriever = ClinicalSafetyRetriever(
+            self.clinical_safety_repository,
+            self.embedding_client,
+            thresholds=clinical_safety_thresholds,
+        )
+        self.clinical_safety_semantic_extractor = ClinicalSafetySemanticExtractorAgent(
+            self.qwen_client,
+            settings,
+        )
+        self.clinical_safety_evaluator = ClinicalSafetyEvaluator(
+            self.clinical_safety_retriever,
+            thresholds=self.clinical_safety_thresholds,
+        )
         self.rule_repository = (
             FallbackRuleRepository(PostgresRuleRepository(settings.database_url), file_rule_repository)
             if settings.database_url
@@ -116,25 +151,28 @@ class Container:
             knowledge_service=KnowledgeService(self.knowledge_repository),
             qwen_client=self.qwen_client,
             rule_repository=self.rule_repository,
+            clinical_safety_evaluator=self.clinical_safety_evaluator,
+            clinical_safety_semantic_extractor=self.clinical_safety_semantic_extractor,
         )
 
     @property
     def ready(self) -> bool:
-        """返回服务就绪检查结果。
+        """检查模型、规则、知识和临床安全数据是否均可用。
 
-        :return: 返回函数执行结果。
+        :return: 所有必要依赖可用时返回 True。
         """
         return (
             self.settings.litellm_configured
             and self.rule_repository.is_ready()
             and self.knowledge_repository.is_ready()
+            and self.clinical_safety_repository.is_ready()
         )
 
 
 @lru_cache
 def get_container() -> Container:
-    """执行 get_container 业务逻辑。
+    """返回进程级缓存的应用依赖容器。
 
-    :return: 返回函数执行结果。
+    :return: 返回使用环境变量构造的依赖容器。
     """
     return Container(Settings.from_env())

@@ -1,33 +1,172 @@
 # =============================================================================
-# 文件: docker/litellm.yml
-# 作用: 配置 LiteLLM Proxy 使用的通义千问对话、视觉与 embedding 模型。
-# 范围: 只描述非敏感模型路由；API key、master key 与数据库连接由 env 文件注入。
-# 说明: 开发与正式 Compose 共用本配置，环境差异由各自的 LiteLLM env 文件提供。
+# 文件: docker/litellm/litellm.yml
+# 作用: 定义 LiteLLM Proxy 的模型路由、熔断、日志、缓存与基础安全策略。
+# 范围: 仅承载非敏感代理层配置；密钥、数据库连接与 UI 凭据由 env 文件注入。
+# 说明: 开发与正式 Compose 共用本配置；如后续启用 Redis、外部告警或额外供应商，
+#       应先补齐对应 env 模板，再同步扩展本文件。
 # =============================================================================
 
+# 官方环境变量入口预留位；当前不在 YAML 中重复声明敏感变量。
+environment_variables: {}
+
 model_list:
+  # 通用对话模型；Agent 默认文本对话请求会路由到通义千问 qwen-plus。
   - model_name: qwen-plus
     litellm_params:
+      # LiteLLM 识别的上游模型名，使用 OpenAI 兼容模式访问 DashScope。
       model: openai/qwen-plus
+      # 通义千问 OpenAI 兼容 API 入口。
       api_base: https://dashscope.aliyuncs.com/compatible-mode/v1
+      # 上游 API Key 由 LiteLLM 容器运行时从 env 文件注入。
       api_key: os.environ/DASHSCOPE_API_KEY
 
+  # 视觉理解模型；用于医学报告图片等视觉解析请求。
   - model_name: qwen-vl-plus
     litellm_params:
       model: openai/qwen-vl-plus
       api_base: https://dashscope.aliyuncs.com/compatible-mode/v1
       api_key: os.environ/DASHSCOPE_API_KEY
 
+  # 向量模型；用于 RAG、临床安全识别和记忆检索相关 embedding。
   - model_name: text-embedding-v4
     litellm_params:
       model: openai/text-embedding-v4
       api_base: https://dashscope.aliyuncs.com/compatible-mode/v1
       api_key: os.environ/DASHSCOPE_API_KEY
+    model_info:
+      # 明确标记该模型属于 embedding 路由。
+      mode: embedding
+      # 该模型在本仓库内仅用于向量检索，不承载生成式对话。
+      base_model: text-embedding-v4
 
-general_settings:
-  master_key: os.environ/LITELLM_MASTER_KEY
-  database_url: os.environ/DATABASE_URL
+router_settings:
+  # 官方推荐的默认路由策略；单模型组场景下保持简单稳定。
+  routing_strategy: simple-shuffle
+  # 请求进入模型前先做上下文窗口预检。
+  enable_pre_call_checks: true
+  # 单模型组连续失败后的熔断阈值。
+  allowed_fails: 3
+  # 熔断冷却时间，单位为秒。
+  cooldown_time: 30
+  # 是否关闭所有熔断机制；严肃场景保持 false。
+  disable_cooldowns: false
+  # 是否启用标签路由；当前未按标签拆分模型组，因此关闭。
+  enable_tag_filtering: false
+  # 标签匹配语义；仅在启用标签路由后才生效。
+  tag_filtering_match_any: false
+  # 同一模型组内部的加权失败重选；当前未启用多部署负载均衡。
+  enable_weighted_failover: false
+  # 重试策略；与上游异常类型一一对应。
+  retry_policy:
+    AuthenticationErrorRetries: 3
+    TimeoutErrorRetries: 3
+    RateLimitErrorRetries: 3
+    ContentPolicyViolationErrorRetries: 4
+    InternalServerErrorRetries: 4
+  # 不同异常类型触发熔断的失败次数上限。
+  allowed_fails_policy:
+    BadRequestErrorAllowedFails: 1000
+    AuthenticationErrorAllowedFails: 10
+    TimeoutErrorAllowedFails: 12
+    RateLimitErrorAllowedFails: 10000
+    ContentPolicyViolationErrorAllowedFails: 15
+    InternalServerErrorAllowedFails: 20
+  # 全局回退模型；当前不引入额外降级模型组，保持空列表。
+  fallbacks: []
+  # 默认模型组回退；当前不启用额外默认回退链路。
+  default_fallbacks: []
+  # 内容安全策略回退；当前不启用专门的内容安全回退链路。
+  content_policy_fallbacks: []
+  # 上下文窗口溢出回退；当前不启用专门的上下文扩容回退链路。
+  context_window_fallbacks: []
+  # 单个部署默认并发上限；用于防止某一后端实例承压过高。
+  default_max_parallel_requests: 8
+  # 最大回退层数；与官方默认值保持一致。
+  max_fallbacks: 5
 
 litellm_settings:
+  # 成功回调；当前不接入外部观测平台。
+  success_callback: []
+  # 失败回调；当前不接入外部告警平台。
+  failure_callback: []
+  # 通用回调；当前不在请求生命周期内挂接额外回调。
+  callbacks: []
+  # 系统健康回调；当前不把 Redis、Postgres 失败上报到第三方平台。
+  service_callbacks: []
+  # 回调消息脱敏；在医疗与用户上下文场景下保持开启。
+  turn_off_message_logging: true
+  # 请求日志中脱敏用户 API key 信息。
+  redact_user_api_key_info: true
+  # 是否允许在请求发送前修改参数；当前不做隐式改写。
+  modify_params: false
+  # 是否启用预览特性；当前保持关闭，避免引入不稳定行为。
+  enable_preview_features: false
+  # 日志采用 JSON 格式，便于容器日志聚合与后续检索。
+  json_logs: true
+  # 上游模型请求超时时间，单位为秒。
   request_timeout: 60
-  drop_params: true
+  # 流式响应超时时间，单位为秒；未单独设置时也可回退到 request_timeout。
+  stream_timeout: 600
+  # 普通请求超时时间，单位为秒。
+  timeout: 600
+  # IPv4 强制开关；当前不强制，保留官方参数面。
+  force_ipv4: false
+  # 是否启用缓存；当前未引入 Redis，因此保持关闭。
+  cache: false
+  # 缓存参数；当前无 Redis 依赖，保留为空对象以便后续扩展。
+  cache_params: {}
+  # Redis 认证缓存；仅在 Redis 缓存开启后才有意义。
+  enable_redis_auth_cache: false
+  # 是否关闭 end user 成本追踪；当前保持默认行为。
+  disable_end_user_cost_tracking: false
+  # 是否仅在 Prometheus 中记录 end user 标签；当前保持关闭。
+  enable_end_user_cost_tracking_prometheus_only: false
+  # 统一请求默认参数；当前不覆盖上游请求参数。
+  default_litellm_params: {}
+  # 调试级别；保持 INFO 以便生产与开发日志一致。
+  debug_level: INFO
+
+general_settings:
+  # LiteLLM 管理密钥；Admin API、Admin UI 和内部服务访问均使用该密钥体系。
+  master_key: os.environ/LITELLM_MASTER_KEY
+  # LiteLLM 元数据库连接；用于保存请求、Key、用户和可选的 UI 管理配置。
+  database_url: os.environ/DATABASE_URL
+  # 是否允许 Admin UI/API 将模型配置持久化到数据库。
+  # 当前默认关闭，以保持 Git 管理的 litellm.yml 仍为模型路由可信源。
+  store_model_in_db: false
+  # 允许访问 LiteLLM Proxy 的来源 IP 列表；为空表示不限制。
+  allowed_ips: []
+  # 默认 embedding 模型；与本仓库的 RAG 和记忆检索默认值保持一致。
+  embedding_model: text-embedding-v4
+  # 是否禁止创建 personal key；当前允许个人 key 以兼容开发与运维操作。
+  default_team_disabled: false
+  # 是否将 prompt 与 response 存入 spend logs；当前不启用，避免扩大日志面。
+  store_prompts_in_spend_logs: false
+  # Spend 列表接口是否只返回调用者的数据；默认保持 true。
+  scope_spend_list_endpoints_to_caller: true
+  # 是否恢复旧版未收敛的 spend 列表行为；保持 false。
+  legacy_unscoped_spend_list_endpoints: false
+  # 用户 API key 的内存缓存 TTL，单位为秒。
+  user_api_key_cache_ttl: 600
+  # 是否关闭数据库 schema 自动更新；当前保持 false，便于初始化和演进。
+  disable_prisma_schema_update: false
+  # LiteLLM key 所用请求头名称；与上游默认 Authorization 保持一致。
+  litellm_key_header_name: Authorization
+  # 是否允许旧式用户认证开关；当前不启用。
+  allow_user_auth: false
+  # 是否允许客户端侧凭据透传到 pass-through 路由；当前不启用。
+  allow_client_side_credentials: false
+  # 是否允许客户端凭据透传到 pass-through 路由；当前不启用。
+  use_client_credentials_pass_through_routes: false
+  # 配置热加载间隔；仅在 store_model_in_db 开启时生效，保留官方默认值。
+  proxy_config_reload_interval_seconds: 30
+  # 告警配置入口；当前不接入外部告警通道，保持关闭。
+  alerting: []
+  # 告警阈值；在告警列表为空时不会触发。
+  alerting_threshold: 0
+  # 告警参数；保留为空对象，后续可用于 Slack 告警扩展。
+  alerting_args: {}
+  # 各告警类型对应 webhook 地址；当前不启用。
+  alert_to_webhook_url: {}
+  # 密钥管理系统配置；当前不接入外部 KMS。
+  key_management_settings: []

@@ -37,6 +37,6 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 # pytest 仅收集本仓库测试，避免把 vendor 子模块的上游测试作为业务门禁。
-pythonpath = ["src"]
+pythonpath = ["src", "."]
 testpaths = ["tests"]
 norecursedirs = [".git", ".venv", "vendor"]

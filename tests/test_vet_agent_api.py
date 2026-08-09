@@ -7,6 +7,10 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
+import pytest
 from fastapi.testclient import TestClient
 
 from ingress import create_app, set_orchestrator
@@ -306,6 +310,108 @@ def test_radiology_attachment_is_blocked(tmp_path, monkeypatch):
     assert any(signal["code"] == "RADIOLOGY_GATE" for signal in data["safety_signals"])
 
 
+@pytest.mark.parametrize(
+    ("text", "pet_info", "expected_code"),
+    [
+        (
+            "它刚才把桌上写着 xylitol 的无糖口香糖咽下去了，目前还能自行走动。我现在最先应该做什么？",
+            {"species": "canine", "sex": "male", "age": "2 years", "weight_kg": 9.5},
+            "TOXIC_XYLITOL",
+        ),
+        (
+            "它尿少尿频但还能尿一点。",
+            {"species": "cat", "sex": "male", "age": "3 years", "weight_kg": 5.2},
+            "PARTIAL_URINARY_OBSTRUCTION_RISK",
+        ),
+        (
+            "我家 12 岁老猫最近多饮多尿，而且慢慢消瘦。",
+            {},
+            "SENIOR_CAT_POLYDIPSIA_WEIGHT_LOSS_RISK",
+        ),
+        (
+            "狗饭后肚子胀，干呕吐不出来，流口水很烦躁。",
+            {"species": "canine", "sex": "male", "age": "4 years", "weight_kg": 28},
+            "GDV_RISK_PATTERN",
+        ),
+        (
+            "猫牙龈发紫，呼吸很快。",
+            {"species": "feline", "sex": "female", "age": "5 years", "weight_kg": 4.1},
+            "CYANOSIS_RISK_PATTERN",
+        ),
+    ],
+)
+def test_contextual_clinical_safety_escalates_hidden_risk_patterns(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    text: str,
+    pet_info: dict[str, object],
+    expected_code: str,
+) -> None:
+    """验证结构化临床安全层能够升级隐匿高风险组合。
+
+    :param tmp_path: 临时数据目录。
+    :param monkeypatch: pytest 环境变量和方法替换工具。
+    :param text: 用户本轮输入文本。
+    :param pet_info: 请求侧自报宠物资料。
+    :param expected_code: 期望命中的结构化临床安全信号编码。
+    :return: 无返回值；断言通过表示隐匿高风险场景已进入安全升级路径。
+    """
+    client = _client(tmp_path, monkeypatch)
+    payload = _payload(text)
+    payload["vet_context"]["pet_info"] = pet_info
+
+    response = client.post("/agent/turns", json=payload)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "safety_escalated"
+    assert "ClinicalSafetyEvaluator" in data["metadata"]["multi_agent_path"]
+    assert any(signal["code"] == expected_code for signal in data["safety_signals"])
+
+
+def test_unverified_pet_info_does_not_independently_trigger_clinical_risk(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证请求侧自报宠物资料不会单独触发临床高风险信号。
+
+    :param tmp_path: 临时数据目录。
+    :param monkeypatch: pytest 环境变量和方法替换工具。
+    :return: 无返回值；断言通过表示自报资料已与临床硬判断隔离。
+    """
+    client = _client(tmp_path, monkeypatch)
+    payload = _payload("最近多饮多尿，而且慢慢消瘦。")
+    payload["vet_context"]["pet_info"] = {
+        "species": "cat",
+        "sex": "female",
+        "age": "12 years",
+        "weight_kg": 3.8,
+    }
+
+    response = client.post("/agent/turns", json=payload)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert not any(
+        signal["code"] == "SENIOR_CAT_POLYDIPSIA_WEIGHT_LOSS_RISK"
+        for signal in data["safety_signals"]
+    )
+
+
+def test_negated_emergency_keyword_does_not_trigger_hard_rule() -> None:
+    """验证否定表达不会仅因包含急症子串而触发硬规则升级。
+
+    :return: 无返回值；断言通过表示否定表达过滤逻辑符合预期。
+    """
+    from vet_agent.agents import SafetyAgent
+
+    agent = SafetyAgent(FileRuleRepository(Settings().seed_dir))
+    assessment = agent.analyze("没有呼吸困难，也不是完全尿不出。", [])
+
+    assert assessment.highest_status == "ok"
+    assert assessment.signals == []
+
+
 def test_memory_read_correct_delete(tmp_path, monkeypatch):
     """验证对应业务场景是否符合预期。
 
@@ -577,7 +683,7 @@ def test_rag_guided_followup_uses_knowledge_to_plan_questions(tmp_path, monkeypa
     response = client.post(
         "/agent/turns",
         json=_payload(
-            "饭后总是缩成一团趴着，看起来不太舒服。",
+            "我家 3 岁、12 公斤的柯基犬饭后总是缩成一团趴着，看起来不太舒服。",
             vet_context={
                 "user_id": "u_rag_followup",
                 "session_id": "s_rag_followup",
@@ -631,7 +737,7 @@ def test_unfinished_consultation_state_skips_task_splitting(tmp_path, monkeypatc
     first = client.post(
         "/agent/turns",
         json=_payload(
-            "饭后总是缩成一团趴着，看起来不太舒服。",
+            "我家 3 岁、12 公斤的柯基犬饭后总是缩成一团趴着，看起来不太舒服。",
             vet_context=vet_context,
         ),
     )
@@ -680,7 +786,10 @@ def test_answer_now_intent_stops_followup_funnel(tmp_path, monkeypatch):
 
     first = client.post(
         "/agent/turns",
-        json=_payload("饭后总是缩成一团趴着，看起来不太舒服。", vet_context=vet_context),
+        json=_payload(
+            "我家 3 岁、12 公斤的柯基犬饭后总是缩成一团趴着，看起来不太舒服。",
+            vet_context=vet_context,
+        ),
     )
     assert first.status_code == 200
     assert first.json()["status"] == "requires_followup"
@@ -725,7 +834,10 @@ def test_semantic_answers_reduce_missing_slots_without_exact_templates(tmp_path,
 
     first = client.post(
         "/agent/turns",
-        json=_payload("它这两天偶尔会躲到角落，晚上节奏和平常不太一样。", vet_context=vet_context),
+        json=_payload(
+            "我家 4 岁猫这两天偶尔会躲到角落，晚上节奏和平常不太一样。",
+            vet_context=vet_context,
+        ),
     )
     assert first.status_code == 200
     assert first.json()["status"] == "requires_followup"
@@ -768,7 +880,7 @@ def test_llm_semantic_extractor_is_primary_fact_path(tmp_path, monkeypatch):
     response = client.post(
         "/agent/turns",
         json=_payload(
-            "饭还是吃的，就是没以前积极；没有把东西吐出来，只是像反胃。先根据这些告诉我需不需要检查。",
+            "我家 3 岁犬饭还是吃的，就是没以前积极；没有把东西吐出来，只是像反胃。先根据这些告诉我需不需要检查。",
             vet_context=vet_context,
         ),
     )
@@ -818,6 +930,61 @@ def test_consultation_second_turn_completes_after_context_is_built(tmp_path, mon
     assert "阶段性最终建议" not in data["output_text"]
     assert "请先回答" not in data["output_text"]
     assert "线下兽医" in data["output_text"]
+
+
+def test_completed_consultation_does_not_pollute_next_chief_complaint(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证已完成问诊不会污染同一 session 的下一次独立主诉。
+
+    :param tmp_path: 临时数据目录。
+    :param monkeypatch: pytest 环境变量与依赖替换工具。
+    :return: 无返回值；断言通过表示场景符合预期。
+    """
+    client = _client(tmp_path, monkeypatch)
+    session_id = "s_state_layering"
+    vet_context = {
+        "user_id": "u_state_layering",
+        "session_id": session_id,
+        "pet_id": "p_state_layering",
+        "pet_info": {
+            "species": "犬",
+            "breed": "柯基",
+            "age": "3岁",
+            "weight_kg": 12,
+        },
+    }
+
+    first = client.post(
+        "/agent/turns",
+        json=_payload(
+            "我家狗今天早上拉稀，精神食欲正常，没有呕吐，大便没有血。",
+            vet_context=vet_context,
+        ),
+    )
+    assert first.status_code == 200
+    assert first.json()["status"] == "completed"
+
+    second = client.post(
+        "/agent/turns",
+        json=_payload(
+            "它现在又开始咳嗽了，像卡住一样。",
+            vet_context=vet_context,
+        ),
+    )
+
+    assert second.status_code == 200
+    data = second.json()
+    assert data["status"] == "requires_followup"
+    state = data["metadata"]["consultation_state"]
+    assert state["chief_complaint"] == "它现在又开始咳嗽了，像卡住一样。"
+    assert state["domain"] == "respiratory"
+    assert "stool" not in state["slots"]
+    assert "appetite" not in state["slots"]
+    assert "onset" not in state["slots"]
+
+
 def test_api_key_auth_can_be_required(tmp_path, monkeypatch):
     """验证对应业务场景是否符合预期。
 
@@ -858,12 +1025,15 @@ def test_session_policy_blocks_switching_pet_in_same_session(tmp_path, monkeypat
     assert response.json()["code"] == "FORBIDDEN"
 
 
-def test_memory_extraction_persists_pet_info_facts(tmp_path, monkeypatch):
-    """验证对应业务场景是否符合预期。
+def test_memory_extraction_does_not_persist_pet_info_facts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证请求侧自报宠物资料不会写入长期记忆。
 
-    :param tmp_path: 参数 tmp_path。
-    :param monkeypatch: 参数 monkeypatch。
-    :return: 无返回值；断言通过表示场景符合预期。
+    :param tmp_path: 临时数据目录。
+    :param monkeypatch: pytest 环境变量和方法替换工具。
+    :return: 无返回值；断言通过表示自报资料不会污染长期记忆。
     """
     client = _client(tmp_path, monkeypatch)
     payload = {
@@ -884,9 +1054,13 @@ def test_memory_extraction_persists_pet_info_facts(tmp_path, monkeypatch):
 
     assert client.post("/agent/turns", json=payload).status_code == 200
     memory = client.get("/memories?user_id=u_extract&session_id=s_extract&pet_id=p_extract").json()
-    fact_keys = {item["fact_key"] for item in memory["pet"]["facts"]}
+    fact_keys = {item["fact_key"] for item in memory["pet"].get("facts", [])}
+    access_control = json.loads((tmp_path / "access_control.json").read_text(encoding="utf-8"))
+    profile = access_control["pet_profiles"]["p_extract"]
 
-    assert {"species", "breed", "age", "weight_kg"}.issubset(fact_keys)
+    assert not {"species", "breed", "age", "weight_kg"}.intersection(fact_keys)
+    assert profile["profile"] == {}
+    assert profile["source"] == "first_seen"
 
 
 def test_safety_review_removes_dosage_expression():

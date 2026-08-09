@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import Any
@@ -16,6 +17,7 @@ from uuid import uuid4
 
 from sqlalchemy import delete, desc, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.orm import Session
 
 from vet_agent import TrustedIdentity
 from vet_agent.db import (
@@ -34,7 +36,7 @@ DEFAULT_TASK_KEY = "__default__"
 
 
 class PostgresMemoryService:
-    def __init__(self, database_url: str, semantic_memory=None) -> None:
+    def __init__(self, database_url: str, semantic_memory: Any | None = None) -> None:
         """初始化当前对象。
 
         :param database_url: 数据库连接地址。
@@ -45,7 +47,7 @@ class PostgresMemoryService:
         self.semantic_memory = semantic_memory or DisabledSemanticMemory()
 
     @asynccontextmanager
-    async def turn_lock(self, identity: TrustedIdentity):
+    async def turn_lock(self, identity: TrustedIdentity) -> AsyncIterator[None]:
         """执行 turn_lock 业务逻辑。
 
         :param identity: 可信身份信息。
@@ -243,17 +245,42 @@ class PostgresMemoryService:
         return {row.task_key: dict(row.state) for row in rows}
 
     async def save_task_consultation_states(self, identity: TrustedIdentity, states: dict[str, Any]) -> None:
-        """执行 save_task_consultation_states 业务逻辑。
+        """替换当前会话仍未完成的多任务问诊状态。
 
         :param identity: 可信身份信息。
-        :param states: 参数 states。
+        :param states: 未完成任务的活跃问诊状态集合。
         :return: 返回函数执行结果。
         """
-        for task_key, state in states.items():
-            self._upsert_state(identity, task_key, state)
+        with self.session_factory.begin() as session:
+            session.execute(
+                delete(ConsultationStateModel).where(
+                    ConsultationStateModel.user_id == identity.user_id,
+                    ConsultationStateModel.pet_id == identity.pet_id,
+                    ConsultationStateModel.session_id == identity.session_id,
+                    ConsultationStateModel.task_key != DEFAULT_TASK_KEY,
+                )
+            )
+            for task_key, state in states.items():
+                self._upsert_state_in_session(session, identity, task_key, state)
+
+    async def clear_default_consultation_state(self, identity: TrustedIdentity) -> None:
+        """清理当前会话的默认活跃问诊状态。
+
+        :param identity: 可信身份信息。
+        :return: 返回函数执行结果。
+        """
+        with self.session_factory.begin() as session:
+            session.execute(
+                delete(ConsultationStateModel).where(
+                    ConsultationStateModel.user_id == identity.user_id,
+                    ConsultationStateModel.pet_id == identity.pet_id,
+                    ConsultationStateModel.session_id == identity.session_id,
+                    ConsultationStateModel.task_key == DEFAULT_TASK_KEY,
+                )
+            )
 
     async def clear_consultation_state(self, identity: TrustedIdentity) -> None:
-        """执行 clear_consultation_state 业务逻辑。
+        """清理当前会话所有活跃问诊状态。
 
         :param identity: 可信身份信息。
         :return: 返回函数执行结果。
@@ -475,6 +502,24 @@ class PostgresMemoryService:
         :param state: 参数 state。
         :return: 返回函数执行结果。
         """
+        with self.session_factory.begin() as session:
+            self._upsert_state_in_session(session, identity, task_key, state)
+
+    def _upsert_state_in_session(
+        self,
+        session: Session,
+        identity: TrustedIdentity,
+        task_key: str,
+        state: dict[str, Any],
+    ) -> None:
+        """在已有数据库会话中写入问诊状态。
+
+        :param session: 数据库会话。
+        :param identity: 可信身份信息。
+        :param task_key: 任务状态键。
+        :param state: 问诊状态。
+        :return: 返回函数执行结果。
+        """
         statement = pg_insert(ConsultationStateModel).values(
             user_id=identity.user_id,
             pet_id=identity.pet_id,
@@ -491,12 +536,11 @@ class PostgresMemoryService:
                 "updated_at": datetime.now(UTC),
             },
         )
-        with self.session_factory.begin() as session:
-            session.execute(statement)
+        session.execute(statement)
 
     def _upsert_fact_in_session(
         self,
-        session,
+        session: Session,
         identity: TrustedIdentity,
         *,
         fact_type: str,

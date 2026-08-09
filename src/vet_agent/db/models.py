@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Any
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import ARRAY, BigInteger, Boolean, DateTime, Float, Integer, Text, UniqueConstraint, func
+from sqlalchemy import ARRAY, BigInteger, Boolean, DateTime, Float, ForeignKey, Integer, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -83,6 +83,68 @@ class KnowledgeChunkModel(Base):
     last_reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     disabled_reason: Mapped[str | None] = mapped_column(Text)
     ingestion_batch: Mapped[str | None] = mapped_column(Text)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, nullable=False, default=dict, server_default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class ClinicalSafetyAssetModel(Base):
+    __tablename__ = "clinical_safety_assets"
+
+    asset_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    code: Mapped[str] = mapped_column(Text, nullable=False)
+    asset_type: Mapped[str] = mapped_column(Text, nullable=False)
+    canonical_name: Mapped[str] = mapped_column(Text, nullable=False)
+    category: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    species_scope: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list, server_default="{}")
+    sex_scope: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list, server_default="{}")
+    age_scope: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list, server_default="{}")
+    severity: Mapped[str] = mapped_column(Text, nullable=False, default="caution", server_default="caution")
+    action_class: Mapped[str] = mapped_column(Text, nullable=False, default="safety_warning", server_default="safety_warning")
+    aliases: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list, server_default="{}")
+    carriers: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list, server_default="{}")
+    user_expressions: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list, server_default="{}")
+    symptoms: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list, server_default="{}")
+    recognition_phrases: Mapped[list[str]] = mapped_column(
+        ARRAY(Text),
+        nullable=False,
+        default=list,
+        server_default="{}",
+    )
+    required_context: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")
+    decision_hints: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")
+    clinical_risk_summary: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    triage_message: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    source: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")
+    raw_text: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")
+    version: Mapped[str] = mapped_column(Text, nullable=False, default="v1", server_default="v1")
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    review_status: Mapped[str] = mapped_column(Text, nullable=False, default="approved", server_default="approved")
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, nullable=False, default=dict, server_default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class ClinicalSafetyChunkModel(Base):
+    __tablename__ = "clinical_safety_chunks"
+
+    chunk_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    asset_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("clinical_safety_assets.asset_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    chunk_type: Mapped[str] = mapped_column(Text, nullable=False)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    embedding_text: Mapped[str] = mapped_column(Text, nullable=False)
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(1024), nullable=True)
+    embedding_model: Mapped[str | None] = mapped_column(Text)
+    embedding_dimension: Mapped[int | None] = mapped_column(Integer)
+    content_hash: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    version: Mapped[str] = mapped_column(Text, nullable=False, default="v1", server_default="v1")
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    review_status: Mapped[str] = mapped_column(Text, nullable=False, default="approved", server_default="approved")
     metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, nullable=False, default=dict, server_default="{}")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())

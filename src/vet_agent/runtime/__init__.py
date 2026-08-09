@@ -6,7 +6,7 @@
 
 
 
-from .embeddings import QwenEmbeddingClient
+from .embeddings import EmbeddingClient, QwenEmbeddingClient
 from .qwen import QwenClient
 
-__all__ = ["QwenClient", "QwenEmbeddingClient"]
+__all__ = ["EmbeddingClient", "QwenClient", "QwenEmbeddingClient"]

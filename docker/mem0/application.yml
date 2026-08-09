@@ -1,7 +1,7 @@
 # =============================================================================
 # 文件: docker/mem0/application.yml
 # 作用: 定义自托管 Mem0 REST Server 的非敏感服务配置。
-# 范围: 覆盖服务监听、LiteLLM 模型代理、pgvector 存储、鉴权开关、遥测与本地历史文件路径。
+# 范围: 覆盖服务监听、LiteLLM 模型代理、pgvector 存储、鉴权开关、遥测、本地历史文件与请求日志保留策略。
 # 说明: 密钥、JWT secret、数据库密码等敏感参数不写入本文件，统一通过 mem0.*.env 注入。
 # =============================================================================
 
@@ -44,14 +44,18 @@ database:
 auth:
   # 生产环境必须保持 false；本项目不通过 Compose environment 覆盖该值。
   disabled: false
-  # Dashboard 回调地址。当前项目未启用 Dashboard，保留默认值以兼容上游 CORS 配置。
-  dashboard_url: http://localhost:3000
+  # Dashboard 对外访问地址；应与正式开发环境或生产环境的 Nginx 网关对外 origin 保持一致。
+  dashboard_url: http://127.0.0.1:3001
 
 telemetry:
   # 严肃生产场景默认关闭上游匿名遥测。
   enabled: false
   # 遥测本地状态文件路径；关闭遥测时仍保留该路径，便于兼容上游代码。
   state_path: /app/history/telemetry.json
+
+maintenance:
+  # Mem0 request_logs 表的保留天数；与 vendor/mem0/server/scripts/prune_request_logs.py 配合使用。
+  request_log_retention_days: 30
 
 runtime:
   # Mem0 上游历史文件路径；容器内 /app/history 由 Compose 挂载持久卷。
