@@ -49,6 +49,8 @@ docker/mem0-dashboard/template/mem0-dashboard.dev.env.template
 docker/mem0-dashboard/template/mem0-dashboard.prod.env.template
 docker/postgres/init/10-bootstrap-logical-databases.sh
 docker/postgres/ops/ensure-extensions.sh
+docker/postgres/ops/vector-smoke-check.sh
+docker/postgres/postgresql.conf
 docker/postgres/template/postgres.dev.env.template
 docker/postgres/template/postgres.prod.env.template
 ```
@@ -128,8 +130,8 @@ curl -X POST http://127.0.0.1:8000/agent/turns \
 ## 环境变量
 
 - `DASHSCOPE_API_KEY`: 通义千问 API Key，仅注入 LiteLLM 容器
-- `LITELLM_MASTER_KEY`: LiteLLM Proxy master key；app 使用同一个值访问 LiteLLM
-- `LITELLM_SALT_KEY`: LiteLLM 数据库凭据加密盐值；一旦生产数据库中已有加密凭据，不应更换
+- `LITELLM_MASTER_KEY`: LiteLLM Proxy 管理密钥；仅用于 Admin UI/API 和创建 virtual key，不应长期作为 app 或 Mem0 的业务调用 key
+- `LITELLM_SALT_KEY`: LiteLLM 数据库凭据加密盐值；一旦生产数据库中已有加密凭据，不应更换，并需与数据库备份成对管理
 - `UI_USERNAME` / `UI_PASSWORD`: LiteLLM Admin UI 登录凭据；生产环境需由密钥管理流程下发
 - `LITELLM_BASE_URL` / `LITELLM_API_KEY`: app 侧 LiteLLM OpenAI-compatible 网关配置，compose 中默认指向 `http://litellm:4000/v1`
 - `POSTGRES_ADMIN_*`: 单 PostgreSQL 容器的初始化管理员配置，仅用于首次创建逻辑库和登录角色
@@ -138,12 +140,15 @@ curl -X POST http://127.0.0.1:8000/agent/turns \
 - `MEM0_BASE_URL` / `MEM0_API_KEY`: app 侧自托管 Mem0 REST Server 配置，compose 中默认指向 `http://mem0:8000`
 - `VET_AGENT_DATA_DIR`: 记忆和留痕数据目录
 - `DATABASE_URL`: PostgreSQL 连接串；配置后优先读取数据库规则/RAG，失败时回退 `assets/seeds`
+- `DATABASE_POOL_SIZE` / `DATABASE_MAX_OVERFLOW`: SQLAlchemy 连接池容量参数，需结合 `APP_WORKERS` 与 PostgreSQL `max_connections` 统一规划
+- `DATABASE_STATEMENT_TIMEOUT_MS` / `DATABASE_IDLE_IN_TRANSACTION_TIMEOUT_MS`: PostgreSQL 连接级 SQL 超时参数，防止异常查询或空闲事务长期占用连接
+- `QWEN_EMBEDDING_DIMENSION`: embedding 输出维度，默认 `1024`，需与 `pgvector` 字段、Mem0 collection 和 LiteLLM 模型路由保持一致
 - `VET_AGENT_SEED_DIR`: 本地规则和知识 seed 目录，默认 `assets/seeds`
 - `OSS_BUCKET` / `OSS_PREFIX` / `OSS_ENDPOINT`: 报告解析只接受该 OSS 桶和 endpoint 下的图片地址；Dev 默认 `infra-dev-file-storage` 与 `oss-cn-hangzhou-internal.aliyuncs.com`
 
 ## PostgreSQL + pgvector
 
-Compose 使用一个 `pgvector/pgvector` PostgreSQL 容器，并在首次初始化时创建 `vet_agent`、`litellm`、`mem0_vector`、`mem0_app` 等逻辑库。业务表结构由本项目 Alembic 管理；LiteLLM 和 Mem0 分别使用自身工具迁移。
+Compose 使用一个 `pgvector/pgvector` PostgreSQL 容器，并在首次初始化时创建 `vet_agent`、`litellm`、`mem0_vector`、`mem0_app` 等逻辑库。PostgreSQL 非敏感运行参数由 `docker/postgres/postgresql.conf` 挂载，密码与逻辑库账号由 `docker/postgres/template/postgres.*.env` 注入。业务表结构由本项目 Alembic 管理；LiteLLM 使用数据库版镜像连接 `litellm` 逻辑库，持久化 virtual key、用户、团队、预算、用量记录和 UI 元数据；Mem0 使用镜像内官方迁移维护自身应用库。
 
 启动数据库:
 
@@ -221,7 +226,7 @@ uv run uvicorn vet_agent.main:app --host 127.0.0.1 --port 8000
 - `logic_traces`: 涉诊涉药输出、证据和 reasoning_display 留痕
 - `idempotency_records`: 幂等键到响应快照的映射，避免客户端重试重复落库
 
-原则: 安全规则和问诊槽位走确定性表；医学知识走 `knowledge_chunks` RAG。`embedding vector` 有值且 `ENABLE_RAG_EMBEDDINGS=true` 时走 pgvector 相似度检索；否则走数据库文本检索，并仍然替代代码硬编码语料。
+原则: 安全规则和问诊槽位走确定性表；医学知识走 `knowledge_chunks` RAG。`embedding vector(1024)` 有值且 `ENABLE_RAG_EMBEDDINGS=true` 时走 pgvector HNSW 相似度检索；否则走数据库文本检索，并仍然替代代码硬编码语料。
 
 配置 `DATABASE_URL` 后，记忆和 trace 会自动切换到 PostgreSQL；未配置时仍使用本地 JSON 文件，方便开发测试。
 

@@ -67,18 +67,20 @@ services:
     image: ${PGVECTOR_IMAGE:-pgvector/pgvector:pg16}
     container_name: vet-agent-dev-postgres
     restart: unless-stopped
-    shm_size: "256mb"
+    shm_size: "${POSTGRES_SHM_SIZE:-256mb}"
     env_file: *postgres-env-files
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf"]
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - vet_agent_dev_pgdata:/var/lib/postgresql/data
       - ./postgres/init:/docker-entrypoint-initdb.d:ro
+      - ./postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
-      interval: 5s
-      timeout: 5s
-      retries: 20
+      interval: ${POSTGRES_HEALTHCHECK_INTERVAL:-5s}
+      timeout: ${POSTGRES_HEALTHCHECK_TIMEOUT:-5s}
+      retries: ${POSTGRES_HEALTHCHECK_RETRIES:-20}
 
   postgres-extensions:
     image: ${PGVECTOR_IMAGE:-pgvector/pgvector:pg16}
@@ -90,10 +92,11 @@ services:
     env_file: *postgres-env-files
     volumes:
       - ./postgres/ops/ensure-extensions.sh:/usr/local/bin/ensure-postgres-extensions:ro
-    command: ["bash", "/usr/local/bin/ensure-postgres-extensions"]
+      - ./postgres/ops/vector-smoke-check.sh:/usr/local/bin/postgres-vector-smoke-check:ro
+    command: ["bash", "-c", "/usr/local/bin/ensure-postgres-extensions && /usr/local/bin/postgres-vector-smoke-check"]
 
   litellm:
-    image: ${LITELLM_IMAGE:-ghcr.io/berriai/litellm:main-stable}
+    image: ${LITELLM_IMAGE:-ghcr.io/berriai/litellm-database:main-stable}
     container_name: vet-agent-dev-litellm
     restart: unless-stopped
     depends_on:

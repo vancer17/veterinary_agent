@@ -50,8 +50,10 @@ docker run -d \
     -e MEM0_POSTGRES_PASSWORD=mem0 \
     -e MEM0_APP_DB_NAME=mem0_app \
     -v "$repo_root/docker/postgres/init:/docker-entrypoint-initdb.d:ro" \
+    -v "$repo_root/docker/postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro" \
     -p "127.0.0.1::5432" \
-    "$postgres_image" >/dev/null
+    "$postgres_image" \
+    postgres -c config_file=/etc/postgresql/postgresql.conf >/dev/null
 
 for attempt in $(seq 1 60); do
     if docker exec "$container_name" \
@@ -82,5 +84,15 @@ DATABASE_URL="$database_url" \
 ENABLE_RAG_EMBEDDINGS=false \
 ENABLE_MEM0=false \
 uv run alembic upgrade head
+
+docker exec -i \
+    -e POSTGRES_HOST=127.0.0.1 \
+    -e POSTGRES_PORT=5432 \
+    -e POSTGRES_USER=postgres \
+    -e POSTGRES_PASSWORD=postgres \
+    -e VET_AGENT_POSTGRES_DB=vet_agent \
+    -e MEM0_POSTGRES_DB=mem0_vector \
+    "$container_name" \
+    bash < docker/postgres/ops/vector-smoke-check.sh
 
 DATABASE_URL="$database_url" uv run alembic current

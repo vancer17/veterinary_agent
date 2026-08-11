@@ -39,6 +39,8 @@ required_files=(
     docker/mem0-dashboard/template/mem0-dashboard.prod.env.template
     docker/postgres/init/10-bootstrap-logical-databases.sh
     docker/postgres/ops/ensure-extensions.sh
+    docker/postgres/ops/vector-smoke-check.sh
+    docker/postgres/postgresql.conf
     docker/postgres/template/postgres.dev.env.template
     docker/postgres/template/postgres.prod.env.template
 )
@@ -82,6 +84,7 @@ while IFS= read -r configuration_file; do
         docker/mem0-dashboard/application.yml|\
         docker/mem0-dashboard/template/mem0-dashboard.dev.env.template|\
         docker/mem0-dashboard/template/mem0-dashboard.prod.env.template|\
+        docker/postgres/postgresql.conf|\
         docker/postgres/template/postgres.dev.env.template|\
         docker/postgres/template/postgres.prod.env.template)
             ;;

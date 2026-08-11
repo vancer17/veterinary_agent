@@ -47,6 +47,8 @@ required_paths=(
     docker/mem0-dashboard/template/mem0-dashboard.prod.env.template
     docker/postgres/init/10-bootstrap-logical-databases.sh
     docker/postgres/ops/ensure-extensions.sh
+    docker/postgres/ops/vector-smoke-check.sh
+    docker/postgres/postgresql.conf
     docker/postgres/template/postgres.dev.env.template
     docker/postgres/template/postgres.prod.env.template
 )
