@@ -30,8 +30,10 @@ model_list:
   # 向量模型；用于 RAG、临床安全识别和记忆检索相关 embedding。
   - model_name: text-embedding-v4
     litellm_params:
-      # 使用 LiteLLM 原生 DashScope provider，确保 dimensions 与 encoding_format 可透传。
-      model: dashscope/text-embedding-v4
+      # 使用 OpenAI 兼容模式访问 DashScope embedding，避免 LiteLLM Router 对 dashscope/ provider 的路由问题。
+      model: openai/text-embedding-v4
+      # 通义千问 OpenAI 兼容 API 入口，支持 dimensions 与 encoding_format 透传。
+      api_base: https://dashscope.aliyuncs.com/compatible-mode/v1
       api_key: os.environ/DASHSCOPE_API_KEY
     model_info:
       # 明确标记该模型属于 embedding 路由。
