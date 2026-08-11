@@ -127,8 +127,6 @@ litellm_settings:
   default_litellm_params: {}
   # 调试级别；保持 INFO 以便生产与开发日志一致。
   debug_level: INFO
-  # 自动丢弃上游不支持的参数；避免 LiteLLM 误判通义千问 embedding 模型能力。
-  drop_params: true
 
 general_settings:
   # LiteLLM 管理密钥；仅用于 Admin API、Admin UI 和创建 virtual key，不应作为业务调用 key 长期下发。
