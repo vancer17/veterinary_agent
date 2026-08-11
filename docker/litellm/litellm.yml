@@ -44,8 +44,8 @@ model_list:
 router_settings:
   # 官方推荐的默认路由策略；单模型组场景下保持简单稳定。
   routing_strategy: simple-shuffle
-  # 请求进入模型前先做上下文窗口预检。
-  enable_pre_call_checks: true
+  # 请求进入模型前先做上下文窗口预检；暂时关闭以避免 embedding 路由的 provider 识别问题。
+  enable_pre_call_checks: false
   # 单模型组连续失败后的熔断阈值。
   allowed_fails: 3
   # 熔断冷却时间，单位为秒。
