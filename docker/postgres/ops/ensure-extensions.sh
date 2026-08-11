@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
-# 文件：docker/postgres/ops/ensure-extensions.sh
-# 作用：使用 PostgreSQL 管理员账号为各逻辑库补齐必要扩展。
-# 说明：本脚本供 Docker Compose 一次性运维任务调用；业务表结构仍由 Alembic 管理。
+# =============================================================================
+# 文件: docker/postgres/ops/ensure-extensions.sh
+# 作用: 使用 PostgreSQL 管理员账号为各逻辑库补齐必要扩展。
+# 范围: 覆盖 Agent 业务库与 Mem0 向量库所需的 pgvector、pg_trgm 扩展。
+# 说明: 本脚本供 Docker Compose 一次性运维任务调用；业务表结构仍由 Alembic 管理。
+# =============================================================================
 
 set -Eeuo pipefail
 
@@ -16,6 +19,11 @@ mem0_vector_database="${MEM0_POSTGRES_DB:-mem0_vector}"
 export PGPASSWORD="$admin_password"
 
 create_extensions() {
+    # 在目标逻辑库内安装指定扩展。
+    #
+    # :param database_name: 目标逻辑库名称。
+    # :param ...: 需要安装的扩展名称列表。
+    # :return: 无返回值。
     local database_name="$1"
     shift
 

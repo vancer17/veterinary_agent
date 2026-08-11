@@ -41,8 +41,10 @@ bundle_paths=(
     docker/litellm/litellm.yml
     docker/mem0/application.yml
     docker/mem0-dashboard/application.yml
+    docker/postgres/postgresql.conf
     docker/postgres/init/10-bootstrap-logical-databases.sh
     docker/postgres/ops/ensure-extensions.sh
+    docker/postgres/ops/vector-smoke-check.sh
 )
 
 for bundle_path in "${bundle_paths[@]}"; do

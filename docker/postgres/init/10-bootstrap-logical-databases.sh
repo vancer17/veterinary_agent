@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
-# File: docker/postgres/init/10-bootstrap-logical-databases.sh
-# Purpose: Bootstrap login roles and logical databases for the production compose
-#          topology that shares one PostgreSQL instance across Vet Agent,
-#          LiteLLM, and Mem0.
-# Scope: Runs only during the official PostgreSQL image first-init phase. It does
-#        not create application tables; schema migrations stay with Alembic,
-#        LiteLLM, and Mem0's upstream Alembic command.
+# =============================================================================
+# 文件: docker/postgres/init/10-bootstrap-logical-databases.sh
+# 作用: 初始化共享 PostgreSQL 实例中的登录角色、逻辑库与基础扩展。
+# 范围: 仅在官方 PostgreSQL 镜像空数据卷首次初始化阶段执行。
+# 说明: 本脚本不创建业务表；业务 schema 由 Alembic、LiteLLM 与 Mem0 各自迁移管理。
+# =============================================================================
 
 set -Eeuo pipefail
 
@@ -30,6 +29,11 @@ created_roles=" ${admin_user} "
 created_databases=" ${admin_database} "
 
 create_login_role() {
+    # 创建登录角色，并防止服务角色复用管理员账号时密码不一致。
+    #
+    # :param role_name: 登录角色名称。
+    # :param role_password: 登录角色密码。
+    # :return: 无返回值。
     local role_name="$1"
     local role_password="$2"
 
@@ -61,6 +65,11 @@ EOSQL
 }
 
 create_owned_database() {
+    # 创建由指定角色拥有的逻辑库。
+    #
+    # :param database_name: 逻辑库名称。
+    # :param owner_name: 逻辑库拥有者。
+    # :return: 无返回值。
     local database_name="$1"
     local owner_name="$2"
 
@@ -85,6 +94,11 @@ create_owned_database() {
 }
 
 create_database_extensions() {
+    # 在目标逻辑库内安装扩展；该操作需使用管理员账号执行。
+    #
+    # :param database_name: 目标逻辑库名称。
+    # :param ...: 需要安装的扩展名称列表。
+    # :return: 无返回值。
     local database_name="$1"
     shift
 

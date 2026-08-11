@@ -6,7 +6,7 @@ Database topology: Mirrors production with one pgvector PostgreSQL instance.
 
 # Docker Compose Dev
 
-开发环境可以使用 `docker/compose.dev.yml` 一键启动 PostgreSQL + LiteLLM Proxy + Mem0 REST Server + Agent API。PostgreSQL 使用一个 `pgvector/pgvector` 容器，并按逻辑库隔离 Agent、LiteLLM 和 Mem0；app 容器启动时会自动执行 Alembic 迁移和 `scripts/seed_database.py`。
+开发环境可以使用 `docker/compose.dev.yml` 一键启动 PostgreSQL + LiteLLM Proxy + Mem0 REST Server + Agent API。PostgreSQL 使用一个 `pgvector/pgvector` 容器，并按逻辑库隔离 Agent、LiteLLM 和 Mem0；非敏感运行参数由 `docker/postgres/postgresql.conf` 挂载，app 容器启动时会自动执行 Alembic 迁移和 `scripts/seed_database.py`。
 
 如果本地之前已经启动过旧的多 PostgreSQL 容器编排，建议执行 `make dev-clean` 后重新启动；PostgreSQL 官方初始化脚本只会在空数据卷首次初始化时创建逻辑库。
 
@@ -22,18 +22,23 @@ make dev-ready
 
 `Makefile` 会优先使用 `docker/compose.dev.env`；如果该文件不存在，则回退到 `docker/compose.dev.env.template`。
 
-`DASHSCOPE_API_KEY` 只注入 LiteLLM 容器；Agent API 通过 `LITELLM_MASTER_KEY` 访问 `http://litellm:4000/v1`，不会直接读取通义千问 Key。`UI_USERNAME`、`UI_PASSWORD` 用于登录 LiteLLM Admin UI，`LITELLM_SALT_KEY` 用于加密 LiteLLM 写入数据库的供应商凭据。开发环境默认 `ENABLE_RAG_EMBEDDINGS=true` 和 `SEED_WITH_EMBEDDINGS=true`，因此启动时会真实调用 embedding 模型。
+`DASHSCOPE_API_KEY` 只注入 LiteLLM 容器；Agent API 通过 `LITELLM_API_KEY` 访问 `http://litellm:4000/v1`，不会直接读取通义千问 Key。开发模板为启动便利可复用 master key，占用稳定开发环境时应在 LiteLLM Admin UI 中创建 app 与 Mem0 专用 virtual key，并分别写入 `docker/app/template/app.dev.env` 与 `docker/mem0/template/mem0.dev.env`。`UI_USERNAME`、`UI_PASSWORD` 用于登录 LiteLLM Admin UI，`LITELLM_SALT_KEY` 用于加密 LiteLLM 写入数据库的供应商凭据。开发环境默认 `ENABLE_RAG_EMBEDDINGS=true` 和 `SEED_WITH_EMBEDDINGS=true`，因此启动时会真实调用 embedding 模型。
 
-LiteLLM Admin UI 由 LiteLLM Proxy 内置提供。开发环境可通过 `http://127.0.0.1:4000/ui` 或正式开发环境 Nginx 网关访问；若后续允许在 UI 中写入模型配置，需先评估 `docker/litellm/litellm.yml` 中 `store_model_in_db` 是否应从 `false` 调整为 `true`。
+LiteLLM 使用数据库版镜像连接 PostgreSQL 的 `litellm` 逻辑库，持久化 virtual key、用户、团队、预算、用量记录和 UI 元数据。模型路由仍由 `docker/litellm/litellm.yml` 管理；若后续允许在 UI 中写入模型配置，需先评估 `store_model_in_db` 是否应从 `false` 调整为 `true`，并补充配置导出、备份和审计流程。
+
+LiteLLM Admin UI 由 LiteLLM Proxy 内置提供。开发环境可通过 `http://127.0.0.1:4000/ui` 或正式开发环境 Nginx 网关访问。
 
 若需要使用镜像站，可在 `docker/compose.dev.env.template` 或复制后的 `docker/compose.dev.env` 中覆盖：
 
 ```text
 PGVECTOR_IMAGE=你的镜像站/pgvector/pgvector:pg16
+POSTGRES_SHM_SIZE=512mb
 MEM0_PYTHON_BASE_IMAGE=你的镜像站/python:3.12-slim-bookworm
 MEM0_DASHBOARD_NODE_BASE_IMAGE=你的镜像站/node:20-bookworm-slim
-LITELLM_IMAGE=你的镜像站/berriai/litellm:main-stable
+LITELLM_IMAGE=你的镜像站/berriai/litellm-database:main-stable
 ```
+
+`postgres-extensions` 一次性任务会补齐 `vector`、`pg_trgm` 扩展，并执行 `docker/postgres/ops/vector-smoke-check.sh` 验证基础向量运算。若启用 `--with-embeddings`，导入脚本会校验 embedding 维度必须为 `QWEN_EMBEDDING_DIMENSION=1024`。
 
 Mem0 开发镜像由 `docker/mem0/Dockerfile` 从 `vendor/mem0/server` 构建，核心 `mem0ai` 包从同一子模块源码安装。Mem0 Dashboard 开发镜像由 `docker/mem0-dashboard/Dockerfile` 从 `vendor/mem0/server/dashboard` 构建，浏览器侧默认访问同源 `/api/mem0`，该路径需由正式开发环境 Nginx 网关转发至容器内 Mem0 REST API。需要记录本地镜像的子模块版本时，可在执行 build 前导出 `MEM0_SOURCE_COMMIT=$(git -C vendor/mem0 rev-parse HEAD)`。
 

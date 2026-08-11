@@ -56,7 +56,7 @@ docker/app/template/app.prod.env:
   OSS_ENDPOINT
 ```
 
-`OPENAI_API_KEY`、`LITELLM_MASTER_KEY`、`LITELLM_API_KEY` 应保持同一 LiteLLM master key；`ADMIN_API_KEY` 与 `MEM0_API_KEY` 应保持同一 Mem0 API key。`LITELLM_SALT_KEY` 用于加密 LiteLLM 数据库中保存的供应商凭据，一旦生产数据库中已有加密凭据，不应更换。`UI_USERNAME` 与 `UI_PASSWORD` 用于 LiteLLM Admin UI 登录，必须使用强随机值。
+`LITELLM_MASTER_KEY` 仅用于 LiteLLM Admin UI/API 和创建 virtual key，不应长期作为业务调用 key。生产首次启动 LiteLLM 后，应创建 Agent app 专用 LiteLLM virtual key 并写入 `docker/app/template/app.prod.env` 的 `LITELLM_API_KEY`，创建 Mem0 专用 LiteLLM virtual key 并写入 `docker/mem0/template/mem0.prod.env` 的 `OPENAI_API_KEY`。`ADMIN_API_KEY` 与 `MEM0_API_KEY` 应保持同一 Mem0 API key。`LITELLM_SALT_KEY` 用于加密 LiteLLM 数据库中保存的供应商凭据，一旦生产数据库中已有加密凭据，不应更换，并需与 `litellm` 逻辑库备份成对管理。`UI_USERNAME` 与 `UI_PASSWORD` 用于 LiteLLM Admin UI 登录，必须使用强随机值。
 
 生产默认开启：
 
@@ -123,7 +123,7 @@ CD_PROD_DEPLOY_PATH
 CD_PROD_BASE_URL
 ```
 
-CD 只同步 `docker/compose.yml`、正式 env 模板、`docker/litellm/litellm.yml`、`docker/mem0/application.yml`、`docker/mem0-dashboard/application.yml` 和必要挂载脚本。生产真实 `docker/*/template/*.prod.env` 文件保留在服务器本地，不进入 Git，不由同步任务覆盖；生产服务器只拉取 Release tag 对应的预编译镜像，不现场执行 Mem0 或 Mem0 Dashboard 镜像构建。
+CD 只同步 `docker/compose.yml`、正式 env 模板、`docker/litellm/litellm.yml`、`docker/mem0/application.yml`、`docker/mem0-dashboard/application.yml`、`docker/postgres/postgresql.conf` 和必要挂载脚本。生产真实 `docker/*/template/*.prod.env` 文件保留在服务器本地，不进入 Git，不由同步任务覆盖；生产服务器只拉取 Release tag 对应的预编译镜像，不现场执行 Mem0 或 Mem0 Dashboard 镜像构建。
 
 ## 常用运维命令
 
@@ -170,14 +170,14 @@ curl -X POST http://127.0.0.1:8000/agent/turns \
 ```text
 docker/compose.prod.env:
 PGVECTOR_IMAGE=你的镜像站/pgvector/pgvector:pg16
-LITELLM_IMAGE=你的镜像站/berriai/litellm:main-stable
+LITELLM_IMAGE=你的镜像站/berriai/litellm-database:main-stable
 ```
 
 `VET_AGENT_IMAGE`、`MEM0_IMAGE` 与 `MEM0_DASHBOARD_IMAGE` 不在 compose env 文件中维护，由 CD 使用 GitHub Release tag 直接注入。生产 Compose 不包含任何 `build` 配置。
 
 ## 数据库拓扑
 
-生产 Compose 只启动一个 `postgres` 服务，使用 `pgvector/pgvector` 镜像。首次初始化时，`docker/postgres/init/10-bootstrap-logical-databases.sh` 通过 PostgreSQL 官方初始化钩子创建逻辑库和登录角色：
+生产 Compose 只启动一个 `postgres` 服务，使用 `pgvector/pgvector` 镜像，并挂载 `docker/postgres/postgresql.conf` 作为非敏感 PostgreSQL 运行参数。首次初始化时，`docker/postgres/init/10-bootstrap-logical-databases.sh` 通过 PostgreSQL 官方初始化钩子创建逻辑库和登录角色：
 
 ```text
 vet_agent     -> Agent 业务数据、RAG、记忆与 trace
@@ -186,7 +186,7 @@ mem0_vector   -> Mem0 pgvector 语义记忆
 mem0_app      -> Mem0 REST Server 用户、API key、请求日志等
 ```
 
-表结构迁移不在初始化脚本中手写：Agent 使用本项目 Alembic，Mem0 使用镜像内官方 Alembic，LiteLLM 使用自身启动迁移。
+表结构迁移不在初始化脚本中手写：Agent 使用本项目 Alembic，Mem0 使用镜像内官方 Alembic，LiteLLM 使用数据库版镜像自身启动迁移。若未来横向扩展多个 LiteLLM 实例，应单独设计迁移任务，并避免多个实例同时执行 schema 更新。
 
 PostgreSQL 扩展由初始化脚本和 `postgres-extensions` 一次性任务负责：
 
@@ -194,6 +194,8 @@ PostgreSQL 扩展由初始化脚本和 `postgres-extensions` 一次性任务负�
 vet_agent   -> vector, pg_trgm
 mem0_vector -> vector
 ```
+
+`postgres-extensions` 会在补齐扩展后执行 `docker/postgres/ops/vector-smoke-check.sh`，确认 `vector`、`pg_trgm` 扩展和 pgvector 余弦距离运算可用。Agent 应用侧通过 `DATABASE_POOL_SIZE`、`DATABASE_MAX_OVERFLOW`、`DATABASE_STATEMENT_TIMEOUT_MS` 等变量控制 SQLAlchemy 连接池和连接级 SQL 超时。
 
 重要：`docker/postgres/init` 只会在 PostgreSQL 数据卷为空时执行。若生产机已经存在数据卷，首次迁移前需先执行 `make prod-db-extensions`，补齐扩展后再运行 `make prod-migrate`。若从旧的多 PostgreSQL 容器编排升级，需先用 `pg_dump` / `pg_restore` 或等价备份工具迁移旧 `litellm-postgres`、`mem0-postgres` 数据；新环境直接初始化则无需手工建表。
 

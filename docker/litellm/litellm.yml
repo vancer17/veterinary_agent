@@ -127,12 +127,12 @@ litellm_settings:
   debug_level: INFO
 
 general_settings:
-  # LiteLLM 管理密钥；Admin API、Admin UI 和内部服务访问均使用该密钥体系。
+  # LiteLLM 管理密钥；仅用于 Admin API、Admin UI 和创建 virtual key，不应作为业务调用 key 长期下发。
   master_key: os.environ/LITELLM_MASTER_KEY
-  # LiteLLM 元数据库连接；用于保存请求、Key、用户和可选的 UI 管理配置。
+  # LiteLLM 元数据库连接；用于持久化 virtual key、用户、团队、预算、用量记录与 UI 元数据。
   database_url: os.environ/DATABASE_URL
   # 是否允许 Admin UI/API 将模型配置持久化到数据库。
-  # 当前默认关闭，以保持 Git 管理的 litellm.yml 仍为模型路由可信源。
+  # 当前默认关闭：数据库持久化运行态数据，模型路由仍以 Git 管理的 litellm.yml 为可信源。
   store_model_in_db: false
   # 允许访问 LiteLLM Proxy 的来源 IP 列表；为空表示不限制。
   allowed_ips: []
