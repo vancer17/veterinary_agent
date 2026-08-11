@@ -93,10 +93,11 @@ services:
     volumes:
       - ./postgres/ops/ensure-extensions.sh:/usr/local/bin/ensure-postgres-extensions:ro
       - ./postgres/ops/vector-smoke-check.sh:/usr/local/bin/postgres-vector-smoke-check:ro
-    command: ["bash", "-c", "/usr/local/bin/ensure-postgres-extensions && /usr/local/bin/postgres-vector-smoke-check"]
+    # 显式通过 bash 调用挂载脚本，避免宿主机文件执行位异常导致一次性运维任务失败。
+    command: ["bash", "-c", "bash /usr/local/bin/ensure-postgres-extensions && bash /usr/local/bin/postgres-vector-smoke-check"]
 
   litellm:
-    image: ${LITELLM_IMAGE:-ghcr.io/berriai/litellm-database:main-stable}
+    image: ${LITELLM_IMAGE:-ghcr.io/berriai/litellm-database:1.96.0}
     container_name: vet-agent-dev-litellm
     restart: unless-stopped
     depends_on:

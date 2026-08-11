@@ -30,8 +30,8 @@ model_list:
   # 向量模型；用于 RAG、临床安全识别和记忆检索相关 embedding。
   - model_name: text-embedding-v4
     litellm_params:
-      model: openai/text-embedding-v4
-      api_base: https://dashscope.aliyuncs.com/compatible-mode/v1
+      # 使用 LiteLLM 原生 DashScope provider，确保 dimensions 与 encoding_format 可透传。
+      model: dashscope/text-embedding-v4
       api_key: os.environ/DASHSCOPE_API_KEY
     model_info:
       # 明确标记该模型属于 embedding 路由。
@@ -134,10 +134,6 @@ general_settings:
   # 是否允许 Admin UI/API 将模型配置持久化到数据库。
   # 当前默认关闭：数据库持久化运行态数据，模型路由仍以 Git 管理的 litellm.yml 为可信源。
   store_model_in_db: false
-  # 允许访问 LiteLLM Proxy 的来源 IP 列表；为空表示不限制。
-  allowed_ips: []
-  # 默认 embedding 模型；与本仓库的 RAG 和记忆检索默认值保持一致。
-  embedding_model: text-embedding-v4
   # 是否禁止创建 personal key；当前允许个人 key 以兼容开发与运维操作。
   default_team_disabled: false
   # 是否将 prompt 与 response 存入 spend logs；当前不启用，避免扩大日志面。
@@ -168,5 +164,5 @@ general_settings:
   alerting_args: {}
   # 各告警类型对应 webhook 地址；当前不启用。
   alert_to_webhook_url: {}
-  # 密钥管理系统配置；当前不接入外部 KMS。
-  key_management_settings: []
+  # 密钥管理系统配置；当前不接入外部 KMS，使用空对象保持 LiteLLM 配置类型兼容。
+  key_management_settings: {}
