@@ -1,8 +1,8 @@
 """
 文件：src/vet_agent/container.py
 作用：组装兽医 Agent 运行所需的仓储、范围上下文服务、模型客户端与业务服务。
-范围：作为应用依赖注入入口，负责将 PostgreSQL 范围仓储接入身份、宠物资料与会话范围数据链。
-说明：身份、宠物资料与会话范围不再提供 JSON 回退；未显式注入测试仓储且缺少 DATABASE_URL 时按 Fail Fast 处理。
+范围：作为应用依赖注入入口，负责将 PostgreSQL 范围仓储和 turn execution 门禁接入主数据链。
+说明：身份、宠物资料与会话范围、幂等与 turn lock 不再提供 JSON 回退；未显式注入测试替身且缺少 DATABASE_URL 时按 Fail Fast 处理。
 """
 
 
@@ -29,6 +29,7 @@ from vet_agent.repositories import (
     PostgresKnowledgeRepository,
     PostgresRuleRepository,
     PostgresScopeRepository,
+    PostgresTurnExecutionRepository,
     ScopeRepository,
 )
 from vet_agent.runtime import QwenClient, QwenEmbeddingClient
@@ -50,6 +51,8 @@ from vet_agent.services import (
     RagGovernanceService,
     ReportIngestionService,
     ScopeContextService,
+    TurnExecutionGate,
+    TurnExecutionGateProtocol,
     make_semantic_memory,
 )
 from vet_agent.stores import JsonDocumentStore
@@ -59,16 +62,24 @@ _container_override: Container | None = None
 
 
 class Container:
-    def __init__(self, settings: Settings, *, scope_repository: ScopeRepository | None = None) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        *,
+        scope_repository: ScopeRepository | None = None,
+        turn_execution_gate: TurnExecutionGateProtocol | None = None,
+    ) -> None:
         """组装应用运行所需的仓储、模型客户端和业务服务。
 
         :param settings: 当前运行环境的应用配置。
         :param scope_repository: 身份、宠物资料与会话范围仓储；仅测试或特殊嵌入场景可显式注入。
+        :param turn_execution_gate: 单回合执行门禁；仅测试或特殊嵌入场景可显式注入。
         :return: 无返回值。
         """
         self.settings = settings
         self.scope_repository = self._scope_repository(settings, scope_repository)
         self.scope_service = ScopeContextService(self.scope_repository)
+        self.turn_execution_gate = self._turn_execution_gate(settings, turn_execution_gate)
         self.semantic_memory = make_semantic_memory(settings)
         self.memory_service = (
             PostgresMemoryService(settings.database_url, semantic_memory=self.semantic_memory)
@@ -156,6 +167,7 @@ class Container:
             rule_repository=self.rule_repository,
             clinical_safety_evaluator=self.clinical_safety_evaluator,
             clinical_safety_semantic_extractor=self.clinical_safety_semantic_extractor,
+            turn_execution_gate=self.turn_execution_gate,
         )
 
     @property
@@ -170,6 +182,7 @@ class Container:
             and self.rule_repository.is_ready()
             and self.knowledge_repository.is_ready()
             and self.clinical_safety_repository.is_ready()
+            and self.turn_execution_gate.is_ready()
         )
 
     def _scope_repository(
@@ -188,6 +201,23 @@ class Container:
         if not settings.database_url:
             raise RuntimeError("DATABASE_URL is required for identity, pet profile and session scope")
         return PostgresScopeRepository(settings.database_url)
+
+    def _turn_execution_gate(
+        self,
+        settings: Settings,
+        turn_execution_gate: TurnExecutionGateProtocol | None,
+    ) -> TurnExecutionGateProtocol:
+        """构造单回合执行门禁。
+
+        :param settings: 当前运行环境的应用配置。
+        :param turn_execution_gate: 外部显式注入的单回合执行门禁。
+        :return: 返回单回合执行门禁实例。
+        """
+        if turn_execution_gate is not None:
+            return turn_execution_gate
+        if not settings.database_url:
+            raise RuntimeError("DATABASE_URL is required for turn execution gate")
+        return TurnExecutionGate(settings, PostgresTurnExecutionRepository(settings.database_url))
 
 
 @lru_cache
