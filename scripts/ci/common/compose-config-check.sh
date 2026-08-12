@@ -23,6 +23,7 @@ prod_compose_file="${CI_PROD_COMPOSE_FILE:-docker/compose.yml}"
 prod_app_image="${CI_PROD_APP_IMAGE:-crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com/vancer-saas/veterinary_agent:ci-config}"
 prod_mem0_image="${CI_PROD_MEM0_IMAGE:-crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com/vancer-saas/veterinary_agent-mem0:ci-config}"
 prod_mem0_dashboard_image="${CI_PROD_MEM0_DASHBOARD_IMAGE:-crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com/vancer-saas/veterinary_agent-mem0-dashboard:ci-config}"
+prod_opa_image="${CI_PROD_OPA_IMAGE:-crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com/vancer-saas/veterinary_agent-opa:ci-config}"
 
 # 开发拓扑覆盖端口映射、源码挂载、自动迁移与 seed 启动链路。
 docker compose \
@@ -34,6 +35,7 @@ docker compose \
 VET_AGENT_IMAGE="$prod_app_image" \
 MEM0_IMAGE="$prod_mem0_image" \
 MEM0_DASHBOARD_IMAGE="$prod_mem0_dashboard_image" \
+OPA_IMAGE="$prod_opa_image" \
 docker compose \
     --env-file "$prod_env_file" \
     -f "$prod_compose_file" \

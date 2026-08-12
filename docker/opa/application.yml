@@ -1,0 +1,129 @@
+# =============================================================================
+# 文件: docker/opa/application.yml
+# 作用: 定义 Open Policy Agent 策略服务的官方原生运行配置。
+# 范围: 覆盖标签、默认裁决、决策日志、状态、缓存、持久化、服务端编解码等 OPA 官方配置域。
+# 说明: 本文件直接交给 opa run --config-file 加载；敏感凭据应通过 opa.*.env 注入并由官方 ${VAR} 机制替换。
+# =============================================================================
+
+labels:
+  # OPA 上报 status 与 decision log 时附带的服务归属标签。
+  app: veterinary_agent
+  # 当前容器在业务拓扑中的职责。
+  service: opa
+  # 部署环境标签；由 env 文件注入，便于区分开发、正式开发与生产环境。
+  environment: ${OPA_ENVIRONMENT}
+  # 实例标识；同一环境存在多个 OPA 实例时应保持唯一。
+  instance: ${OPA_INSTANCE_ID}
+  # 服务归属方标签；用于后续日志聚合与审计归档。
+  owner: vancer-saas
+
+# 默认裁决路径用于访问 OPA 根 Data API 时的兜底决策。
+# 当前 bootstrap policy 只允许 healthcheck 类烟测输入，业务策略接入后应切换到正式 policy package。
+default_decision: /vet_agent/bootstrap/decision
+
+# 仅在 OPA 自身 API 开启 --authorization=basic 时生效；默认保持官方 system.authz 路径。
+default_authorization_decision: /system/authz/allow
+
+# OPA bundle 持久化目录；启用 bundles[_].persist 后会在该目录缓存已下载策略包。
+persistence_directory: /opa/persistence
+
+decision_logs:
+  # 初版将决策日志写入容器标准日志，便于开发与生产初版排障；日志内容会先经过 system.log.mask 策略处理。
+  console: true
+  # 决策日志远程上报路径；未配置 service 时只使用 console 输出。
+  resource: /logs
+  # 决策日志上报节流配置。启用远程上报后，该配置控制批量上传频率与单批大小。
+  reporting:
+    buffer_type: size
+    upload_size_limit_bytes: 32768
+    min_delay_seconds: 300
+    max_delay_seconds: 600
+    trigger: periodic
+  # 敏感字段擦除策略路径，由 docker/opa/policies/system_log.rego 提供。
+  mask_decision: /system/log/mask
+  # 日志丢弃策略路径；当前默认不丢弃任何决策日志。
+  drop_decision: /system/log/drop
+  request_context:
+    http:
+      # 只采集追踪类请求头，避免把 Authorization 等敏感头写入日志。
+      headers:
+        - x-request-id
+        - x-trace-id
+
+status:
+  # 默认不将 status 完整负载写入本地日志，避免 Prometheus 指标快照造成日志膨胀；排障时可临时启用。
+  console: false
+  # 将 status 插件状态导出到 /metrics，便于后续接入 Prometheus。
+  prometheus: true
+  # status 上报触发方式；periodic 为官方默认行为。
+  trigger: periodic
+
+caching:
+  inter_query_builtin_cache:
+    # http.send 等跨查询缓存的内存上限；当前保持保守值，避免策略服务内存不可控增长。
+    max_size_bytes: 10000000
+    # 缓存接近上限时提前淘汰，降低突发流量下的内存压力。
+    forced_eviction_threshold_percentage: 70
+    # 定期清理过期缓存条目；单位为秒。
+    stale_entry_eviction_period_seconds: 3600
+  inter_query_builtin_value_cache:
+    # 结构化策略常用内置函数缓存条目数；0 表示不限制全局条目数，具体命名缓存可单独控制。
+    max_num_entries: 0
+    named:
+      io_jwt:
+        # JWT 校验缓存默认启用，便于后续接入 token 策略时降低重复解析成本。
+        disabled: false
+        max_num_entries: 1024
+
+server:
+  decoding:
+    # OPA Data API 请求体最大长度；临床策略输入应保持结构化摘要，不应传入完整长文本。
+    max_length: 134217728
+    gzip:
+      # gzip 请求体解压后最大长度，防止压缩体绕过普通请求大小限制。
+      max_length: 268435456
+  encoding:
+    gzip:
+      # 响应超过该阈值时启用 gzip，减少大策略结果或调试响应的网络传输量。
+      min_length: 1024
+      # gzip 压缩级别；OPA 官方仅接受 0、1、9，初版使用 1 优先降低 CPU 开销。
+      compression_level: 1
+
+# 以下为 OPA 官方远程控制面能力示例。启用时应去除注释，并在 opa.*.env 中提供对应敏感凭据。
+# services:
+#   control_plane:
+#     url: https://opa-control-plane.example.com
+#     response_header_timeout_seconds: 10
+#     credentials:
+#       bearer:
+#         scheme: Bearer
+#         token: ${OPA_CONTROL_PLANE_BEARER_TOKEN}
+#
+# bundles:
+#   vet_agent:
+#     service: control_plane
+#     resource: bundles/veterinary_agent/policies.tar.gz
+#     persist: true
+#     polling:
+#       min_delay_seconds: 60
+#       max_delay_seconds: 120
+#     signing:
+#       keyid: bundle_signing_key
+#       scope: read
+#
+# keys:
+#   bundle_signing_key:
+#     algorithm: RS256
+#     key: ${OPA_BUNDLE_SIGNING_PUBLIC_KEY}
+#     scope: read
+#
+# distributed_tracing:
+#   type: grpc
+#   address: otel-collector:4317
+#   service_name: opa
+#   sample_percentage: 10
+#   encryption: "off"
+#   resource:
+#     service_namespace: veterinary_agent
+#     service_version: ${OPA_SERVICE_VERSION}
+#     deployment_environment: ${OPA_ENVIRONMENT}

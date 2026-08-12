@@ -74,11 +74,11 @@
 │   ├── litellm/                   # LiteLLM 配置与敏感参数模板
 │   ├── mem0/                      # 自托管 Mem0 服务封装
 │   ├── mem0-dashboard/            # Mem0 运维 Dashboard 封装
+│   ├── opa/                       # OPA 策略服务封装、配置、策略与测试
 │   └── postgres/                  # PostgreSQL 初始化与运维脚本
 ├── docs/
 │   ├── engineering.md             # 本工程规范
-│   ├── docker-compose-dev.md      # 开发环境运维说明
-│   ├── docker-compose-production.md
+│   ├── deployment/                # 部署入口、Nginx 路由和环境访问说明
 │   └── tickets/                   # 工单、设计结论与历史记录
 ├── scripts/
 │   ├── cd/                        # CD 公共与仓库级脚本

@@ -25,6 +25,11 @@ on:
         required: true
         default: false
         type: boolean
+      build_opa_image:
+        description: "Build self-hosted OPA image"
+        required: true
+        default: false
+        type: boolean
 
 concurrency:
   group: try-run-${{ github.workflow }}-${{ github.ref }}-${{ inputs.gate_scope }}
@@ -40,6 +45,7 @@ env:
   CI_TRY_RUN_SCOPE: ${{ inputs.gate_scope }}
   CI_BUILD_MEM0_IMAGE: ${{ inputs.build_mem0_image }}
   CI_BUILD_MEM0_DASHBOARD_IMAGE: ${{ inputs.build_mem0_image }}
+  CI_BUILD_OPA_IMAGE: ${{ inputs.build_opa_image }}
 
 jobs:
   # ---------------------------------------------------------------------------

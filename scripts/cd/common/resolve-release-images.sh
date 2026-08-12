@@ -18,8 +18,9 @@ release_sha="${CD_RELEASE_SHA:-$(git rev-list -n 1 "$release_tag")}"
 registry_image="${CD_REGISTRY_IMAGE:-crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com/vancer-saas/veterinary_agent}"
 mem0_registry_image="${CD_MEM0_REGISTRY_IMAGE:-crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com/vancer-saas/veterinary_agent-mem0}"
 mem0_dashboard_registry_image="${CD_MEM0_DASHBOARD_REGISTRY_IMAGE:-crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com/vancer-saas/veterinary_agent-mem0-dashboard}"
+opa_registry_image="${CD_OPA_REGISTRY_IMAGE:-crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com/vancer-saas/veterinary_agent-opa}"
 
-if [[ "$registry_image" == *@* ]] || [[ "$mem0_registry_image" == *@* ]] || [[ "$mem0_dashboard_registry_image" == *@* ]]; then
+if [[ "$registry_image" == *@* ]] || [[ "$mem0_registry_image" == *@* ]] || [[ "$mem0_dashboard_registry_image" == *@* ]] || [[ "$opa_registry_image" == *@* ]]; then
     echo "镜像仓库变量不得包含 digest；CD 只允许使用 GitHub Release 标签。" >&2
     exit 1
 fi
@@ -27,6 +28,7 @@ fi
 app_release_image="${registry_image}:${release_tag}"
 mem0_release_image="${mem0_registry_image}:${release_tag}"
 mem0_dashboard_release_image="${mem0_dashboard_registry_image}:${release_tag}"
+opa_release_image="${opa_registry_image}:${release_tag}"
 
 if [ -n "${GITHUB_OUTPUT:-}" ]; then
     {
@@ -35,6 +37,7 @@ if [ -n "${GITHUB_OUTPUT:-}" ]; then
         printf 'app_image=%s\n' "$app_release_image"
         printf 'mem0_image=%s\n' "$mem0_release_image"
         printf 'mem0_dashboard_image=%s\n' "$mem0_dashboard_release_image"
+        printf 'opa_image=%s\n' "$opa_release_image"
     } >>"$GITHUB_OUTPUT"
 fi
 
@@ -43,3 +46,4 @@ printf 'CD_RELEASE_SHA=%q\n' "$release_sha"
 printf 'CD_APP_IMAGE=%q\n' "$app_release_image"
 printf 'CD_MEM0_IMAGE=%q\n' "$mem0_release_image"
 printf 'CD_MEM0_DASHBOARD_IMAGE=%q\n' "$mem0_dashboard_release_image"
+printf 'CD_OPA_IMAGE=%q\n' "$opa_release_image"
