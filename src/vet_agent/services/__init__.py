@@ -35,6 +35,15 @@ from .scope import (
     ScopePolicyEvaluator,
 )
 from .trace import LogicTraceStore
+from .turn_execution import (
+    TurnExecutionBusyError,
+    TurnExecutionConflictError,
+    TurnExecutionDependencyError,
+    TurnExecutionError,
+    TurnExecutionGate,
+    TurnExecutionGateProtocol,
+    TurnExecutor,
+)
 
 __all__ = [
     "AccessControlService",
@@ -63,5 +72,12 @@ __all__ = [
     "ScopeDecision",
     "ScopeDecisionAction",
     "ScopePolicyEvaluator",
+    "TurnExecutionBusyError",
+    "TurnExecutionConflictError",
+    "TurnExecutionDependencyError",
+    "TurnExecutionError",
+    "TurnExecutionGate",
+    "TurnExecutionGateProtocol",
+    "TurnExecutor",
     "make_semantic_memory",
 ]

@@ -31,6 +31,13 @@ from .scope import (
     SessionBinding,
     VerifiedPetProfile,
 )
+from .turn_execution import (
+    PostgresTurnExecutionRepository,
+    TurnExecutionRepository,
+    TurnExecutionRepositoryError,
+    TurnIdempotencyClaim,
+    TurnIdempotencyClaimStatus,
+)
 
 __all__ = [
     "ConsultationDomainRule",
@@ -45,10 +52,15 @@ __all__ = [
     "PostgresKnowledgeRepository",
     "PostgresRuleRepository",
     "PostgresScopeRepository",
+    "PostgresTurnExecutionRepository",
     "RuleRepository",
     "ScopeRepository",
     "SafetyRule",
     "SessionBinding",
+    "TurnExecutionRepository",
+    "TurnExecutionRepositoryError",
+    "TurnIdempotencyClaim",
+    "TurnIdempotencyClaimStatus",
     "VerifiedPetProfile",
     "compile_regex",
     "evidence_from_hits",

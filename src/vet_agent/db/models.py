@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Any
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import ARRAY, BigInteger, Boolean, DateTime, Float, ForeignKey, Integer, Text, UniqueConstraint, func
+from sqlalchemy import ARRAY, BigInteger, Boolean, CheckConstraint, DateTime, Float, ForeignKey, Integer, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -430,17 +430,27 @@ class IdempotencyRecordModel(Base):
     __tablename__ = "idempotency_records"
     __table_args__ = (
         UniqueConstraint("user_id", "pet_id", "session_id", "idempotency_key", name="uq_idempotency_scope_key"),
+        CheckConstraint("status IN ('processing', 'completed', 'failed')", name="ck_idempotency_records_status"),
+        {"comment": "Agent 单回合幂等记录表，用于 turn execution 门禁的 claim、响应重放与失败追踪。"},
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    user_id: Mapped[str] = mapped_column(Text, nullable=False)
-    pet_id: Mapped[str] = mapped_column(Text, nullable=False)
-    session_id: Mapped[str] = mapped_column(Text, nullable=False)
-    idempotency_key: Mapped[str] = mapped_column(Text, nullable=False)
-    request_id: Mapped[str] = mapped_column(Text, nullable=False)
-    trace_id: Mapped[str] = mapped_column(Text, nullable=False)
-    response_id: Mapped[str | None] = mapped_column(Text)
-    status: Mapped[str] = mapped_column(Text, nullable=False)
-    response_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True, comment="幂等记录内部主键。")
+    user_id: Mapped[str] = mapped_column(Text, nullable=False, comment="本轮可信身份范围中的用户标识。")
+    pet_id: Mapped[str] = mapped_column(Text, nullable=False, comment="本轮可信身份范围中的宠物标识。")
+    session_id: Mapped[str] = mapped_column(Text, nullable=False, comment="本轮可信身份范围中的会话标识。")
+    idempotency_key: Mapped[str] = mapped_column(Text, nullable=False, comment="调用方提交的幂等键，在同一用户、宠物、会话范围内唯一。")
+    request_id: Mapped[str] = mapped_column(Text, nullable=False, comment="最近一次声明或完成该幂等记录的请求标识。")
+    trace_id: Mapped[str] = mapped_column(Text, nullable=False, comment="最近一次声明或完成该幂等记录的链路追踪标识。")
+    request_hash: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        default="",
+        server_default="",
+        comment="去除 request_id、trace_id 与 idempotency_key 后的请求语义哈希，用于检测同 key 不同请求冲突。",
+    )
+    response_id: Mapped[str | None] = mapped_column(Text, comment="首个成功响应的 Agent turn 标识。")
+    status: Mapped[str] = mapped_column(Text, nullable=False, comment="幂等记录状态，仅允许 processing、completed、failed。")
+    response_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSONB, comment="首个成功响应的 JSON 快照，用于后续同语义请求重放。")
+    error_type: Mapped[str | None] = mapped_column(Text, comment="最近一次执行失败的异常类型，用于排障和审计。")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), comment="幂等记录创建时间。")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), comment="幂等记录最近更新时间。")
