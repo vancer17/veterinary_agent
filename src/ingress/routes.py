@@ -17,6 +17,8 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from .dto import AgentTurnRequest, HealthResponse, IngressRequest, ReadyResponse
 from .errors import (
+    ApiIngressError,
+    ConflictError,
     ErrorResponse,
     InvalidRequestError,
     OrchestratorTimeoutError,
@@ -26,6 +28,7 @@ from .orchestrator import Orchestrator, get_orchestrator
 from vet_agent import AuthorizedScopeContext as CoreAuthorizedScopeContext
 from vet_agent import ScopeAssertion as CoreScopeAssertion
 from vet_agent import get_container
+from vet_agent.services import TurnExecutionConflictError, TurnExecutionDependencyError
 
 
 router = APIRouter()
@@ -144,6 +147,20 @@ async def _dispatch_turn(
 
     try:
         response = await orchestrator.create_turn(turn_request)
+    except TurnExecutionConflictError as exc:
+        raise ConflictError(
+            str(exc),
+            request_id=turn_request.request_context.request_id,
+            trace_id=turn_request.request_context.trace_id,
+            details=exc.details,
+        ) from exc
+    except TurnExecutionDependencyError as exc:
+        raise OrchestratorUnavailableError(
+            str(exc),
+            request_id=turn_request.request_context.request_id,
+            trace_id=turn_request.request_context.trace_id,
+            details=exc.details,
+        ) from exc
     except TimeoutError as exc:
         raise OrchestratorTimeoutError(
             request_id=turn_request.request_context.request_id,
@@ -170,21 +187,55 @@ async def _stream_events(
     try:
         async for event in orchestrator.stream_turn(turn_request):
             yield _to_sse(event)
+    except TurnExecutionConflictError as exc:
+        yield _to_sse(
+            _turn_failed_event(
+                ConflictError(
+                    str(exc),
+                    request_id=turn_request.request_context.request_id,
+                    trace_id=turn_request.request_context.trace_id,
+                    details=exc.details,
+                )
+            )
+        )
+        return
+    except TurnExecutionDependencyError as exc:
+        yield _to_sse(
+            _turn_failed_event(
+                OrchestratorUnavailableError(
+                    str(exc),
+                    request_id=turn_request.request_context.request_id,
+                    trace_id=turn_request.request_context.trace_id,
+                    details=exc.details,
+                )
+            )
+        )
+        return
     except TimeoutError as exc:
         error = OrchestratorTimeoutError(
             request_id=turn_request.request_context.request_id,
             trace_id=turn_request.request_context.trace_id,
         )
-        yield _to_sse(
-            {
-                "event": "turn.failed",
-                "code": error.code.value,
-                "message": error.message,
-                "request_id": turn_request.request_context.request_id,
-                "trace_id": turn_request.request_context.trace_id,
-            }
-        )
+        yield _to_sse(_turn_failed_event(error))
         return
+
+
+def _turn_failed_event(error: ApiIngressError) -> dict[str, Any]:
+    """构造流式响应中的 turn.failed 错误事件。
+
+    :param error: 入口层标准错误对象。
+    :return: 返回 SSE 事件载荷。
+    """
+    payload: dict[str, Any] = {
+        "event": "turn.failed",
+        "code": error.code.value,
+        "message": error.message,
+        "request_id": error.request_id,
+        "trace_id": error.trace_id,
+    }
+    if error.details is not None:
+        payload["details"] = error.details
+    return payload
 
 
 def _to_sse(event: Mapping[str, Any]) -> str:
