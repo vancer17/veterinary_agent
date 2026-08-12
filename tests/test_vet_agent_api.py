@@ -16,10 +16,19 @@ import pytest
 from fastapi.testclient import TestClient
 
 from ingress import create_app, set_orchestrator
-from vet_agent import Container, Settings, TrustedIdentity, VetAgentIngressOrchestrator, set_container
+from vet_agent import (
+    AgentTurnRequest,
+    AgentTurnResponse,
+    Container,
+    Settings,
+    TrustedIdentity,
+    VetAgentIngressOrchestrator,
+    set_container,
+)
 from vet_agent.agents import TaskSplitterAgent
 from vet_agent.repositories import FileRuleRepository, ScopeRepository, SessionBinding, VerifiedPetProfile
 from vet_agent.runtime import QwenClient
+from vet_agent.services import TurnExecutionGateProtocol, TurnExecutor
 
 
 app = create_app()
@@ -174,6 +183,55 @@ class InMemoryScopeRepository(ScopeRepository):
         )
 
 
+class InMemoryTurnExecutionGate(TurnExecutionGateProtocol):
+    """为 API 测试提供显式注入的 turn execution 门禁替身。
+
+    :return: 无返回值。
+    """
+
+    def __init__(self) -> None:
+        """初始化测试 turn execution 门禁替身。
+
+        :return: 无返回值。
+        """
+        self.responses: dict[tuple[str, str, str, str], AgentTurnResponse] = {}
+        self.execution_count: int = 0
+
+    async def run(self, request: AgentTurnRequest, execute: TurnExecutor) -> AgentTurnResponse:
+        """执行测试范围内的 turn lock 与幂等重放逻辑。
+
+        :param request: 当前 Agent 回合请求。
+        :param execute: 测试主链路执行函数。
+        :return: 返回新生成或已保存的测试响应。
+        """
+        idempotency_key = request.turn_options.idempotency_key
+        if not idempotency_key:
+            self.execution_count += 1
+            return await execute()
+
+        key = (
+            request.trusted_identity.user_id,
+            request.trusted_identity.pet_id,
+            request.trusted_identity.session_id,
+            idempotency_key,
+        )
+        existing = self.responses.get(key)
+        if existing is not None:
+            return existing
+
+        self.execution_count += 1
+        response = await execute()
+        self.responses[key] = response
+        return response
+
+    def is_ready(self) -> bool:
+        """检查测试 turn execution 门禁是否就绪。
+
+        :return: 始终返回 True。
+        """
+        return True
+
+
 _test_scope_repository: InMemoryScopeRepository | None = None
 
 
@@ -193,7 +251,11 @@ def _client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setattr(QwenClient, "_send_chat", _fake_litellm_send_chat)
     global _test_scope_repository
     _test_scope_repository = InMemoryScopeRepository()
-    container = Container(Settings.from_env(), scope_repository=_test_scope_repository)
+    container = Container(
+        Settings.from_env(),
+        scope_repository=_test_scope_repository,
+        turn_execution_gate=InMemoryTurnExecutionGate(),
+    )
     set_container(container)
     set_orchestrator(VetAgentIngressOrchestrator(container))
     return TestClient(app)

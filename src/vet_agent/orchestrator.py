@@ -1,6 +1,8 @@
 """
 文件：src/vet_agent/orchestrator.py
-作用：提供兽医 Agent 项目的业务实现。
+作用：编排兽医 Agent 单回合主业务链路。
+范围：负责安全评估、范围上下文读取、问诊状态、任务拆分、RAG、回复生成、记忆写入与 trace 写入。
+说明：幂等 claim、响应重放与 turn lock 已迁移至 turn execution 门禁；本文件仅通过门禁协议提交主链路执行闭包。
 说明：本文件遵循项目标准文件树编排；跨包引用应通过对应包的 __init__.py 暴露能力。
 """
 
@@ -8,7 +10,7 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator, Iterator
 from typing import Any
 from uuid import uuid4
 
@@ -46,6 +48,7 @@ from vet_agent.services import (
     PetContext,
     PetContextProvider,
     ReasoningDisplayBuilder,
+    TurnExecutionGateProtocol,
 )
 
 
@@ -62,6 +65,7 @@ class VetOrchestrator:
         rule_repository: RuleRepository,
         clinical_safety_evaluator: ClinicalSafetyEvaluator,
         clinical_safety_semantic_extractor: ClinicalSafetySemanticExtractorAgent,
+        turn_execution_gate: TurnExecutionGateProtocol,
     ) -> None:
         """初始化当前对象。
 
@@ -74,12 +78,14 @@ class VetOrchestrator:
         :param rule_repository: 参数 rule_repository。
         :param clinical_safety_evaluator: 结构化临床安全评估器。
         :param clinical_safety_semantic_extractor: 临床安全结构化语义抽取器。
+        :param turn_execution_gate: 单回合执行门禁，负责 turn lock 与幂等基础设施控制。
         :return: 无返回值。
         """
         self.settings = settings
         self.context_provider = context_provider
         self.memory_service = memory_service
         self.trace_store = trace_store
+        self.turn_execution_gate = turn_execution_gate
         self.knowledge_service = knowledge_service
         self.safety = SafetyAgent(rule_repository)
         self.clinical_safety = clinical_safety_evaluator
@@ -102,33 +108,14 @@ class VetOrchestrator:
         :param request: 请求对象。
         :return: 返回函数执行结果。
         """
-        async with self._turn_lock(request):
-            idempotency_key = request.turn_options.idempotency_key
-            if idempotency_key:
-                claim = await self.memory_service.begin_idempotency(
-                    request.trusted_identity,
-                    idempotency_key=idempotency_key,
-                    request_id=request.request_context.request_id,
-                    trace_id=request.request_context.trace_id,
-                    wait_seconds=self.settings.idempotency_wait_seconds,
-                    processing_ttl_seconds=self.settings.idempotency_processing_ttl_seconds,
-                )
-                if claim.get("state") == "replayed" and claim.get("response_snapshot"):
-                    return AgentTurnResponse.model_validate(claim["response_snapshot"])
-                if claim.get("state") == "busy":
-                    raise TimeoutError("idempotent request is still processing")
-                try:
-                    return await self._run_turn_core(request)
-                except Exception as exc:
-                    await self.memory_service.mark_idempotency_failed(
-                        request.trusted_identity,
-                        idempotency_key=idempotency_key,
-                        request_id=request.request_context.request_id,
-                        trace_id=request.request_context.trace_id,
-                        error_type=type(exc).__name__,
-                    )
-                    raise
+        async def execute_turn() -> AgentTurnResponse:
+            """在 turn execution 门禁放行后执行 Agent 主业务链路。
+
+            :return: 返回本轮新生成的 Agent 响应。
+            """
             return await self._run_turn_core(request)
+
+        return await self.turn_execution_gate.run(request, execute_turn)
 
     async def _run_turn_core(self, request: AgentTurnRequest) -> AgentTurnResponse:
         """执行 _run_turn_core 内部辅助逻辑。
@@ -799,7 +786,7 @@ class VetOrchestrator:
             ]
         )
 
-    async def stream_turn(self, request: AgentTurnRequest):
+    async def stream_turn(self, request: AgentTurnRequest) -> AsyncIterator[str]:
         """以流式事件形式执行一个 Agent 对话回合。
 
         :param request: 请求对象。
@@ -878,20 +865,6 @@ class VetOrchestrator:
             event="turn.completed",
             data={"id": response.id, "status": response.status},
         ).to_sse()
-
-    @asynccontextmanager
-    async def _turn_lock(self, request: AgentTurnRequest):
-        """执行 _turn_lock 内部辅助逻辑。
-
-        :param request: 请求对象。
-        :return: 返回异步执行结果。
-        """
-        lock_factory = getattr(self.memory_service, "turn_lock", None)
-        if callable(lock_factory):
-            async with lock_factory(request.trusted_identity):
-                yield
-            return
-        yield
 
     async def _finalize_and_persist(
         self,
@@ -980,16 +953,8 @@ class VetOrchestrator:
             },
         )
         await self.trace_store.write_turn(request, response)
-        if request.turn_options.idempotency_key:
-            await self.memory_service.save_idempotency_response(
-                request.trusted_identity,
-                idempotency_key=request.turn_options.idempotency_key,
-                request_id=request.request_context.request_id,
-                trace_id=request.request_context.trace_id,
-                response_snapshot=response.model_dump(mode="json"),
-            )
 
-    def _chunks(self, text: str, size: int):
+    def _chunks(self, text: str, size: int) -> Iterator[str]:
         """执行 _chunks 内部辅助逻辑。
 
         :param text: 待处理文本。
