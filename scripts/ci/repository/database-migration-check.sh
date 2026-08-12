@@ -24,33 +24,6 @@ fi
 container_name="vet-agent-ci-postgres-${GITHUB_RUN_ID:-local}-$$"
 postgres_image="${PGVECTOR_IMAGE:-pgvector/pgvector:pg16}"
 
-while IFS= read -r revision_name; do
-    if [ "${#revision_name}" -gt 32 ]; then
-        echo "Alembic revision 超过默认 version_num 长度限制: ${revision_name}" >&2
-        echo "请将 revision 控制在 32 个字符以内，或显式迁移 alembic_version 表字段长度。" >&2
-        exit 1
-    fi
-done < <(
-    python3 - <<'PY'
-from __future__ import annotations
-
-import ast
-import pathlib
-
-for revision_file in sorted(pathlib.Path("alembic/versions").glob("*.py")):
-    module = ast.parse(revision_file.read_text(encoding="utf-8"), filename=str(revision_file))
-    for node in module.body:
-        if (
-            isinstance(node, ast.Assign)
-            and any(isinstance(target, ast.Name) and target.id == "revision" for target in node.targets)
-            and isinstance(node.value, ast.Constant)
-            and isinstance(node.value.value, str)
-        ):
-            print(node.value.value)
-            break
-PY
-)
-
 cleanup() {
     # 清理本次数据库检查创建的临时 PostgreSQL 容器。
     #

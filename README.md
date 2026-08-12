@@ -266,14 +266,12 @@ uv run pytest
 ```bash
 export VET_AGENT_API_KEYS="replace-with-service-key"
 export REQUIRE_API_AUTH="true"
-export PET_AUTHORIZATION_MODE="strict"
-export SESSION_POLICY_MODE="strict"
 ```
 
 新增能力：
 
 - API 鉴权：配置 `VET_AGENT_API_KEYS` 或 `REQUIRE_API_AUTH=true` 后，入口要求 `Authorization: Bearer ...` 或 `X-API-Key`。
-- 宠物授权：`pet_profiles` 作为 `pet_id -> user_id` 归属源；strict 模式下未登记或归属不匹配会返回 `403`。
+- 宠物授权：`pet_profiles` 作为服务端已验证宠物画像与归属源；未登记、停用或归属不匹配会返回 `403`，不再根据请求侧 `pet_info` 自动注册。
 - 一 session 一宠：`pet_session_bindings` 绑定 `session_id + user_id + pet_id`，同一会话切到另一只宠物会被拒绝。
 - 幂等并发：`idempotency_records` 支持 `processing/completed/failed`，同一幂等键并发请求会等待并复用首个响应。
 - session 串行化：PostgreSQL 模式使用 advisory lock 序列化同一 `user_id + pet_id + session_id` 下的 turn，降低状态竞争。

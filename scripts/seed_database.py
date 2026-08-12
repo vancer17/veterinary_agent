@@ -27,7 +27,6 @@ from vet_agent.db import (
     ConsultationDomainModel,
     ConsultationSlotModel,
     KnowledgeChunkModel,
-    SafetyRuleModel,
     make_session_factory,
 )
 from vet_agent.runtime import QwenEmbeddingClient
@@ -66,7 +65,6 @@ def main() -> None:
     clinical_safety_dir = Path(args.clinical_safety_dir)
     session_factory = make_session_factory(args.database_url)
     with session_factory() as session:
-        seed_safety(session, seed_dir / "safety_rules.json")
         seed_consultation(session, seed_dir / "consultation_rules.json")
         seed_knowledge(session, seed_dir / "knowledge_chunks.json", embedding_client)
         seed_clinical_safety(
@@ -77,38 +75,6 @@ def main() -> None:
             review_status=args.clinical_safety_review_status,
         )
         session.commit()
-
-
-def seed_safety(session: Session, path: Path) -> None:
-    """写入安全规则 seed。
-
-    :param session: 数据库会话。
-    :param path: 安全规则 JSON 文件路径。
-    :return: 无返回值。
-    """
-    rows = json.loads(path.read_text(encoding="utf-8"))
-    for item in rows:
-        for pattern in item.get("patterns", []):
-            model = session.scalar(
-                select(SafetyRuleModel).where(
-                    SafetyRuleModel.code == item["code"],
-                    SafetyRuleModel.rule_type == item["rule_type"],
-                    SafetyRuleModel.match_type == item["match_type"],
-                    SafetyRuleModel.pattern == pattern,
-                )
-            )
-            if model is None:
-                model = SafetyRuleModel(
-                    code=item["code"],
-                    rule_type=item["rule_type"],
-                    match_type=item["match_type"],
-                    pattern=pattern,
-                )
-                session.add(model)
-            model.severity = item.get("severity", "caution")
-            model.message = item["message"]
-            model.response_template = item.get("response_template")
-            model.metadata_json = item.get("metadata", {})
 
 
 def seed_consultation(session: Session, path: Path) -> None:
