@@ -2,7 +2,7 @@
 # =============================================================================
 # 文件: scripts/ci/repository/run-repository-gate.sh
 # 作用: 聚合兽医 Agent 仓库特色 CI 门禁。
-# 范围: CD 布局约束、pgvector 数据库初始化、Alembic 迁移验证与 Mem0 封装镜像构建。
+# 范围: CD 布局约束、pgvector 数据库初始化、Alembic 迁移验证、Mem0 与 OPA 封装镜像构建。
 # 说明: 该入口包含强业务语义，不应作为其他业务仓库的通用模板直接分发。
 # =============================================================================
 
@@ -14,9 +14,11 @@ cd "$repo_root"
 bash scripts/ci/repository/cd-layout-check.sh
 bash scripts/ci/repository/database-migration-check.sh
 
-# Mem0 与 Mem0 Dashboard 是本仓库生产交付的一部分，默认在仓库特色门禁中构建；
-# try-run 等轻量场景可通过 CI_BUILD_MEM0_IMAGE=false 或 CI_BUILD_MEM0_DASHBOARD_IMAGE=false 显式跳过。
+# Mem0、Mem0 Dashboard 与 OPA 是本仓库生产交付的一部分，默认在仓库特色门禁中构建；
+# try-run 等轻量场景可通过 CI_BUILD_*_IMAGE=false 显式跳过。
+bash scripts/ci/repository/opa-policy-check.sh
 CI_BUILD_APP_IMAGE=false \
 CI_BUILD_MEM0_IMAGE="${CI_BUILD_MEM0_IMAGE:-true}" \
 CI_BUILD_MEM0_DASHBOARD_IMAGE="${CI_BUILD_MEM0_DASHBOARD_IMAGE:-true}" \
+CI_BUILD_OPA_IMAGE="${CI_BUILD_OPA_IMAGE:-true}" \
 bash scripts/ci/common/docker-build-check.sh

@@ -21,6 +21,15 @@ from vet_agent.clinical_safety import (
     FileClinicalSafetyRepository,
     PostgresClinicalSafetyRepository,
 )
+from vet_agent.input_safety import (
+    GuardrailsInputSafetyDetector,
+    InputSafetyPolicyClient,
+    InputSafetyRepository,
+    InputSafetyService,
+    LocalInputSafetyPolicyClient,
+    OpaInputSafetyPolicyClient,
+    PostgresInputSafetyRepository,
+)
 from vet_agent.repositories import (
     FallbackKnowledgeRepository,
     FileKnowledgeRepository,
@@ -68,12 +77,14 @@ class Container:
         *,
         scope_repository: ScopeRepository | None = None,
         turn_execution_gate: TurnExecutionGateProtocol | None = None,
+        input_safety_service: InputSafetyService | None = None,
     ) -> None:
         """组装应用运行所需的仓储、模型客户端和业务服务。
 
         :param settings: 当前运行环境的应用配置。
         :param scope_repository: 身份、宠物资料与会话范围仓储；仅测试或特殊嵌入场景可显式注入。
         :param turn_execution_gate: 单回合执行门禁；仅测试或特殊嵌入场景可显式注入。
+        :param input_safety_service: 基础输入安全服务；仅测试或特殊嵌入场景可显式注入。
         :return: 无返回值。
         """
         self.settings = settings
@@ -87,6 +98,7 @@ class Container:
             else MemoryService(JsonDocumentStore(settings.data_dir / "memory.json"))
         )
         self.access_control = AccessControlService(settings, self.scope_service)
+        self.input_safety_service = self._input_safety_service(settings, input_safety_service)
         self.trace_store = (
             PostgresLogicTraceStore(settings.database_url)
             if settings.database_url
@@ -168,6 +180,7 @@ class Container:
             clinical_safety_evaluator=self.clinical_safety_evaluator,
             clinical_safety_semantic_extractor=self.clinical_safety_semantic_extractor,
             turn_execution_gate=self.turn_execution_gate,
+            input_safety_service=self.input_safety_service,
         )
 
     @property
@@ -179,6 +192,7 @@ class Container:
         return (
             self.settings.litellm_configured
             and self.access_control.is_ready()
+            and self.input_safety_service.is_ready()
             and self.rule_repository.is_ready()
             and self.knowledge_repository.is_ready()
             and self.clinical_safety_repository.is_ready()
@@ -218,6 +232,61 @@ class Container:
         if not settings.database_url:
             raise RuntimeError("DATABASE_URL is required for turn execution gate")
         return TurnExecutionGate(settings, PostgresTurnExecutionRepository(settings.database_url))
+
+    def _input_safety_service(
+        self,
+        settings: Settings,
+        input_safety_service: InputSafetyService | None,
+    ) -> InputSafetyService:
+        """构造基础输入安全候选与策略裁决服务。
+
+        :param settings: 当前运行环境的应用配置。
+        :param input_safety_service: 外部显式注入的输入安全服务。
+        :return: 返回输入安全服务实例。
+        """
+        if input_safety_service is not None:
+            return input_safety_service
+        if not settings.enable_input_safety:
+            raise RuntimeError("ENABLE_INPUT_SAFETY=false is only allowed through explicit test injection")
+        if not settings.database_url:
+            raise RuntimeError("DATABASE_URL is required for input safety candidate definitions")
+        repository = PostgresInputSafetyRepository(settings.database_url)
+        detectors = (
+            (
+                GuardrailsInputSafetyDetector(
+                    settings,
+                    repository,
+                    system_prompt="兽医 Agent 输入安全检测器仅采集提示注入候选，最终动作由 OPA 裁决。",
+                ),
+            )
+            if settings.enable_input_safety_guardrails
+            else ()
+        )
+        return InputSafetyService(
+            settings,
+            repository=repository,
+            detectors=detectors,
+            policy_client=self._input_safety_policy_client(settings),
+        )
+
+    def _input_safety_policy_client(self, settings: Settings) -> InputSafetyPolicyClient:
+        """构造基础输入安全策略裁决客户端。
+
+        :param settings: 当前运行环境的应用配置。
+        :return: 返回输入安全策略客户端。
+        """
+        if settings.input_safety_policy_backend == "opa":
+            return OpaInputSafetyPolicyClient(
+                base_url=settings.input_safety_opa_base_url,
+                version="v1",
+                package_path=settings.input_safety_opa_package_path,
+                rule_name=settings.input_safety_opa_rule_name,
+                auth_token=settings.input_safety_opa_auth_token,
+                timeout_seconds=settings.request_timeout_seconds,
+            )
+        if settings.input_safety_policy_backend == "local":
+            return LocalInputSafetyPolicyClient()
+        raise RuntimeError(f"unsupported INPUT_SAFETY_POLICY_BACKEND: {settings.input_safety_policy_backend}")
 
 
 @lru_cache

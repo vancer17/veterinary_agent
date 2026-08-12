@@ -20,22 +20,72 @@ class Base(DeclarativeBase):
     pass
 
 
-class SafetyRuleModel(Base):
-    __tablename__ = "safety_rules"
+class InputSafetyCandidateDefinitionModel(Base):
+    __tablename__ = "input_safety_candidate_definitions"
+    __table_args__ = (
+        UniqueConstraint("code", name="uq_input_safety_candidate_definitions_code"),
+        CheckConstraint(
+            "default_severity IN ('info', 'caution', 'urgent', 'blocked')",
+            name="ck_input_safety_candidate_definitions_severity",
+        ),
+        {
+            "comment": "基础输入安全候选定义表，用于描述结构化检测器输出的策略语义，不保存文本关键词规则。"
+        },
+    )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    code: Mapped[str] = mapped_column(Text, nullable=False)
-    rule_type: Mapped[str] = mapped_column(Text, nullable=False)
-    match_type: Mapped[str] = mapped_column(Text, nullable=False)
-    pattern: Mapped[str] = mapped_column(Text, nullable=False)
-    severity: Mapped[str] = mapped_column(Text, nullable=False, default="caution", server_default="caution")
-    message: Mapped[str] = mapped_column(Text, nullable=False)
-    response_template: Mapped[str | None] = mapped_column(Text)
-    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
-    version: Mapped[str] = mapped_column(Text, nullable=False, default="v1", server_default="v1")
-    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, nullable=False, default=dict, server_default="{}")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True, comment="候选定义内部主键。")
+    code: Mapped[str] = mapped_column(Text, nullable=False, comment="候选编码，用于 OPA 策略、审计和安全信号关联。")
+    category: Mapped[str] = mapped_column(Text, nullable=False, comment="候选类别，例如完整性、提示注入、未开放能力或业务范围候选。")
+    default_severity: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        default="caution",
+        server_default="caution",
+        comment="候选默认严重级别；最终动作和信号级别由 OPA 裁决覆盖。",
+    )
+    message: Mapped[str] = mapped_column(Text, nullable=False, comment="候选默认说明，用于审计和默认安全响应。")
+    detector: Mapped[str] = mapped_column(Text, nullable=False, comment="候选来源检测器或结构化字段检查器标识。")
+    priority: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=100,
+        server_default="100",
+        comment="候选定义排序优先级，数值越小越优先。",
+    )
+    enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default="true",
+        comment="候选定义是否允许运行时使用。",
+    )
+    version: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        default="v1",
+        server_default="v1",
+        comment="候选定义版本。",
+    )
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(
+        "metadata",
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+        comment="候选定义附加审计信息。",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        comment="候选定义创建时间。",
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        comment="候选定义最近更新时间。",
+    )
 
 
 class ConsultationDomainModel(Base):
