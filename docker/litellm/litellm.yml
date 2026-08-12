@@ -41,6 +41,16 @@ model_list:
       # 该模型在本仓库内仅用于向量检索，不承载生成式对话。
       base_model: text-embedding-v4
 
+  # 向量模型别名；Mem0 使用不带前缀的模型名，路由到同一 embedding 后端。
+  - model_name: text-embedding-v4
+    litellm_params:
+      model: openai/text-embedding-v4
+      api_base: https://dashscope.aliyuncs.com/compatible-mode/v1
+      api_key: os.environ/DASHSCOPE_API_KEY
+    model_info:
+      mode: embedding
+      base_model: text-embedding-v4
+
 router_settings:
   # 官方推荐的默认路由策略；单模型组场景下保持简单稳定。
   routing_strategy: simple-shuffle
@@ -127,8 +137,6 @@ litellm_settings:
   default_litellm_params: {}
   # 调试级别；保持 INFO 以便生产与开发日志一致。
   debug_level: INFO
-  # 自动丢弃上游不支持的参数；避免 LiteLLM 误判通义千问 embedding 模型能力。
-  drop_params: true
 
 general_settings:
   # LiteLLM 管理密钥；仅用于 Admin API、Admin UI 和创建 virtual key，不应作为业务调用 key 长期下发。
