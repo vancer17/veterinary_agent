@@ -11,7 +11,7 @@ from alembic import op
 
 
 revision = "0008_scope_table_comments"
-down_revision = "0007_clinical_safety_phrases"
+down_revision = "0007_clinical_safety_recognition_phrases"
 branch_labels = None
 depends_on = None
 
