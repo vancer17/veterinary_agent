@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel, Field
@@ -45,7 +45,7 @@ async def read_memory(
     user_id: Annotated[str, Query(min_length=1)],
     session_id: Annotated[str, Query(min_length=1)],
     pet_id: Annotated[str, Query(min_length=1)],
-):
+) -> dict[str, Any]:
     """执行 read_memory 业务逻辑。
 
     :param request: 请求对象。
@@ -63,7 +63,7 @@ async def read_memory(
 
 
 @router.put("")
-async def correct_memory(correction: MemoryCorrection, request: Request):
+async def correct_memory(correction: MemoryCorrection, request: Request) -> dict[str, str]:
     """执行 correct_memory 业务逻辑。
 
     :param correction: 参数 correction。
@@ -88,7 +88,7 @@ async def correct_memory(correction: MemoryCorrection, request: Request):
 
 
 @router.put("/facts")
-async def correct_pet_fact(correction: FactCorrection, request: Request):
+async def correct_pet_fact(correction: FactCorrection, request: Request) -> dict[str, str]:
     """执行 correct_pet_fact 业务逻辑。
 
     :param correction: 参数 correction。
@@ -120,7 +120,7 @@ async def delete_pet_memory(
     request: Request,
     user_id: Annotated[str | None, Query(min_length=1)] = None,
     session_id: Annotated[str | None, Query(min_length=1)] = None,
-):
+) -> dict[str, str]:
     """执行 delete_pet_memory 业务逻辑。
 
     :param pet_id: 参数 pet_id。
@@ -130,15 +130,11 @@ async def delete_pet_memory(
     :return: 返回异步执行结果。
     """
     container = get_container()
-    if user_id and session_id:
-        identity = TrustedIdentity(user_id=user_id, session_id=session_id, pet_id=pet_id)
-        await _authorize_memory_request(request, identity)
-        await container.memory_service.delete_pet_memory(pet_id, user_id=user_id)
-    else:
-        settings = container.settings
-        if settings.require_api_auth or settings.api_keys or settings.pet_authorization_mode == "strict":
-            raise ForbiddenError("user_id and session_id are required to delete pet memory")
-        await container.memory_service.delete_pet_memory(pet_id)
+    if not user_id or not session_id:
+        raise ForbiddenError("user_id and session_id are required to delete pet memory")
+    identity = TrustedIdentity(user_id=user_id, session_id=session_id, pet_id=pet_id)
+    await _authorize_memory_request(request, identity)
+    await container.memory_service.delete_pet_memory(pet_id, user_id=user_id)
     return {"status": "deleted", "pet_id": pet_id}
 
 
@@ -151,4 +147,4 @@ async def _authorize_memory_request(request: Request, identity: TrustedIdentity)
     """
     container = get_container()
     principal = container.access_control.authenticate(request.headers)
-    await container.access_control.authorize(identity, pet_info={}, principal=principal)
+    await container.access_control.authorize_identity(identity, pet_info={}, principal=principal)

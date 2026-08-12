@@ -7,23 +7,177 @@
 
 from __future__ import annotations
 
-import json
+from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 
 from ingress import create_app, set_orchestrator
-from vet_agent import Settings, VetAgentIngressOrchestrator, get_container
+from vet_agent import Container, Settings, TrustedIdentity, VetAgentIngressOrchestrator, set_container
 from vet_agent.agents import TaskSplitterAgent
-from vet_agent.repositories import FileRuleRepository
+from vet_agent.repositories import FileRuleRepository, ScopeRepository, SessionBinding, VerifiedPetProfile
 from vet_agent.runtime import QwenClient
 
 
 app = create_app()
 
 
-def _client(tmp_path, monkeypatch) -> TestClient:
+class InMemoryScopeRepository(ScopeRepository):
+    """为 API 测试提供显式注入的范围仓储。
+
+    :return: 无返回值。
+    """
+
+    def __init__(self) -> None:
+        """初始化测试范围仓储。
+
+        :return: 无返回值。
+        """
+        self.profiles: dict[tuple[str, str], VerifiedPetProfile] = {}
+        self.bindings: dict[str, SessionBinding] = {}
+        self.auto_register_profiles: bool = True
+        self.upsert_profile_count: int = 0
+        self.bind_session_count: int = 0
+        self.touch_session_count: int = 0
+
+    def get_pet_profile(self, identity: TrustedIdentity) -> VerifiedPetProfile | None:
+        """读取测试范围内的已验证宠物画像。
+
+        :param identity: 本轮可信身份范围。
+        :return: 返回测试画像投影。
+        """
+        key = (identity.user_id, identity.pet_id)
+        if key not in self.profiles:
+            if not self.auto_register_profiles:
+                for profile in self.profiles.values():
+                    if profile.pet_id == identity.pet_id:
+                        return profile
+                return None
+            self.profiles[key] = VerifiedPetProfile(
+                user_id=identity.user_id,
+                pet_id=identity.pet_id,
+                profile={},
+                source="test_verified_profile_stub",
+                is_active=True,
+            )
+        return self.profiles[key]
+
+    def upsert_pet_profile(
+        self,
+        identity: TrustedIdentity,
+        *,
+        profile: dict[str, Any],
+        source: str,
+        is_active: bool,
+    ) -> VerifiedPetProfile:
+        """写入或刷新测试范围内的上游已验证宠物画像投影。
+
+        :param identity: 本轮可信身份范围。
+        :param profile: 上游已验证宠物画像。
+        :param source: 上游画像来源。
+        :param is_active: 宠物画像是否启用。
+        :return: 返回写入后的画像投影。
+        """
+        self.upsert_profile_count += 1
+        item = VerifiedPetProfile(
+            user_id=identity.user_id,
+            pet_id=identity.pet_id,
+            profile=profile,
+            source=source,
+            is_active=is_active,
+        )
+        self.profiles[(identity.user_id, identity.pet_id)] = item
+        return item
+
+    def get_session_binding(self, session_id: str) -> SessionBinding | None:
+        """读取测试范围内的会话绑定。
+
+        :param session_id: 会话标识。
+        :return: 返回测试会话绑定投影。
+        """
+        return self.bindings.get(session_id)
+
+    def bind_session(self, identity: TrustedIdentity) -> SessionBinding | None:
+        """创建测试范围内的会话绑定。
+
+        :param identity: 本轮可信身份范围。
+        :return: 返回创建后或已存在的会话绑定投影。
+        """
+        self.bind_session_count += 1
+        now = datetime.now(UTC)
+        self.bindings.setdefault(
+            identity.session_id,
+            SessionBinding(
+                session_id=identity.session_id,
+                user_id=identity.user_id,
+                pet_id=identity.pet_id,
+                created_at=now,
+                updated_at=now,
+                last_seen_at=now,
+            ),
+        )
+        return self.bindings.get(identity.session_id)
+
+    def touch_session(self, identity: TrustedIdentity) -> None:
+        """更新测试范围内的会话最近访问时间。
+
+        :param identity: 本轮可信身份范围。
+        :return: 无返回值。
+        """
+        self.touch_session_count += 1
+        existing = self.bindings.get(identity.session_id)
+        if existing is None:
+            self.bind_session(identity)
+            return
+        now = datetime.now(UTC)
+        self.bindings[identity.session_id] = SessionBinding(
+            session_id=existing.session_id,
+            user_id=existing.user_id,
+            pet_id=existing.pet_id,
+            created_at=existing.created_at,
+            updated_at=now,
+            last_seen_at=now,
+        )
+
+    def is_ready(self) -> bool:
+        """检查测试范围仓储是否就绪。
+
+        :return: 始终返回 True。
+        """
+        return True
+
+    def register_profile(
+        self,
+        *,
+        user_id: str,
+        pet_id: str,
+        profile: dict[str, Any] | None = None,
+        is_active: bool = True,
+    ) -> None:
+        """显式登记测试范围内的已验证宠物画像。
+
+        :param user_id: 宠物所属用户标识。
+        :param pet_id: 宠物标识。
+        :param profile: 已验证宠物画像内容。
+        :param is_active: 宠物资料是否启用。
+        :return: 无返回值。
+        """
+        self.profiles[(user_id, pet_id)] = VerifiedPetProfile(
+            user_id=user_id,
+            pet_id=pet_id,
+            profile=profile or {},
+            source="test_registered_profile",
+            is_active=is_active,
+        )
+
+
+_test_scope_repository: InMemoryScopeRepository | None = None
+
+
+def _client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     """执行 _client 内部辅助逻辑。
 
     :param tmp_path: 参数 tmp_path。
@@ -37,12 +191,63 @@ def _client(tmp_path, monkeypatch) -> TestClient:
     monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.setenv("VET_AGENT_DATA_DIR", str(tmp_path))
     monkeypatch.setattr(QwenClient, "_send_chat", _fake_litellm_send_chat)
-    get_container.cache_clear()
-    set_orchestrator(VetAgentIngressOrchestrator(get_container()))
+    global _test_scope_repository
+    _test_scope_repository = InMemoryScopeRepository()
+    container = Container(Settings.from_env(), scope_repository=_test_scope_repository)
+    set_container(container)
+    set_orchestrator(VetAgentIngressOrchestrator(container))
     return TestClient(app)
 
 
-async def _fake_litellm_send_chat(self, messages, *, model: str, temperature: float) -> str:
+def _clear_test_container() -> None:
+    """清理测试期间注入的容器覆盖。
+
+    :return: 无返回值。
+    """
+    set_container(None)
+
+
+def _register_verified_profile(
+    *,
+    user_id: str = "u1",
+    pet_id: str = "p1",
+    profile: dict[str, Any] | None = None,
+    is_active: bool = True,
+) -> None:
+    """在测试范围仓储中显式登记服务端已验证宠物画像。
+
+    :param user_id: 宠物所属用户标识。
+    :param pet_id: 宠物标识。
+    :param profile: 已验证宠物画像内容。
+    :param is_active: 宠物画像是否启用。
+    :return: 无返回值。
+    """
+    assert _test_scope_repository is not None
+    _test_scope_repository.register_profile(
+        user_id=user_id,
+        pet_id=pet_id,
+        profile=profile,
+        is_active=is_active,
+    )
+
+
+@pytest.fixture(autouse=True)
+def _reset_container_after_test() -> Iterator[None]:
+    """在每个测试结束后清理注入容器，避免范围仓储与记忆状态串用。
+
+    :return: 返回 pytest fixture 迭代器。
+    """
+    yield
+    _clear_test_container()
+
+
+async def _fake_litellm_send_chat(
+    self: object,
+    messages: list[dict[str, Any]],
+    *,
+    model: str,
+    temperature: float,
+) -> str:
     """执行 _fake_litellm_send_chat 内部辅助逻辑。
 
     :param messages: 参数 messages。
@@ -146,7 +351,7 @@ async def _fake_litellm_send_chat(self, messages, *, model: str, temperature: fl
     return "我会先做分诊:目前还需要确认症状开始时间、精神食欲、是否呕吐腹泻或咳喘。如果加重或出现红旗症状，请尽快就医。"
 
 
-def _message_text(messages) -> str:
+def _message_text(messages: list[dict[str, Any]]) -> str:
     """执行 _message_text 内部辅助逻辑。
 
     :param messages: 参数 messages。
@@ -164,33 +369,107 @@ def _message_text(messages) -> str:
     return "\n".join(parts)
 
 
-def _payload(text: str, **extra):
+def _scope_assertion(
+    *,
+    user_id: str = "u1",
+    pet_id: str = "p1",
+    session_id: str = "s1",
+    profile: dict[str, Any] | None = None,
+    ownership_verified: bool = True,
+    pet_active: bool = True,
+    pet_deleted: bool = False,
+    expires_at: str | None = None,
+) -> dict[str, Any]:
+    """构造测试用 BFF 范围声明。
+
+    :param user_id: BFF 已认证用户标识。
+    :param pet_id: BFF 已校验归属的宠物标识。
+    :param session_id: BFF 发放或复用的会话标识。
+    :param profile: 服务端已验证宠物基础画像。
+    :param ownership_verified: 是否声明已完成宠物归属校验。
+    :param pet_active: 是否声明宠物可用。
+    :param pet_deleted: 是否声明宠物已删除。
+    :param expires_at: 声明过期时间。
+    :return: 返回测试请求可直接使用的范围声明。
+    """
+    now = datetime.now(UTC).isoformat()
+    verified_profile = profile or {
+        "species": "犬",
+        "breed": "柯基",
+        "age": "3岁",
+        "weight_kg": 12,
+    }
+    assertion: dict[str, Any] = {
+        "schema_version": "v1",
+        "issuer": "test-bff",
+        "issued_at": now,
+        "user_id": user_id,
+        "pet_id": pet_id,
+        "session_id": session_id,
+        "authorization": {
+            "ownership_verified": ownership_verified,
+            "pet_active": pet_active,
+            "pet_status": "active" if pet_active else "inactive",
+            "pet_deleted": pet_deleted,
+        },
+        "profile": verified_profile,
+        "source": {
+            "system": "test-main-service",
+            "database": "app_dev",
+            "table": "master_pet_info",
+            "record_id": pet_id,
+            "record_updated_at": now,
+            "data_source": "test",
+        },
+        "session_policy": {"binding_mode": "single_user_pet_per_session"},
+    }
+    if expires_at is not None:
+        assertion["expires_at"] = expires_at
+    return assertion
+
+
+def _payload(text: str, **extra: Any) -> dict[str, Any]:
     """执行 _payload 内部辅助逻辑。
 
     :param text: 待处理文本。
     :param extra: 参数 extra。
     :return: 返回函数执行结果。
     """
+    vet_context = dict(
+        extra.pop(
+            "vet_context",
+            {
+                "user_id": "u1",
+                "session_id": "s1",
+                "pet_id": "p1",
+                "pet_info": {
+                    "species": "犬",
+                    "breed": "柯基",
+                    "age": "3岁",
+                    "weight_kg": 12,
+                },
+            },
+        )
+    )
+    user_id = str(vet_context.pop("user_id", "u1"))
+    session_id = str(vet_context.pop("session_id", "s1"))
+    pet_id = str(vet_context.pop("pet_id", "p1"))
+    pet_info = dict(vet_context.get("pet_info") or {})
+    scope_assertion = extra.pop(
+        "scope_assertion",
+        _scope_assertion(user_id=user_id, pet_id=pet_id, session_id=session_id, profile=pet_info or None),
+    )
     payload = {
         "input": text,
         "stream": False,
-        "vet_context": {
-            "user_id": "u1",
-            "session_id": "s1",
-            "pet_id": "p1",
-            "pet_info": {
-                "species": "犬",
-                "breed": "柯基",
-                "age": "3岁",
-                "weight_kg": 12,
-            },
-        },
+        "scope_assertion": scope_assertion,
+        "vet_context": {"pet_info": pet_info},
     }
     payload.update(extra)
     return payload
 
 
-def _payload_without_pet_info(text: str, session_id: str = "s_ctx"):
+def _payload_without_pet_info(text: str, session_id: str = "s_ctx") -> dict[str, Any]:
     """执行 _payload_without_pet_info 内部辅助逻辑。
 
     :param text: 待处理文本。
@@ -200,15 +479,17 @@ def _payload_without_pet_info(text: str, session_id: str = "s_ctx"):
     return {
         "input": text,
         "stream": False,
-        "vet_context": {
-            "user_id": "u_ctx",
-            "session_id": session_id,
-            "pet_id": "p_ctx",
-        },
+        "scope_assertion": _scope_assertion(
+            user_id="u_ctx",
+            session_id=session_id,
+            pet_id="p_ctx",
+            profile={"species": "dog"},
+        ),
+        "vet_context": {"pet_info": {}},
     }
 
 
-def test_health_and_ready(tmp_path, monkeypatch):
+def test_health_and_ready(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证对应业务场景是否符合预期。
 
     :param tmp_path: 参数 tmp_path。
@@ -223,7 +504,7 @@ def test_health_and_ready(tmp_path, monkeypatch):
     assert ready.json()["checks"]["orchestrator"] is True
 
 
-def test_sync_turn_uses_litellm_gateway_and_evidence(tmp_path, monkeypatch):
+def test_sync_turn_uses_litellm_gateway_and_evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证对应业务场景是否符合预期。
 
     :param tmp_path: 参数 tmp_path。
@@ -243,7 +524,7 @@ def test_sync_turn_uses_litellm_gateway_and_evidence(tmp_path, monkeypatch):
     assert "SafetyAgent" in data["metadata"]["multi_agent_path"]
 
 
-def test_toxic_substance_is_escalated(tmp_path, monkeypatch):
+def test_toxic_substance_is_escalated(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证对应业务场景是否符合预期。
 
     :param tmp_path: 参数 tmp_path。
@@ -261,7 +542,7 @@ def test_toxic_substance_is_escalated(tmp_path, monkeypatch):
     assert any(signal["code"] == "TOXIC_SUBSTANCE" for signal in data["safety_signals"])
 
 
-def test_emergency_red_flag_skips_followup(tmp_path, monkeypatch):
+def test_emergency_red_flag_skips_followup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证对应业务场景是否符合预期。
 
     :param tmp_path: 参数 tmp_path。
@@ -279,7 +560,7 @@ def test_emergency_red_flag_skips_followup(tmp_path, monkeypatch):
     assert any(signal["code"] == "EMERGENCY_RED_FLAG" for signal in data["safety_signals"])
 
 
-def test_radiology_attachment_is_blocked(tmp_path, monkeypatch):
+def test_radiology_attachment_is_blocked(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证对应业务场景是否符合预期。
 
     :param tmp_path: 参数 tmp_path。
@@ -359,6 +640,10 @@ def test_contextual_clinical_safety_escalates_hidden_risk_patterns(
     client = _client(tmp_path, monkeypatch)
     payload = _payload(text)
     payload["vet_context"]["pet_info"] = pet_info
+    if pet_info:
+        payload["scope_assertion"] = _scope_assertion(profile=dict(pet_info))
+    else:
+        payload["scope_assertion"] = _scope_assertion(profile={"species": "cat", "age": "12 years"})
 
     response = client.post("/agent/turns", json=payload)
 
@@ -398,6 +683,199 @@ def test_unverified_pet_info_does_not_independently_trigger_clinical_risk(
     )
 
 
+def test_scope_policy_requires_scope_assertion(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证缺少 BFF 范围声明时入口请求会被拒绝。
+
+    :param tmp_path: 临时数据目录。
+    :param monkeypatch: pytest 环境变量和方法替换工具。
+    :return: 无返回值；断言通过表示旧版 vet_context 身份路径已移除。
+    """
+    client = _client(tmp_path, monkeypatch)
+    payload = _payload("它今天有点拉稀。")
+    payload.pop("scope_assertion")
+
+    response = client.post("/agent/turns", json=payload)
+
+    assert response.status_code == 422
+    data = response.json()
+    assert data["code"] == "MISSING_REQUIRED_CONTEXT"
+
+
+def test_scope_policy_rejects_legacy_vet_context_identity_fields(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证旧版 vet_context 身份字段不会被入口模型继续接收。
+
+    :param tmp_path: 临时数据目录。
+    :param monkeypatch: pytest 环境变量和方法替换工具。
+    :return: 无返回值；断言通过表示旧版身份字段已从请求契约中移除。
+    """
+    client = _client(tmp_path, monkeypatch)
+    payload = _payload("它今天有点拉稀。")
+    payload["vet_context"]["user_id"] = "legacy_user"
+    payload["vet_context"]["session_id"] = "legacy_session"
+    payload["vet_context"]["pet_id"] = "legacy_pet"
+
+    response = client.post("/agent/turns", json=payload)
+
+    assert response.status_code == 400
+    data = response.json()
+    assert data["code"] == "INVALID_REQUEST"
+
+
+def test_scope_assertion_rejects_source_record_mismatch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证范围声明来源记录与宠物标识不一致时会被入口模型拒绝。
+
+    :param tmp_path: 临时数据目录。
+    :param monkeypatch: pytest 环境变量和方法替换工具。
+    :return: 无返回值；断言通过表示来源审计字段具备一致性校验。
+    """
+    client = _client(tmp_path, monkeypatch)
+    assertion = _scope_assertion(pet_id="p_scope")
+    assertion["source"]["record_id"] = "p_other"
+    payload = _payload("它今天有点拉稀。", scope_assertion=assertion)
+
+    response = client.post("/agent/turns", json=payload)
+
+    assert response.status_code == 400
+    data = response.json()
+    assert data["code"] == "INVALID_REQUEST"
+
+
+def test_scope_policy_rejects_inactive_pet_profile(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证停用的服务端宠物画像会被范围策略拒绝。
+
+    :param tmp_path: 临时数据目录。
+    :param monkeypatch: pytest 环境变量和方法替换工具。
+    :return: 无返回值；断言通过表示停用资料不会进入 Agent 主链路。
+    """
+    client = _client(tmp_path, monkeypatch)
+    payload = _payload(
+        "它今天有点拉稀。",
+        scope_assertion=_scope_assertion(pet_active=False),
+    )
+    response = client.post("/agent/turns", json=payload)
+
+    assert response.status_code == 403
+    data = response.json()
+    assert data["code"] == "FORBIDDEN"
+    assert data["details"]["scope_decision"]["action"] == "deny_inactive_pet"
+
+
+def test_scope_policy_rejects_unverified_ownership_assertion(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证 BFF 未声明已完成宠物归属校验时范围策略会拒绝请求。
+
+    :param tmp_path: 临时数据目录。
+    :param monkeypatch: pytest 环境变量和方法替换工具。
+    :return: 无返回值；断言通过表示 Agent 不接受未验证归属声明。
+    """
+    client = _client(tmp_path, monkeypatch)
+    payload = _payload(
+        "它今天有点拉稀。",
+        scope_assertion=_scope_assertion(ownership_verified=False),
+    )
+    response = client.post("/agent/turns", json=payload)
+
+    assert response.status_code == 403
+    data = response.json()
+    assert data["code"] == "FORBIDDEN"
+    assert data["details"]["scope_decision"]["action"] == "deny_scope_assertion_invalid"
+
+
+def test_scope_assertion_bootstraps_verified_pet_profile_projection(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证冷启动时 BFF 范围声明会写入 Agent 本地画像投影。
+
+    :param tmp_path: 临时数据目录。
+    :param monkeypatch: pytest 环境变量和方法替换工具。
+    :return: 无返回值；断言通过表示冷启动不再依赖 pet_info 自动注册。
+    """
+    client = _client(tmp_path, monkeypatch)
+    assert _test_scope_repository is not None
+    _test_scope_repository.auto_register_profiles = False
+    payload = _payload(
+        "它今天有点拉稀。",
+        vet_context={
+            "user_id": "u_bootstrap",
+            "session_id": "s_bootstrap",
+            "pet_id": "p_bootstrap",
+            "pet_info": {},
+        },
+        scope_assertion=_scope_assertion(
+            user_id="u_bootstrap",
+            session_id="s_bootstrap",
+            pet_id="p_bootstrap",
+            profile={"species": "dog", "breed": "corgi", "age": "3 years", "weight_kg": 12},
+        ),
+    )
+
+    response = client.post("/agent/turns", json=payload)
+
+    assert response.status_code == 200
+    profile = _test_scope_repository.profiles[("u_bootstrap", "p_bootstrap")]
+    assert profile.profile["species"] == "dog"
+    assert profile.profile["breed"] == "corgi"
+    assert profile.source.startswith("test-bff:test-main-service:master_pet_info:p_bootstrap")
+
+
+def test_scope_authorization_side_effect_runs_once_per_turn(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证单次主接口请求不会重复执行范围授权副作用。
+
+    :param tmp_path: 临时数据目录。
+    :param monkeypatch: pytest 环境变量和方法替换工具。
+    :return: 无返回值；断言通过表示入口授权快照已被主链路复用。
+    """
+    client = _client(tmp_path, monkeypatch)
+    assert _test_scope_repository is not None
+
+    response = client.post("/agent/turns", json=_payload("它今天有点拉稀。"))
+
+    assert response.status_code == 200
+    assert _test_scope_repository.upsert_profile_count == 1
+    assert _test_scope_repository.bind_session_count == 1
+    assert _test_scope_repository.touch_session_count == 0
+
+
+def test_scope_policy_rejects_expired_scope_assertion(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证过期 BFF 范围声明会被范围策略拒绝。
+
+    :param tmp_path: 临时数据目录。
+    :param monkeypatch: pytest 环境变量和方法替换工具。
+    :return: 无返回值；断言通过表示 Agent 不接受过期范围声明。
+    """
+    client = _client(tmp_path, monkeypatch)
+    payload = _payload(
+        "它今天有点拉稀。",
+        scope_assertion=_scope_assertion(expires_at="2000-01-01T00:00:00+00:00"),
+    )
+
+    response = client.post("/agent/turns", json=payload)
+
+    assert response.status_code == 403
+    assert response.json()["details"]["scope_decision"]["action"] == "deny_scope_assertion_invalid"
+
+
 def test_negated_emergency_keyword_does_not_trigger_hard_rule() -> None:
     """验证否定表达不会仅因包含急症子串而触发硬规则升级。
 
@@ -412,7 +890,7 @@ def test_negated_emergency_keyword_does_not_trigger_hard_rule() -> None:
     assert assessment.signals == []
 
 
-def test_memory_read_correct_delete(tmp_path, monkeypatch):
+def test_memory_read_correct_delete(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证对应业务场景是否符合预期。
 
     :param tmp_path: 参数 tmp_path。
@@ -432,12 +910,12 @@ def test_memory_read_correct_delete(tmp_path, monkeypatch):
     memory = client.get("/memories?user_id=u1&session_id=s1&pet_id=p1").json()
     assert memory["pet"]["last_summary"] == correction["summary"]
 
-    assert client.delete("/memories/pets/p1").status_code == 200
+    assert client.delete("/memories/pets/p1?user_id=u1&session_id=s1").status_code == 200
     memory_after_delete = client.get("/memories?user_id=u1&session_id=s1&pet_id=p1").json()
     assert memory_after_delete["pet"] == {}
 
 
-def test_pet_fact_memory_can_be_persisted_and_read(tmp_path, monkeypatch):
+def test_pet_fact_memory_can_be_persisted_and_read(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证对应业务场景是否符合预期。
 
     :param tmp_path: 参数 tmp_path。
@@ -462,7 +940,7 @@ def test_pet_fact_memory_can_be_persisted_and_read(tmp_path, monkeypatch):
     assert facts[0]["fact_value"] == "疑似鸡肉过敏"
 
 
-def test_idempotency_key_reuses_first_response(tmp_path, monkeypatch):
+def test_idempotency_key_reuses_first_response(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证对应业务场景是否符合预期。
 
     :param tmp_path: 参数 tmp_path。
@@ -483,7 +961,7 @@ def test_idempotency_key_reuses_first_response(tmp_path, monkeypatch):
     assert second.json()["id"] == first.json()["id"]
 
 
-def test_openai_compatible_response_shape(tmp_path, monkeypatch):
+def test_openai_compatible_response_shape(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证对应业务场景是否符合预期。
 
     :param tmp_path: 参数 tmp_path。
@@ -505,7 +983,7 @@ def test_openai_compatible_response_shape(tmp_path, monkeypatch):
     assert data["metadata"]["request_id"]
 
 
-def test_agent_turn_external_contract_includes_reasoning_display(tmp_path, monkeypatch):
+def test_agent_turn_external_contract_includes_reasoning_display(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证对应业务场景是否符合预期。
 
     :param tmp_path: 参数 tmp_path。
@@ -529,7 +1007,7 @@ def test_agent_turn_external_contract_includes_reasoning_display(tmp_path, monke
     assert data["vet_result"]["route"]
 
 
-def test_stream_turn_emits_reasoning_display_events(tmp_path, monkeypatch):
+def test_stream_turn_emits_reasoning_display_events(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证对应业务场景是否符合预期。
 
     :param tmp_path: 参数 tmp_path。
@@ -551,7 +1029,7 @@ def test_stream_turn_emits_reasoning_display_events(tmp_path, monkeypatch):
     assert "event: segment.delta" in body
 
 
-def test_multi_task_turn_splits_into_independent_segments(tmp_path, monkeypatch):
+def test_multi_task_turn_splits_into_independent_segments(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证对应业务场景是否符合预期。
 
     :param tmp_path: 参数 tmp_path。
@@ -591,7 +1069,7 @@ def test_multi_task_turn_splits_into_independent_segments(tmp_path, monkeypatch)
     assert all(segment["reasoning_display"]["text"] for segment in data["segments"])
 
 
-def test_llm_task_router_can_drive_task_splitting():
+def test_llm_task_router_can_drive_task_splitting() -> None:
     """验证对应业务场景是否符合预期。
 
     :return: 无返回值；断言通过表示场景符合预期。
@@ -599,7 +1077,13 @@ def test_llm_task_router_can_drive_task_splitting():
     class FakeQwen:
         available = True
 
-        async def chat(self, messages, *, model=None, temperature=0.2):
+        async def chat(
+            self,
+            messages: list[dict[str, Any]],
+            *,
+            model: str | None = None,
+            temperature: float = 0.2,
+        ) -> str:
             """执行 chat 业务逻辑。
 
             :param messages: 参数 messages。
@@ -631,7 +1115,7 @@ def test_llm_task_router_can_drive_task_splitting():
     assert decision.tasks[0].reason == "消化道症状"
 
 
-def test_header_body_id_conflict_returns_invalid_request(tmp_path, monkeypatch):
+def test_header_body_id_conflict_returns_invalid_request(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证对应业务场景是否符合预期。
 
     :param tmp_path: 参数 tmp_path。
@@ -650,7 +1134,7 @@ def test_header_body_id_conflict_returns_invalid_request(tmp_path, monkeypatch):
     assert data["request_id"] == "req_body"
 
 
-def test_consultation_first_turn_collects_slots_without_final_advice(tmp_path, monkeypatch):
+def test_consultation_first_turn_collects_slots_without_final_advice(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证对应业务场景是否符合预期。
 
     :param tmp_path: 参数 tmp_path。
@@ -666,12 +1150,13 @@ def test_consultation_first_turn_collects_slots_without_final_advice(tmp_path, m
     assert data["status"] == "requires_followup"
     assert data["metadata"]["consultation_phase"] == "collecting_info"
     assert "我先不武断下结论" in data["output_text"]
-    assert "它是猫还是狗" in data["output_text"]
+    assert "物种: dog" in data["output_text"]
+    assert "它是猫还是狗" not in data["output_text"]
     assert "请先回答" in data["output_text"]
     assert "QwenResponseAgent" not in data["metadata"]["multi_agent_path"]
 
 
-def test_rag_guided_followup_uses_knowledge_to_plan_questions(tmp_path, monkeypatch):
+def test_rag_guided_followup_uses_knowledge_to_plan_questions(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证知识库命中结果可反推动态追问。
 
     :param tmp_path: 参数 tmp_path。
@@ -713,7 +1198,7 @@ def test_rag_guided_followup_uses_knowledge_to_plan_questions(tmp_path, monkeypa
     assert data["evidence"]
 
 
-def test_unfinished_consultation_state_skips_task_splitting(tmp_path, monkeypatch):
+def test_unfinished_consultation_state_skips_task_splitting(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证未完成问诊状态会优先吸收下一轮回答。
 
     :param tmp_path: 参数 tmp_path。
@@ -764,7 +1249,7 @@ def test_unfinished_consultation_state_skips_task_splitting(tmp_path, monkeypatc
     assert "任务 1" not in data["output_text"]
 
 
-def test_answer_now_intent_stops_followup_funnel(tmp_path, monkeypatch):
+def test_answer_now_intent_stops_followup_funnel(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证用户明确要求先答时，系统会进入带边界的阶段性回答。
 
     :param tmp_path: 参数 tmp_path。
@@ -812,7 +1297,7 @@ def test_answer_now_intent_stops_followup_funnel(tmp_path, monkeypatch):
     assert "请先回答" not in data["output_text"]
 
 
-def test_semantic_answers_reduce_missing_slots_without_exact_templates(tmp_path, monkeypatch):
+def test_semantic_answers_reduce_missing_slots_without_exact_templates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证宽泛语义表达可以补全上下文，避免固定槽位追问漏斗。
 
     :param tmp_path: 参数 tmp_path。
@@ -857,7 +1342,7 @@ def test_semantic_answers_reduce_missing_slots_without_exact_templates(tmp_path,
     assert data["metadata"]["answerability"]["mode"] in {"slot_complete", "sufficient_semantic_evidence"}
 
 
-def test_llm_semantic_extractor_is_primary_fact_path(tmp_path, monkeypatch):
+def test_llm_semantic_extractor_is_primary_fact_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证 LLM 语义抽取结果会作为主路径合并到问诊状态。
 
     :param tmp_path: 参数 tmp_path。
@@ -900,7 +1385,7 @@ def test_llm_semantic_extractor_is_primary_fact_path(tmp_path, monkeypatch):
     assert data["metadata"]["answerability"]["mode"] == "user_requested_answer_now"
 
 
-def test_consultation_second_turn_completes_after_context_is_built(tmp_path, monkeypatch):
+def test_consultation_second_turn_completes_after_context_is_built(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证对应业务场景是否符合预期。
 
     :param tmp_path: 参数 tmp_path。
@@ -985,7 +1470,7 @@ def test_completed_consultation_does_not_pollute_next_chief_complaint(
     assert "onset" not in state["slots"]
 
 
-def test_api_key_auth_can_be_required(tmp_path, monkeypatch):
+def test_api_key_auth_can_be_required(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证对应业务场景是否符合预期。
 
     :param tmp_path: 参数 tmp_path。
@@ -1006,7 +1491,7 @@ def test_api_key_auth_can_be_required(tmp_path, monkeypatch):
     assert ok.status_code == 200
 
 
-def test_session_policy_blocks_switching_pet_in_same_session(tmp_path, monkeypatch):
+def test_session_policy_blocks_switching_pet_in_same_session(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证对应业务场景是否符合预期。
 
     :param tmp_path: 参数 tmp_path。
@@ -1016,7 +1501,12 @@ def test_session_policy_blocks_switching_pet_in_same_session(tmp_path, monkeypat
     client = _client(tmp_path, monkeypatch)
     first = _payload_without_pet_info("My dog has mild diarrhea.", session_id="s_one_pet")
     second = _payload_without_pet_info("My cat has mild diarrhea.", session_id="s_one_pet")
-    second["vet_context"]["pet_id"] = "another_pet"
+    second["scope_assertion"] = _scope_assertion(
+        user_id="u_ctx",
+        session_id="s_one_pet",
+        pet_id="another_pet",
+        profile={"species": "cat"},
+    )
 
     assert client.post("/agent/turns", json=first).status_code == 200
     response = client.post("/agent/turns", json=second)
@@ -1039,10 +1529,13 @@ def test_memory_extraction_does_not_persist_pet_info_facts(
     payload = {
         "input": "Please remember this profile.",
         "stream": False,
+        "scope_assertion": _scope_assertion(
+            user_id="u_extract",
+            session_id="s_extract",
+            pet_id="p_extract",
+            profile={"species": "dog"},
+        ),
         "vet_context": {
-            "user_id": "u_extract",
-            "session_id": "s_extract",
-            "pet_id": "p_extract",
             "pet_info": {
                 "species": "dog",
                 "breed": "corgi",
@@ -1055,15 +1548,15 @@ def test_memory_extraction_does_not_persist_pet_info_facts(
     assert client.post("/agent/turns", json=payload).status_code == 200
     memory = client.get("/memories?user_id=u_extract&session_id=s_extract&pet_id=p_extract").json()
     fact_keys = {item["fact_key"] for item in memory["pet"].get("facts", [])}
-    access_control = json.loads((tmp_path / "access_control.json").read_text(encoding="utf-8"))
-    profile = access_control["pet_profiles"]["p_extract"]
+    assert _test_scope_repository is not None
+    profile = _test_scope_repository.profiles[("u_extract", "p_extract")]
 
     assert not {"species", "breed", "age", "weight_kg"}.intersection(fact_keys)
-    assert profile["profile"] == {}
-    assert profile["source"] == "first_seen"
+    assert profile.profile == {"species": "dog"}
+    assert profile.source.startswith("test-bff:test-main-service:master_pet_info:p_extract")
 
 
-def test_safety_review_removes_dosage_expression():
+def test_safety_review_removes_dosage_expression() -> None:
     """验证对应业务场景是否符合预期。
 
     :return: 无返回值；断言通过表示场景符合预期。
@@ -1077,7 +1570,7 @@ def test_safety_review_removes_dosage_expression():
     assert any(signal.code == "DOSAGE_REMOVED" for signal in result.signals)
 
 
-def test_report_parse_extracts_structured_lab_items(tmp_path, monkeypatch):
+def test_report_parse_extracts_structured_lab_items(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证对应业务场景是否符合预期。
 
     :param tmp_path: 参数 tmp_path。
@@ -1107,7 +1600,7 @@ def test_report_parse_extracts_structured_lab_items(tmp_path, monkeypatch):
     assert any(item["item_name"] == "ALT" and item["abnormal_flag"] == "high" for item in data["items"])
 
 
-def test_radiology_report_is_blocked_from_online_interpretation(tmp_path, monkeypatch):
+def test_radiology_report_is_blocked_from_online_interpretation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证对应业务场景是否符合预期。
 
     :param tmp_path: 参数 tmp_path。
@@ -1134,7 +1627,7 @@ def test_radiology_report_is_blocked_from_online_interpretation(tmp_path, monkey
     assert data["safety_flags"][0]["code"] == "RADIOLOGY_REPORT_GATE"
 
 
-def test_report_parse_rejects_non_oss_image_url(tmp_path, monkeypatch):
+def test_report_parse_rejects_non_oss_image_url(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证对应业务场景是否符合预期。
 
     :param tmp_path: 参数 tmp_path。
@@ -1158,7 +1651,7 @@ def test_report_parse_rejects_non_oss_image_url(tmp_path, monkeypatch):
     assert response.json()["code"] == "INVALID_REQUEST"
 
 
-def test_rag_governance_admin_can_list_and_update_seed_chunks(tmp_path, monkeypatch):
+def test_rag_governance_admin_can_list_and_update_seed_chunks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证对应业务场景是否符合预期。
 
     :param tmp_path: 参数 tmp_path。
@@ -1183,7 +1676,7 @@ def test_rag_governance_admin_can_list_and_update_seed_chunks(tmp_path, monkeypa
     assert update.json()["enabled"] is False
 
 
-def test_admin_can_preview_import_publish_clinical_conditions(tmp_path, monkeypatch):
+def test_admin_can_preview_import_publish_clinical_conditions(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证结构化临床病症卡可通过 Admin API 预览、导入、发布与查询。
 
     :param tmp_path: 参数 tmp_path。
