@@ -37,6 +37,14 @@ required_files=(
     docker/mem0-dashboard/render_env.py
     docker/mem0-dashboard/template/mem0-dashboard.dev.env.template
     docker/mem0-dashboard/template/mem0-dashboard.prod.env.template
+    docker/opa/Dockerfile
+    docker/opa/application.yml
+    docker/opa/entrypoint.sh
+    docker/opa/policies/bootstrap.rego
+    docker/opa/policies/system_log.rego
+    docker/opa/template/opa.dev.env.template
+    docker/opa/template/opa.prod.env.template
+    docker/opa/tests/bootstrap_test.rego
     docker/postgres/init/10-bootstrap-logical-databases.sh
     docker/postgres/ops/ensure-extensions.sh
     docker/postgres/ops/vector-smoke-check.sh
@@ -84,6 +92,9 @@ while IFS= read -r configuration_file; do
         docker/mem0-dashboard/application.yml|\
         docker/mem0-dashboard/template/mem0-dashboard.dev.env.template|\
         docker/mem0-dashboard/template/mem0-dashboard.prod.env.template|\
+        docker/opa/application.yml|\
+        docker/opa/template/opa.dev.env.template|\
+        docker/opa/template/opa.prod.env.template|\
         docker/postgres/postgresql.conf|\
         docker/postgres/template/postgres.dev.env.template|\
         docker/postgres/template/postgres.prod.env.template)

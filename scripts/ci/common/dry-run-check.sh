@@ -14,6 +14,7 @@ cd "$repo_root"
 registry_image="${CI_REGISTRY_IMAGE:-crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com/vancer-saas/veterinary_agent}"
 mem0_registry_image="${CI_MEM0_REGISTRY_IMAGE:-crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com/vancer-saas/veterinary_agent-mem0}"
 mem0_dashboard_registry_image="${CI_MEM0_DASHBOARD_REGISTRY_IMAGE:-crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com/vancer-saas/veterinary_agent-mem0-dashboard}"
+opa_registry_image="${CI_OPA_REGISTRY_IMAGE:-crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com/vancer-saas/veterinary_agent-opa}"
 release_tag_example="${CI_RELEASE_TAG_EXAMPLE:-vX.Y.Z}"
 
 bash scripts/ci/common/static-check.sh
@@ -45,6 +46,14 @@ required_paths=(
     docker/mem0-dashboard/render_env.py
     docker/mem0-dashboard/template/mem0-dashboard.dev.env.template
     docker/mem0-dashboard/template/mem0-dashboard.prod.env.template
+    docker/opa/Dockerfile
+    docker/opa/application.yml
+    docker/opa/entrypoint.sh
+    docker/opa/policies/bootstrap.rego
+    docker/opa/policies/system_log.rego
+    docker/opa/template/opa.dev.env.template
+    docker/opa/template/opa.prod.env.template
+    docker/opa/tests/bootstrap_test.rego
     docker/postgres/init/10-bootstrap-logical-databases.sh
     docker/postgres/ops/ensure-extensions.sh
     docker/postgres/ops/vector-smoke-check.sh
@@ -63,4 +72,5 @@ done
 echo "dry-run 应用镜像模板: ${registry_image}:${release_tag_example}"
 echo "dry-run Mem0 镜像模板: ${mem0_registry_image}:${release_tag_example}"
 echo "dry-run Mem0 Dashboard 镜像模板: ${mem0_dashboard_registry_image}:${release_tag_example}"
+echo "dry-run OPA 镜像模板: ${opa_registry_image}:${release_tag_example}"
 echo "dry-run 不执行镜像构建、镜像推送或环境部署。"

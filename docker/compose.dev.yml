@@ -30,6 +30,12 @@ x-mem0-dashboard-env-files: &mem0-dashboard-env-files
   - path: ./mem0-dashboard/template/mem0-dashboard.dev.env
     required: false
 
+x-opa-env-files: &opa-env-files
+  - path: ./opa/template/opa.dev.env.template
+    required: true
+  - path: ./opa/template/opa.dev.env
+    required: false
+
 x-app-env-files: &app-env-files
   - path: ./app/template/app.dev.env.template
     required: true
@@ -59,6 +65,15 @@ x-mem0-dashboard-build: &mem0-dashboard-build
     NODE_BASE_IMAGE: ${MEM0_DASHBOARD_NODE_BASE_IMAGE:-node:20-bookworm-slim}
     # 将子模块提交写入镜像元数据，便于从运行镜像反查对应上游源码版本。
     MEM0_SOURCE_COMMIT: ${MEM0_SOURCE_COMMIT:-unknown}
+
+x-opa-build: &opa-build
+  context: ..
+  dockerfile: docker/opa/Dockerfile
+  args:
+    # OPA 官方 Release 版本；开发环境可覆盖验证新版本兼容性。
+    OPA_VERSION: ${OPA_VERSION:-v1.19.0}
+    # OPA Runtime 基础镜像；仅用于本地开发构建，不影响生产预编译镜像。
+    OPA_RUNTIME_BASE_IMAGE: ${OPA_RUNTIME_BASE_IMAGE:-debian:bookworm-slim}
 
 name: ${COMPOSE_PROJECT_NAME:-vet-agent-dev}
 
@@ -152,6 +167,26 @@ services:
     volumes:
       - ./mem0-dashboard/application.yml:/app/config/application.yml:ro
 
+  opa:
+    image: ${OPA_IMAGE:-vet-agent-opa:dev}
+    build: *opa-build
+    container_name: vet-agent-dev-opa
+    restart: unless-stopped
+    init: true
+    env_file: *opa-env-files
+    ports:
+      - "${OPA_PORT:-8181}:8181"
+      - "${OPA_DIAGNOSTIC_PORT:-8282}:8282"
+    volumes:
+      - ./opa/application.yml:/opa/config/application.yml:ro
+      - ./opa/policies:/opa/policies:ro
+      - vet_agent_dev_opa_persistence:/opa/persistence
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8282/health >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
   app:
     image: ${VET_AGENT_IMAGE:-vet-agent:dev}
     build: *app-build
@@ -163,6 +198,8 @@ services:
       litellm:
         condition: service_healthy
       mem0:
+        condition: service_healthy
+      opa:
         condition: service_healthy
     env_file: *app-env-files
     ports:
@@ -190,3 +227,4 @@ services:
 volumes:
   vet_agent_dev_pgdata:
   vet_agent_dev_mem0_history:
+  vet_agent_dev_opa_persistence:

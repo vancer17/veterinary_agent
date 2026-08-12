@@ -22,7 +22,6 @@ from .rules import (
     FileRuleRepository,
     PostgresRuleRepository,
     RuleRepository,
-    SafetyRule,
     compile_regex,
 )
 from .scope import (
@@ -55,7 +54,6 @@ __all__ = [
     "PostgresTurnExecutionRepository",
     "RuleRepository",
     "ScopeRepository",
-    "SafetyRule",
     "SessionBinding",
     "TurnExecutionRepository",
     "TurnExecutionRepositoryError",

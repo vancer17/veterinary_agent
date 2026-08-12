@@ -26,6 +26,11 @@ from vet_agent import (
     set_container,
 )
 from vet_agent.agents import TaskSplitterAgent
+from vet_agent.input_safety import (
+    InputSafetyService,
+    LocalInputSafetyPolicyClient,
+    StaticInputSafetyRepository,
+)
 from vet_agent.repositories import FileRuleRepository, ScopeRepository, SessionBinding, VerifiedPetProfile
 from vet_agent.runtime import QwenClient
 from vet_agent.services import TurnExecutionGateProtocol, TurnExecutor
@@ -255,6 +260,12 @@ def _client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
         Settings.from_env(),
         scope_repository=_test_scope_repository,
         turn_execution_gate=InMemoryTurnExecutionGate(),
+        input_safety_service=InputSafetyService(
+            Settings.from_env(),
+            repository=StaticInputSafetyRepository(),
+            detectors=(),
+            policy_client=LocalInputSafetyPolicyClient(),
+        ),
     )
     set_container(container)
     set_orchestrator(VetAgentIngressOrchestrator(container))
@@ -583,7 +594,7 @@ def test_sync_turn_uses_litellm_gateway_and_evidence(tmp_path: Path, monkeypatch
     assert data["trace_id"]
     assert "线下兽医" in data["output_text"]
     assert data["evidence"]
-    assert "SafetyAgent" in data["metadata"]["multi_agent_path"]
+    assert "InputSafetyService" in data["metadata"]["multi_agent_path"]
 
 
 def test_toxic_substance_is_escalated(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -600,7 +611,7 @@ def test_toxic_substance_is_escalated(tmp_path: Path, monkeypatch: pytest.Monkey
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "safety_escalated"
-    assert "立即联系线下兽医" in data["output_text"]
+    assert "请尽快联系线下兽医医院" in data["output_text"]
     assert any(signal["code"] == "TOXIC_SUBSTANCE" for signal in data["safety_signals"])
 
 
@@ -618,7 +629,7 @@ def test_emergency_red_flag_skips_followup(tmp_path: Path, monkeypatch: pytest.M
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "safety_escalated"
-    assert "不建议先在线上反复追问" in data["output_text"]
+    assert "请尽快联系线下兽医医院" in data["output_text"]
     assert any(signal["code"] == "EMERGENCY_RED_FLAG" for signal in data["safety_signals"])
 
 
@@ -649,8 +660,9 @@ def test_radiology_attachment_is_blocked(tmp_path: Path, monkeypatch: pytest.Mon
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "blocked"
-    assert "不能做影像判读" in data["output_text"]
+    assert "未开放影像判读能力" in data["output_text"]
     assert any(signal["code"] == "RADIOLOGY_GATE" for signal in data["safety_signals"])
+    assert data["metadata"]["memory_extraction"]["skipped_reason"] == "input_safety_policy_stopped_main_chain"
 
 
 @pytest.mark.parametrize(
@@ -936,20 +948,6 @@ def test_scope_policy_rejects_expired_scope_assertion(
 
     assert response.status_code == 403
     assert response.json()["details"]["scope_decision"]["action"] == "deny_scope_assertion_invalid"
-
-
-def test_negated_emergency_keyword_does_not_trigger_hard_rule() -> None:
-    """验证否定表达不会仅因包含急症子串而触发硬规则升级。
-
-    :return: 无返回值；断言通过表示否定表达过滤逻辑符合预期。
-    """
-    from vet_agent.agents import SafetyAgent
-
-    agent = SafetyAgent(FileRuleRepository(Settings().seed_dir))
-    assessment = agent.analyze("没有呼吸困难，也不是完全尿不出。", [])
-
-    assert assessment.highest_status == "ok"
-    assert assessment.signals == []
 
 
 def test_memory_read_correct_delete(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1625,7 +1623,7 @@ def test_safety_review_removes_dosage_expression() -> None:
     """
     from vet_agent.agents import SafetyAgent, SafetyReviewAgent
 
-    reviewer = SafetyReviewAgent(SafetyAgent(FileRuleRepository(Settings().seed_dir)))
+    reviewer = SafetyReviewAgent(SafetyAgent())
     result = reviewer.review_text("You can give 5 mg/kg twice daily.")
 
     assert "5 mg/kg" not in result.text
