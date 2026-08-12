@@ -9,6 +9,7 @@ from .contracts import (
     AgentTurnRequest,
     AgentTurnResponse,
     AttachmentRef,
+    AuthorizedScopeContext,
     ErrorResponse,
     Evidence,
     IngressRequest,
@@ -16,6 +17,11 @@ from .contracts import (
     ReasoningDisplay,
     RequestContext,
     SafetySignal,
+    ScopeAssertion,
+    ScopeAssertionAuthorization,
+    ScopeAssertionProfile,
+    ScopeAssertionSessionPolicy,
+    ScopeAssertionSource,
     StreamEvent,
     TrustedIdentity,
     TurnOptions,
@@ -29,6 +35,7 @@ __all__ = [
     "AgentTurnRequest",
     "AgentTurnResponse",
     "AttachmentRef",
+    "AuthorizedScopeContext",
     "Container",
     "ErrorResponse",
     "Evidence",
@@ -37,6 +44,11 @@ __all__ = [
     "ReasoningDisplay",
     "RequestContext",
     "SafetySignal",
+    "ScopeAssertion",
+    "ScopeAssertionAuthorization",
+    "ScopeAssertionProfile",
+    "ScopeAssertionSessionPolicy",
+    "ScopeAssertionSource",
     "Settings",
     "StreamEvent",
     "TrustedIdentity",
@@ -46,22 +58,23 @@ __all__ = [
     "VetOrchestrator",
     "VetSegment",
     "get_container",
+    "set_container",
     "now_utc",
 ]
 
 __version__ = "0.1.0"
 
 
-def __getattr__(name: str):
+def __getattr__(name: str) -> object:
     """按名称延迟解析一级包公共对象。
 
     :param name: 名称。
     :return: 返回函数执行结果。
     """
-    if name in {"Container", "get_container"}:
-        from .container import Container, get_container
+    if name in {"Container", "get_container", "set_container"}:
+        from .container import Container, get_container, set_container
 
-        values = {"Container": Container, "get_container": get_container}
+        values = {"Container": Container, "get_container": get_container, "set_container": set_container}
         return values[name]
     if name == "VetAgentIngressOrchestrator":
         from .ingress_adapter import VetAgentIngressOrchestrator

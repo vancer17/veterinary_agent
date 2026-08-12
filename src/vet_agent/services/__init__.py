@@ -6,11 +6,7 @@
 
 
 
-from .access_control import (
-    AccessControlService,
-    JsonAccessControlStore,
-    PostgresAccessControlStore,
-)
+from .access_control import AccessControlService
 from .clinical_knowledge import (
     ClinicalKnowledgeService,
     JsonClinicalKnowledgeStore,
@@ -29,13 +25,23 @@ from .rag_governance import (
 from .reasoning_display import ReasoningDisplayBuilder
 from .reports import JsonReportStore, PostgresReportStore, ReportIngestionService
 from .semantic_memory import DisabledSemanticMemory, make_semantic_memory
+from .scope import (
+    AuthenticatedPrincipal,
+    DeterministicScopePolicyEvaluator,
+    ScopeContext,
+    ScopeContextService,
+    ScopeDecision,
+    ScopeDecisionAction,
+    ScopePolicyEvaluator,
+)
 from .trace import LogicTraceStore
 
 __all__ = [
     "AccessControlService",
+    "AuthenticatedPrincipal",
     "ClinicalKnowledgeService",
+    "DeterministicScopePolicyEvaluator",
     "DisabledSemanticMemory",
-    "JsonAccessControlStore",
     "JsonClinicalKnowledgeStore",
     "JsonRagGovernanceStore",
     "JsonReportStore",
@@ -44,7 +50,6 @@ __all__ = [
     "MemoryService",
     "PetContext",
     "PetContextProvider",
-    "PostgresAccessControlStore",
     "PostgresClinicalKnowledgeStore",
     "PostgresLogicTraceStore",
     "PostgresMemoryService",
@@ -53,5 +58,10 @@ __all__ = [
     "RagGovernanceService",
     "ReasoningDisplayBuilder",
     "ReportIngestionService",
+    "ScopeContext",
+    "ScopeContextService",
+    "ScopeDecision",
+    "ScopeDecisionAction",
+    "ScopePolicyEvaluator",
     "make_semantic_memory",
 ]

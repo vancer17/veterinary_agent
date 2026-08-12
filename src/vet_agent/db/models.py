@@ -233,31 +233,74 @@ class PetProfileModel(Base):
     __table_args__ = (
         UniqueConstraint("pet_id", name="uq_pet_profiles_pet_id"),
         UniqueConstraint("user_id", "pet_id", name="uq_pet_profiles_owner_pet"),
+        {
+            "comment": "上游已验证宠物画像在 Agent 侧的本地投影表，用于身份、宠物资料与会话范围数据链。"
+        },
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    user_id: Mapped[str] = mapped_column(Text, nullable=False)
-    pet_id: Mapped[str] = mapped_column(Text, nullable=False)
-    profile: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")
-    source: Mapped[str] = mapped_column(Text, nullable=False, default="api", server_default="api")
-    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True, comment="宠物画像内部主键。")
+    user_id: Mapped[str] = mapped_column(Text, nullable=False, comment="宠物所属用户标识，来自可信上游或宠物资料领域。")
+    pet_id: Mapped[str] = mapped_column(Text, nullable=False, comment="宠物标识，作为业务侧宠物范围主键。")
+    profile: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+        comment="上游已验证宠物画像 JSON，由可信 BFF 范围声明或受控同步流程写入。",
+    )
+    source: Mapped[str] = mapped_column(Text, nullable=False, default="api", server_default="api", comment="画像投影来源。")
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default="true",
+        comment="宠物画像是否处于启用状态；停用后范围策略应拒绝进入 Agent 主链路。",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        comment="宠物画像创建时间。",
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        comment="宠物画像最近更新时间。",
+    )
 
 
 class PetSessionBindingModel(Base):
     __tablename__ = "pet_session_bindings"
     __table_args__ = (
         UniqueConstraint("session_id", name="uq_pet_session_bindings_session_id"),
+        {
+            "comment": "会话与用户、宠物范围绑定表，用于保证一 session 一宠且避免跨宠串话。"
+        },
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    session_id: Mapped[str] = mapped_column(Text, nullable=False)
-    user_id: Mapped[str] = mapped_column(Text, nullable=False)
-    pet_id: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
-    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True, comment="会话绑定内部主键。")
+    session_id: Mapped[str] = mapped_column(Text, nullable=False, comment="会话标识，一个 session 只能绑定到同一用户与宠物。")
+    user_id: Mapped[str] = mapped_column(Text, nullable=False, comment="会话绑定的用户标识。")
+    pet_id: Mapped[str] = mapped_column(Text, nullable=False, comment="会话绑定的宠物标识。")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        comment="会话绑定创建时间。",
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        comment="会话绑定更新时间。",
+    )
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        comment="会话绑定最近一次通过范围授权的时间。",
+    )
 
 
 class ConsultationStateModel(Base):

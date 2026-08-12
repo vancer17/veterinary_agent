@@ -149,7 +149,13 @@ class VetOrchestrator:
                 agent_path=["SafetyAgent"],
             )
 
-        pet_context = await self.context_provider.load(request.vet_context, request.metadata)
+        pet_context = await self.context_provider.load(
+            request.trusted_identity,
+            request.scope_assertion,
+            request.vet_context,
+            request.metadata,
+            authorized_scope_context=request.authorized_scope_context,
+        )
         clinical_semantic = await self.clinical_safety_semantic_extractor.extract(
             user_text=user_text,
             pet_context_summary=pet_context.summary(),

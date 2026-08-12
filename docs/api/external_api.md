@@ -1,3 +1,12 @@
+<!--
+=============================================================================
+文件: docs/api/external_api.md
+作用: 定义兽医 Agent HTTP 入口的外部契约、请求字段、错误码和联调语义。
+范围: 面向 BFF、内部服务调用方、测试与运维排障；当前以 scope_assertion 作为唯一可信范围声明入口。
+维护: 当入口 DTO、范围声明字段、错误码或 BFF 调用约定变化时，应同步更新本文档。
+=============================================================================
+-->
+
 # 兽医 Agent 对外 API 文档
 
 ## 1. 文档说明
@@ -11,7 +20,9 @@
 - [`docs/components/l2-vet-business/vet-trace-schema/design.md`](../components/l2-vet-business/vet-trace-schema/design.md)
 - [`docs/interface_spec.md`](../interface_spec.md)
 
-当前阶段服务部署在可信局域网内，`user_id`、`session_id`、`pet_id` 由上游客户端或 BFF 可信传入。`ApiIngress` 不实现 JWT、OAuth、登录态解析，也不校验 `pet_id` 是否属于 `user_id`。
+当前阶段服务部署在可信局域网内，Agent 服务不直接面向 App、Web 或其他用户端暴露，而是由 BFF 或其他已授权内部服务通过 HTTP 调用。用户登录、宠物归属校验、宠物启停校验和 `session_id` 发放职责由调用方承担。
+
+Agent 请求必须通过 `scope_assertion` 显式携带本轮服务端范围声明。`scope_assertion` 是身份、宠物、会话和已验证宠物基础画像的唯一可信入口；旧版 `vet_context.user_id`、`vet_context.session_id`、`vet_context.pet_id` 不再属于正式契约。请求侧自报宠物资料不得与服务端画像混用，仅可放入 `vet_context.pet_info` 作为非可信审计信息。
 
 ## 2. 接口总览
 
@@ -60,12 +71,12 @@ HTTP 状态码大于等于 `400` 时，响应体统一使用以下结构：
 ```json
 {
   "code": "MISSING_REQUIRED_CONTEXT",
-  "message": "vet_context.pet_id is required",
+  "message": "scope_assertion.pet_id is required",
   "request_id": "req_01HZYK8JQ7M3V9QF8Y5W0A2B3C",
   "trace_id": "trace_01HZYK8JQ7M3V9QF8Y5W0A2B3C",
   "details": [
     {
-      "field": "vet_context.pet_id",
+      "field": "scope_assertion.pet_id",
       "reason": "required"
     }
   ]
@@ -87,7 +98,7 @@ HTTP 状态码大于等于 `400` 时，响应体统一使用以下结构：
 | HTTP 状态 | 错误码 | 场景 |
 | --- | --- | --- |
 | `400` | `INVALID_REQUEST` | 请求体结构错误、字段类型错误、请求头与请求体 ID 冲突 |
-| `422` | `MISSING_REQUIRED_CONTEXT` | 缺少 `vet_context.user_id`、`vet_context.session_id` 或 `vet_context.pet_id` |
+| `422` | `MISSING_REQUIRED_CONTEXT` | 缺少 `scope_assertion.user_id`、`scope_assertion.session_id`、`scope_assertion.pet_id` 或其他必需范围声明字段 |
 | `413` | `PAYLOAD_TOO_LARGE` | 请求体或附件元信息超过入口限制 |
 | `429` | `RATE_LIMITED` | 触发入口限流 |
 | `503` | `SERVICE_UNAVAILABLE` | 编排层不可用 |
@@ -101,7 +112,7 @@ HTTP 状态码大于等于 `400` 时，响应体统一使用以下结构：
 
 创建一轮兽医 Agent 对话。
 
-该接口采用 OpenAI Responses 风格组织 `model`、`input`、`stream`、`output`，同时显式保留兽医业务扩展字段 `vet_context`、`attachments`、`turn_options`、`segments`、`vet_result`、`reasoning_display`。
+该接口采用 OpenAI Responses 风格组织 `model`、`input`、`stream`、`output`，同时显式保留兽医业务扩展字段 `scope_assertion`、`vet_context`、`attachments`、`turn_options`、`segments`、`vet_result`、`reasoning_display`。
 
 该接口不等同于 OpenAI Responses API 原样复刻。它是兽医业务主接口，必须显式携带本轮可信身份上下文。
 
@@ -111,7 +122,8 @@ HTTP 状态码大于等于 `400` 时，响应体统一使用以下结构：
 
 - 接收一轮对话请求。
 - 校验基础请求结构。
-- 校验必需上下文字段。
+- 校验必需范围声明字段。
+- 校验 `scope_assertion` 中身份、宠物、会话、授权状态和画像来源的结构完整性。
 - 校验响应模式和附件元信息完整性。
 - 生成或透传 `request_id`、`trace_id`。
 - 构造内部 `AgentTurnRequest`。
@@ -121,8 +133,9 @@ HTTP 状态码大于等于 `400` 时，响应体统一使用以下结构：
 
 `ApiIngress` 不执行以下业务逻辑：
 
-- 不校验 `pet_id` 是否属于 `user_id`。
-- 不校验 session 与 `pet_id` 是否一致；一 session 一宠策略由 `PetSessionPolicy` 负责。
+- 不通过 JWT、OAuth 或用户登录态自行识别 App 用户。
+- 不主动查询主服务数据库校验 `pet_id` 是否属于 `user_id`；该职责由 BFF 或授权内部调用方完成。
+- 不主动发放 `session_id`；同一个 `session_id` 只能绑定同一组 `user_id + pet_id` 的策略由 Agent 范围服务执行一致性保护。
 - 不识别急症、毒物、意图或 `generation_profile`。
 - 不执行 RAG、OCR、记忆读写、模型调用或安全审查。
 - 不生成、分类、审查、重写或解释 `reasoning_display`。
@@ -153,16 +166,45 @@ HTTP 状态码大于等于 `400` 时，响应体统一使用以下结构：
     "client": "miniapp",
     "client_version": "1.0.0"
   },
-  "vet_context": {
+  "scope_assertion": {
+    "schema_version": "v1",
+    "issuer": "bff-main-service",
+    "issued_at": "2026-08-12T10:00:00Z",
+    "expires_at": "2026-08-12T10:02:00Z",
     "user_id": "user_123",
-    "session_id": "sess_456",
     "pet_id": "pet_789",
-    "pet_info": {
+    "session_id": "sess_456",
+    "authorization": {
+      "ownership_verified": true,
+      "pet_active": true,
+      "pet_status": "active",
+      "pet_deleted": false
+    },
+    "profile": {
+      "pet_code": "PET202608120001",
+      "name": "团子",
       "species": "cat",
       "breed": "domestic_shorthair",
       "age": "3y",
-      "weight_kg": 4.6
+      "age_months": 36,
+      "weight_kg": 4.6,
+      "sex": "female",
+      "neutered": true
+    },
+    "source": {
+      "system": "bff-main-service",
+      "database": "app_dev",
+      "table": "master_pet_info",
+      "record_id": "pet_789",
+      "record_updated_at": "2026-08-12T09:58:00Z",
+      "data_source": "manual"
+    },
+    "session_policy": {
+      "binding_mode": "single_user_pet_per_session"
     }
+  },
+  "vet_context": {
+    "pet_info": {}
   },
   "attachments": [],
   "turn_options": {
@@ -181,18 +223,77 @@ HTTP 状态码大于等于 `400` 时，响应体统一使用以下结构：
 | `input` | array | 条件必填 | 本轮输入；与 `attachments` 至少存在一类有效内容 |
 | `stream` | boolean | 否 | 是否启用 SSE 流式响应 |
 | `metadata` | object | 否 | 普通透传元信息 |
-| `vet_context` | object | 是 | 兽医业务上下文 |
+| `scope_assertion` | object | 是 | BFF 或授权内部调用方注入的服务端范围声明，是身份、宠物、会话和已验证宠物基础画像的唯一可信入口 |
+| `vet_context` | object | 否 | 请求侧非可信上下文；当前仅允许 `pet_info`，不得参与鉴权、冷启动画像写入或临床硬判断 |
 | `attachments` | array | 条件必填 | 附件引用元信息；与 `input` 至少存在一类有效内容 |
 | `turn_options` | object | 否 | 本轮入口选项 |
+
+`scope_assertion` 字段：
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `schema_version` | string | 是 | 范围声明结构版本，当前固定为 `v1` |
+| `issuer` | string | 是 | 声明签发方，例如 `bff-main-service`；Agent 应结合服务级认证确认调用方身份 |
+| `issued_at` | string | 是 | 声明签发时间，ISO 8601 格式 |
+| `expires_at` | string | 否 | 声明过期时间，ISO 8601 格式；建议由 BFF 设置短有效期 |
+| `user_id` | string | 是 | BFF 已认证用户 ID，来自主服务账号体系 |
+| `pet_id` | string | 是 | BFF 已完成归属校验的宠物 ID，来源为 `master_pet_info.id` |
+| `session_id` | string | 是 | BFF 发放或复用的连续问诊会话 ID |
+| `authorization` | object | 是 | BFF 对归属和宠物状态的裁决摘要 |
+| `profile` | object | 是 | BFF 从主服务数据库读取并归一后的服务端已验证宠物基础画像 |
+| `source` | object | 是 | 画像来源、记录版本和审计信息 |
+| `session_policy` | object | 否 | 本轮 session 范围策略声明 |
+
+`scope_assertion.authorization` 字段：
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `ownership_verified` | boolean | 是 | BFF 是否已确认 `master_pet_info.owner_id` 与当前 `user_id` 一致 |
+| `pet_active` | boolean | 是 | 宠物档案是否允许进入 Agent 服务；通常由 `status == "active"` 且 `deleted_at IS NULL` 推导 |
+| `pet_status` | string | 是 | 主服务 `master_pet_info.status` 原始状态 |
+| `pet_deleted` | boolean | 是 | 主服务 `master_pet_info.deleted_at` 是否非空 |
+
+`scope_assertion.profile` 字段：
+
+| 字段 | 类型 | 必填 | 来源字段 | 说明 |
+| --- | --- | --- | --- | --- |
+| `pet_code` | string | 否 | `master_pet_info.pet_code` | 宠物业务编码，用于审计和排障 |
+| `name` | string | 否 | `master_pet_info.name` | 宠物名称 |
+| `species` | string | 是 | `master_pet_info.species` | 宠物物种；建议由 BFF 归一为 `cat`、`dog` 或后续明确枚举 |
+| `sex` | string | 否 | `master_pet_info.gender` | 宠物性别；建议由 BFF 归一为 `male`、`female`、`unknown` |
+| `birthday` | string | 否 | `master_pet_info.birthday` | 出生日期，格式为 `YYYY-MM-DD` |
+| `age_months` | integer | 否 | `master_pet_info.age_months` 或由 `birthday` 推导 | 年龄月数 |
+| `age` | string | 否 | `age_months` 或 `birthday` 推导 | 供当前 Agent 上下文摘要兼容使用的年龄文本 |
+| `breed` | string | 否 | `master_pet_info.variety` | 品种；由 BFF 将主服务字段 `variety` 归一为 `breed` |
+| `weight_kg` | number | 否 | `master_pet_info.weight` | 体重千克值；由 BFF 将主服务字段 `weight` 归一为 `weight_kg` |
+| `neutered` | boolean | 否 | `master_pet_info.sterilized` | 是否绝育；由 BFF 将主服务字段 `sterilized` 归一为 `neutered` |
+| `neutered_date` | string | 否 | `master_pet_info.neutered_date` | 绝育日期，格式为 `YYYY-MM-DD` |
+| `reproduction_status` | string | 否 | `master_pet_info.reproduction_status` | 繁育状态 |
+| `activity_level` | integer | 否 | `master_pet_info.activity_level` | 活跃度 |
+| `region` | string | 否 | `master_pet_info.region` | 宠物所在地区 |
+
+`scope_assertion.source` 字段：
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `system` | string | 是 | 来源系统，当前为 BFF 或主服务标识 |
+| `database` | string | 否 | 来源数据库，例如 `app_dev` |
+| `table` | string | 是 | 来源表，当前为 `master_pet_info` |
+| `record_id` | string | 是 | 来源记录 ID，应与 `scope_assertion.pet_id` 对应 |
+| `record_updated_at` | string | 是 | 来源记录更新时间，来自 `master_pet_info.updated_at` |
+| `data_source` | string | 否 | 主服务 `master_pet_info.data_source` 原始值 |
+
+`scope_assertion.session_policy` 字段：
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `binding_mode` | string | 否 | 当前推荐值为 `single_user_pet_per_session`，含义为同一个 `session_id` 只能绑定同一组 `user_id + pet_id` |
 
 `vet_context` 字段：
 
 | 字段 | 类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
-| `user_id` | string | 是 | 上游可信传入的用户 ID |
-| `session_id` | string | 是 | 上游可信传入的会话 ID |
-| `pet_id` | string | 是 | 上游可信传入的本轮咨询宠物 ID |
-| `pet_info` | object | 否 | 客户端携带的宠物基础信息；下游仍可按 `pet_id` 补全或校验上下文 |
+| `pet_info` | object | 否 | 请求侧自报或兼容宠物资料，仅作为未验证审计信息；不得覆盖 `scope_assertion.profile` |
 
 `input[]` 当前支持的最小形态：
 
@@ -240,20 +341,37 @@ HTTP 状态码大于等于 `400` 时，响应体统一使用以下结构：
 
 - 请求体必须是合法 JSON。
 - `stream` 若传入，必须是 boolean。
-- `vet_context.user_id` 必填。
-- `vet_context.session_id` 必填。
-- `vet_context.pet_id` 必填。
+- `scope_assertion.schema_version` 必填。
+- `scope_assertion.issuer` 必填。
+- `scope_assertion.issued_at` 必填。
+- `scope_assertion.user_id` 必填。
+- `scope_assertion.pet_id` 必填。
+- `scope_assertion.session_id` 必填。
+- `scope_assertion.authorization.ownership_verified` 必须为 `true`。
+- `scope_assertion.authorization.pet_active` 必须为 `true`。
+- `scope_assertion.authorization.pet_status` 必填。
+- `scope_assertion.authorization.pet_deleted` 必须为 `false`。
+- `scope_assertion.profile.species` 必填。
+- `scope_assertion.source.table`、`scope_assertion.source.record_id`、`scope_assertion.source.record_updated_at` 必填。
 - `input` 与 `attachments` 至少存在一类有效内容。
 - `attachments[]` 的 `attachment_id`、`mime_type`、`purpose`、`storage_ref` 必填。
 - 请求体与附件元信息不得超过入口限制。
 
 入口层不得执行以下校验或判决：
 
-- 不判断 `pet_id` 是否属于 `user_id`。
-- 不判断 session 是否已经绑定其他 `pet_id`。
-- 不根据用户文本改写、纠错或推断 `pet_id`。
+- 不主动查询主服务数据库判断 `pet_id` 是否属于 `user_id`。
+- 不根据 `vet_context.pet_info` 创建或覆盖服务端已验证宠物画像。
+- 不根据用户文本改写、纠错或推断 `scope_assertion.pet_id`。
 - 不判断附件是否为化验单、病历或其他医学资料。
 - 不判断用户意图、急症、毒物、非医疗跨域级别。
+
+Agent 范围服务必须执行以下一致性保护：
+
+- 通过服务级认证确认调用方为可信内部服务，并保留认证主体与 `scope_assertion.issuer` 的审计关联。
+- 基于 `scope_assertion` 初始化或刷新 Agent 侧 `pet_profiles` 投影。
+- 首次看到 `scope_assertion.session_id` 时绑定当前 `user_id + pet_id`。
+- 后续看到同一 `session_id` 时，必须仍然对应同一组 `user_id + pet_id`；否则返回 `403 FORBIDDEN`。
+- 当声明缺失、声明过期、授权状态为否、画像核心字段缺失或本地投影写入失败时，应 Fail Fast。
 
 ### 4.5 同步响应
 
@@ -460,9 +578,11 @@ data: {"id":"turn_01HZYK9G4DX8S7RC7J2MTNQ9V1","status":"completed"}
 
 但本系统仍要求显式提供兽医业务上下文：
 
-- `vet_context.user_id`
-- `vet_context.session_id`
-- `vet_context.pet_id`
+- `scope_assertion.user_id`
+- `scope_assertion.session_id`
+- `scope_assertion.pet_id`
+- `scope_assertion.authorization`
+- `scope_assertion.profile`
 
 兼容入口的请求最终会被标准化为内部 `AgentTurnRequest`，并进入与 `/agent/turns` 相同的编排、护栏、留痕和响应流程。
 
@@ -472,7 +592,7 @@ data: {"id":"turn_01HZYK9G4DX8S7RC7J2MTNQ9V1","status":"completed"}
 
 - 不得通过 `instructions` 放宽急症、毒物、用药或安全护栏。
 - 不得通过 `tools`、`tool_choice` 或类似字段授予额外工具权限。
-- 不得通过 `metadata` 改写 `pet_id`、`session_id` 或安全判决。
+- 不得通过 `metadata`、`vet_context.pet_info` 或兼容字段改写 `scope_assertion.pet_id`、`scope_assertion.session_id` 或安全判决。
 - 不得通过模型选择绕过服务端模型策略。
 - 不得通过兼容入口放宽一 session 一宠约束。
 - 不得通过兼容入口绕过 RAG 禁令或 SAF 规则。
@@ -582,9 +702,11 @@ data: {"id":"turn_01HZYK9G4DX8S7RC7J2MTNQ9V1","status":"completed"}
 
 - `request_id`
 - `trace_id`
-- `user_id`
-- `session_id`
-- `pet_id`
+- `scope_assertion.user_id`
+- `scope_assertion.session_id`
+- `scope_assertion.pet_id`
+- `scope_assertion.issuer`
+- `scope_assertion.source.record_updated_at`
 - `path`
 - `response_mode`
 - `status_code`
