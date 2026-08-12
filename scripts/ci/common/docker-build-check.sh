@@ -20,6 +20,7 @@ app_dockerfile="${CI_APP_DOCKERFILE:-docker/app/Dockerfile}"
 app_image_tag="${CI_APP_IMAGE_TAG:-vet-agent-ci-app:${GITHUB_SHA:-local}}"
 mem0_image_tag="${CI_MEM0_IMAGE_TAG:-vet-agent-ci-mem0:${GITHUB_SHA:-local}}"
 mem0_dashboard_image_tag="${CI_MEM0_DASHBOARD_IMAGE_TAG:-vet-agent-ci-mem0-dashboard:${GITHUB_SHA:-local}}"
+opa_image_tag="${CI_OPA_IMAGE_TAG:-vet-agent-ci-opa:${GITHUB_SHA:-local}}"
 
 case "${CI_BUILD_APP_IMAGE:-true}" in
     1|true|TRUE|yes|YES|on|ON)
@@ -75,5 +76,22 @@ case "${CI_BUILD_MEM0_DASHBOARD_IMAGE:-false}" in
         ;;
     *)
         echo "跳过 Mem0 Dashboard 镜像构建：CI_BUILD_MEM0_DASHBOARD_IMAGE 未启用。"
+        ;;
+esac
+
+case "${CI_BUILD_OPA_IMAGE:-false}" in
+    1|true|TRUE|yes|YES|on|ON)
+        # OPA 镜像封装官方 Release 二进制与本仓库 bootstrap policy，用于验证策略服务交付物可构建。
+        docker build \
+            -f docker/opa/Dockerfile \
+            --build-arg "OPA_VERSION=${CI_OPA_VERSION:-v1.19.0}" \
+            --build-arg "OPA_RUNTIME_BASE_IMAGE=${CI_OPA_RUNTIME_BASE_IMAGE:-debian:bookworm-slim}" \
+            -t "$opa_image_tag" \
+            .
+
+        docker run --rm "$opa_image_tag" opa test /opa/policies /opa/tests --fail-on-empty
+        ;;
+    *)
+        echo "跳过 OPA 镜像构建：CI_BUILD_OPA_IMAGE 未启用。"
         ;;
 esac
