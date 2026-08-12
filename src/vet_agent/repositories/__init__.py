@@ -25,6 +25,12 @@ from .rules import (
     SafetyRule,
     compile_regex,
 )
+from .scope import (
+    PostgresScopeRepository,
+    ScopeRepository,
+    SessionBinding,
+    VerifiedPetProfile,
+)
 
 __all__ = [
     "ConsultationDomainRule",
@@ -38,8 +44,12 @@ __all__ = [
     "KnowledgeRepository",
     "PostgresKnowledgeRepository",
     "PostgresRuleRepository",
+    "PostgresScopeRepository",
     "RuleRepository",
+    "ScopeRepository",
     "SafetyRule",
+    "SessionBinding",
+    "VerifiedPetProfile",
     "compile_regex",
     "evidence_from_hits",
 ]

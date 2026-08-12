@@ -1,7 +1,8 @@
 """
 文件：src/vet_agent/container.py
-作用：提供兽医 Agent 项目的业务实现。
-说明：本文件遵循项目标准文件树编排；跨包引用应通过对应包的 __init__.py 暴露能力。
+作用：组装兽医 Agent 运行所需的仓储、范围上下文服务、模型客户端与业务服务。
+范围：作为应用依赖注入入口，负责将 PostgreSQL 范围仓储接入身份、宠物资料与会话范围数据链。
+说明：身份、宠物资料与会话范围不再提供 JSON 回退；未显式注入测试仓储且缺少 DATABASE_URL 时按 Fail Fast 处理。
 """
 
 
@@ -27,12 +28,13 @@ from vet_agent.repositories import (
     FileRuleRepository,
     PostgresKnowledgeRepository,
     PostgresRuleRepository,
+    PostgresScopeRepository,
+    ScopeRepository,
 )
 from vet_agent.runtime import QwenClient, QwenEmbeddingClient
 from vet_agent.services import (
     AccessControlService,
     ClinicalKnowledgeService,
-    JsonAccessControlStore,
     JsonClinicalKnowledgeStore,
     JsonRagGovernanceStore,
     JsonReportStore,
@@ -40,7 +42,6 @@ from vet_agent.services import (
     LogicTraceStore,
     MemoryService,
     PetContextProvider,
-    PostgresAccessControlStore,
     PostgresClinicalKnowledgeStore,
     PostgresLogicTraceStore,
     PostgresMemoryService,
@@ -48,31 +49,33 @@ from vet_agent.services import (
     PostgresReportStore,
     RagGovernanceService,
     ReportIngestionService,
+    ScopeContextService,
     make_semantic_memory,
 )
 from vet_agent.stores import JsonDocumentStore
 
 
+_container_override: Container | None = None
+
+
 class Container:
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, *, scope_repository: ScopeRepository | None = None) -> None:
         """组装应用运行所需的仓储、模型客户端和业务服务。
 
         :param settings: 当前运行环境的应用配置。
+        :param scope_repository: 身份、宠物资料与会话范围仓储；仅测试或特殊嵌入场景可显式注入。
         :return: 无返回值。
         """
         self.settings = settings
+        self.scope_repository = self._scope_repository(settings, scope_repository)
+        self.scope_service = ScopeContextService(self.scope_repository)
         self.semantic_memory = make_semantic_memory(settings)
         self.memory_service = (
             PostgresMemoryService(settings.database_url, semantic_memory=self.semantic_memory)
             if settings.database_url
             else MemoryService(JsonDocumentStore(settings.data_dir / "memory.json"))
         )
-        self.access_control = AccessControlService(
-            settings,
-            PostgresAccessControlStore(settings.database_url)
-            if settings.database_url
-            else JsonAccessControlStore(JsonDocumentStore(settings.data_dir / "access_control.json")),
-        )
+        self.access_control = AccessControlService(settings, self.scope_service)
         self.trace_store = (
             PostgresLogicTraceStore(settings.database_url)
             if settings.database_url
@@ -145,7 +148,7 @@ class Container:
         )
         self.orchestrator = VetOrchestrator(
             settings,
-            context_provider=PetContextProvider(),
+            context_provider=PetContextProvider(self.scope_service),
             memory_service=self.memory_service,
             trace_store=self.trace_store,
             knowledge_service=KnowledgeService(self.knowledge_repository),
@@ -163,10 +166,28 @@ class Container:
         """
         return (
             self.settings.litellm_configured
+            and self.access_control.is_ready()
             and self.rule_repository.is_ready()
             and self.knowledge_repository.is_ready()
             and self.clinical_safety_repository.is_ready()
         )
+
+    def _scope_repository(
+        self,
+        settings: Settings,
+        scope_repository: ScopeRepository | None,
+    ) -> ScopeRepository:
+        """构造身份、宠物资料与会话范围仓储。
+
+        :param settings: 当前运行环境的应用配置。
+        :param scope_repository: 外部显式注入的范围仓储。
+        :return: 返回范围仓储实例。
+        """
+        if scope_repository is not None:
+            return scope_repository
+        if not settings.database_url:
+            raise RuntimeError("DATABASE_URL is required for identity, pet profile and session scope")
+        return PostgresScopeRepository(settings.database_url)
 
 
 @lru_cache
@@ -175,4 +196,17 @@ def get_container() -> Container:
 
     :return: 返回使用环境变量构造的依赖容器。
     """
+    if _container_override is not None:
+        return _container_override
     return Container(Settings.from_env())
+
+
+def set_container(container: Container | None) -> None:
+    """设置或清理进程级容器覆盖对象。
+
+    :param container: 显式注入的容器，传入 None 时清理覆盖对象并恢复默认构造。
+    :return: 无返回值。
+    """
+    global _container_override
+    _container_override = container
+    get_container.cache_clear()
