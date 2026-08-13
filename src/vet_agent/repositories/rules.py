@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -21,20 +21,7 @@ from vet_agent.db import (
     ConsultationDomainModel,
     ConsultationSlotModel,
     make_session_factory,
-    SafetyRuleModel,
 )
-
-
-@dataclass(frozen=True)
-class SafetyRule:
-    code: str
-    rule_type: str
-    match_type: str
-    pattern: str
-    severity: str
-    message: str
-    response_template: str | None = None
-    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -62,13 +49,6 @@ class ConsultationRuleSet:
 
 
 class RuleRepository(Protocol):
-    def safety_rules(self) -> list[SafetyRule]:
-        """执行 safety_rules 业务逻辑。
-
-        :return: 返回函数执行结果。
-        """
-        ...
-
     def consultation_rules(self) -> ConsultationRuleSet:
         """执行 consultation_rules 业务逻辑。
 
@@ -92,29 +72,6 @@ class FileRuleRepository:
         :return: 无返回值。
         """
         self.seed_dir = seed_dir
-
-    def safety_rules(self) -> list[SafetyRule]:
-        """执行 safety_rules 业务逻辑。
-
-        :return: 返回函数执行结果。
-        """
-        raw = json.loads((self.seed_dir / "safety_rules.json").read_text(encoding="utf-8"))
-        rules: list[SafetyRule] = []
-        for item in raw:
-            for pattern in item.get("patterns", []):
-                rules.append(
-                    SafetyRule(
-                        code=item["code"],
-                        rule_type=item["rule_type"],
-                        match_type=item["match_type"],
-                        pattern=pattern,
-                        severity=item.get("severity", "caution"),
-                        message=item["message"],
-                        response_template=item.get("response_template"),
-                        metadata=item.get("metadata", {}),
-                    )
-                )
-        return rules
 
     def consultation_rules(self) -> ConsultationRuleSet:
         """执行 consultation_rules 业务逻辑。
@@ -152,7 +109,7 @@ class FileRuleRepository:
 
         :return: 返回函数执行结果。
         """
-        return (self.seed_dir / "safety_rules.json").exists() and (self.seed_dir / "consultation_rules.json").exists()
+        return (self.seed_dir / "consultation_rules.json").exists()
 
 
 class PostgresRuleRepository:
@@ -164,31 +121,6 @@ class PostgresRuleRepository:
         """
         self.database_url = database_url
         self.session_factory = make_session_factory(database_url)
-
-    def safety_rules(self) -> list[SafetyRule]:
-        """执行 safety_rules 业务逻辑。
-
-        :return: 返回函数执行结果。
-        """
-        with self.session_factory() as session:
-            rows = session.scalars(
-                select(SafetyRuleModel)
-                .where(SafetyRuleModel.enabled.is_(True))
-                .order_by(SafetyRuleModel.id)
-            ).all()
-        return [
-            SafetyRule(
-                code=row.code,
-                rule_type=row.rule_type,
-                match_type=row.match_type,
-                pattern=row.pattern,
-                severity=row.severity,
-                message=row.message,
-                response_template=row.response_template,
-                metadata=row.metadata_json or {},
-            )
-            for row in rows
-        ]
 
     def consultation_rules(self) -> ConsultationRuleSet:
         """执行 consultation_rules 业务逻辑。
@@ -234,10 +166,9 @@ class PostgresRuleRepository:
         """
         try:
             with self.session_factory() as session:
-                safety_count = _count_enabled(session, SafetyRuleModel)
                 domain_count = _count_enabled(session, ConsultationDomainModel)
                 slot_count = _count_enabled(session, ConsultationSlotModel)
-            return safety_count > 0 and domain_count > 0 and slot_count > 0
+            return domain_count > 0 and slot_count > 0
         except SQLAlchemyError:
             return False
 
@@ -252,17 +183,6 @@ class FallbackRuleRepository:
         """
         self.primary = primary
         self.fallback = fallback
-
-    def safety_rules(self) -> list[SafetyRule]:
-        """执行 safety_rules 业务逻辑。
-
-        :return: 返回函数执行结果。
-        """
-        try:
-            rules = self.primary.safety_rules()
-            return rules or self.fallback.safety_rules()
-        except Exception:
-            return self.fallback.safety_rules()
 
     def consultation_rules(self) -> ConsultationRuleSet:
         """执行 consultation_rules 业务逻辑。

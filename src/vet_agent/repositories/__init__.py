@@ -22,8 +22,20 @@ from .rules import (
     FileRuleRepository,
     PostgresRuleRepository,
     RuleRepository,
-    SafetyRule,
     compile_regex,
+)
+from .scope import (
+    PostgresScopeRepository,
+    ScopeRepository,
+    SessionBinding,
+    VerifiedPetProfile,
+)
+from .turn_execution import (
+    PostgresTurnExecutionRepository,
+    TurnExecutionRepository,
+    TurnExecutionRepositoryError,
+    TurnIdempotencyClaim,
+    TurnIdempotencyClaimStatus,
 )
 
 __all__ = [
@@ -38,8 +50,16 @@ __all__ = [
     "KnowledgeRepository",
     "PostgresKnowledgeRepository",
     "PostgresRuleRepository",
+    "PostgresScopeRepository",
+    "PostgresTurnExecutionRepository",
     "RuleRepository",
-    "SafetyRule",
+    "ScopeRepository",
+    "SessionBinding",
+    "TurnExecutionRepository",
+    "TurnExecutionRepositoryError",
+    "TurnIdempotencyClaim",
+    "TurnIdempotencyClaimStatus",
+    "VerifiedPetProfile",
     "compile_regex",
     "evidence_from_hits",
 ]

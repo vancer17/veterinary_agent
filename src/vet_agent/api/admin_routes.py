@@ -244,5 +244,5 @@ async def admin_list_reports(
     container = get_container()
     principal = container.access_control.authenticate(request.headers)
     identity = TrustedIdentity(user_id=user_id, session_id=session_id, pet_id=pet_id)
-    await container.access_control.authorize(identity, pet_info={}, principal=principal)
+    await container.access_control.authorize_identity(identity, pet_info={}, principal=principal)
     return {"items": await container.report_service.list_reports(identity)}

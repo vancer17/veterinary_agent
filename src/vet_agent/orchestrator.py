@@ -1,6 +1,8 @@
 """
 文件：src/vet_agent/orchestrator.py
-作用：提供兽医 Agent 项目的业务实现。
+作用：编排兽医 Agent 单回合主业务链路。
+范围：负责安全评估、范围上下文读取、问诊状态、任务拆分、RAG、回复生成、记忆写入与 trace 写入。
+说明：幂等 claim、响应重放与 turn lock 已迁移至 turn execution 门禁；本文件仅通过门禁协议提交主链路执行闭包。
 说明：本文件遵循项目标准文件树编排；跨包引用应通过对应包的 __init__.py 暴露能力。
 """
 
@@ -8,7 +10,7 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator, Iterator
 from typing import Any
 from uuid import uuid4
 
@@ -37,6 +39,8 @@ from vet_agent.clinical_safety import (
     ClinicalSafetySemanticExtractorAgent,
     ClinicalSafetySemanticResult,
 )
+from vet_agent.input_safety import InputSafetyDecision, InputSafetyRequestContext, InputSafetyService
+from vet_agent.observability import AgentPathNode, build_agent_path
 from vet_agent.repositories import RuleRepository
 from vet_agent.runtime import QwenClient
 from vet_agent.services import (
@@ -46,6 +50,7 @@ from vet_agent.services import (
     PetContext,
     PetContextProvider,
     ReasoningDisplayBuilder,
+    TurnExecutionGateProtocol,
 )
 
 
@@ -62,6 +67,8 @@ class VetOrchestrator:
         rule_repository: RuleRepository,
         clinical_safety_evaluator: ClinicalSafetyEvaluator,
         clinical_safety_semantic_extractor: ClinicalSafetySemanticExtractorAgent,
+        turn_execution_gate: TurnExecutionGateProtocol,
+        input_safety_service: InputSafetyService,
     ) -> None:
         """初始化当前对象。
 
@@ -74,12 +81,16 @@ class VetOrchestrator:
         :param rule_repository: 参数 rule_repository。
         :param clinical_safety_evaluator: 结构化临床安全评估器。
         :param clinical_safety_semantic_extractor: 临床安全结构化语义抽取器。
+        :param turn_execution_gate: 单回合执行门禁，负责 turn lock 与幂等基础设施控制。
+        :param input_safety_service: 基础输入安全候选与 OPA 策略裁决服务。
         :return: 无返回值。
         """
         self.settings = settings
         self.context_provider = context_provider
         self.memory_service = memory_service
         self.trace_store = trace_store
+        self.turn_execution_gate = turn_execution_gate
+        self.input_safety_service = input_safety_service
         self.knowledge_service = knowledge_service
         self.safety = SafetyAgent(rule_repository)
         self.clinical_safety = clinical_safety_evaluator
@@ -102,33 +113,14 @@ class VetOrchestrator:
         :param request: 请求对象。
         :return: 返回函数执行结果。
         """
-        async with self._turn_lock(request):
-            idempotency_key = request.turn_options.idempotency_key
-            if idempotency_key:
-                claim = await self.memory_service.begin_idempotency(
-                    request.trusted_identity,
-                    idempotency_key=idempotency_key,
-                    request_id=request.request_context.request_id,
-                    trace_id=request.request_context.trace_id,
-                    wait_seconds=self.settings.idempotency_wait_seconds,
-                    processing_ttl_seconds=self.settings.idempotency_processing_ttl_seconds,
-                )
-                if claim.get("state") == "replayed" and claim.get("response_snapshot"):
-                    return AgentTurnResponse.model_validate(claim["response_snapshot"])
-                if claim.get("state") == "busy":
-                    raise TimeoutError("idempotent request is still processing")
-                try:
-                    return await self._run_turn_core(request)
-                except Exception as exc:
-                    await self.memory_service.mark_idempotency_failed(
-                        request.trusted_identity,
-                        idempotency_key=idempotency_key,
-                        request_id=request.request_context.request_id,
-                        trace_id=request.request_context.trace_id,
-                        error_type=type(exc).__name__,
-                    )
-                    raise
+        async def execute_turn() -> AgentTurnResponse:
+            """在 turn execution 门禁放行后执行 Agent 主业务链路。
+
+            :return: 返回本轮新生成的 Agent 响应。
+            """
             return await self._run_turn_core(request)
+
+        return await self.turn_execution_gate.run(request, execute_turn)
 
     async def _run_turn_core(self, request: AgentTurnRequest) -> AgentTurnResponse:
         """执行 _run_turn_core 内部辅助逻辑。
@@ -137,28 +129,42 @@ class VetOrchestrator:
         :return: 返回函数执行结果。
         """
         user_text = request.joined_text()
-        assessment = self.safety.analyze(user_text, request.attachments)
         model = request.model or self.settings.default_model
+        input_safety_decision = await self.input_safety_service.evaluate(
+            InputSafetyRequestContext.from_request(request)
+        )
 
-        if assessment.blocked or assessment.escalated:
-            return await self._safety_triage_response(
+        if input_safety_decision.blocked or input_safety_decision.escalated:
+            return await self._input_safety_response(
                 request=request,
-                assessment=assessment,
+                decision=input_safety_decision,
                 model=model,
                 evidence=[],
-                agent_path=["SafetyAgent"],
+                agent_path=build_agent_path(
+                    AgentPathNode.INPUT_SAFETY_SERVICE,
+                    AgentPathNode.INPUT_SAFETY_POLICY_OPA,
+                ),
             )
 
-        pet_context = await self.context_provider.load(request.vet_context, request.metadata)
+        assessment = SafetyAssessment.from_signals(list(input_safety_decision.signals))
+
+        pet_context = await self.context_provider.load(
+            request.trusted_identity,
+            request.scope_assertion,
+            request.vet_context,
+            request.metadata,
+            authorized_scope_context=request.authorized_scope_context,
+        )
         clinical_semantic = await self.clinical_safety_semantic_extractor.extract(
             user_text=user_text,
             pet_context_summary=pet_context.summary(),
             model=model,
         )
-        clinical_safety_result = self.clinical_safety.assess_with_resolution(
+        clinical_safety_result = await self.clinical_safety.assess_with_resolution(
             user_text,
             pet_context.summary(),
             age_text=str(pet_context.verified_profile.get("age") or ""),
+            request=request,
             semantic_result=clinical_semantic,
         )
         clinical_signals = clinical_safety_result.signals
@@ -169,14 +175,17 @@ class VetOrchestrator:
                 assessment=assessment,
                 model=model,
                 evidence=pet_context.evidence,
-                agent_path=[
-                    "SafetyAgent",
-                    "PetContextAgent",
-                    "ClinicalSafetySemanticExtractorAgent",
-                    "ClinicalSafetyEvaluator",
-                ],
+                agent_path=build_agent_path(
+                    AgentPathNode.INPUT_SAFETY_SERVICE,
+                    AgentPathNode.INPUT_SAFETY_POLICY_OPA,
+                    AgentPathNode.PET_CONTEXT_AGENT,
+                    AgentPathNode.CLINICAL_SAFETY_SEMANTIC_EXTRACTOR_AGENT,
+                    AgentPathNode.CLINICAL_SAFETY_EVALUATOR,
+                    AgentPathNode.CLINICAL_SAFETY_POLICY_OPA,
+                ),
                 clinical_safety_semantic=clinical_semantic,
                 clinical_safety_resolution=clinical_safety_result,
+                input_safety_decision=input_safety_decision,
             )
 
         memory = await self.memory_service.read(request.trusted_identity)
@@ -203,6 +212,7 @@ class VetOrchestrator:
                     model=model,
                     clinical_safety_semantic=clinical_semantic,
                     clinical_safety_resolution=clinical_safety_result,
+                    input_safety_decision=input_safety_decision,
                 )
                 response = await self._finalize_and_persist(request, response, medical=True)
                 await self.memory_service.clear_default_consultation_state(request.trusted_identity)
@@ -276,18 +286,20 @@ class VetOrchestrator:
                 safety_signals=[*assessment.signals, *post_signals],
                 evidence=evidence,
                 metadata={
-                    "multi_agent_path": [
-                        "SafetyAgent",
-                        "PetContextAgent",
-                        "ClinicalSafetySemanticExtractorAgent",
-                        "ClinicalSafetyEvaluator",
-                        "MemoryAgent",
-                        "ConsultationSemanticExtractorAgent",
-                        "ConsultationStateAgent",
-                        "AnswerabilityEvaluator",
-                        "KnowledgeAgent",
-                        "RagQuestionPlannerAgent",
-                    ],
+                    "multi_agent_path": build_agent_path(
+                        AgentPathNode.INPUT_SAFETY_SERVICE,
+                        AgentPathNode.INPUT_SAFETY_POLICY_OPA,
+                        AgentPathNode.PET_CONTEXT_AGENT,
+                        AgentPathNode.CLINICAL_SAFETY_SEMANTIC_EXTRACTOR_AGENT,
+                        AgentPathNode.CLINICAL_SAFETY_EVALUATOR,
+                        AgentPathNode.CLINICAL_SAFETY_POLICY_OPA,
+                        AgentPathNode.MEMORY_AGENT,
+                        AgentPathNode.CONSULTATION_SEMANTIC_EXTRACTOR_AGENT,
+                        AgentPathNode.CONSULTATION_STATE_AGENT,
+                        AgentPathNode.ANSWERABILITY_EVALUATOR,
+                        AgentPathNode.KNOWLEDGE_AGENT,
+                        AgentPathNode.RAG_QUESTION_PLANNER_AGENT,
+                    ),
                     "consultation_phase": consultation_decision.state.phase,
                     "consultation_state": consultation_decision.state.to_dict(),
                     "missing_slots": consultation_decision.missing_slots,
@@ -297,6 +309,7 @@ class VetOrchestrator:
                         clinical_safety_semantic=clinical_semantic,
                         clinical_safety_resolution=clinical_safety_result,
                     ),
+                    "input_safety_decision": input_safety_decision.to_metadata(),
                     "followup_question_plan": followup_plan.to_metadata(),
                     **self._task_router_skip_metadata(continuing_consultation),
                 },
@@ -352,20 +365,22 @@ class VetOrchestrator:
             safety_signals=[*assessment.signals, *post_signals],
             evidence=evidence,
             metadata={
-                "multi_agent_path": [
-                    "SafetyAgent",
-                    "PetContextAgent",
-                    "ClinicalSafetySemanticExtractorAgent",
-                    "ClinicalSafetyEvaluator",
-                    "MemoryAgent",
-                    "ConsultationSemanticExtractorAgent",
-                    "ConsultationStateAgent",
-                    "AnswerabilityEvaluator",
-                    "KnowledgeAgent",
-                    "QuestionPlannerAgent",
-                    "QwenResponseAgent",
-                    "SafetyReviewAgent",
-                ],
+                "multi_agent_path": build_agent_path(
+                    AgentPathNode.INPUT_SAFETY_SERVICE,
+                    AgentPathNode.INPUT_SAFETY_POLICY_OPA,
+                    AgentPathNode.PET_CONTEXT_AGENT,
+                    AgentPathNode.CLINICAL_SAFETY_SEMANTIC_EXTRACTOR_AGENT,
+                    AgentPathNode.CLINICAL_SAFETY_EVALUATOR,
+                    AgentPathNode.CLINICAL_SAFETY_POLICY_OPA,
+                    AgentPathNode.MEMORY_AGENT,
+                    AgentPathNode.CONSULTATION_SEMANTIC_EXTRACTOR_AGENT,
+                    AgentPathNode.CONSULTATION_STATE_AGENT,
+                    AgentPathNode.ANSWERABILITY_EVALUATOR,
+                    AgentPathNode.KNOWLEDGE_AGENT,
+                    AgentPathNode.QUESTION_PLANNER_AGENT,
+                    AgentPathNode.QWEN_RESPONSE_AGENT,
+                    AgentPathNode.SAFETY_REVIEW_AGENT,
+                ),
                 "litellm_configured": self.settings.litellm_configured,
                 "consultation_phase": consultation_decision.state.phase,
                 "consultation_state": consultation_decision.state.to_dict(),
@@ -376,6 +391,7 @@ class VetOrchestrator:
                     clinical_safety_semantic=clinical_semantic,
                     clinical_safety_resolution=clinical_safety_result,
                 ),
+                "input_safety_decision": input_safety_decision.to_metadata(),
                 **self._task_router_skip_metadata(continuing_consultation),
             },
         )
@@ -393,6 +409,7 @@ class VetOrchestrator:
         agent_path: list[str],
         clinical_safety_semantic: ClinicalSafetySemanticResult | None = None,
         clinical_safety_resolution: ClinicalSafetyEvaluationResult | None = None,
+        input_safety_decision: InputSafetyDecision | None = None,
     ) -> AgentTurnResponse:
         """根据安全评估构造并持久化安全分诊响应。
 
@@ -403,6 +420,7 @@ class VetOrchestrator:
         :param agent_path: 当前安全分诊链路中参与的 Agent 名称。
         :param clinical_safety_semantic: 临床安全结构化语义结果。
         :param clinical_safety_resolution: 临床安全裁决和显式回退结果。
+        :param input_safety_decision: 已完成的基础输入安全策略裁决；为空时不写入审计字段。
         :return: 返回已持久化的安全分诊响应。
         """
         text = self.safety.forced_response(assessment)
@@ -445,11 +463,103 @@ class VetOrchestrator:
                     clinical_safety_semantic=clinical_safety_semantic,
                     clinical_safety_resolution=clinical_safety_resolution,
                 ),
+                **self._input_safety_metadata(input_safety_decision),
             },
         )
         response = await self._finalize_and_persist(request, response, medical=True)
         await self.memory_service.clear_consultation_state(request.trusted_identity)
         return response
+
+    async def _input_safety_response(
+        self,
+        *,
+        request: AgentTurnRequest,
+        decision: InputSafetyDecision,
+        model: str,
+        evidence: list[Evidence],
+        agent_path: list[str],
+    ) -> AgentTurnResponse:
+        """根据基础输入安全策略裁决构造并持久化安全响应。
+
+        :param request: 当前回合请求对象。
+        :param decision: 基础输入安全策略裁决结果。
+        :param model: 当前回合使用的模型名称。
+        :param evidence: 可公开展示的上下文证据列表。
+        :param agent_path: 当前输入安全链路中参与的组件名称。
+        :return: 返回已持久化的输入安全响应。
+        """
+        status = "blocked" if decision.blocked else "safety_escalated"
+        text = self._input_safety_response_text(decision)
+        text, post_signals = self.safety.sanitize_output(text)
+        signals = [*decision.signals, *post_signals]
+        segment = VetSegment(
+            type="input_safety",
+            title="输入安全",
+            status=status,
+            content=text,
+            output_text=text,
+            evidence=evidence,
+        )
+        reasoning_display = self.reasoning_display.build_turn_display(
+            status=status,
+            segment_id=segment.segment_id,
+            evidence=evidence,
+            safety_signals=signals,
+        )
+        segment.reasoning_display = reasoning_display
+        segment.references = self.reasoning_display.references_from_evidence(evidence)
+        response = AgentTurnResponse(
+            id=f"turn_{uuid4().hex}",
+            request_id=request.request_context.request_id,
+            trace_id=request.request_context.trace_id,
+            model=model,
+            status=status,
+            output_text=text,
+            segments=[segment],
+            reasoning_display=reasoning_display,
+            vet_result={
+                "generation_profile": "input_safety",
+                "route": "input_safety_policy",
+                "audit_tier": "A",
+            },
+            safety_signals=signals,
+            evidence=evidence,
+            metadata={
+                "multi_agent_path": agent_path,
+                "input_safety_decision": decision.to_metadata(),
+            },
+        )
+        response = self.safety_review.review_response(response)
+        response.metadata["memory_extraction"] = {
+            "agent": "MemoryExtractionAgent",
+            "stored_fact_count": 0,
+            "fact_keys": [],
+            "skipped_reason": "input_safety_policy_stopped_main_chain",
+        }
+        await self._persist(request, response, medical=False)
+        await self.memory_service.clear_consultation_state(request.trusted_identity)
+        return response
+
+    def _input_safety_response_text(self, decision: InputSafetyDecision) -> str:
+        """生成基础输入安全响应文本。
+
+        :param decision: 基础输入安全策略裁决结果。
+        :return: 返回面向用户的安全响应文本。
+        """
+        message = decision.message.strip() or "当前输入未通过基础安全策略裁决。"
+        if decision.blocked:
+            return f"{message}\n\n请调整问题或补充合规的文本、附件用途后重新提交。"
+        return f"{message}\n\n如需继续，请补充与宠物健康咨询直接相关的必要信息。"
+
+    def _input_safety_metadata(self, decision: InputSafetyDecision | None) -> dict[str, Any]:
+        """构造基础输入安全策略裁决 metadata。
+
+        :param decision: 基础输入安全策略裁决结果。
+        :return: 返回可合并到 Agent 响应 metadata 的输入安全审计字段。
+        """
+        if decision is None:
+            return {}
+        return {"input_safety_decision": decision.to_metadata()}
 
     async def _run_multi_task_turn(
         self,
@@ -463,6 +573,7 @@ class VetOrchestrator:
         model: str,
         clinical_safety_semantic: ClinicalSafetySemanticResult,
         clinical_safety_resolution: ClinicalSafetyEvaluationResult,
+        input_safety_decision: InputSafetyDecision,
     ) -> AgentTurnResponse:
         """执行 _run_multi_task_turn 内部辅助逻辑。
 
@@ -475,6 +586,7 @@ class VetOrchestrator:
         :param model: 模型名称。
         :param clinical_safety_semantic: 临床安全结构化语义结果。
         :param clinical_safety_resolution: 临床安全显式回退结果。
+        :param input_safety_decision: 基础输入安全策略裁决结果。
         :return: 返回函数执行结果。
         """
         task_states = await self.memory_service.read_task_consultation_states(request.trusted_identity)
@@ -617,19 +729,31 @@ class VetOrchestrator:
             evidence=all_evidence,
             metadata={
                 "multi_agent_path": [
-                    "SafetyAgent",
-                    "PetContextAgent",
-                    "ClinicalSafetySemanticExtractorAgent",
-                    "ClinicalSafetyEvaluator",
-                    "MemoryAgent",
-                    "TaskRouterAgent",
-                    "ConsultationSemanticExtractorAgent",
-                    "ConsultationStateAgent",
-                    "AnswerabilityEvaluator",
-                    "KnowledgeAgent",
-                    *(["RagQuestionPlannerAgent"] if used_rag_question_planner else []),
-                    *(["QwenResponseAgent"] if used_response_composer else []),
-                    "SafetyReviewAgent",
+                    *build_agent_path(
+                        AgentPathNode.INPUT_SAFETY_SERVICE,
+                        AgentPathNode.INPUT_SAFETY_POLICY_OPA,
+                        AgentPathNode.PET_CONTEXT_AGENT,
+                        AgentPathNode.CLINICAL_SAFETY_SEMANTIC_EXTRACTOR_AGENT,
+                        AgentPathNode.CLINICAL_SAFETY_EVALUATOR,
+                        AgentPathNode.CLINICAL_SAFETY_POLICY_OPA,
+                        AgentPathNode.MEMORY_AGENT,
+                        AgentPathNode.TASK_ROUTER_AGENT,
+                        AgentPathNode.CONSULTATION_SEMANTIC_EXTRACTOR_AGENT,
+                        AgentPathNode.CONSULTATION_STATE_AGENT,
+                        AgentPathNode.ANSWERABILITY_EVALUATOR,
+                        AgentPathNode.KNOWLEDGE_AGENT,
+                    ),
+                    *(
+                        build_agent_path(AgentPathNode.RAG_QUESTION_PLANNER_AGENT)
+                        if used_rag_question_planner
+                        else []
+                    ),
+                    *(
+                        build_agent_path(AgentPathNode.QWEN_RESPONSE_AGENT)
+                        if used_response_composer
+                        else []
+                    ),
+                    *build_agent_path(AgentPathNode.SAFETY_REVIEW_AGENT),
                 ],
                 "task_count": len(tasks),
                 "task_router_strategy": split_decision.strategy,
@@ -638,6 +762,7 @@ class VetOrchestrator:
                     clinical_safety_semantic=clinical_safety_semantic,
                     clinical_safety_resolution=clinical_safety_resolution,
                 ),
+                "input_safety_decision": input_safety_decision.to_metadata(),
                 "tasks": task_summaries,
                 "consultation_states": updated_task_states,
                 "litellm_configured": self.settings.litellm_configured,
@@ -793,7 +918,7 @@ class VetOrchestrator:
             ]
         )
 
-    async def stream_turn(self, request: AgentTurnRequest):
+    async def stream_turn(self, request: AgentTurnRequest) -> AsyncIterator[str]:
         """以流式事件形式执行一个 Agent 对话回合。
 
         :param request: 请求对象。
@@ -873,20 +998,6 @@ class VetOrchestrator:
             data={"id": response.id, "status": response.status},
         ).to_sse()
 
-    @asynccontextmanager
-    async def _turn_lock(self, request: AgentTurnRequest):
-        """执行 _turn_lock 内部辅助逻辑。
-
-        :param request: 请求对象。
-        :return: 返回异步执行结果。
-        """
-        lock_factory = getattr(self.memory_service, "turn_lock", None)
-        if callable(lock_factory):
-            async with lock_factory(request.trusted_identity):
-                yield
-            return
-        yield
-
     async def _finalize_and_persist(
         self,
         request: AgentTurnRequest,
@@ -894,7 +1005,7 @@ class VetOrchestrator:
         *,
         medical: bool,
     ) -> AgentTurnResponse:
-        """执行 _finalize_and_persist 内部辅助逻辑。
+        """执行输出审查、记忆抽取与回合持久化。
 
         :param request: 请求对象。
         :param response: 响应对象。
@@ -902,7 +1013,7 @@ class VetOrchestrator:
         :return: 返回函数执行结果。
         """
         response = self.safety_review.review_response(response)
-        extracted_facts = await self._extract_and_store_facts(request, response)
+        extracted_facts = await self._extract_and_store_facts(request, response) if medical else []
         response.metadata["memory_extraction"] = {
             "agent": "MemoryExtractionAgent",
             "stored_fact_count": len(extracted_facts),
@@ -974,16 +1085,8 @@ class VetOrchestrator:
             },
         )
         await self.trace_store.write_turn(request, response)
-        if request.turn_options.idempotency_key:
-            await self.memory_service.save_idempotency_response(
-                request.trusted_identity,
-                idempotency_key=request.turn_options.idempotency_key,
-                request_id=request.request_context.request_id,
-                trace_id=request.request_context.trace_id,
-                response_snapshot=response.model_dump(mode="json"),
-            )
 
-    def _chunks(self, text: str, size: int):
+    def _chunks(self, text: str, size: int) -> Iterator[str]:
         """执行 _chunks 内部辅助逻辑。
 
         :param text: 待处理文本。

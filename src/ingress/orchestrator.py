@@ -78,10 +78,10 @@ class UnavailableOrchestrator:
 _orchestrator: Orchestrator | None = None
 
 
-def set_orchestrator(orchestrator: Orchestrator) -> None:
+def set_orchestrator(orchestrator: Orchestrator | None) -> None:
     """设置全局入口编排器。
 
-    :param orchestrator: 编排器实例。
+    :param orchestrator: 编排器实例；测试或应用关闭时可传入 None 清理全局状态。
     :return: 返回函数执行结果。
     """
     global _orchestrator

@@ -93,7 +93,7 @@ class ConflictError(ApiIngressError):
 class MissingRequiredContextError(ApiIngressError):
     status_code = 422
     code = ErrorCode.missing_required_context
-    message = "Missing required vet context"
+    message = "Missing required scope assertion"
 
 
 class PayloadTooLargeError(ApiIngressError):
@@ -190,19 +190,16 @@ async def unhandled_error_handler(_request: Request, error: Exception) -> JSONRe
 
 
 def _is_missing_context_error(errors: list[dict[str, Any]]) -> bool:
-    """执行 _is_missing_context_error 内部辅助逻辑。
+    """判断请求校验错误是否属于范围声明缺失。
 
     :param errors: 参数 errors。
-    :return: 返回函数执行结果。
+    :return: 缺少 scope_assertion 或其必需字段时返回 True。
     """
-    required_fields = {"user_id", "session_id", "pet_id"}
     for item in errors:
-        loc = tuple(str(part) for part in item.get("loc", ()))
-        if "vet_context" not in loc:
+        if item.get("type") != "missing":
             continue
-        if loc[-1] in required_fields:
-            return True
-        if loc[-1] == "vet_context":
+        loc = tuple(str(part) for part in item.get("loc", ()))
+        if "scope_assertion" in loc:
             return True
     return False
 
