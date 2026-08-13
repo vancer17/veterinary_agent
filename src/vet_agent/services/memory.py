@@ -124,11 +124,14 @@ class MemoryService:
         self,
         identity: TrustedIdentity,
         states: dict[str, Any],
+        *,
+        clear_default_state: bool = False,
     ) -> None:
         """替换当前会话仍未完成的多任务问诊状态。
 
         :param identity: 可信身份信息。
         :param states: 未完成任务的活跃问诊状态集合。
+        :param clear_default_state: 是否在同一次写入中清理默认问诊状态；仅用于 __default__ 迁移到具体任务键的场景。
         :return: 返回函数执行结果。
         """
         data = self.store.load()
@@ -137,6 +140,9 @@ class MemoryService:
         session_memory = data.setdefault("sessions", {}).setdefault(identity.session_id, {"turns": []})
         session_memory["task_consultation_states"] = states
         data["pets"][identity.pet_id]["task_consultation_states"] = states
+        if clear_default_state:
+            session_memory.pop("consultation_state", None)
+            data["pets"][identity.pet_id].pop("consultation_state", None)
         self.store.save(data)
 
     async def clear_default_consultation_state(self, identity: TrustedIdentity) -> None:

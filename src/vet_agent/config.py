@@ -50,13 +50,22 @@ class Settings:
     clinical_safety_vector_min_score: float = 0.35
     database_url: str | None = None
     enable_rag_embeddings: bool = False
-    enable_llm_task_splitter: bool = True
+    task_routing_max_task_count: int = 5
+    task_routing_opa_base_url: str = "http://opa:8181/v1"
+    task_routing_opa_package_path: str = "vet_agent.task_routing"
+    task_routing_opa_rule_name: str = "decision"
+    task_routing_opa_auth_token: str | None = None
     enable_llm_semantic_extraction: bool = True
     semantic_extraction_min_confidence: float = 0.65
     consultation_max_followup_rounds: int = 2
     enable_mem0: bool = True
     mem0_base_url: str = "http://127.0.0.1:8001"
     mem0_api_key: str | None = None
+    memory_read_session_turn_limit: int = 20
+    memory_read_pet_episode_limit: int = 10
+    memory_read_semantic_limit: int = 5
+    memory_read_allow_semantic_degraded: bool = False
+    memory_prompt_max_chars: int = 5000
     api_keys: tuple[str, ...] = ()
     require_api_auth: bool = False
     idempotency_wait_seconds: float = 10.0
@@ -109,13 +118,28 @@ class Settings:
             clinical_safety_vector_min_score=float(os.getenv("CLINICAL_SAFETY_VECTOR_MIN_SCORE", "0.35")),
             database_url=os.getenv("DATABASE_URL"),
             enable_rag_embeddings=_bool_env("ENABLE_RAG_EMBEDDINGS", False),
-            enable_llm_task_splitter=_bool_env("ENABLE_LLM_TASK_SPLITTER", True),
+            task_routing_max_task_count=int(os.getenv("TASK_ROUTING_MAX_TASK_COUNT", "5")),
+            task_routing_opa_base_url=os.getenv(
+                "TASK_ROUTING_OPA_BASE_URL",
+                "http://opa:8181/v1",
+            ).strip().rstrip("/"),
+            task_routing_opa_package_path=os.getenv(
+                "TASK_ROUTING_OPA_PACKAGE_PATH",
+                "vet_agent.task_routing",
+            ).strip(),
+            task_routing_opa_rule_name=os.getenv("TASK_ROUTING_OPA_RULE_NAME", "decision").strip(),
+            task_routing_opa_auth_token=os.getenv("TASK_ROUTING_OPA_AUTH_TOKEN") or None,
             enable_llm_semantic_extraction=_bool_env("ENABLE_LLM_SEMANTIC_EXTRACTION", True),
             semantic_extraction_min_confidence=float(os.getenv("SEMANTIC_EXTRACTION_MIN_CONFIDENCE", "0.65")),
             consultation_max_followup_rounds=int(os.getenv("CONSULTATION_MAX_FOLLOWUP_ROUNDS", "2")),
             enable_mem0=_bool_env("ENABLE_MEM0", True),
             mem0_base_url=os.getenv("MEM0_BASE_URL", "http://127.0.0.1:8001").rstrip("/"),
             mem0_api_key=os.getenv("MEM0_API_KEY"),
+            memory_read_session_turn_limit=int(os.getenv("MEMORY_READ_SESSION_TURN_LIMIT", "20")),
+            memory_read_pet_episode_limit=int(os.getenv("MEMORY_READ_PET_EPISODE_LIMIT", "10")),
+            memory_read_semantic_limit=int(os.getenv("MEMORY_READ_SEMANTIC_LIMIT", "5")),
+            memory_read_allow_semantic_degraded=_bool_env("MEMORY_READ_ALLOW_SEMANTIC_DEGRADED", False),
+            memory_prompt_max_chars=int(os.getenv("MEMORY_PROMPT_MAX_CHARS", "5000")),
             api_keys=_csv_env("VET_AGENT_API_KEYS"),
             require_api_auth=_bool_env("REQUIRE_API_AUTH", False),
             idempotency_wait_seconds=float(os.getenv("IDEMPOTENCY_WAIT_SECONDS", "10")),

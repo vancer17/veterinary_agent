@@ -14,6 +14,11 @@ from .knowledge import (
     PostgresKnowledgeRepository,
     evidence_from_hits,
 )
+from .memory_read import (
+    JsonMemoryReadRepository,
+    MemoryReadRepositoryError,
+    PostgresMemoryReadRepository,
+)
 from .rules import (
     ConsultationDomainRule,
     ConsultationRuleSet,
@@ -48,7 +53,10 @@ __all__ = [
     "FileRuleRepository",
     "KnowledgeHit",
     "KnowledgeRepository",
+    "JsonMemoryReadRepository",
+    "MemoryReadRepositoryError",
     "PostgresKnowledgeRepository",
+    "PostgresMemoryReadRepository",
     "PostgresRuleRepository",
     "PostgresScopeRepository",
     "PostgresTurnExecutionRepository",

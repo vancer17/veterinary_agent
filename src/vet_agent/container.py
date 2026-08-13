@@ -31,12 +31,19 @@ from vet_agent.input_safety import (
     OpaInputSafetyPolicyClient,
     PostgresInputSafetyRepository,
 )
+from vet_agent.memory import (
+    MemoryContextBuilder,
+    MemoryReadService,
+    make_memory_projection_client,
+)
 from vet_agent.repositories import (
     FallbackKnowledgeRepository,
     FileKnowledgeRepository,
     FallbackRuleRepository,
     FileRuleRepository,
+    JsonMemoryReadRepository,
     PostgresKnowledgeRepository,
+    PostgresMemoryReadRepository,
     PostgresRuleRepository,
     PostgresScopeRepository,
     PostgresTurnExecutionRepository,
@@ -66,6 +73,14 @@ from vet_agent.services import (
     make_semantic_memory,
 )
 from vet_agent.stores import JsonDocumentStore
+from vet_agent.task_routing import (
+    OpaTaskRoutingPolicyClient,
+    PostgresTaskRoutingDomainRepository,
+    TaskRoutingDomainRepository,
+    TaskRoutingPolicyClient,
+    TaskRoutingService,
+)
+from vet_agent.agents import TaskRouterAgent
 
 
 _container_override: Container | None = None
@@ -82,6 +97,8 @@ class Container:
         clinical_safety_repository: ClinicalSafetyRepository | None = None,
         clinical_safety_policy_client: ClinicalSafetyPolicyClient | None = None,
         embedding_client: EmbeddingClient | None = None,
+        task_routing_domain_repository: TaskRoutingDomainRepository | None = None,
+        task_routing_policy_client: TaskRoutingPolicyClient | None = None,
     ) -> None:
         """组装应用运行所需的仓储、模型客户端和业务服务。
 
@@ -92,6 +109,8 @@ class Container:
         :param clinical_safety_repository: 临床安全向量仓储；仅测试或特殊嵌入场景可显式注入。
         :param clinical_safety_policy_client: 临床安全策略客户端；仅测试或特殊嵌入场景可显式注入。
         :param embedding_client: 向量化客户端；仅测试或特殊嵌入场景可显式注入。
+        :param task_routing_domain_repository: 任务路由任务域目录仓储；仅测试或特殊嵌入场景可显式注入。
+        :param task_routing_policy_client: 任务路由策略客户端；仅测试或特殊嵌入场景可显式注入。
         :return: 无返回值。
         """
         self.settings = settings
@@ -99,8 +118,24 @@ class Container:
         self.scope_service = ScopeContextService(self.scope_repository)
         self.turn_execution_gate = self._turn_execution_gate(settings, turn_execution_gate)
         self.semantic_memory = make_semantic_memory(settings)
+        self.memory_projection_client = make_memory_projection_client(settings)
+        self.memory_read_repository = (
+            PostgresMemoryReadRepository(settings.database_url)
+            if settings.database_url
+            else JsonMemoryReadRepository(JsonDocumentStore(settings.data_dir / "memory.json"))
+        )
+        self.memory_read_service = MemoryReadService(
+            settings,
+            repository=self.memory_read_repository,
+            projection_client=self.memory_projection_client,
+        )
+        self.memory_context_builder = MemoryContextBuilder(settings)
         self.memory_service = (
-            PostgresMemoryService(settings.database_url, semantic_memory=self.semantic_memory)
+            PostgresMemoryService(
+                settings.database_url,
+                memory_read_service=self.memory_read_service,
+                semantic_memory=self.semantic_memory,
+            )
             if settings.database_url
             else MemoryService(JsonDocumentStore(settings.data_dir / "memory.json"))
         )
@@ -150,6 +185,22 @@ class Container:
             self.clinical_safety_policy_client,
             thresholds=self.clinical_safety_thresholds,
         )
+        self.task_routing_domain_repository = self._task_routing_domain_repository(
+            settings,
+            task_routing_domain_repository,
+        )
+        self.task_routing_policy_client = (
+            task_routing_policy_client
+            if task_routing_policy_client is not None
+            else self._task_routing_policy_client(settings)
+        )
+        self.task_routing_service = TaskRoutingService(
+            settings,
+            domain_repository=self.task_routing_domain_repository,
+            policy_client=self.task_routing_policy_client,
+            structured_client=self.qwen_client,
+        )
+        self.task_router = TaskRouterAgent(self.task_routing_service)
         self.rule_repository = (
             FallbackRuleRepository(PostgresRuleRepository(settings.database_url), file_rule_repository)
             if settings.database_url
@@ -185,6 +236,8 @@ class Container:
             settings,
             context_provider=PetContextProvider(self.scope_service),
             memory_service=self.memory_service,
+            memory_read_service=self.memory_read_service,
+            memory_context_builder=self.memory_context_builder,
             trace_store=self.trace_store,
             knowledge_service=KnowledgeService(self.knowledge_repository),
             qwen_client=self.qwen_client,
@@ -193,6 +246,7 @@ class Container:
             clinical_safety_semantic_extractor=self.clinical_safety_semantic_extractor,
             turn_execution_gate=self.turn_execution_gate,
             input_safety_service=self.input_safety_service,
+            task_router=self.task_router,
         )
 
     @property
@@ -210,6 +264,44 @@ class Container:
             and self.clinical_safety_repository.is_ready()
             and self.clinical_safety_policy_client.is_ready()
             and self.turn_execution_gate.is_ready()
+            and self.memory_read_service.is_ready()
+            and self.task_router.is_ready()
+        )
+
+    def _task_routing_domain_repository(
+        self,
+        settings: Settings,
+        repository: TaskRoutingDomainRepository | None,
+    ) -> TaskRoutingDomainRepository:
+        """构造任务路由任务域目录仓储。
+
+        :param settings: 当前运行环境配置。
+        :param repository: 外部显式注入的任务域目录仓储。
+        :return: 返回任务路由任务域目录仓储实例。
+        :raises RuntimeError: 生产数据库未配置且未显式注入测试替身时抛出。
+        """
+        if repository is not None:
+            return repository
+        if not settings.database_url:
+            raise RuntimeError(
+                "DATABASE_URL is required for task routing domain catalog; "
+                "inject an explicit test repository for embedded tests"
+            )
+        return PostgresTaskRoutingDomainRepository(settings.database_url)
+
+    def _task_routing_policy_client(self, settings: Settings) -> TaskRoutingPolicyClient:
+        """构造任务路由策略客户端。
+
+        :param settings: 当前运行环境配置。
+        :return: 返回任务路由策略客户端。
+        """
+        return OpaTaskRoutingPolicyClient(
+            base_url=settings.task_routing_opa_base_url,
+            version="v1",
+            package_path=settings.task_routing_opa_package_path,
+            rule_name=settings.task_routing_opa_rule_name,
+            auth_token=settings.task_routing_opa_auth_token,
+            timeout_seconds=settings.request_timeout_seconds,
         )
 
     def _scope_repository(

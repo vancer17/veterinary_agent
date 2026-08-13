@@ -27,6 +27,7 @@ from .models import (
     PetReportModel,
     PetSessionBindingModel,
     RagAuditEventModel,
+    TaskRoutingDomainModel,
 )
 from .session import make_engine, make_session_factory, session_scope, sqlalchemy_url
 
@@ -51,6 +52,7 @@ __all__ = [
     "PetReportModel",
     "PetSessionBindingModel",
     "RagAuditEventModel",
+    "TaskRoutingDomainModel",
     "make_engine",
     "make_session_factory",
     "session_scope",
