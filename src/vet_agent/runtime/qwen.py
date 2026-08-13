@@ -10,11 +10,15 @@ from __future__ import annotations
 import asyncio
 import random
 import time
-from typing import Any
+from typing import Any, TypeVar
 
 import httpx
+from pydantic import BaseModel
 
 from vet_agent import Settings
+
+
+StructuredOutputT = TypeVar("StructuredOutputT", bound=BaseModel)
 
 
 class QwenClient:
@@ -79,6 +83,49 @@ class QwenClient:
                         break
             self._record_failure()
         raise RuntimeError("Qwen chat request failed") from last_error
+
+    async def chat_structured(
+        self,
+        messages: list[dict[str, str]],
+        *,
+        response_model: type[StructuredOutputT],
+        model: str | None = None,
+        temperature: float = 0.0,
+    ) -> StructuredOutputT:
+        """通过 LiteLLM response_format 执行结构化模型调用。
+
+        :param messages: OpenAI 兼容消息列表。
+        :param response_model: 用于生成 JSON Schema 与校验响应的 Pydantic 模型。
+        :param model: 模型名称；未指定时使用默认文本模型。
+        :param temperature: 采样温度。
+        :return: 返回通过 Pydantic 校验后的结构化对象。
+        """
+        if not self.available:
+            raise RuntimeError("LiteLLM proxy is not configured")
+
+        if self._circuit_open():
+            raise RuntimeError("Qwen circuit breaker is open")
+
+        model_candidates = self._model_candidates(model)
+        last_error: Exception | None = None
+        async with self._semaphore:
+            for candidate in model_candidates:
+                try:
+                    result = await self._chat_structured_with_retries(
+                        messages,
+                        response_model=response_model,
+                        model=candidate,
+                        temperature=temperature,
+                    )
+                    self._record_success()
+                    return result
+                except Exception as exc:
+                    last_error = exc
+                    if not self._retryable_exception(exc):
+                        self._record_failure()
+                        raise
+            self._record_failure()
+        raise RuntimeError("Qwen structured chat request failed") from last_error
 
     async def chat_with_images(
         self,
@@ -151,6 +198,38 @@ class QwenClient:
                 await asyncio.sleep(self._retry_delay(attempt))
         raise RuntimeError("Qwen chat retry loop exhausted") from last_error
 
+    async def _chat_structured_with_retries(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        response_model: type[StructuredOutputT],
+        model: str,
+        temperature: float,
+    ) -> StructuredOutputT:
+        """执行结构化模型调用重试流程。
+
+        :param messages: OpenAI 兼容消息列表。
+        :param response_model: Pydantic 响应模型。
+        :param model: 模型名称。
+        :param temperature: 采样温度。
+        :return: 返回通过校验的结构化对象。
+        """
+        last_error: Exception | None = None
+        for attempt in range(self.settings.qwen_max_retries + 1):
+            try:
+                return await self._send_structured_chat(
+                    messages,
+                    response_model=response_model,
+                    model=model,
+                    temperature=temperature,
+                )
+            except Exception as exc:
+                last_error = exc
+                if attempt >= self.settings.qwen_max_retries or not self._retryable_exception(exc):
+                    raise
+                await asyncio.sleep(self._retry_delay(attempt))
+        raise RuntimeError("Qwen structured chat retry loop exhausted") from last_error
+
     async def _send_chat(
         self,
         messages: list[dict[str, Any]],
@@ -184,6 +263,55 @@ class QwenClient:
             response.raise_for_status()
             data = response.json()
         return data["choices"][0]["message"]["content"]
+
+    async def _send_structured_chat(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        response_model: type[StructuredOutputT],
+        model: str,
+        temperature: float,
+    ) -> StructuredOutputT:
+        """发送带 response_format 的结构化模型请求。
+
+        :param messages: OpenAI 兼容消息列表。
+        :param response_model: Pydantic 响应模型。
+        :param model: 模型名称。
+        :param temperature: 采样温度。
+        :return: 返回通过 Pydantic 校验的结构化对象。
+        """
+        payload: dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "temperature": temperature,
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": response_model.__name__,
+                    "schema": response_model.model_json_schema(),
+                    "strict": True,
+                },
+            },
+        }
+        headers = {
+            "Authorization": f"Bearer {self.settings.litellm_api_key}",
+            "Content-Type": "application/json",
+        }
+        await self._pace()
+        async with httpx.AsyncClient(timeout=self.settings.request_timeout_seconds) as client:
+            response = await client.post(
+                f"{self.settings.litellm_base_url}/chat/completions",
+                headers=headers,
+                json=payload,
+            )
+            response.raise_for_status()
+            data = response.json()
+        content = data["choices"][0]["message"]["content"]
+        if isinstance(content, dict):
+            return response_model.model_validate(content)
+        if isinstance(content, str):
+            return response_model.model_validate_json(content)
+        raise ValueError("structured chat content must be a JSON object or JSON string")
 
     async def close(self) -> None:
         """执行 close 业务逻辑。

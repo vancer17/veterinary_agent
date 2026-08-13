@@ -22,7 +22,10 @@ ClinicalSafetyRetrievalStage = Literal[
 ClinicalSafetySemanticStage = Literal[
     "llm",
     "llm_low_confidence",
-    "rule_fallback",
+    "disabled",
+    "unavailable",
+    "failed",
+    "invalid_schema",
     "skipped",
 ]
 
@@ -96,15 +99,7 @@ class ClinicalSafetySemanticFallbackState:
         :return: 返回结构化语义回退状态。
         """
         normalized_strategy = strategy.strip() or "not_requested"
-        if normalized_strategy == "rule_fallback":
-            return cls(
-                stage="rule_fallback",
-                degraded=True,
-                reasons=cls._reasons(fallback_reason, default_reason="semantic_rule_fallback_used"),
-                confidence=confidence,
-                strategy=normalized_strategy,
-            )
-        if normalized_strategy == "llm_semantic_extractor_low_confidence":
+        if normalized_strategy == "litellm_response_format_low_confidence":
             return cls(
                 stage="llm_low_confidence",
                 degraded=True,
@@ -115,11 +110,55 @@ class ClinicalSafetySemanticFallbackState:
                 confidence=confidence,
                 strategy=normalized_strategy,
             )
-        if normalized_strategy == "llm_semantic_extractor":
+        if normalized_strategy == "litellm_response_format":
             return cls(
                 stage="llm",
                 degraded=False,
                 reasons=cls._reasons(fallback_reason),
+                confidence=confidence,
+                strategy=normalized_strategy,
+            )
+        if normalized_strategy == "semantic_extraction_disabled":
+            return cls(
+                stage="disabled",
+                degraded=True,
+                reasons=cls._reasons(
+                    fallback_reason,
+                    default_reason="llm_clinical_safety_semantic_extraction_disabled",
+                ),
+                confidence=confidence,
+                strategy=normalized_strategy,
+            )
+        if normalized_strategy == "semantic_extraction_unavailable":
+            return cls(
+                stage="unavailable",
+                degraded=True,
+                reasons=cls._reasons(
+                    fallback_reason,
+                    default_reason="llm_clinical_safety_semantic_extraction_unavailable",
+                ),
+                confidence=confidence,
+                strategy=normalized_strategy,
+            )
+        if normalized_strategy == "semantic_extraction_invalid_schema":
+            return cls(
+                stage="invalid_schema",
+                degraded=True,
+                reasons=cls._reasons(
+                    fallback_reason,
+                    default_reason="llm_clinical_safety_semantic_invalid_schema",
+                ),
+                confidence=confidence,
+                strategy=normalized_strategy,
+            )
+        if normalized_strategy == "semantic_extraction_failed":
+            return cls(
+                stage="failed",
+                degraded=True,
+                reasons=cls._reasons(
+                    fallback_reason,
+                    default_reason="llm_clinical_safety_semantic_extraction_failed",
+                ),
                 confidence=confidence,
                 strategy=normalized_strategy,
             )
