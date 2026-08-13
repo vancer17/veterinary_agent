@@ -60,9 +60,6 @@ class Settings:
     mem0_api_key: str | None = None
     api_keys: tuple[str, ...] = ()
     require_api_auth: bool = False
-    pet_authorization_mode: str = "permissive"
-    session_policy_mode: str = "permissive"
-    require_auth_user_match: bool = False
     idempotency_wait_seconds: float = 10.0
     idempotency_processing_ttl_seconds: float = 300.0
     qwen_max_concurrent_requests: int = 8
@@ -109,9 +106,6 @@ class Settings:
             mem0_api_key=os.getenv("MEM0_API_KEY"),
             api_keys=_csv_env("VET_AGENT_API_KEYS"),
             require_api_auth=_bool_env("REQUIRE_API_AUTH", False),
-            pet_authorization_mode=os.getenv("PET_AUTHORIZATION_MODE", "permissive").strip().lower(),
-            session_policy_mode=os.getenv("SESSION_POLICY_MODE", "permissive").strip().lower(),
-            require_auth_user_match=_bool_env("REQUIRE_AUTH_USER_MATCH", False),
             idempotency_wait_seconds=float(os.getenv("IDEMPOTENCY_WAIT_SECONDS", "10")),
             idempotency_processing_ttl_seconds=float(os.getenv("IDEMPOTENCY_PROCESSING_TTL_SECONDS", "300")),
             qwen_max_concurrent_requests=int(os.getenv("QWEN_MAX_CONCURRENT_REQUESTS", "8")),

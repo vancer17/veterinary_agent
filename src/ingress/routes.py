@@ -23,7 +23,8 @@ from .errors import (
     OrchestratorUnavailableError,
 )
 from .orchestrator import Orchestrator, get_orchestrator
-from vet_agent import TrustedIdentity as CoreTrustedIdentity
+from vet_agent import AuthorizedScopeContext as CoreAuthorizedScopeContext
+from vet_agent import ScopeAssertion as CoreScopeAssertion
 from vet_agent import get_container
 
 
@@ -118,8 +119,11 @@ async def _dispatch_turn(
     :return: 返回函数执行结果。
     """
     _apply_header_ids(payload, request)
-    turn_request = payload.to_agent_turn_request(source_path=request.url.path)
-    await _authorize_turn(payload, request)
+    authorized_scope_context = await _authorize_turn(payload, request)
+    turn_request = payload.to_agent_turn_request(
+        source_path=request.url.path,
+        authorized_scope_context=authorized_scope_context.model_dump(mode="json"),
+    )
 
     if not await orchestrator.is_ready():
         raise OrchestratorUnavailableError(
@@ -273,24 +277,22 @@ def _header_value(request: Request, name: str) -> str | None:
     return None
 
 
-async def _authorize_turn(payload: IngressRequest, request: Request) -> None:
+async def _authorize_turn(payload: IngressRequest, request: Request) -> CoreAuthorizedScopeContext:
     """执行内部授权逻辑。
 
     :param payload: 请求载荷。
     :param request: 请求对象。
-    :return: 返回函数执行结果。
+    :return: 返回入口授权后生成的内部范围上下文快照。
     """
     container = get_container()
     principal = container.access_control.authenticate(request.headers)
-    await container.access_control.authorize(
-        CoreTrustedIdentity(
-            user_id=payload.vet_context.user_id,
-            session_id=payload.vet_context.session_id,
-            pet_id=payload.vet_context.pet_id,
-        ),
+    scope_assertion = CoreScopeAssertion.model_validate(payload.scope_assertion.model_dump(mode="json"))
+    scope_context = await container.access_control.authorize(
+        scope_assertion,
         pet_info=payload.vet_context.pet_info,
         principal=principal,
     )
+    return scope_context.to_authorized_snapshot()
 
 
 def _ready_checks(orchestrator_ready: bool) -> dict[str, bool]:

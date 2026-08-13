@@ -6,6 +6,9 @@
 
 
 
+from fastapi import FastAPI
+
+from .dto import AgentTurnRequest as IngressAgentTurnRequest
 from .errors import (
     ApiIngressError,
     ConflictError,
@@ -28,6 +31,7 @@ __all__ = [
     "ErrorResponse",
     "ForbiddenError",
     "InvalidRequestError",
+    "IngressAgentTurnRequest",
     "MissingRequiredContextError",
     "Orchestrator",
     "OrchestratorTimeoutError",
@@ -40,7 +44,7 @@ __all__ = [
 ]
 
 
-def create_app():
+def create_app() -> FastAPI:
     """创建并配置 FastAPI 应用实例。
 
     :return: 返回函数执行结果。
