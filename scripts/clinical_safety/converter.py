@@ -20,7 +20,6 @@ from vet_agent.clinical_safety import (
     ClinicalSafetyAssetType,
     ClinicalSafetyChunk,
     SafetySeverity,
-    derive_clinical_safety_code,
 )
 
 
@@ -163,14 +162,17 @@ def build_standard_safety_documents(
     :param review_status: 生成资产的默认审核状态。
     :return: 返回资产文档与向量片段文档。
     """
+    generated_at = datetime.now(UTC)
+    published_at = generated_at if review_status == "approved" else None
     assets = convert_safety_reference_payload(
         payload,
         source_file=source_file,
         version=version,
         review_status=review_status,
+        published_at=published_at,
     )
     chunks = build_safety_chunks(assets)
-    generated_at = datetime.now(UTC).isoformat()
+    generated_at_text = generated_at.isoformat()
     source_meta = dict(payload.get("_meta") or {})
     asset_document = {
         "_meta": {
@@ -180,7 +182,7 @@ def build_standard_safety_documents(
             "source_file": source_file,
             "source_meta": source_meta,
             "asset_count": len(assets),
-            "generated_at": generated_at,
+            "generated_at": generated_at_text,
         },
         "assets": [asset.to_dict() for asset in assets],
     }
@@ -192,7 +194,7 @@ def build_standard_safety_documents(
             "source_file": source_file,
             "asset_count": len(assets),
             "chunk_count": len(chunks),
-            "generated_at": generated_at,
+            "generated_at": generated_at_text,
         },
         "chunks": [chunk.to_dict() for chunk in chunks],
     }
@@ -205,6 +207,7 @@ def convert_safety_reference_payload(
     source_file: str,
     version: str = "v1",
     review_status: str = "pending",
+    published_at: datetime | None = None,
 ) -> list[ClinicalSafetyAsset]:
     """将原始安全参考 JSON 转换为标准临床安全资产列表。
 
@@ -212,6 +215,7 @@ def convert_safety_reference_payload(
     :param source_file: 原始参考文件路径。
     :param version: 生成资产版本。
     :param review_status: 生成资产的默认审核状态。
+    :param published_at: 发布态资产的发布时间；草稿资产保持为空。
     :return: 返回标准临床安全资产列表。
     """
     assets: list[ClinicalSafetyAsset] = []
@@ -230,6 +234,7 @@ def convert_safety_reference_payload(
                     source_file=source_file,
                     version=version,
                     review_status=review_status,
+                    published_at=published_at,
                 )
             )
     return assets
@@ -255,6 +260,7 @@ def _convert_item(
     source_file: str,
     version: str,
     review_status: str,
+    published_at: datetime | None,
 ) -> ClinicalSafetyAsset:
     """转换单条原始临床安全条目。
 
@@ -264,6 +270,7 @@ def _convert_item(
     :param source_file: 原始参考文件路径。
     :param version: 生成资产版本。
     :param review_status: 生成资产的默认审核状态。
+    :param published_at: 发布态资产的发布时间。
     :return: 返回标准临床安全资产。
     """
     item_text = _clean_text(raw_item.get("item"))
@@ -294,17 +301,18 @@ def _convert_item(
     required_context = _required_context(species_scope, sex_scope, age_scope, symptoms)
     decision_hints = _decision_hints(asset_type, action_class)
     asset_id = _asset_id(asset_type, item_text, section, index)
+    canonical_name = _canonical_name(item_text, index)
     return ClinicalSafetyAsset(
         asset_id=asset_id,
         asset_type=asset_type,
-        canonical_name=_canonical_name(item_text, index),
+        canonical_name=canonical_name,
         category=category,
         species_scope=species_scope,
         sex_scope=sex_scope,
         age_scope=age_scope,
         severity=severity,
         action_class=action_class,
-        code=derive_clinical_safety_code(asset_type, _canonical_name(item_text, index)),
+        code=_asset_code(asset_type, canonical_name, section, index),
         aliases=aliases,
         carriers=carriers,
         user_expressions=user_expressions,
@@ -321,6 +329,8 @@ def _convert_item(
         },
         review_status=review_status,
         version=version,
+        enabled=review_status == "approved",
+        published_at=published_at if review_status == "approved" else None,
         raw_text={
             "item": item_text,
             "aliases": aliases_text,
@@ -345,7 +355,7 @@ def _chunks_for_asset(asset: ClinicalSafetyAsset) -> list[ClinicalSafetyChunk]:
     """
     base_metadata = {
         "asset_id": asset.asset_id,
-        "code": asset.resolved_code(),
+        "code": asset.code,
         "asset_type": asset.asset_type,
         "canonical_name": asset.canonical_name,
         "category": asset.category,
@@ -383,6 +393,8 @@ def _chunks_for_asset(asset: ClinicalSafetyAsset) -> list[ClinicalSafetyChunk]:
             metadata={**base_metadata, "chunk_role": "候选召回"},
             review_status=asset.review_status,
             version=asset.version,
+            enabled=asset.enabled,
+            content_hash=_content_hash(recognition_text),
         ),
         ClinicalSafetyChunk(
             chunk_id=f"{asset.asset_id}.clinical_risk.{asset.version}",
@@ -393,6 +405,8 @@ def _chunks_for_asset(asset: ClinicalSafetyAsset) -> list[ClinicalSafetyChunk]:
             metadata={**base_metadata, "chunk_role": "风险解释"},
             review_status=asset.review_status,
             version=asset.version,
+            enabled=asset.enabled,
+            content_hash=_content_hash(clinical_text),
         ),
         ClinicalSafetyChunk(
             chunk_id=f"{asset.asset_id}.triage_action.{asset.version}",
@@ -403,8 +417,40 @@ def _chunks_for_asset(asset: ClinicalSafetyAsset) -> list[ClinicalSafetyChunk]:
             metadata={**base_metadata, "chunk_role": "处置口径"},
             review_status=asset.review_status,
             version=asset.version,
+            enabled=asset.enabled,
+            content_hash=_content_hash(triage_text),
         ),
     ]
+
+
+def _asset_code(
+    asset_type: ClinicalSafetyAssetType,
+    canonical_name: str,
+    section: str,
+    index: int,
+) -> str:
+    """生成离线资产治理阶段使用的稳定安全信号编码。
+
+    :param asset_type: 标准安全资产类型。
+    :param canonical_name: 资产规范名称。
+    :param section: 原始条目所属顶层分组。
+    :param index: 条目在分组中的序号。
+    :return: 返回离线生成并等待审核发布的安全信号编码。
+    """
+    curated_codes: dict[str, str] = {
+        "木糖醇": "TOXIC_XYLITOL",
+        "尿频尿少但仍能尿一点 / 疑似部分尿道梗阻": "PARTIAL_URINARY_OBSTRUCTION_RISK",
+        "老年猫:消瘦 + 食欲不减反而亢进 + 多饮多尿": "SENIOR_CAT_POLYDIPSIA_WEIGHT_LOSS_RISK",
+        "胃扩张扭转": "GDV_RISK_PATTERN",
+        "舌/牙龈发绀发紫": "CYANOSIS_RISK_PATTERN",
+    }
+    if canonical_name in curated_codes:
+        return curated_codes[canonical_name]
+    if asset_type in {"toxin", "human_drug", "plant_toxin", "chemical_toxin"}:
+        return f"TOXIC_SUBSTANCE_{index:03d}"
+    if asset_type == "emergency_red_flag":
+        return f"EMERGENCY_RED_FLAG_{index:03d}"
+    return f"DANGER_PATTERN_{section.upper()}_{index:03d}"
 
 
 def _asset_type(section: str, category: str, item_text: str) -> ClinicalSafetyAssetType:
@@ -892,6 +938,15 @@ def _join_embedding_text(values: Iterable[str]) -> str:
     :return: 返回去重拼接后的向量化文本。
     """
     return "；".join(_unique_terms(values))
+
+
+def _content_hash(text: str) -> str:
+    """生成临床安全 chunk 向量化文本内容哈希。
+
+    :param text: 待写入 chunk 的向量化文本。
+    :return: 返回 SHA-256 十六进制摘要。
+    """
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _clean_text(value: Any) -> str:

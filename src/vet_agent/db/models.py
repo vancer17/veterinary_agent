@@ -140,6 +140,42 @@ class KnowledgeChunkModel(Base):
 
 class ClinicalSafetyAssetModel(Base):
     __tablename__ = "clinical_safety_assets"
+    __table_args__ = (
+        CheckConstraint("asset_id <> ''", name="ck_clinical_safety_assets_asset_id_nonempty"),
+        CheckConstraint(
+            "(review_status <> 'approved') OR btrim(code) <> ''",
+            name="ck_clinical_safety_assets_code_nonempty",
+        ),
+        CheckConstraint(
+            "(review_status <> 'approved') OR "
+            "(code <> 'CLINICAL_SAFETY_UNKNOWN' AND code !~ '^CLINICAL_SAFETY_[0-9_]+$')",
+            name="ck_clinical_safety_assets_code_not_generated_fallback",
+        ),
+        CheckConstraint(
+            "asset_type IN ('toxin', 'human_drug', 'plant_toxin', 'chemical_toxin', 'emergency_red_flag', 'danger_pattern')",
+            name="ck_clinical_safety_assets_asset_type",
+        ),
+        CheckConstraint(
+            "severity IN ('info', 'caution', 'urgent', 'blocked')",
+            name="ck_clinical_safety_assets_severity",
+        ),
+        CheckConstraint(
+            "action_class IN ('emergency', 'same_day_visit', 'urgent_visit', 'safety_warning')",
+            name="ck_clinical_safety_assets_action_class",
+        ),
+        CheckConstraint(
+            "review_status IN ('pending', 'approved', 'rejected', 'quarantined')",
+            name="ck_clinical_safety_assets_review_status",
+        ),
+        CheckConstraint(
+            "(review_status = 'approved' AND enabled IS TRUE AND published_at IS NOT NULL) OR "
+            "(review_status <> 'approved' AND enabled IS FALSE AND published_at IS NULL)",
+            name="ck_clinical_safety_assets_publish_state",
+        ),
+        {
+            "comment": "临床安全资产表，用于保存经资产治理域审核发布的安全候选资产；运行时不得根据名称补齐编码或枚举。",
+        },
+    )
 
     asset_id: Mapped[str] = mapped_column(Text, primary_key=True, comment="临床安全资产稳定标识。")
     code: Mapped[str] = mapped_column(Text, nullable=False, comment="对外安全信号编码，用于审计、策略和响应输出。")
@@ -149,8 +185,8 @@ class ClinicalSafetyAssetModel(Base):
     species_scope: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list, server_default="{}", comment="资产适用物种范围。")
     sex_scope: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list, server_default="{}", comment="资产适用性别范围。")
     age_scope: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list, server_default="{}", comment="资产适用年龄阶段范围。")
-    severity: Mapped[str] = mapped_column(Text, nullable=False, default="caution", server_default="caution", comment="资产默认安全严重级别。")
-    action_class: Mapped[str] = mapped_column(Text, nullable=False, default="safety_warning", server_default="safety_warning", comment="资产默认分诊动作分类。")
+    severity: Mapped[str] = mapped_column(Text, nullable=False, comment="资产默认安全严重级别。")
+    action_class: Mapped[str] = mapped_column(Text, nullable=False, comment="资产默认分诊动作分类。")
     aliases: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list, server_default="{}", comment="资产别名、英文名、商品名或俗称。")
     carriers: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list, server_default="{}", comment="风险载体或暴露来源列表。")
     user_expressions: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list, server_default="{}", comment="用户常见表达列表，仅用于资产治理和向量文本生成。")
@@ -169,8 +205,8 @@ class ClinicalSafetyAssetModel(Base):
     source: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}", comment="资料来源追踪信息。")
     raw_text: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}", comment="原始临床安全文本字段备份。")
     version: Mapped[str] = mapped_column(Text, nullable=False, default="v1", server_default="v1", comment="资产版本。")
-    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true", comment="资产是否允许运行时使用。")
-    review_status: Mapped[str] = mapped_column(Text, nullable=False, default="approved", server_default="approved", comment="资产审核状态，线上召回仅使用 approved。")
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false", comment="资产是否允许运行时使用；发布动作必须显式置为 true。")
+    review_status: Mapped[str] = mapped_column(Text, nullable=False, default="pending", server_default="pending", comment="资产审核状态，线上召回仅使用 approved。")
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), comment="资产发布时间。")
     metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, nullable=False, default=dict, server_default="{}", comment="资产附加审计元数据。")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), comment="资产创建时间。")
@@ -179,6 +215,26 @@ class ClinicalSafetyAssetModel(Base):
 
 class ClinicalSafetyChunkModel(Base):
     __tablename__ = "clinical_safety_chunks"
+    __table_args__ = (
+        CheckConstraint("chunk_id <> ''", name="ck_clinical_safety_chunks_chunk_id_nonempty"),
+        CheckConstraint(
+            "chunk_type IN ('recognition', 'clinical_risk', 'triage_action')",
+            name="ck_clinical_safety_chunks_chunk_type",
+        ),
+        CheckConstraint(
+            "review_status IN ('pending', 'approved', 'rejected', 'quarantined')",
+            name="ck_clinical_safety_chunks_review_status",
+        ),
+        CheckConstraint(
+            "(review_status = 'approved' AND enabled IS TRUE AND embedding IS NOT NULL "
+            "AND embedding_model IS NOT NULL AND embedding_dimension IS NOT NULL AND btrim(content_hash) <> '') OR "
+            "(review_status <> 'approved' AND enabled IS FALSE)",
+            name="ck_clinical_safety_chunks_publish_state",
+        ),
+        {
+            "comment": "临床安全向量 chunk 表，作为线上临床安全候选召回的 pgvector 主路径；发布态必须已完成向量化。",
+        },
+    )
 
     chunk_id: Mapped[str] = mapped_column(Text, primary_key=True, comment="临床安全向量 chunk 稳定标识。")
     asset_id: Mapped[str] = mapped_column(
@@ -195,8 +251,8 @@ class ClinicalSafetyChunkModel(Base):
     embedding_dimension: Mapped[int | None] = mapped_column(Integer, comment="embedding 向量维度。")
     content_hash: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="", comment="embedding_text 的内容哈希。")
     version: Mapped[str] = mapped_column(Text, nullable=False, default="v1", server_default="v1", comment="chunk 版本。")
-    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true", comment="chunk 是否允许运行时召回。")
-    review_status: Mapped[str] = mapped_column(Text, nullable=False, default="approved", server_default="approved", comment="chunk 审核状态，线上召回仅使用 approved。")
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false", comment="chunk 是否允许运行时召回；发布动作必须显式置为 true。")
+    review_status: Mapped[str] = mapped_column(Text, nullable=False, default="pending", server_default="pending", comment="chunk 审核状态，线上召回仅使用 approved。")
     metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, nullable=False, default=dict, server_default="{}", comment="chunk 附加审计元数据。")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), comment="chunk 创建时间。")
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), comment="chunk 最近更新时间。")

@@ -364,7 +364,7 @@ def _candidate_payload(candidate: ClinicalSafetyCandidate) -> dict[str, Any]:
     asset = candidate.asset
     return {
         "asset_id": asset.asset_id,
-        "code": asset.resolved_code(),
+        "code": asset.code,
         "asset_type": asset.asset_type,
         "canonical_name": asset.canonical_name,
         "species_scope": list(asset.species_scope),

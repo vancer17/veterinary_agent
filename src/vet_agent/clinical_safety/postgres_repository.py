@@ -200,6 +200,7 @@ class PostgresClinicalSafetyRepository(ClinicalSafetyVectorRepository):
         return (
             ClinicalSafetyAssetModel.enabled.is_(True),
             ClinicalSafetyAssetModel.review_status == PUBLISHED_REVIEW_STATUS,
+            ClinicalSafetyAssetModel.published_at.is_not(None),
         )
 
     def _published_chunk_filters(self) -> tuple[ColumnElement[bool], ...]:
@@ -210,6 +211,10 @@ class PostgresClinicalSafetyRepository(ClinicalSafetyVectorRepository):
         return (
             ClinicalSafetyChunkModel.enabled.is_(True),
             ClinicalSafetyChunkModel.review_status == PUBLISHED_REVIEW_STATUS,
+            ClinicalSafetyChunkModel.embedding.is_not(None),
+            ClinicalSafetyChunkModel.embedding_model.is_not(None),
+            ClinicalSafetyChunkModel.embedding_dimension.is_not(None),
+            ClinicalSafetyChunkModel.content_hash != "",
         )
 
     def _asset_from_row(self, row: ClinicalSafetyAssetModel) -> ClinicalSafetyAsset:
@@ -241,6 +246,8 @@ class PostgresClinicalSafetyRepository(ClinicalSafetyVectorRepository):
             source=self._dict_of_text(row.source or {}),
             review_status=row.review_status,
             version=row.version,
+            enabled=row.enabled,
+            published_at=row.published_at,
             raw_text=self._dict_of_text(row.raw_text or {}),
             metadata=dict(row.metadata_json or {}),
         )
@@ -281,7 +288,7 @@ class PostgresClinicalSafetyRepository(ClinicalSafetyVectorRepository):
             "danger_pattern",
         }:
             return cast(ClinicalSafetyAssetType, value)
-        return "danger_pattern"
+        raise ValueError(f"invalid clinical safety asset_type from database: {value}")
 
     def _action_class(self, value: str) -> ClinicalSafetyActionClass:
         """校验数据库中的安全动作分类。
@@ -291,7 +298,7 @@ class PostgresClinicalSafetyRepository(ClinicalSafetyVectorRepository):
         """
         if value in {"emergency", "same_day_visit", "urgent_visit", "safety_warning"}:
             return cast(ClinicalSafetyActionClass, value)
-        return "safety_warning"
+        raise ValueError(f"invalid clinical safety action_class from database: {value}")
 
     def _chunk_type(self, value: str) -> ClinicalSafetyChunkType:
         """校验数据库中的安全 chunk 类型。
@@ -301,7 +308,7 @@ class PostgresClinicalSafetyRepository(ClinicalSafetyVectorRepository):
         """
         if value in {"recognition", "clinical_risk", "triage_action"}:
             return cast(ClinicalSafetyChunkType, value)
-        return "recognition"
+        raise ValueError(f"invalid clinical safety chunk_type from database: {value}")
 
     def _severity(self, value: str) -> SafetySeverity:
         """校验数据库中的安全严重级别。
@@ -311,7 +318,7 @@ class PostgresClinicalSafetyRepository(ClinicalSafetyVectorRepository):
         """
         if value in {"info", "caution", "urgent", "blocked"}:
             return cast(SafetySeverity, value)
-        return "caution"
+        raise ValueError(f"invalid clinical safety severity from database: {value}")
 
     def _dict_of_text(self, value: dict[str, Any]) -> dict[str, str]:
         """将数据库 JSON 对象转换为字符串字典。

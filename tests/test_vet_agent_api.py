@@ -88,7 +88,7 @@ class StaticClinicalSafetyPolicyClient(ClinicalSafetyPolicyClient):
         """
         signals = tuple(
             SafetySignal(
-                code=candidate.asset.resolved_code(),
+                code=candidate.asset.code,
                 severity=(
                     "urgent"
                     if candidate.asset.severity == "urgent"

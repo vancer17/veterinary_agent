@@ -65,7 +65,7 @@ class StaticClinicalSafetyPolicyClient(ClinicalSafetyPolicyClient):
             )
         signals = tuple(
             SafetySignal(
-                code=candidate.asset.resolved_code(),
+                code=candidate.asset.code,
                 severity=self._severity(candidate, policy_input),
                 message=candidate.asset.triage_message
                 or candidate.asset.clinical_risk_summary
@@ -95,7 +95,7 @@ class StaticClinicalSafetyPolicyClient(ClinicalSafetyPolicyClient):
             action=action,
             allow=action != ClinicalSafetyPolicyAction.BLOCK,
             message="测试临床安全策略完成结构化候选裁决。",
-            reasons=tuple(candidate.asset.resolved_code() for candidate in candidates),
+            reasons=tuple(candidate.asset.code for candidate in candidates),
             signals=signals,
             metadata={"policy_backend": "static_test"},
         )
@@ -369,6 +369,7 @@ def _danger_pattern_asset() -> ClinicalSafetyAsset:
         age_scope=(),
         severity="caution",
         action_class="safety_warning",
+        code="CYANOSIS_RISK_PATTERN",
         aliases=("皮肤发紫",),
         carriers=(),
         user_expressions=(),
