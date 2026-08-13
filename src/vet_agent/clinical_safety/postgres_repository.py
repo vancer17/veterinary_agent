@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Sequence, cast
 
-from sqlalchemy import ColumnElement, func, literal, or_, select
+from sqlalchemy import ColumnElement, literal, select
 from sqlalchemy.exc import SQLAlchemyError
 
 from vet_agent.db import (
@@ -26,10 +26,10 @@ from .models import (
     ClinicalSafetyChunkType,
     SafetySeverity,
 )
-from .repository import ClinicalSafetyRepository, PUBLISHED_REVIEW_STATUS
+from .repository import ClinicalSafetyVectorRepository, PUBLISHED_REVIEW_STATUS
 
 
-class PostgresClinicalSafetyRepository:
+class PostgresClinicalSafetyRepository(ClinicalSafetyVectorRepository):
     """从独立临床安全表读取已发布资产，并执行 pgvector 相似度召回。"""
 
     def __init__(self, database_url: str) -> None:
@@ -166,58 +166,6 @@ class PostgresClinicalSafetyRepository:
             )
             for chunk, score_value, distance_value in rows
             if float(score_value or 0.0) >= min_score
-        ]
-
-    def retrieve_text_chunk_hits(
-        self,
-        query: str,
-        *,
-        chunk_types: tuple[ClinicalSafetyChunkType, ...],
-        limit: int,
-    ) -> list[ClinicalSafetyChunkHit]:
-        """在 embedding 不可用时通过 PostgreSQL trigram 执行保守文本召回。
-
-        :param query: 用户输入与可信上下文组成的查询文本。
-        :param chunk_types: 允许参与召回的 chunk 类型。
-        :param limit: 返回 chunk 命中数量上限。
-        :return: 返回按文本相关度排序的 chunk 命中列表。
-        """
-        if not query.strip() or not chunk_types or limit <= 0:
-            return []
-        query_literal = literal(query)
-        title_similarity = func.similarity(func.lower(ClinicalSafetyChunkModel.title), func.lower(query_literal))
-        text_similarity = func.similarity(func.lower(ClinicalSafetyChunkModel.embedding_text), func.lower(query_literal))
-        score = func.greatest(title_similarity, text_similarity).label("score")
-        statement = (
-            select(ClinicalSafetyChunkModel, score)
-            .join(
-                ClinicalSafetyAssetModel,
-                ClinicalSafetyAssetModel.asset_id == ClinicalSafetyChunkModel.asset_id,
-            )
-            .where(
-                *self._published_chunk_filters(),
-                *self._published_asset_filters(),
-                ClinicalSafetyChunkModel.chunk_type.in_(chunk_types),
-                or_(
-                    func.lower(ClinicalSafetyChunkModel.title).like(func.lower(literal(f"%{query}%"))),
-                    func.lower(ClinicalSafetyChunkModel.embedding_text).like(func.lower(literal(f"%{query}%"))),
-                    title_similarity > 0.05,
-                    text_similarity > 0.05,
-                ),
-            )
-            .order_by(score.desc(), ClinicalSafetyChunkModel.chunk_id)
-            .limit(limit)
-        )
-        with self.session_factory() as session:
-            rows = session.execute(statement).all()
-        return [
-            ClinicalSafetyChunkHit(
-                chunk=self._chunk_from_row(chunk),
-                score=float(score_value or 0.0),
-                score_type="lexical_overlap",
-                retrieval_source="clinical_safety_postgres_text",
-            )
-            for chunk, score_value in rows
         ]
 
     def is_ready(self) -> bool:

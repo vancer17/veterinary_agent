@@ -44,8 +44,9 @@ from .semantic_extractor import (
 from .postgres_repository import PostgresClinicalSafetyRepository
 from .repository import (
     PUBLISHED_REVIEW_STATUS,
+    ClinicalSafetyAssetRepository,
     ClinicalSafetyRepository,
-    FallbackClinicalSafetyRepository,
+    ClinicalSafetyVectorRepository,
     FileClinicalSafetyRepository,
 )
 from .retriever import ClinicalSafetyRetriever
@@ -81,8 +82,9 @@ __all__ = [
     "ClinicalSafetyTemporalState",
     "ClinicalSafetyThresholds",
     "ClinicalSafetyRepository",
+    "ClinicalSafetyAssetRepository",
+    "ClinicalSafetyVectorRepository",
     "ClinicalSafetyRetriever",
-    "FallbackClinicalSafetyRepository",
     "FileClinicalSafetyRepository",
     "PostgresClinicalSafetyRepository",
     "SafetySeverity",

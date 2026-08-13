@@ -141,63 +141,65 @@ class KnowledgeChunkModel(Base):
 class ClinicalSafetyAssetModel(Base):
     __tablename__ = "clinical_safety_assets"
 
-    asset_id: Mapped[str] = mapped_column(Text, primary_key=True)
-    code: Mapped[str] = mapped_column(Text, nullable=False)
-    asset_type: Mapped[str] = mapped_column(Text, nullable=False)
-    canonical_name: Mapped[str] = mapped_column(Text, nullable=False)
-    category: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
-    species_scope: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list, server_default="{}")
-    sex_scope: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list, server_default="{}")
-    age_scope: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list, server_default="{}")
-    severity: Mapped[str] = mapped_column(Text, nullable=False, default="caution", server_default="caution")
-    action_class: Mapped[str] = mapped_column(Text, nullable=False, default="safety_warning", server_default="safety_warning")
-    aliases: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list, server_default="{}")
-    carriers: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list, server_default="{}")
-    user_expressions: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list, server_default="{}")
-    symptoms: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list, server_default="{}")
+    asset_id: Mapped[str] = mapped_column(Text, primary_key=True, comment="临床安全资产稳定标识。")
+    code: Mapped[str] = mapped_column(Text, nullable=False, comment="对外安全信号编码，用于审计、策略和响应输出。")
+    asset_type: Mapped[str] = mapped_column(Text, nullable=False, comment="安全资产类型，例如毒物、人用药、急症红旗或隐匿风险模式。")
+    canonical_name: Mapped[str] = mapped_column(Text, nullable=False, comment="资产规范名称。")
+    category: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="", comment="资产所属临床分类或原始资料分类。")
+    species_scope: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list, server_default="{}", comment="资产适用物种范围。")
+    sex_scope: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list, server_default="{}", comment="资产适用性别范围。")
+    age_scope: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list, server_default="{}", comment="资产适用年龄阶段范围。")
+    severity: Mapped[str] = mapped_column(Text, nullable=False, default="caution", server_default="caution", comment="资产默认安全严重级别。")
+    action_class: Mapped[str] = mapped_column(Text, nullable=False, default="safety_warning", server_default="safety_warning", comment="资产默认分诊动作分类。")
+    aliases: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list, server_default="{}", comment="资产别名、英文名、商品名或俗称。")
+    carriers: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list, server_default="{}", comment="风险载体或暴露来源列表。")
+    user_expressions: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list, server_default="{}", comment="用户常见表达列表，仅用于资产治理和向量文本生成。")
+    symptoms: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list, server_default="{}", comment="资产相关症状或风险线索。")
     recognition_phrases: Mapped[list[str]] = mapped_column(
         ARRAY(Text),
         nullable=False,
         default=list,
         server_default="{}",
+        comment="资产召回短语集合，仅用于离线生成 embedding 文本，不作为运行时关键词规则。",
     )
-    required_context: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")
-    decision_hints: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")
-    clinical_risk_summary: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
-    triage_message: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
-    source: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")
-    raw_text: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")
-    version: Mapped[str] = mapped_column(Text, nullable=False, default="v1", server_default="v1")
-    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
-    review_status: Mapped[str] = mapped_column(Text, nullable=False, default="approved", server_default="approved")
-    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, nullable=False, default=dict, server_default="{}")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    required_context: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}", comment="资产需要的结构化上下文提示。")
+    decision_hints: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}", comment="不同语义场景下的策略动作提示。")
+    clinical_risk_summary: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="", comment="临床风险摘要。")
+    triage_message: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="", comment="对外分诊处置口径。")
+    source: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}", comment="资料来源追踪信息。")
+    raw_text: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}", comment="原始临床安全文本字段备份。")
+    version: Mapped[str] = mapped_column(Text, nullable=False, default="v1", server_default="v1", comment="资产版本。")
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true", comment="资产是否允许运行时使用。")
+    review_status: Mapped[str] = mapped_column(Text, nullable=False, default="approved", server_default="approved", comment="资产审核状态，线上召回仅使用 approved。")
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), comment="资产发布时间。")
+    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, nullable=False, default=dict, server_default="{}", comment="资产附加审计元数据。")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), comment="资产创建时间。")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), comment="资产最近更新时间。")
 
 
 class ClinicalSafetyChunkModel(Base):
     __tablename__ = "clinical_safety_chunks"
 
-    chunk_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    chunk_id: Mapped[str] = mapped_column(Text, primary_key=True, comment="临床安全向量 chunk 稳定标识。")
     asset_id: Mapped[str] = mapped_column(
         Text,
         ForeignKey("clinical_safety_assets.asset_id", ondelete="CASCADE"),
         nullable=False,
+        comment="关联的临床安全资产标识。",
     )
-    chunk_type: Mapped[str] = mapped_column(Text, nullable=False)
-    title: Mapped[str] = mapped_column(Text, nullable=False)
-    embedding_text: Mapped[str] = mapped_column(Text, nullable=False)
-    embedding: Mapped[list[float] | None] = mapped_column(Vector(1024), nullable=True)
-    embedding_model: Mapped[str | None] = mapped_column(Text)
-    embedding_dimension: Mapped[int | None] = mapped_column(Integer)
-    content_hash: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
-    version: Mapped[str] = mapped_column(Text, nullable=False, default="v1", server_default="v1")
-    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
-    review_status: Mapped[str] = mapped_column(Text, nullable=False, default="approved", server_default="approved")
-    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, nullable=False, default=dict, server_default="{}")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    chunk_type: Mapped[str] = mapped_column(Text, nullable=False, comment="chunk 用途类型，例如识别、临床风险或分诊动作。")
+    title: Mapped[str] = mapped_column(Text, nullable=False, comment="chunk 标题。")
+    embedding_text: Mapped[str] = mapped_column(Text, nullable=False, comment="生成向量使用的标准文本。")
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(1024), nullable=True, comment="pgvector embedding 向量，线上候选召回主路径。")
+    embedding_model: Mapped[str | None] = mapped_column(Text, comment="生成 embedding 使用的模型名称。")
+    embedding_dimension: Mapped[int | None] = mapped_column(Integer, comment="embedding 向量维度。")
+    content_hash: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="", comment="embedding_text 的内容哈希。")
+    version: Mapped[str] = mapped_column(Text, nullable=False, default="v1", server_default="v1", comment="chunk 版本。")
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true", comment="chunk 是否允许运行时召回。")
+    review_status: Mapped[str] = mapped_column(Text, nullable=False, default="approved", server_default="approved", comment="chunk 审核状态，线上召回仅使用 approved。")
+    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, nullable=False, default=dict, server_default="{}", comment="chunk 附加审计元数据。")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), comment="chunk 创建时间。")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), comment="chunk 最近更新时间。")
 
 
 class KnowledgeIngestionBatchModel(Base):

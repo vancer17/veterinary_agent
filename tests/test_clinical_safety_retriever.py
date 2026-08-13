@@ -38,6 +38,27 @@ class StaticEmbeddingClient:
         return [0.2, 0.8]
 
 
+class UnavailableEmbeddingClient:
+    """提供不可用 embedding 状态的测试客户端。"""
+
+    @property
+    def available(self) -> bool:
+        """声明测试 embedding 客户端不可用。
+
+        :return: 始终返回 False。
+        """
+        return False
+
+    def embed(self, text: str) -> list[float]:
+        """防止不可用客户端被错误调用。
+
+        :param text: 待向量化的查询文本。
+        :return: 本路径不应返回向量。
+        :raises AssertionError: 该方法被调用时表示召回器未遵循可用性门禁。
+        """
+        raise AssertionError(f"不可用 embedding 客户端不应被调用：{text}")
+
+
 class VectorOnlyClinicalSafetyRepository:
     """提供固定向量命中的内存临床安全仓储。"""
 
@@ -51,7 +72,6 @@ class VectorOnlyClinicalSafetyRepository:
         self.asset = asset
         self.chunk = chunk
         self.vector_calls = 0
-        self.text_calls = 0
 
     def assets(self, *, published_only: bool = True) -> list[ClinicalSafetyAsset]:
         """读取测试资产。
@@ -141,26 +161,6 @@ class VectorOnlyClinicalSafetyRepository:
             )
         ]
 
-    def retrieve_text_chunk_hits(
-        self,
-        query: str,
-        *,
-        chunk_types: tuple[ClinicalSafetyChunkType, ...],
-        limit: int,
-    ) -> list[ClinicalSafetyChunkHit]:
-        """记录文本回退调用；本测试不应走到该分支。
-
-        :param query: 原始查询文本。
-        :param chunk_types: 允许参与召回的 chunk 类型。
-        :param limit: 返回 chunk 命中数量上限。
-        :return: 始终返回空列表。
-        """
-        self.text_calls += 1
-        assert query
-        assert chunk_types
-        assert limit > 0
-        return []
-
     def is_ready(self) -> bool:
         """声明测试仓储始终可用。
 
@@ -205,8 +205,54 @@ def test_retriever_prefers_pgvector_hits_when_embedding_is_available() -> None:
     candidates = retriever.retrieve("猫牙龈发紫，呼吸很快。")
 
     assert repository.vector_calls == 1
-    assert repository.text_calls == 0
     assert len(candidates) == 1
     assert candidates[0].asset.resolved_code() == "CYANOSIS_RISK_PATTERN"
     assert candidates[0].score_type == "cosine_similarity"
     assert candidates[0].retrieval_source == "clinical_safety_pgvector"
+
+
+def test_retriever_returns_empty_when_embedding_is_unavailable() -> None:
+    """验证 embedding 不可用时不会回退到文本、文件或资产短语召回。
+
+    :return: 无返回值；断言通过表示候选召回遵循向量主路径 Fail Fast 语义。
+    """
+    asset = ClinicalSafetyAsset(
+        asset_id="safety_emergency_cyanosis",
+        asset_type="emergency_red_flag",
+        canonical_name="舌/牙龈发绀发紫",
+        category="呼吸循环",
+        species_scope=("dog", "cat"),
+        sex_scope=(),
+        age_scope=(),
+        severity="urgent",
+        action_class="emergency",
+        aliases=("牙龈发紫",),
+    )
+    chunk = ClinicalSafetyChunk(
+        chunk_id="safety_emergency_cyanosis.recognition.v1",
+        asset_id=asset.asset_id,
+        chunk_type="recognition",
+        title="舌/牙龈发绀发紫 风险识别",
+        embedding_text="牙龈发紫；舌头发青；发绀",
+        metadata={},
+        review_status="approved",
+    )
+    repository = VectorOnlyClinicalSafetyRepository(asset, chunk)
+    retriever = ClinicalSafetyRetriever(
+        repository,
+        UnavailableEmbeddingClient(),
+        min_score=0.35,
+    )
+
+    result = retriever.retrieve_with_resolution("猫牙龈发紫，呼吸很快。")
+
+    assert repository.vector_calls == 0
+    assert result.candidates == []
+    assert result.state.stage == "none"
+    assert result.state.degraded is True
+    assert result.state.reasons == (
+        "embedding_client_unavailable",
+        "clinical_safety_retrieval_empty",
+    )
+    assert result.state.vector_hit_count == 0
+    assert result.state.candidate_count == 0
