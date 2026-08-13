@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
@@ -14,6 +15,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import BaseModel
 
 from ingress import create_app, set_orchestrator
 from vet_agent import (
@@ -549,6 +551,7 @@ def _client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.setenv("VET_AGENT_DATA_DIR", str(tmp_path))
     monkeypatch.setattr(QwenClient, "_send_chat", _fake_litellm_send_chat)
+    monkeypatch.setattr(QwenClient, "_send_structured_chat", _fake_litellm_send_structured_chat)
     global _test_scope_repository
     _test_scope_repository = InMemoryScopeRepository()
     container = Container(
@@ -721,6 +724,81 @@ async def _fake_litellm_send_chat(
     return "我会先做分诊:目前还需要确认症状开始时间、精神食欲、是否呕吐腹泻或咳喘。如果加重或出现红旗症状，请尽快就医。"
 
 
+async def _fake_litellm_send_structured_chat(
+    self: object,
+    messages: list[dict[str, Any]],
+    *,
+    response_model: type[BaseModel],
+    model: str,
+    temperature: float,
+) -> BaseModel:
+    """执行 _fake_litellm_send_structured_chat 内部辅助逻辑。
+
+    :param messages: 参数 messages。
+    :param response_model: 结构化响应模型。
+    :param model: 模型名称。
+    :param temperature: 参数 temperature。
+    :return: 返回函数执行结果。
+    """
+    del self, model, temperature
+    prompt_payload = _structured_message_payload(messages)
+    if prompt_payload.get("task") != "将用户输入归一为临床安全结构化语义。":
+        return response_model.model_validate_json("{}")
+    request_text = str(prompt_payload.get("user_text") or "")
+    pet_context_text = str(prompt_payload.get("pet_context_summary") or "")
+    payload = {
+        "species": "unknown",
+        "sex": "unknown",
+        "age_group": "adult",
+        "age_text": "",
+        "exposure_state": "unknown",
+        "symptom_state": "present",
+        "temporal_state": "current",
+        "temporal_scope": "ongoing",
+        "resolution_state": "ongoing",
+        "temporal_text": "现在",
+        "intent_type": "symptom",
+        "high_risk_terms": [],
+        "negated_terms": [],
+        "confidence": 0.92,
+        "rationale": "测试替身返回可信临床安全语义。",
+    }
+    if "狗" in request_text or "canine" in pet_context_text:
+        payload["species"] = "dog"
+    if "猫" in request_text or "feline" in pet_context_text:
+        payload["species"] = "cat"
+    if "male" in pet_context_text or "公" in pet_context_text or "雄" in pet_context_text:
+        payload["sex"] = "male"
+    if "female" in pet_context_text or "母" in pet_context_text or "雌" in pet_context_text:
+        payload["sex"] = "female"
+    if "12 years" in pet_context_text or "12 岁" in request_text or "老猫" in request_text:
+        payload["age_group"] = "senior"
+        payload["age_text"] = "12 years"
+    if "3 years" in pet_context_text or "3岁" in pet_context_text:
+        payload["age_text"] = "3 years"
+    if "巧克力" in request_text or "xylitol" in request_text or "无糖口香糖" in request_text:
+        payload.update(
+            {
+                "exposure_state": "confirmed",
+                "symptom_state": "unknown",
+                "intent_type": "toxicity",
+                "high_risk_terms": ["毒物暴露"],
+            }
+        )
+    if "没有误食" in request_text or "没给" in request_text or "未给" in request_text:
+        payload.update(
+            {
+                "exposure_state": "denied",
+                "symptom_state": "unknown",
+                "intent_type": "knowledge",
+                "high_risk_terms": [],
+                "negated_terms": ["暴露"],
+                "rationale": "测试替身返回明确否认暴露语义。",
+            }
+        )
+    return response_model.model_validate(payload)
+
+
 def _message_text(messages: list[dict[str, Any]]) -> str:
     """执行 _message_text 内部辅助逻辑。
 
@@ -737,6 +815,27 @@ def _message_text(messages: list[dict[str, Any]]) -> str:
                 if isinstance(item, dict):
                     parts.append(str(item))
     return "\n".join(parts)
+
+
+def _structured_message_payload(messages: list[dict[str, Any]]) -> dict[str, Any]:
+    """从结构化抽取测试消息中读取 JSON 负载。
+
+    :param messages: 结构化抽取请求消息。
+    :return: 解析成功时返回 JSON 对象，否则返回空字典。
+    """
+    for message in reversed(messages):
+        if message.get("role") != "user":
+            continue
+        content = message.get("content")
+        if not isinstance(content, str):
+            continue
+        try:
+            data = json.loads(content)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(data, dict):
+            return data
+    return {}
 
 
 def _scope_assertion(

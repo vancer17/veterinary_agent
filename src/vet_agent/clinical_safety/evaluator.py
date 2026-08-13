@@ -90,14 +90,13 @@ class ClinicalSafetyEvaluator:
                 semantic_result=semantic_result,
             )
         )
-        allow_semantic_escalation = not self._semantic_is_low_confidence(semantic_result)
+        trusted_semantic_result = self._trusted_semantic_result(semantic_result)
         signals = [
             signal
             for signal in (
                 self._candidate_signal(
                     candidate,
-                    semantic_result=semantic_result,
-                    allow_semantic_escalation=allow_semantic_escalation,
+                    semantic_result=trusted_semantic_result,
                 )
                 for candidate in retrieval_result.candidates
             )
@@ -143,13 +142,11 @@ class ClinicalSafetyEvaluator:
         candidate: ClinicalSafetyCandidate,
         *,
         semantic_result: ClinicalSafetySemanticResult | None,
-        allow_semantic_escalation: bool,
     ) -> SafetySignal | None:
         """将单个向量召回候选裁决为安全信号。
 
         :param candidate: 已按资产聚合的临床安全候选。
         :param semantic_result: 由 LLM 抽取的结构化临床安全语义。
-        :param allow_semantic_escalation: 是否允许结构化语义参与更激进的裁决。
         :return: 候选满足当前风险条件时返回安全信号，否则返回 None。
         """
         asset = candidate.asset
@@ -162,14 +159,12 @@ class ClinicalSafetyEvaluator:
             asset,
             candidate,
             semantic_result=semantic_result,
-            allow_semantic_escalation=allow_semantic_escalation,
         ):
             return None
         severity = self._effective_severity(
             asset,
             candidate,
             semantic_result=semantic_result,
-            allow_semantic_escalation=allow_semantic_escalation,
         )
         return SafetySignal(
             code=asset.resolved_code(),
@@ -253,22 +248,20 @@ class ClinicalSafetyEvaluator:
         candidate: ClinicalSafetyCandidate,
         *,
         semantic_result: ClinicalSafetySemanticResult | None,
-        allow_semantic_escalation: bool,
     ) -> bool:
         """判断向量候选是否允许生成安全信号。
 
         :param asset: 待裁决的临床安全资产。
         :param candidate: 已按资产聚合的临床安全候选。
         :param semantic_result: 由 LLM 抽取的结构化临床安全语义。
-        :param allow_semantic_escalation: 是否允许结构化语义参与更激进的裁决。
         :return: 当前候选需要生成安全信号时返回 True。
         """
         if asset.asset_type in TOXIC_ASSET_TYPES and semantic_result is not None:
             if semantic_result.exposure_state == "denied" and semantic_result.intent_type not in {"knowledge", "prevention"}:
                 return False
-            if allow_semantic_escalation and semantic_result.exposure_state in {"confirmed", "possible"}:
+            if semantic_result.exposure_state in {"confirmed", "possible"}:
                 return candidate.score >= self.thresholds.retrieval_min_score
-            if allow_semantic_escalation and semantic_result.intent_type in {"knowledge", "prevention"}:
+            if semantic_result.intent_type in {"knowledge", "prevention"}:
                 return candidate.score >= self.thresholds.retrieval_min_score
         return candidate.score >= self.thresholds.signal_min_score
 
@@ -278,21 +271,18 @@ class ClinicalSafetyEvaluator:
         candidate: ClinicalSafetyCandidate,
         *,
         semantic_result: ClinicalSafetySemanticResult | None,
-        allow_semantic_escalation: bool,
     ) -> SafetySeverity:
         """根据资产、向量分数和可信语义确定最终严重级别。
 
         :param asset: 待裁决的临床安全资产。
         :param candidate: 已按资产聚合的临床安全候选。
         :param semantic_result: 由 LLM 抽取的结构化临床安全语义。
-        :param allow_semantic_escalation: 是否允许结构化语义参与更激进的裁决。
         :return: 返回写入 SafetySignal 的严重级别。
         """
         if asset.asset_type in TOXIC_ASSET_TYPES:
             return self._toxic_severity(
                 candidate,
                 semantic_result=semantic_result,
-                allow_semantic_escalation=allow_semantic_escalation,
             )
         if asset.severity == "urgent" or asset.action_class in {"emergency", "same_day_visit"}:
             return self._adjust_temporal_severity("urgent", semantic_result)
@@ -305,16 +295,14 @@ class ClinicalSafetyEvaluator:
         candidate: ClinicalSafetyCandidate,
         *,
         semantic_result: ClinicalSafetySemanticResult | None,
-        allow_semantic_escalation: bool,
     ) -> SafetySeverity:
         """确定毒物或人用药候选的严重级别。
 
         :param candidate: 已按资产聚合的临床安全候选。
         :param semantic_result: 由 LLM 抽取的结构化临床安全语义。
-        :param allow_semantic_escalation: 是否允许结构化语义参与更激进的裁决。
         :return: 返回毒物或人用药候选严重级别。
         """
-        if semantic_result is None or not allow_semantic_escalation:
+        if semantic_result is None:
             return "caution"
         if semantic_result.exposure_state == "confirmed":
             return self._adjust_temporal_severity("urgent", semantic_result)
@@ -357,15 +345,20 @@ class ClinicalSafetyEvaluator:
             return "remote_past"
         return "unclear"
 
-    def _semantic_is_low_confidence(self, semantic_result: ClinicalSafetySemanticResult | None) -> bool:
-        """判断结构化语义是否属于低置信度结果。
+    def _trusted_semantic_result(
+        self,
+        semantic_result: ClinicalSafetySemanticResult | None,
+    ) -> ClinicalSafetySemanticResult | None:
+        """筛选可进入候选适配与裁决输入的可信结构化语义。
 
         :param semantic_result: 由 LLM 抽取的结构化临床安全语义。
-        :return: 低置信度结果返回 True，否则返回 False。
+        :return: 语义可信时返回原对象，否则返回 None。
         """
         if semantic_result is None:
-            return False
-        return semantic_result.is_low_confidence()
+            return None
+        if not semantic_result.is_trusted():
+            return None
+        return semantic_result
 
     def _signal_message(self, asset: ClinicalSafetyAsset) -> str:
         """生成安全信号展示文案。

@@ -1,25 +1,18 @@
 """
 文件：tests/test_clinical_safety_semantic.py
-作用：验证临床安全结构化语义抽取与基于语义的裁决行为。
-说明：测试通过内存仓储和伪造 LLM 客户端验证最终形态链路，不依赖 PostgreSQL。
+作用：验证临床安全结构化语义抽取契约、可信状态门控与显式降级行为。
+说明：本文件只覆盖语义抽取层，不断言临床安全裁决、严重级别或候选归一行为。
 """
 
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Sequence
+
+from pydantic import BaseModel
 
 from vet_agent import Settings
 from vet_agent.clinical_safety import (
-    ClinicalSafetyAsset,
-    ClinicalSafetyCandidate,
-    ClinicalSafetyEvaluator,
-    ClinicalSafetyRetriever,
     ClinicalSafetySemanticExtractorAgent,
-    ClinicalSafetySemanticResult,
-    ClinicalSafetyChunk,
-    ClinicalSafetyChunkHit,
-    ClinicalSafetyChunkType,
 )
 
 
@@ -59,134 +52,24 @@ class FakeQwenClient:
         del messages, model, temperature
         return self.raw_response
 
-
-class StaticEmbeddingClient:
-    """提供固定 embedding 的测试客户端。"""
-
-    @property
-    def available(self) -> bool:
-        """声明测试 embedding 客户端始终可用。
-
-        :return: 始终返回 True。
-        """
-        return True
-
-    def embed(self, text: str) -> list[float]:
-        """为测试查询返回固定 embedding。
-
-        :param text: 待向量化的查询文本。
-        :return: 返回固定二维向量。
-        """
-        assert text
-        return [0.2, 0.8]
-
-
-class StaticClinicalSafetyRepository:
-    """提供固定临床安全资产和 chunk 的内存仓储。"""
-
-    def __init__(self, asset: ClinicalSafetyAsset, chunk: ClinicalSafetyChunk) -> None:
-        """初始化测试仓储。
-
-        :param asset: 用于召回和裁决的测试资产。
-        :param chunk: 与资产关联的测试 chunk。
-        :return: 无返回值。
-        """
-        self.asset = asset
-        self.chunk = chunk
-
-    def assets(self, *, published_only: bool = True) -> list[ClinicalSafetyAsset]:
-        """读取测试资产。
-
-        :param published_only: 是否仅返回发布态资产。
-        :return: 返回单个测试资产。
-        """
-        del published_only
-        return [self.asset]
-
-    def chunks(
+    async def chat_structured(
         self,
+        messages: list[dict[str, str]],
         *,
-        chunk_type: ClinicalSafetyChunkType | None = None,
-        published_only: bool = True,
-    ) -> list[ClinicalSafetyChunk]:
-        """读取测试 chunk。
+        response_model: type[BaseModel],
+        model: str | None = None,
+        temperature: float = 0.0,
+    ) -> BaseModel:
+        """返回预设结构化模型输出。
 
-        :param chunk_type: 限定读取的 chunk 类型。
-        :param published_only: 是否仅返回发布态 chunk。
-        :return: 返回测试 chunk 列表。
+        :param messages: 传入的消息列表。
+        :param response_model: 结构化响应模型。
+        :param model: 模型名称。
+        :param temperature: 采样温度。
+        :return: 返回固定结构化响应。
         """
-        del published_only
-        if chunk_type is not None and chunk_type != self.chunk.chunk_type:
-            return []
-        return [self.chunk]
-
-    def asset_by_id(
-        self,
-        asset_id: str,
-        *,
-        published_only: bool = True,
-    ) -> ClinicalSafetyAsset | None:
-        """按标识读取测试资产。
-
-        :param asset_id: 资产标识。
-        :param published_only: 是否仅返回发布态资产。
-        :return: 标识匹配时返回资产，否则返回 None。
-        """
-        del published_only
-        return self.asset if asset_id == self.asset.asset_id else None
-
-    def chunks_by_asset_id(
-        self,
-        asset_id: str,
-        *,
-        published_only: bool = True,
-    ) -> list[ClinicalSafetyChunk]:
-        """读取指定资产关联的测试 chunk。
-
-        :param asset_id: 资产标识。
-        :param published_only: 是否仅返回发布态 chunk。
-        :return: 返回关联 chunk 列表。
-        """
-        del published_only
-        return [self.chunk] if asset_id == self.asset.asset_id else []
-
-    def retrieve_vector_chunk_hits(
-        self,
-        query_embedding: Sequence[float],
-        *,
-        chunk_types: tuple[ClinicalSafetyChunkType, ...],
-        limit: int,
-        min_score: float,
-    ) -> list[ClinicalSafetyChunkHit]:
-        """返回固定向量命中，模拟 PostgreSQL/pgvector 主路径。
-
-        :param query_embedding: 查询向量。
-        :param chunk_types: 允许参与召回的 chunk 类型。
-        :param limit: 返回 chunk 命中数量上限。
-        :param min_score: 候选最低相似度分数。
-        :return: 返回固定向量命中列表。
-        """
-        assert list(query_embedding) == [0.2, 0.8]
-        assert self.chunk.chunk_type in chunk_types
-        assert limit > 0
-        assert min_score > 0
-        return [
-            ClinicalSafetyChunkHit(
-                chunk=self.chunk,
-                score=0.91,
-                distance=0.09,
-                score_type="cosine_similarity",
-                retrieval_source="clinical_safety_pgvector",
-                embedding_model="test-embedding",
-            )
-        ]
-
-    def is_ready(self) -> bool:
-        """声明测试仓储始终可用。
-
-        :return: 始终返回 True。
-        """
-        return True
+        del messages, model, temperature
+        return response_model.model_validate_json(self.raw_response)
 
 
 def test_clinical_safety_semantic_extractor_parses_llm_json() -> None:
@@ -206,6 +89,9 @@ def test_clinical_safety_semantic_extractor_parses_llm_json() -> None:
               "exposure_state": "confirmed",
               "symptom_state": "present",
               "temporal_state": "current",
+              "temporal_scope": "ongoing",
+              "resolution_state": "ongoing",
+              "temporal_text": "现在",
               "intent_type": "toxicity",
               "high_risk_terms": ["泰诺", "呕吐"],
               "negated_terms": [],
@@ -225,7 +111,8 @@ def test_clinical_safety_semantic_extractor_parses_llm_json() -> None:
         )
     )
 
-    assert result.strategy == "llm_semantic_extractor"
+    assert result.strategy == "litellm_response_format"
+    assert result.is_trusted()
     assert result.species == "cat"
     assert result.sex == "female"
     assert result.age_group == "senior"
@@ -234,8 +121,8 @@ def test_clinical_safety_semantic_extractor_parses_llm_json() -> None:
     assert "泰诺" in result.high_risk_terms
 
 
-def test_clinical_safety_semantic_low_confidence_falls_back_to_rule_result() -> None:
-    """验证低置信度语义结果会退回为保守规则结果。
+def test_clinical_safety_semantic_low_confidence_returns_explicit_degraded_result() -> None:
+    """验证低置信度语义结果会显式降级而不补造语义事实。
 
     :return: 无返回值；断言通过表示低置信度 LLM 输出不会直接进入裁决面。
     """
@@ -251,6 +138,9 @@ def test_clinical_safety_semantic_low_confidence_falls_back_to_rule_result() -> 
               "exposure_state": "confirmed",
               "symptom_state": "present",
               "temporal_state": "current",
+              "temporal_scope": "ongoing",
+              "resolution_state": "ongoing",
+              "temporal_text": "现在",
               "intent_type": "toxicity",
               "high_risk_terms": ["泰诺", "呕吐"],
               "negated_terms": [],
@@ -271,477 +161,70 @@ def test_clinical_safety_semantic_low_confidence_falls_back_to_rule_result() -> 
     )
 
     assert result.is_low_confidence()
-    assert result.strategy == "llm_semantic_extractor_low_confidence"
-    assert result.species == "dog"
-    assert result.sex == "male"
-    assert result.exposure_state != "confirmed"
-    assert result.intent_type != "toxicity"
+    assert not result.is_trusted()
+    assert result.strategy == "litellm_response_format_low_confidence"
+    assert result.species == "unknown"
+    assert result.sex == "unknown"
+    assert result.exposure_state == "unknown"
+    assert result.intent_type == "other"
+    assert result.to_query_hints() == ""
 
 
-def test_clinical_safety_evaluator_treats_low_confidence_semantic_as_conservative() -> None:
-    """验证低置信度语义不会把裁决推向更激进的升级。
+def test_clinical_safety_semantic_disabled_does_not_create_rule_based_facts() -> None:
+    """验证禁用模型抽取时只返回显式失败状态，不生成关键词推断事实。
 
-    :return: 无返回值；断言通过表示低置信度语义只会保守处理。
+    :return: 无返回值；断言通过表示禁用状态符合临床安全语义 Fail Fast 约束。
     """
-    asset = ClinicalSafetyAsset(
-        asset_id="safety_human_drug_001",
-        asset_type="human_drug",
-        canonical_name="对乙酰氨基酚",
-        category="人用药物",
-        species_scope=("cat", "dog"),
-        sex_scope=(),
-        age_scope=(),
-        severity="urgent",
-        action_class="emergency",
-        code="TOXIC_SUBSTANCE",
-        aliases=("泰诺", "扑热息痛"),
-        carriers=(),
-        user_expressions=(),
-        symptoms=("呕吐",),
-        recognition_phrases=("泰诺", "对乙酰氨基酚", "扑热息痛", "呕吐"),
-    )
-    chunk = ClinicalSafetyChunk(
-        chunk_id="safety_human_drug_001.recognition.v1",
-        asset_id=asset.asset_id,
-        chunk_type="recognition",
-        title="对乙酰氨基酚 风险识别",
-        embedding_text="泰诺；对乙酰氨基酚；扑热息痛；呕吐",
-        metadata={},
-        review_status="approved",
-    )
-    retriever = ClinicalSafetyRetriever(
-        StaticClinicalSafetyRepository(asset, chunk),
-        embedding_client=StaticEmbeddingClient(),
-        min_score=0.35,
-    )
-    evaluator = ClinicalSafetyEvaluator(retriever)
-    semantic = ClinicalSafetySemanticResult(
-        species="cat",
-        sex="unknown",
-        age_group="adult",
-        age_text="3岁",
-        exposure_state="confirmed",
-        symptom_state="present",
-        temporal_state="current",
-        intent_type="toxicity",
-        high_risk_terms=("泰诺", "呕吐"),
-        negated_terms=(),
-        confidence=0.31,
-        strategy="llm_semantic_extractor_low_confidence",
-        fallback_reason="semantic_llm_low_confidence:0.31",
-        source_text="我家猫误食泰诺后呕吐。",
+    extractor = ClinicalSafetySemanticExtractorAgent(
+        qwen=None,
+        settings=Settings(enable_llm_semantic_extraction=False),
     )
 
-    result = evaluator.assess_with_resolution(
-        "我家猫误食泰诺后呕吐。",
-        context_text="宠物画像: 物种=猫, 年龄=3岁",
-        age_text="3岁",
-        semantic_result=semantic,
+    result = asyncio.run(
+        extractor.extract(
+            user_text="我家猫误食泰诺后正在呕吐。",
+            pet_context_summary="宠物画像: 物种=猫, 年龄=8岁, 性别=母。",
+            model="qwen-plus",
+        )
     )
 
-    assert result.signals
-    assert result.signals[0].severity != "urgent"
-    assert result.signals[0].severity == "caution"
-    assert result.fallback_state.semantic.stage == "llm_low_confidence"
-    assert result.fallback_state.semantic.degraded is True
+    assert not result.is_trusted()
+    assert result.strategy == "semantic_extraction_disabled"
+    assert result.species == "unknown"
+    assert result.exposure_state == "unknown"
+    assert result.symptom_state == "unknown"
+    assert result.high_risk_terms == ()
+    assert result.to_fallback_state().stage == "disabled"
 
 
-def test_clinical_safety_evaluator_uses_semantic_exposure_state_to_suppress_denied_mentions() -> None:
-    """验证结构化语义可以压掉“仅提到毒物但明确否认暴露”的误触发。
+def test_clinical_safety_semantic_invalid_schema_does_not_create_rule_based_facts() -> None:
+    """验证结构化响应不符合契约时只返回显式失败状态，不宽松修复字段。
 
-    :return: 无返回值；断言通过表示结构化语义已参与裁决。
+    :return: 无返回值；断言通过表示无效 schema 不会进入临床安全语义可信面。
     """
-    asset = ClinicalSafetyAsset(
-        asset_id="safety_human_drug_001",
-        asset_type="human_drug",
-        canonical_name="对乙酰氨基酚",
-        category="人用药物",
-        species_scope=("cat", "dog"),
-        sex_scope=(),
-        age_scope=(),
-        severity="urgent",
-        action_class="emergency",
-        code="TOXIC_SUBSTANCE",
-        aliases=("泰诺", "扑热息痛"),
-        carriers=(),
-        user_expressions=(),
-        symptoms=(),
-        recognition_phrases=("泰诺", "对乙酰氨基酚", "扑热息痛"),
-    )
-    chunk = ClinicalSafetyChunk(
-        chunk_id="safety_human_drug_001.recognition.v1",
-        asset_id=asset.asset_id,
-        chunk_type="recognition",
-        title="对乙酰氨基酚 风险识别",
-        embedding_text="泰诺；对乙酰氨基酚；扑热息痛",
-        metadata={},
-        review_status="approved",
-    )
-    repository = StaticClinicalSafetyRepository(asset, chunk)
-    retriever = ClinicalSafetyRetriever(repository, embedding_client=StaticEmbeddingClient(), min_score=0.35)
-    evaluator = ClinicalSafetyEvaluator(retriever)
-
-    denied_semantic = ClinicalSafetySemanticResult(
-        species="cat",
-        sex="unknown",
-        age_group="adult",
-        age_text="3岁",
-        exposure_state="denied",
-        symptom_state="unknown",
-        temporal_state="current",
-        intent_type="other",
-        high_risk_terms=("泰诺",),
-        negated_terms=(),
-        confidence=0.88,
-        strategy="llm_semantic_extractor",
-        source_text="家里有泰诺，已经收起来了，没有给它吃。",
-    )
-    denied_signals = evaluator.assess(
-        "家里有泰诺，已经收起来了，没有给它吃。",
-        context_text="宠物画像: 物种=猫, 年龄=3岁",
-        age_text="3岁",
-        semantic_result=denied_semantic,
-    )
-
-    confirmed_semantic = ClinicalSafetySemanticResult(
-        species="cat",
-        sex="unknown",
-        age_group="adult",
-        age_text="3岁",
-        exposure_state="confirmed",
-        symptom_state="present",
-        temporal_state="current",
-        intent_type="toxicity",
-        high_risk_terms=("泰诺", "呕吐"),
-        negated_terms=(),
-        confidence=0.95,
-        strategy="llm_semantic_extractor",
-        source_text="我家猫误食了泰诺，已经开始呕吐。",
-    )
-    confirmed_signals = evaluator.assess(
-        "我家猫误食了泰诺，已经开始呕吐。",
-        context_text="宠物画像: 物种=猫, 年龄=3岁",
-        age_text="3岁",
-        semantic_result=confirmed_semantic,
-    )
-
-    assert denied_signals == []
-    assert confirmed_signals
-    assert confirmed_signals[0].code == "TOXIC_SUBSTANCE"
-    assert confirmed_signals[0].severity == "urgent"
-
-
-def test_clinical_safety_evaluator_downgrades_resolved_recent_past_toxic_event() -> None:
-    """验证已恢复的近期既往毒物事件不会继续按当前急症升级。
-
-    :return: 无返回值；断言通过表示时间语义已参与裁决降级。
-    """
-    asset = ClinicalSafetyAsset(
-        asset_id="safety_human_drug_001",
-        asset_type="human_drug",
-        canonical_name="对乙酰氨基酚",
-        category="人用药物",
-        species_scope=("cat", "dog"),
-        sex_scope=(),
-        age_scope=(),
-        severity="urgent",
-        action_class="emergency",
-        code="TOXIC_SUBSTANCE",
-        aliases=("泰诺", "扑热息痛"),
-        carriers=(),
-        user_expressions=(),
-        symptoms=("呕吐",),
-        recognition_phrases=("泰诺", "对乙酰氨基酚", "扑热息痛", "呕吐"),
-    )
-    chunk = ClinicalSafetyChunk(
-        chunk_id="safety_human_drug_001.recognition.v1",
-        asset_id=asset.asset_id,
-        chunk_type="recognition",
-        title="对乙酰氨基酚 风险识别",
-        embedding_text="泰诺；对乙酰氨基酚；扑热息痛；呕吐",
-        metadata={},
-        review_status="approved",
-    )
-    retriever = ClinicalSafetyRetriever(
-        StaticClinicalSafetyRepository(asset, chunk),
-        embedding_client=StaticEmbeddingClient(),
-        min_score=0.35,
-    )
-    evaluator = ClinicalSafetyEvaluator(retriever)
-    semantic = ClinicalSafetySemanticResult(
-        species="cat",
-        sex="unknown",
-        age_group="adult",
-        age_text="3岁",
-        exposure_state="confirmed",
-        symptom_state="present",
-        temporal_state="past",
-        temporal_scope="recent_past",
-        resolution_state="resolved",
-        temporal_text="昨天",
-        intent_type="toxicity",
-        high_risk_terms=("泰诺", "呕吐"),
-        negated_terms=(),
-        confidence=0.95,
-        strategy="llm_semantic_extractor",
-        source_text="昨天误食泰诺，今天已经完全恢复。",
-    )
-
-    result = evaluator.assess_with_resolution(
-        "昨天误食泰诺，今天已经完全恢复。",
-        context_text="宠物画像: 物种=猫, 年龄=3岁",
-        age_text="3岁",
-        semantic_result=semantic,
-    )
-
-    assert result.signals
-    assert result.signals[0].code == "TOXIC_SUBSTANCE"
-    assert result.signals[0].severity == "caution"
-    assert result.fallback_state.semantic.stage == "llm"
-    assert result.fallback_state.semantic.degraded is False
-
-
-def test_clinical_safety_evaluator_keeps_ongoing_toxic_event_urgent() -> None:
-    """验证正在发生的毒物暴露仍保持急性升级。
-
-    :return: 无返回值；断言通过表示当前事件不会被时间语义错误降级。
-    """
-    asset = ClinicalSafetyAsset(
-        asset_id="safety_human_drug_001",
-        asset_type="human_drug",
-        canonical_name="对乙酰氨基酚",
-        category="人用药物",
-        species_scope=("cat", "dog"),
-        sex_scope=(),
-        age_scope=(),
-        severity="urgent",
-        action_class="emergency",
-        code="TOXIC_SUBSTANCE",
-        aliases=("泰诺", "扑热息痛"),
-        carriers=(),
-        user_expressions=(),
-        symptoms=("呕吐",),
-        recognition_phrases=("泰诺", "对乙酰氨基酚", "扑热息痛", "呕吐"),
-    )
-    chunk = ClinicalSafetyChunk(
-        chunk_id="safety_human_drug_001.recognition.v1",
-        asset_id=asset.asset_id,
-        chunk_type="recognition",
-        title="对乙酰氨基酚 风险识别",
-        embedding_text="泰诺；对乙酰氨基酚；扑热息痛；呕吐",
-        metadata={},
-        review_status="approved",
-    )
-    retriever = ClinicalSafetyRetriever(
-        StaticClinicalSafetyRepository(asset, chunk),
-        embedding_client=StaticEmbeddingClient(),
-        min_score=0.35,
-    )
-    evaluator = ClinicalSafetyEvaluator(retriever)
-    semantic = ClinicalSafetySemanticResult(
-        species="cat",
-        sex="unknown",
-        age_group="adult",
-        age_text="3岁",
-        exposure_state="confirmed",
-        symptom_state="present",
-        temporal_state="current",
-        temporal_scope="ongoing",
-        resolution_state="ongoing",
-        temporal_text="现在",
-        intent_type="toxicity",
-        high_risk_terms=("泰诺", "呕吐"),
-        negated_terms=(),
-        confidence=0.95,
-        strategy="llm_semantic_extractor",
-        source_text="现在误食泰诺并正在呕吐。",
-    )
-
-    result = evaluator.assess_with_resolution(
-        "现在误食泰诺并正在呕吐。",
-        context_text="宠物画像: 物种=猫, 年龄=3岁",
-        age_text="3岁",
-        semantic_result=semantic,
-    )
-
-    assert result.signals
-    assert result.signals[0].code == "TOXIC_SUBSTANCE"
-    assert result.signals[0].severity == "urgent"
-    assert result.fallback_state.semantic.stage == "llm"
-    assert result.fallback_state.semantic.degraded is False
-
-
-def test_clinical_safety_evaluator_returns_explicit_vector_resolution() -> None:
-    """验证临床安全裁决结果会显式暴露向量召回与语义状态。
-
-    :return: 无返回值；断言通过表示向量召回状态已贯穿召回和裁决层。
-    """
-    asset = ClinicalSafetyAsset(
-        asset_id="safety_human_drug_001",
-        asset_type="human_drug",
-        canonical_name="对乙酰氨基酚",
-        category="人用药物",
-        species_scope=("cat", "dog"),
-        sex_scope=(),
-        age_scope=(),
-        severity="urgent",
-        action_class="emergency",
-        code="TOXIC_SUBSTANCE",
-        aliases=("泰诺", "扑热息痛"),
-        carriers=(),
-        user_expressions=(),
-        symptoms=("呕吐",),
-        recognition_phrases=("泰诺", "对乙酰氨基酚", "扑热息痛", "呕吐"),
-    )
-    chunk = ClinicalSafetyChunk(
-        chunk_id="safety_human_drug_001.recognition.v1",
-        asset_id=asset.asset_id,
-        chunk_type="recognition",
-        title="对乙酰氨基酚 风险识别",
-        embedding_text="泰诺；对乙酰氨基酚；扑热息痛；呕吐",
-        metadata={},
-        review_status="approved",
-    )
-    retriever = ClinicalSafetyRetriever(
-        StaticClinicalSafetyRepository(asset, chunk),
-        embedding_client=StaticEmbeddingClient(),
-        min_score=0.35,
-    )
-    evaluator = ClinicalSafetyEvaluator(retriever)
-    semantic = ClinicalSafetySemanticResult(
-        species="cat",
-        sex="unknown",
-        age_group="adult",
-        age_text="3岁",
-        exposure_state="confirmed",
-        symptom_state="present",
-        temporal_state="current",
-        intent_type="toxicity",
-        high_risk_terms=("泰诺", "呕吐"),
-        negated_terms=(),
-        confidence=0.95,
-        strategy="llm_semantic_extractor",
-        source_text="我家猫误食泰诺后呕吐。",
-    )
-
-    result = evaluator.assess_with_resolution(
-        "我家猫误食泰诺后呕吐。",
-        context_text="宠物画像: 物种=猫, 年龄=3岁",
-        age_text="3岁",
-        semantic_result=semantic,
-    )
-
-    assert result.signals
-    assert result.fallback_state.retrieval.stage == "vector"
-    assert result.fallback_state.retrieval.degraded is False
-    assert result.fallback_state.retrieval.retrieval_source == "clinical_safety_pgvector"
-    assert result.fallback_state.semantic.stage == "llm"
-    assert result.to_metadata()["fallback_state"]["retrieval"]["stage"] == "vector"
-
-
-def test_clinical_safety_evaluator_uses_vector_thresholds() -> None:
-    """验证临床安全裁决只使用向量候选阈值。
-
-    :return: 无返回值；断言通过表示词面回退已退出候选裁决路径。
-    """
-    asset = ClinicalSafetyAsset(
-        asset_id="safety_danger_pattern_001",
-        asset_type="danger_pattern",
-        canonical_name="发绀发紫",
-        category="呼吸循环",
-        species_scope=("cat", "dog"),
-        sex_scope=(),
-        age_scope=(),
-        severity="caution",
-        action_class="safety_warning",
-        aliases=("皮肤发紫",),
-        carriers=(),
-        user_expressions=(),
-        symptoms=("轻微不适",),
-        recognition_phrases=("发绀", "发紫", "轻微不适"),
-    )
-    chunk = ClinicalSafetyChunk(
-        chunk_id="safety_danger_pattern_001.recognition.v1",
-        asset_id=asset.asset_id,
-        chunk_type="recognition",
-        title="发绀发紫 风险识别",
-        embedding_text="发绀；发紫；轻微不适",
-        metadata={},
-        review_status="approved",
-    )
-    retriever = ClinicalSafetyRetriever(
-        StaticClinicalSafetyRepository(asset, chunk),
-        embedding_client=StaticEmbeddingClient(),
-        min_score=0.35,
-    )
-    evaluator = ClinicalSafetyEvaluator(retriever)
-
-    vector_candidate = ClinicalSafetyCandidate(
-        asset=asset,
-        score=0.68,
-        chunk_hits=(
-            ClinicalSafetyChunkHit(
-                chunk=chunk,
-                score=0.68,
-                distance=0.32,
-                score_type="cosine_similarity",
-                retrieval_source="clinical_safety_pgvector",
-                matched_terms=(),
-            ),
+    extractor = ClinicalSafetySemanticExtractorAgent(
+        FakeQwenClient(
+            """
+            {
+              "species": "cat",
+              "confidence": 0.95
+            }
+            """
         ),
-        score_type="cosine_similarity",
-        retrieval_source="clinical_safety_pgvector",
-    )
-    vector_signal = evaluator._candidate_signal(
-        vector_candidate,
-        semantic_result=None,
-        allow_semantic_escalation=True,
-    )
-    urgent_vector_candidate = ClinicalSafetyCandidate(
-        asset=asset,
-        score=0.78,
-        chunk_hits=(
-            ClinicalSafetyChunkHit(
-                chunk=chunk,
-                score=0.78,
-                distance=0.22,
-                score_type="cosine_similarity",
-                retrieval_source="clinical_safety_pgvector",
-                matched_terms=(),
-            ),
-        ),
-        score_type="cosine_similarity",
-        retrieval_source="clinical_safety_pgvector",
-    )
-    urgent_vector_signal = evaluator._candidate_signal(
-        urgent_vector_candidate,
-        semantic_result=None,
-        allow_semantic_escalation=True,
-    )
-    low_score_vector_candidate = ClinicalSafetyCandidate(
-        asset=asset,
-        score=0.28,
-        chunk_hits=(
-            ClinicalSafetyChunkHit(
-                chunk=chunk,
-                score=0.28,
-                distance=0.0,
-                score_type="cosine_similarity",
-                retrieval_source="clinical_safety_pgvector",
-                matched_terms=("轻微不适",),
-            ),
-        ),
-        score_type="cosine_similarity",
-        retrieval_source="clinical_safety_pgvector",
-    )
-    low_score_vector_signal = evaluator._candidate_signal(
-        low_score_vector_candidate,
-        semantic_result=None,
-        allow_semantic_escalation=True,
+        Settings(),
     )
 
-    assert vector_signal is not None
-    assert vector_signal.severity == "caution"
-    assert urgent_vector_signal is not None
-    assert urgent_vector_signal.severity == "urgent"
-    assert low_score_vector_signal is None
+    result = asyncio.run(
+        extractor.extract(
+            user_text="我家猫误食泰诺后正在呕吐。",
+            pet_context_summary="宠物画像: 物种=猫, 年龄=8岁, 性别=母。",
+            model="qwen-plus",
+        )
+    )
+
+    assert not result.is_trusted()
+    assert result.strategy == "semantic_extraction_invalid_schema"
+    assert result.species == "unknown"
+    assert result.exposure_state == "unknown"
+    assert result.high_risk_terms == ()
+    assert result.to_fallback_state().stage == "invalid_schema"
