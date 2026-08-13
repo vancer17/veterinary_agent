@@ -48,7 +48,7 @@ flowchart TD
   F --> G[ClinicalSafetySemanticExtractorAgent.extract 临床安全语义抽取]
   G --> H[ClinicalSafetyEvaluator.assess_with_resolution 临床安全裁决]
   H --> I[MemoryService.read 读取会话与宠物记忆]
-  I --> J[TaskSplitterAgent.split 多任务拆分]
+  I --> J[TaskRouterAgent.route 结构化任务路由]
   J --> K[ConsultationSemanticExtractorAgent.extract 问诊语义抽取]
   K --> L[ConsultationStateAgent.update 问诊状态与回答充分性]
   L --> M{是否需要追问}
@@ -80,7 +80,7 @@ flowchart TD
 | 6 | 临床安全候选召回 | `ClinicalSafetyRetriever`、`PostgresClinicalSafetyRepository`、`ClinicalSafetyChunkModel` | PostgreSQL/pgvector | 替代临床安全静态 JSON 主路径和文件短语回退，按已审核 chunk 执行向量召回 | 生产优先使用 `clinical_safety_chunks.embedding`，文件仓储仅作开发或应急降级 |
 | 7 | 临床安全裁决 | `ClinicalSafetyEvaluator.assess_with_resolution` | OPA | 将候选风险、结构化语义、上下文适用性转换为可审计策略动作 | 保留 evaluator 作为候选归一层，OPA 负责动作裁决 |
 | 8 | 记忆读取 | `PostgresMemoryService.read`、`make_semantic_memory`、`Mem0RestSemanticMemory` | PostgreSQL/pgvector、Mem0 | PostgreSQL 读取权威事实、episode 和会话状态；Mem0 增强跨轮语义相关记忆召回 | 不改变 PostgreSQL 可信事实源边界，Mem0 仅作为语义投影 |
-| 9 | 多任务拆分 | `TaskSplitterAgent.split`、`RuleTaskSplitter` | LiteLLM `response_format`、OPA | response_format 替代 `_parse_llm_tasks()`；OPA 可限制任务数量、任务域和降级动作 | LLM 结果结构化，规则拆分仅作为候选回退 |
+| 9 | 多任务拆分 | `TaskRouterAgent.route`、`TaskRoutingService`、`TaskExecutionPlan` | LiteLLM `response_format`、Pydantic、OPA、PostgreSQL/pgvector | 结构化输出替代手写 JSON 解析；任务域目录由 `task_routing_domains` 提供；OPA 校验任务数量、任务域、任务键和已有任务引用；依赖、契约或策略失败直接 Fail Fast | 移除 `TaskSplitterAgent`、`RuleTaskSplitter`、`classifier_keywords` 和所有关键词回退路径 |
 | 10 | 问诊语义抽取 | `ConsultationSemanticExtractorAgent.extract` | LiteLLM `response_format` | 替代 `_extract_json()`；结构化事实进入问诊状态 | 保留 `SemanticExtractorOutput`，移除手写 JSON 提取 |
 | 11 | 问诊状态与回答充分性 | `ConsultationStateAgent.update`、`AnswerabilityEvaluator`、`ConsultationStateModel` | PostgreSQL/pgvector、OPA | PostgreSQL 保存活跃问诊状态；OPA 只裁决“是否允许阶段性回答/是否必须追问”等动作门槛 | 不把槽位状态机迁移到 Rego，不把活跃状态写入 Mem0 |
 | 12 | 追问相关 RAG | `_plan_followup_questions`、`KnowledgeService.retrieve` | LlamaIndex、PostgreSQL/pgvector、LiteLLM `response_format` | LlamaIndex 替代手写检索编排；PostgreSQL/pgvector 作为生产向量存储；response_format 替代追问规划 JSON 解析 | 保持 `KnowledgeHit` 和 `Evidence` 输出契约 |

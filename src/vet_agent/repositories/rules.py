@@ -27,7 +27,6 @@ from vet_agent.db import (
 @dataclass(frozen=True)
 class ConsultationDomainRule:
     domain: str
-    classifier_keywords: list[str]
     required_slots: list[str]
     priority: int = 100
 
@@ -82,7 +81,6 @@ class FileRuleRepository:
         domains = {
             item["domain"]: ConsultationDomainRule(
                 domain=item["domain"],
-                classifier_keywords=list(item.get("classifier_keywords", [])),
                 required_slots=list(item.get("required_slots", [])),
                 priority=int(item.get("priority", 100)),
             )
@@ -141,7 +139,6 @@ class PostgresRuleRepository:
         domains = {
             row.domain: ConsultationDomainRule(
                 domain=row.domain,
-                classifier_keywords=list(row.classifier_keywords or []),
                 required_slots=list(row.required_slots or []),
                 priority=int(row.priority or 100),
             )

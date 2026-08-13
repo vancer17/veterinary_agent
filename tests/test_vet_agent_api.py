@@ -28,7 +28,6 @@ from vet_agent import (
     VetAgentIngressOrchestrator,
     set_container,
 )
-from vet_agent.agents import TaskSplitterAgent
 from vet_agent.clinical_safety import (
     ClinicalSafetyAsset,
     ClinicalSafetyCandidate,
@@ -48,7 +47,15 @@ from vet_agent.input_safety import (
 from vet_agent.observability import AgentPathNode
 from vet_agent.repositories import FileRuleRepository, ScopeRepository, SessionBinding, VerifiedPetProfile
 from vet_agent.runtime import QwenClient
-from vet_agent.services import TurnExecutionGateProtocol, TurnExecutor
+from vet_agent.services import MemoryService, TurnExecutionGateProtocol, TurnExecutor
+from vet_agent.stores import JsonDocumentStore
+from vet_agent.task_routing import (
+    DEFAULT_TASK_KEY,
+    LocalTaskRoutingPolicyClient,
+    StaticTaskRoutingDomainRepository,
+    TaskRoutingRequestContext,
+    TaskRoutingService,
+)
 
 
 app = create_app()
@@ -641,6 +648,7 @@ class StaticClinicalSafetyRepository:
 
 _test_scope_repository: InMemoryScopeRepository | None = None
 _current_test_input_text = ""
+_last_response_composer_prompt = ""
 
 
 def _client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
@@ -660,19 +668,22 @@ def _client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setattr(QwenClient, "_send_structured_chat", _fake_litellm_send_structured_chat)
     global _test_scope_repository
     _test_scope_repository = InMemoryScopeRepository()
+    settings = Settings.from_env()
     container = Container(
-        Settings.from_env(),
+        settings,
         scope_repository=_test_scope_repository,
         turn_execution_gate=InMemoryTurnExecutionGate(),
         clinical_safety_repository=StaticClinicalSafetyRepository(),
         clinical_safety_policy_client=StaticClinicalSafetyPolicyClient(),
         embedding_client=StaticEmbeddingClient(),
         input_safety_service=InputSafetyService(
-            Settings.from_env(),
+            settings,
             repository=StaticInputSafetyRepository(),
             detectors=(),
             policy_client=LocalInputSafetyPolicyClient(),
         ),
+        task_routing_domain_repository=StaticTaskRoutingDomainRepository.default(),
+        task_routing_policy_client=LocalTaskRoutingPolicyClient(),
     )
     set_container(container)
     set_orchestrator(VetAgentIngressOrchestrator(container))
@@ -718,6 +729,8 @@ def _reset_container_after_test() -> Iterator[None]:
     :return: 返回 pytest fixture 迭代器。
     """
     yield
+    global _last_response_composer_prompt
+    _last_response_composer_prompt = ""
     _clear_test_container()
 
 
@@ -774,16 +787,6 @@ async def _fake_litellm_send_chat(
           }
         }
         """
-    if "TaskRouterAgent" in user_text and "主餐都会清空" in user_text:
-        return """
-        {
-          "tasks": [
-            {"domain": "general", "title": "一般补充", "text": "主餐都会清空，前天第一次看到", "priority": 10, "reason": "补充问诊信息"},
-            {"domain": "behavior", "title": "互动状态", "text": "叫名字会抬头，结束后会自己拿玩具过来", "priority": 20, "reason": "互动和行为信息"},
-            {"domain": "gastrointestinal", "title": "腹部反应", "text": "轻碰腹部会把身体绷紧", "priority": 30, "reason": "腹部相关线索"}
-          ]
-        }
-        """
     if "RagQuestionPlannerAgent" in user_text and "缩成一团" in user_text:
         return """
         {
@@ -818,6 +821,8 @@ async def _fake_litellm_send_chat(
         }
         """
     if "结构化问诊状态已足够" in user_text:
+        global _last_response_composer_prompt
+        _last_response_composer_prompt = user_text
         return (
             "分诊/紧急度: 目前根据已补充的信息，暂未看到必须立即急诊的红旗，但仍需要继续观察变化。\n"
             "可能方向与依据: 更偏向轻度、短时的消化道不适或饮食刺激。\n"
@@ -849,6 +854,69 @@ async def _fake_litellm_send_structured_chat(
     """
     del self, model, temperature
     prompt_payload = _structured_message_payload(messages)
+    if prompt_payload.get("task") == "将用户本轮输入归一为任务路由计划。":
+        request_text = str(prompt_payload.get("user_text") or "")
+        active_tasks = list(prompt_payload.get("active_tasks") or [])
+        existing_task_key = (
+            str(active_tasks[0].get("task_key"))
+            if len(active_tasks) == 1
+            else None
+        )
+        if "主餐都会清空" in request_text:
+            payload = {
+                "tasks": [
+                    {
+                        "domain": "gastrointestinal",
+                        "text": request_text,
+                        "existing_task_key": existing_task_key,
+                        "priority": 10,
+                    }
+                ]
+            }
+        elif "夜里乱叫" in request_text and "换粮" in request_text:
+            payload = {
+                "tasks": [
+                    {
+                        "domain": "gastrointestinal",
+                        "text": "今天拉稀，精神正常，食欲正常，没有呕吐",
+                        "existing_task_key": existing_task_key,
+                        "priority": 10,
+                    },
+                    {
+                        "domain": "behavior",
+                        "text": "最近夜里乱叫",
+                        "priority": 20,
+                    },
+                    {
+                        "domain": "feeding",
+                        "text": "能不能换粮",
+                        "priority": 30,
+                    },
+                ]
+            }
+        elif "咳嗽" in request_text or "卡住" in request_text:
+            payload = {
+                "tasks": [
+                    {
+                        "domain": "respiratory",
+                        "text": request_text,
+                        "existing_task_key": existing_task_key,
+                        "priority": 10,
+                    }
+                ]
+            }
+        else:
+            payload = {
+                "tasks": [
+                    {
+                        "domain": "gastrointestinal",
+                        "text": request_text,
+                        "existing_task_key": existing_task_key,
+                        "priority": 10,
+                    }
+                ]
+            }
+        return response_model.model_validate(payload)
     if prompt_payload.get("task") != "将用户输入归一为临床安全结构化语义。":
         return response_model.model_validate_json("{}")
     request_text = str(prompt_payload.get("user_text") or "")
@@ -1649,50 +1717,160 @@ def test_multi_task_turn_splits_into_independent_segments(tmp_path: Path, monkey
     assert all(segment["reasoning_display"]["text"] for segment in data["segments"])
 
 
-def test_llm_task_router_can_drive_task_splitting() -> None:
-    """验证对应业务场景是否符合预期。
+def test_default_consultation_state_is_migrated_during_multi_task_plan(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证默认问诊状态参与多任务计划时会迁移到具体任务键。
+
+    :param tmp_path: 参数 tmp_path。
+    :param monkeypatch: 参数 monkeypatch。
+    :return: 无返回值；断言通过表示默认状态迁移边界符合预期。
+    """
+    client = _client(tmp_path, monkeypatch)
+    vet_context = {
+        "user_id": "u_multi_migrate",
+        "session_id": "s_multi_migrate",
+        "pet_id": "p_multi_migrate",
+        "pet_info": {
+            "species": "犬",
+            "breed": "柯基",
+            "age": "3岁",
+            "weight_kg": 12,
+        },
+    }
+
+    first = client.post(
+        "/agent/turns",
+        json=_payload("我家狗今天拉稀，怎么办？", vet_context=vet_context),
+    )
+    assert first.status_code == 200
+    assert first.json()["status"] == "requires_followup"
+
+    second = client.post(
+        "/agent/turns",
+        json=_payload(
+            "我家狗今天拉稀，精神正常，食欲正常，没有呕吐。还有最近夜里乱叫。顺便问下能不能换粮？",
+            vet_context=vet_context,
+        ),
+    )
+
+    assert second.status_code == 200
+    data = second.json()
+    task_router = data["metadata"]["task_router"]
+    assert task_router["tasks"][0]["existing_task_key"] == DEFAULT_TASK_KEY
+    assert task_router["tasks"][0]["task_key"] == "gastrointestinal"
+    stored_memory = JsonDocumentStore(tmp_path / "memory.json").load()
+    session_memory = stored_memory["sessions"]["s_multi_migrate"]
+    pet_memory = stored_memory["pets"]["p_multi_migrate"]
+    assert "consultation_state" not in session_memory
+    assert "consultation_state" not in pet_memory
+    assert DEFAULT_TASK_KEY not in session_memory.get("task_consultation_states", {})
+
+
+def test_task_state_replacement_preserves_default_state_without_migration(tmp_path: Path) -> None:
+    """验证普通多任务状态替换不会误删默认问诊状态。
+
+    :param tmp_path: 参数 tmp_path。
+    :return: 无返回值；断言通过表示持久化服务仅在显式迁移时清理默认状态。
+    """
+    import asyncio
+
+    service = MemoryService(JsonDocumentStore(tmp_path / "memory.json"))
+    identity = TrustedIdentity(user_id="u_state_boundary", pet_id="p_state_boundary", session_id="s_state_boundary")
+    default_state = {"phase": "collecting_info", "chief_complaint": "默认消化道问诊"}
+    behavior_state = {"phase": "collecting_info", "chief_complaint": "夜里乱叫"}
+
+    asyncio.run(service.save_consultation_state(identity, default_state))
+    asyncio.run(service.save_task_consultation_states(identity, {"behavior": behavior_state}))
+
+    stored_memory = JsonDocumentStore(tmp_path / "memory.json").load()
+    session_memory = stored_memory["sessions"]["s_state_boundary"]
+    assert session_memory["consultation_state"] == default_state
+    assert session_memory["task_consultation_states"]["behavior"] == behavior_state
+
+    asyncio.run(
+        service.save_task_consultation_states(
+            identity,
+            {"behavior": behavior_state},
+            clear_default_state=True,
+        )
+    )
+
+    stored_memory = JsonDocumentStore(tmp_path / "memory.json").load()
+    session_memory = stored_memory["sessions"]["s_state_boundary"]
+    assert "consultation_state" not in session_memory
+    assert session_memory["task_consultation_states"]["behavior"] == behavior_state
+
+
+def test_structured_task_router_can_drive_task_splitting() -> None:
+    """验证结构化任务路由可以生成多任务执行计划。
 
     :return: 无返回值；断言通过表示场景符合预期。
     """
-    class FakeQwen:
+    class FakeStructuredClient:
         available = True
 
-        async def chat(
+        async def chat_structured(
             self,
-            messages: list[dict[str, Any]],
+            messages: list[dict[str, str]],
             *,
+            response_model: type[BaseModel],
             model: str | None = None,
-            temperature: float = 0.2,
-        ) -> str:
-            """执行 chat 业务逻辑。
+            temperature: float = 0.0,
+        ) -> BaseModel:
+            """返回测试使用的结构化任务路由候选。
 
-            :param messages: 参数 messages。
+            :param messages: 结构化模型消息。
+            :param response_model: 结构化响应模型。
             :param model: 模型名称。
-            :param temperature: 参数 temperature。
-            :return: 返回异步执行结果。
+            :param temperature: 采样温度。
+            :return: 返回通过 Pydantic 校验的任务路由候选。
             """
-            return """
-            {
-              "tasks": [
-                {"domain": "behavior", "title": "夜里乱叫", "text": "最近夜里乱叫", "priority": 20, "reason": "行为场景"},
-                {"domain": "gastrointestinal", "title": "拉稀", "text": "今天拉稀，精神正常", "priority": 10, "reason": "消化道症状"}
-              ]
-            }
-            """
+            del messages, model, temperature
+            return response_model.model_validate(
+                {
+                    "tasks": [
+                        {
+                            "domain": "behavior",
+                            "text": "最近夜里乱叫",
+                            "priority": 20,
+                        },
+                        {
+                            "domain": "gastrointestinal",
+                            "text": "今天拉稀，精神正常",
+                            "priority": 10,
+                        },
+                    ]
+                }
+            )
 
-    splitter = TaskSplitterAgent(
-        FileRuleRepository(Settings().seed_dir),
-        FakeQwen(),
-        Settings(enable_llm_task_splitter=True, litellm_api_key="test"),
+    service = TaskRoutingService(
+        Settings(litellm_api_key="test"),
+        domain_repository=StaticTaskRoutingDomainRepository.default(),
+        policy_client=LocalTaskRoutingPolicyClient(),
+        structured_client=FakeStructuredClient(),
     )
 
     import asyncio
 
-    decision = asyncio.run(splitter.split("我家狗今天拉稀，精神正常。还有最近夜里乱叫。"))
+    decision = asyncio.run(
+        service.route(
+            context=TaskRoutingRequestContext(
+                request_id="req_task_router",
+                trace_id="trace_task_router",
+                user_id="u_task_router",
+                pet_id="p_task_router",
+                session_id="s_task_router",
+            ),
+            user_text="我家狗今天拉稀，精神正常。还有最近夜里乱叫。",
+            pet_context_summary="犬，3岁",
+            active_tasks=(),
+        )
+    )
 
-    assert decision.strategy == "llm_task_router"
+    assert decision.strategy == "litellm_response_format_task_router"
     assert [task.domain for task in decision.tasks] == ["gastrointestinal", "behavior"]
-    assert decision.tasks[0].reason == "消化道症状"
 
 
 def test_header_body_id_conflict_returns_invalid_request(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1778,19 +1956,22 @@ def test_rag_guided_followup_uses_knowledge_to_plan_questions(tmp_path: Path, mo
     assert data["evidence"]
 
 
-def test_unfinished_consultation_state_skips_task_splitting(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """验证未完成问诊状态会优先吸收下一轮回答。
+def test_unfinished_consultation_state_is_routed_as_an_existing_task(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证未完成问诊状态由结构化路由器引用已有任务。
 
     :param tmp_path: 参数 tmp_path。
     :param monkeypatch: 参数 monkeypatch。
     :return: 无返回值；断言通过表示场景符合预期。
     """
     client = _client(tmp_path, monkeypatch)
-    session_id = "s_skip_task_router"
+    session_id = "s_existing_task_router"
     vet_context = {
-        "user_id": "u_skip_task_router",
+        "user_id": "u_existing_task_router",
         "session_id": session_id,
-        "pet_id": "p_skip_task_router",
+        "pet_id": "p_existing_task_router",
         "pet_info": {
             "species": "犬",
             "breed": "柯基",
@@ -1821,9 +2002,8 @@ def test_unfinished_consultation_state_skips_task_splitting(tmp_path: Path, monk
     data = second.json()
     assert data["status"] == "completed"
     assert data["vet_result"]["route"] == "standard_consultation"
-    assert data["metadata"]["task_router_skipped"] is True
-    assert data["metadata"]["task_router_strategy"] == "skipped_unfinished_consultation_state"
-    assert "TaskRouterAgent" not in data["metadata"]["multi_agent_path"]
+    assert data["metadata"]["task_router"]["tasks"][0]["existing_task_key"] == "__default__"
+    assert "TaskRouterAgent" in data["metadata"]["multi_agent_path"]
     assert "AnswerabilityEvaluator" in data["metadata"]["multi_agent_path"]
     assert data["metadata"]["answerability"]["mode"] in {"slot_complete", "sufficient_semantic_evidence"}
     assert "任务 1" not in data["output_text"]
@@ -1992,6 +2172,11 @@ def test_consultation_second_turn_completes_after_context_is_built(tmp_path: Pat
     assert data["metadata"]["consultation_phase"] == "ready_to_answer"
     assert data["metadata"]["missing_slots"] == []
     assert "QwenResponseAgent" in data["metadata"]["multi_agent_path"]
+    memory_read = data["metadata"]["memory_read"]["audit"]
+    assert memory_read["session_turns_count"] == 1
+    assert memory_read["semantic_status"] == "disabled"
+    assert "当前会话上下文" in _last_response_composer_prompt
+    assert "它有点拉稀，怎么办？" in _last_response_composer_prompt
     assert "阶段性最终建议" not in data["output_text"]
     assert "请先回答" not in data["output_text"]
     assert "线下兽医" in data["output_text"]

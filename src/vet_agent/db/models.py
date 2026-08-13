@@ -93,11 +93,65 @@ class ConsultationDomainModel(Base):
 
     domain: Mapped[str] = mapped_column(Text, primary_key=True)
     required_slots: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False)
-    classifier_keywords: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, default=list, server_default="{}")
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
     priority: Mapped[int] = mapped_column(Integer, nullable=False, default=100, server_default="100")
     version: Mapped[str] = mapped_column(Text, nullable=False, default="v1", server_default="v1")
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class TaskRoutingDomainModel(Base):
+    __tablename__ = "task_routing_domains"
+    __table_args__ = (
+        UniqueConstraint("domain", name="uq_task_routing_domains_domain"),
+        {
+            "comment": "任务路由任务域目录表，用于约束结构化任务拆分结果，不保存关键词规则或临床动作规则。",
+        },
+    )
+
+    domain: Mapped[str] = mapped_column(Text, primary_key=True, comment="任务域稳定技术标识。")
+    title: Mapped[str] = mapped_column(Text, nullable=False, comment="任务域面向用户展示的标题。")
+    description: Mapped[str] = mapped_column(Text, nullable=False, comment="任务域职责说明，仅用于路由上下文和运维理解。")
+    priority: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=100,
+        server_default="100",
+        comment="任务域默认排序优先级，数值越小越优先。",
+    )
+    enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default="true",
+        comment="任务域是否允许进入任务路由目录。",
+    )
+    version: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        default="v1",
+        server_default="v1",
+        comment="任务域目录配置版本。",
+    )
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(
+        "metadata",
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+        comment="任务域附加审计元数据，不承载任务动作规则。",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        comment="任务域记录创建时间。",
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        comment="任务域记录最近更新时间。",
+    )
 
 
 class ConsultationSlotModel(Base):
@@ -318,22 +372,49 @@ class ConversationTurnModel(Base):
     __tablename__ = "conversation_turns"
     __table_args__ = (
         UniqueConstraint("request_id", name="uq_conversation_turns_request_id"),
+        {
+            "comment": "Agent 对话回合表，用于当前 session 滑动窗口、回合审计、幂等响应快照关联与记忆投影来源。"
+        },
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    turn_id: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
-    request_id: Mapped[str] = mapped_column(Text, nullable=False)
-    trace_id: Mapped[str] = mapped_column(Text, nullable=False)
-    user_id: Mapped[str] = mapped_column(Text, nullable=False)
-    session_id: Mapped[str] = mapped_column(Text, nullable=False)
-    pet_id: Mapped[str] = mapped_column(Text, nullable=False)
-    input_text: Mapped[str] = mapped_column(Text, nullable=False)
-    summary: Mapped[str] = mapped_column(Text, nullable=False)
-    status: Mapped[str] = mapped_column(Text, nullable=False, default="completed", server_default="completed")
-    medical: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
-    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, nullable=False, default=dict, server_default="{}")
-    response_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True, comment="对话回合内部主键。")
+    turn_id: Mapped[str] = mapped_column(Text, nullable=False, unique=True, comment="Agent 生成的稳定回合标识。")
+    request_id: Mapped[str] = mapped_column(Text, nullable=False, comment="入口请求标识，用于幂等与 trace 关联。")
+    trace_id: Mapped[str] = mapped_column(Text, nullable=False, comment="链路追踪标识。")
+    user_id: Mapped[str] = mapped_column(Text, nullable=False, comment="可信用户标识。")
+    session_id: Mapped[str] = mapped_column(Text, nullable=False, comment="可信会话标识。")
+    pet_id: Mapped[str] = mapped_column(Text, nullable=False, comment="可信宠物标识。")
+    input_text: Mapped[str] = mapped_column(Text, nullable=False, comment="本轮用户输入文本快照。")
+    summary: Mapped[str] = mapped_column(Text, nullable=False, comment="本轮 Agent 响应摘要或完整输出快照。")
+    status: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        default="completed",
+        server_default="completed",
+        comment="本轮 Agent 响应状态。",
+    )
+    medical: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default="true",
+        comment="本轮是否属于医疗咨询主链路。",
+    )
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(
+        "metadata",
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+        comment="本轮回合附加审计元数据。",
+    )
+    response_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSONB, comment="本轮响应结构化快照。")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        comment="本轮回合创建时间。",
+    )
 
 
 class PetProfileModel(Base):
@@ -415,55 +496,147 @@ class ConsultationStateModel(Base):
     __tablename__ = "consultation_states"
     __table_args__ = (
         UniqueConstraint("user_id", "pet_id", "session_id", "task_key", name="uq_consultation_states_scope"),
+        {
+            "comment": "活跃问诊状态表，用于当前 session 默认问诊状态与多任务问诊状态持久化。"
+        },
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    user_id: Mapped[str] = mapped_column(Text, nullable=False)
-    pet_id: Mapped[str] = mapped_column(Text, nullable=False)
-    session_id: Mapped[str] = mapped_column(Text, nullable=False)
-    task_key: Mapped[str] = mapped_column(Text, nullable=False, default="__default__", server_default="__default__")
-    state: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")
-    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True, comment="问诊状态内部主键。")
+    user_id: Mapped[str] = mapped_column(Text, nullable=False, comment="可信用户标识。")
+    pet_id: Mapped[str] = mapped_column(Text, nullable=False, comment="可信宠物标识。")
+    session_id: Mapped[str] = mapped_column(Text, nullable=False, comment="可信会话标识。")
+    task_key: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        default="__default__",
+        server_default="__default__",
+        comment="问诊任务键；__default__ 表示默认单任务状态。",
+    )
+    state: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+        comment="结构化活跃问诊状态 JSON。",
+    )
+    version: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+        server_default="1",
+        comment="问诊状态更新版本号。",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        comment="问诊状态创建时间。",
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        comment="问诊状态最近更新时间。",
+    )
 
 
 class PetMemoryFactModel(Base):
     __tablename__ = "pet_memory_facts"
     __table_args__ = (
         UniqueConstraint("user_id", "pet_id", "fact_type", "fact_key", name="uq_pet_memory_facts_key"),
+        {
+            "comment": "宠物权威长期事实表，用于保存经抽取、确认或人工纠正后的可信记忆事实。"
+        },
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    user_id: Mapped[str] = mapped_column(Text, nullable=False)
-    pet_id: Mapped[str] = mapped_column(Text, nullable=False)
-    fact_type: Mapped[str] = mapped_column(Text, nullable=False)
-    fact_key: Mapped[str] = mapped_column(Text, nullable=False)
-    fact_value: Mapped[str] = mapped_column(Text, nullable=False)
-    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.8, server_default="0.8")
-    source_turn_id: Mapped[str | None] = mapped_column(Text)
-    source_text: Mapped[str | None] = mapped_column(Text)
-    valid_from: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
-    valid_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
-    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, nullable=False, default=dict, server_default="{}")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True, comment="长期事实内部主键。")
+    user_id: Mapped[str] = mapped_column(Text, nullable=False, comment="可信用户标识。")
+    pet_id: Mapped[str] = mapped_column(Text, nullable=False, comment="可信宠物标识。")
+    fact_type: Mapped[str] = mapped_column(Text, nullable=False, comment="事实类型，例如 medical 或 owner_preference。")
+    fact_key: Mapped[str] = mapped_column(Text, nullable=False, comment="事实键名。")
+    fact_value: Mapped[str] = mapped_column(Text, nullable=False, comment="事实内容。")
+    confidence: Mapped[float] = mapped_column(
+        Float,
+        nullable=False,
+        default=0.8,
+        server_default="0.8",
+        comment="事实置信度，范围应由写入策略控制。",
+    )
+    source_turn_id: Mapped[str | None] = mapped_column(Text, comment="事实来源回合标识。")
+    source_text: Mapped[str | None] = mapped_column(Text, comment="事实来源文本片段。")
+    valid_from: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        comment="事实生效时间。",
+    )
+    valid_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), comment="事实失效时间。")
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default="true",
+        comment="事实是否处于可读状态。",
+    )
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(
+        "metadata",
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+        comment="长期事实附加审计元数据。",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        comment="长期事实创建时间。",
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        comment="长期事实最近更新时间。",
+    )
 
 
 class PetMemoryEpisodeModel(Base):
     __tablename__ = "pet_memory_episodes"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    user_id: Mapped[str] = mapped_column(Text, nullable=False)
-    pet_id: Mapped[str] = mapped_column(Text, nullable=False)
-    session_id: Mapped[str] = mapped_column(Text, nullable=False)
-    turn_id: Mapped[str | None] = mapped_column(Text)
-    title: Mapped[str] = mapped_column(Text, nullable=False)
-    summary: Mapped[str] = mapped_column(Text, nullable=False)
-    memory_scope: Mapped[str] = mapped_column(Text, nullable=False, default="medium", server_default="medium")
-    metadata_json: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, nullable=False, default=dict, server_default="{}")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    __table_args__ = (
+        {
+            "comment": "宠物中期历史 episode 表，用于保存跨 session 的历史事件摘要和语义投影来源审计。"
+        },
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True, comment="episode 内部主键。")
+    user_id: Mapped[str] = mapped_column(Text, nullable=False, comment="可信用户标识。")
+    pet_id: Mapped[str] = mapped_column(Text, nullable=False, comment="可信宠物标识。")
+    session_id: Mapped[str] = mapped_column(Text, nullable=False, comment="episode 来源会话标识。")
+    turn_id: Mapped[str | None] = mapped_column(Text, comment="episode 来源回合标识。")
+    title: Mapped[str] = mapped_column(Text, nullable=False, comment="episode 标题。")
+    summary: Mapped[str] = mapped_column(Text, nullable=False, comment="episode 摘要。")
+    memory_scope: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        default="medium",
+        server_default="medium",
+        comment="episode 记忆范围，例如 medium。",
+    )
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(
+        "metadata",
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+        comment="episode 附加审计元数据。",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        comment="episode 创建时间。",
+    )
 
 
 class PetReportModel(Base):

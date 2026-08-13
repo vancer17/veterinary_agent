@@ -57,9 +57,8 @@ async def read_memory(
     container = get_container()
     identity = TrustedIdentity(user_id=user_id, session_id=session_id, pet_id=pet_id)
     await _authorize_memory_request(request, identity)
-    return await container.memory_service.read(
-        identity
-    )
+    bundle = await container.memory_read_service.read_snapshot(identity)
+    return bundle.to_legacy_dict()
 
 
 @router.put("")

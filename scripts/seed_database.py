@@ -27,9 +27,11 @@ from vet_agent.db import (
     ConsultationDomainModel,
     ConsultationSlotModel,
     KnowledgeChunkModel,
+    TaskRoutingDomainModel,
     make_session_factory,
 )
 from vet_agent.runtime import QwenEmbeddingClient
+from vet_agent.task_routing import default_task_routing_domains
 
 
 def parse_args() -> argparse.Namespace:
@@ -81,6 +83,7 @@ def main() -> None:
     seed_dir = Path(args.seed_dir)
     session_factory = make_session_factory(args.database_url)
     with session_factory() as session:
+        seed_task_routing_domains(session)
         seed_consultation(session, seed_dir / "consultation_rules.json")
         seed_knowledge(session, seed_dir / "knowledge_chunks.json", embedding_client)
         seed_clinical_safety(
@@ -92,6 +95,25 @@ def main() -> None:
             require_publish_embeddings=not args.allow_missing_clinical_safety_embeddings,
         )
         session.commit()
+
+
+def seed_task_routing_domains(session: Session) -> None:
+    """写入任务路由正式任务域目录。
+
+    :param session: 数据库会话。
+    :return: 无返回值。
+    """
+    for item in default_task_routing_domains():
+        model = session.get(TaskRoutingDomainModel, item.domain)
+        if model is None:
+            model = TaskRoutingDomainModel(domain=item.domain)
+            session.add(model)
+        model.title = item.title
+        model.description = item.description
+        model.priority = item.priority
+        model.enabled = True
+        model.version = item.version
+        model.metadata_json = dict(item.metadata)
 
 
 def seed_consultation(session: Session, path: Path) -> None:
@@ -108,7 +130,6 @@ def seed_consultation(session: Session, path: Path) -> None:
             model = ConsultationDomainModel(domain=item["domain"])
             session.add(model)
         model.required_slots = item.get("required_slots", [])
-        model.classifier_keywords = item.get("classifier_keywords", [])
         model.priority = int(item.get("priority", 100))
     for item in raw.get("slots", []):
         model = session.get(ConsultationSlotModel, item["slot_name"])

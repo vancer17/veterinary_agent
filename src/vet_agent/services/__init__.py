@@ -24,7 +24,7 @@ from .rag_governance import (
 )
 from .reasoning_display import ReasoningDisplayBuilder
 from .reports import JsonReportStore, PostgresReportStore, ReportIngestionService
-from .semantic_memory import DisabledSemanticMemory, make_semantic_memory
+from .semantic_memory import DisabledSemanticMemory, SemanticMemoryWriter, make_semantic_memory
 from .scope import (
     AuthenticatedPrincipal,
     DeterministicScopePolicyEvaluator,
@@ -72,6 +72,7 @@ __all__ = [
     "ScopeDecision",
     "ScopeDecisionAction",
     "ScopePolicyEvaluator",
+    "SemanticMemoryWriter",
     "TurnExecutionBusyError",
     "TurnExecutionConflictError",
     "TurnExecutionDependencyError",
