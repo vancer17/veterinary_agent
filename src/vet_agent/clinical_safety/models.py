@@ -27,7 +27,7 @@ ClinicalSafetyActionClass = Literal[
     "safety_warning",
 ]
 ClinicalSafetyChunkType = Literal["recognition", "clinical_risk", "triage_action"]
-ClinicalSafetyScoreType = Literal["cosine_similarity", "lexical_overlap"]
+ClinicalSafetyScoreType = Literal["cosine_similarity"]
 
 
 def derive_clinical_safety_code(
@@ -210,11 +210,11 @@ class ClinicalSafetyChunk:
 
 @dataclass(frozen=True)
 class ClinicalSafetyChunkHit:
-    """表示一次向量或文本召回命中的安全 chunk。
+    """表示一次 pgvector 向量召回命中的安全 chunk。
 
     :param chunk: 被召回的临床安全向量片段。
     :param score: 查询与片段之间的排序分数。
-    :param distance: 向量距离；文本召回时为 0。
+    :param distance: pgvector 余弦距离。
     :param score_type: 分数计算方式。
     :param retrieval_source: 命中来源。
     :param embedding_model: 查询或 chunk 使用的 embedding 模型。
@@ -226,7 +226,7 @@ class ClinicalSafetyChunkHit:
     score: float
     distance: float = 0.0
     score_type: ClinicalSafetyScoreType = "cosine_similarity"
-    retrieval_source: str = "clinical_safety_vector"
+    retrieval_source: str = "clinical_safety_pgvector"
     embedding_model: str | None = None
     matched_terms: tuple[str, ...] = field(default_factory=tuple)
 
@@ -247,7 +247,7 @@ class ClinicalSafetyCandidate:
     score: float
     chunk_hits: tuple[ClinicalSafetyChunkHit, ...]
     score_type: ClinicalSafetyScoreType = "cosine_similarity"
-    retrieval_source: str = "clinical_safety_vector"
+    retrieval_source: str = "clinical_safety_pgvector"
 
     def matched_terms(self) -> tuple[str, ...]:
         """汇总候选资产下所有召回片段的审计命中特征词。

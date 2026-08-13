@@ -11,7 +11,8 @@ import os
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import engine_from_config, pool, text
+from sqlalchemy.engine import Connection
 
 from vet_agent.db import Base, sqlalchemy_url
 
@@ -21,6 +22,9 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata
+
+
+ALEMBIC_VERSION_TABLE_NAME = "alembic_version"
 
 
 def database_url() -> str:
@@ -60,9 +64,39 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
+        _ensure_alembic_version_table(connection)
+        # 版本表兼容 DDL 必须在 Alembic 正式迁移事务开始前提交；
+        # 否则 SQLAlchemy 2.x 的 autobegin 会使后续迁移事务无法由 Alembic 正常收束。
+        connection.commit()
         context.configure(connection=connection, target_metadata=target_metadata)
         with context.begin_transaction():
             context.run_migrations()
+
+
+def _ensure_alembic_version_table(connection: Connection) -> None:
+    """确保 Alembic 版本表可以保存当前仓库的长 revision 标识。
+
+    :param connection: Alembic 在线迁移使用的数据库连接。
+    :return: 无返回值。
+    """
+    connection.execute(
+        text(
+            f"""
+            CREATE TABLE IF NOT EXISTS {ALEMBIC_VERSION_TABLE_NAME} (
+                version_num TEXT NOT NULL,
+                CONSTRAINT {ALEMBIC_VERSION_TABLE_NAME}_pkc PRIMARY KEY (version_num)
+            )
+            """
+        )
+    )
+    connection.execute(
+        text(
+            f"""
+            ALTER TABLE {ALEMBIC_VERSION_TABLE_NAME}
+            ALTER COLUMN version_num TYPE TEXT
+            """
+        )
+    )
 
 
 if context.is_offline_mode():

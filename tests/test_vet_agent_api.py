@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -26,6 +26,12 @@ from vet_agent import (
     set_container,
 )
 from vet_agent.agents import TaskSplitterAgent
+from vet_agent.clinical_safety import (
+    ClinicalSafetyAsset,
+    ClinicalSafetyChunk,
+    ClinicalSafetyChunkHit,
+    ClinicalSafetyChunkType,
+)
 from vet_agent.input_safety import (
     InputSafetyService,
     LocalInputSafetyPolicyClient,
@@ -237,7 +243,296 @@ class InMemoryTurnExecutionGate(TurnExecutionGateProtocol):
         return True
 
 
+class StaticEmbeddingClient:
+    """为 API 测试提供固定 embedding 客户端。
+
+    :return: 无返回值。
+    """
+
+    @property
+    def available(self) -> bool:
+        """声明测试 embedding 客户端始终可用。
+
+        :return: 始终返回 True。
+        """
+        return True
+
+    def embed(self, text: str) -> list[float]:
+        """为测试查询返回固定 embedding。
+
+        :param text: 待向量化文本。
+        :return: 返回固定二维向量。
+        """
+        assert text
+        return [0.2, 0.8]
+
+
+class StaticClinicalSafetyRepository:
+    """为 API 测试提供向量召回仓储替身。
+
+    :return: 无返回值。
+    """
+
+    def __init__(self) -> None:
+        """初始化测试临床安全向量仓储。
+
+        :return: 无返回值。
+        """
+        self.assets_by_id = self._assets()
+        self.chunks_by_id = {
+            asset.asset_id: ClinicalSafetyChunk(
+                chunk_id=f"{asset.asset_id}.recognition.v1",
+                asset_id=asset.asset_id,
+                chunk_type="recognition",
+                title=f"{asset.canonical_name} 风险识别",
+                embedding_text="；".join(
+                    [
+                        asset.canonical_name,
+                        *asset.aliases,
+                        *asset.symptoms,
+                        *asset.recognition_phrases,
+                    ]
+                ),
+                metadata={},
+                review_status="approved",
+            )
+            for asset in self.assets_by_id.values()
+        }
+
+    def assets(self, *, published_only: bool = True) -> list[ClinicalSafetyAsset]:
+        """读取测试临床安全资产。
+
+        :param published_only: 是否仅返回发布态资产。
+        :return: 返回测试资产列表。
+        """
+        del published_only
+        return list(self.assets_by_id.values())
+
+    def chunks(
+        self,
+        *,
+        chunk_type: ClinicalSafetyChunkType | None = None,
+        published_only: bool = True,
+    ) -> list[ClinicalSafetyChunk]:
+        """读取测试临床安全 chunk。
+
+        :param chunk_type: 限定读取的 chunk 类型。
+        :param published_only: 是否仅返回发布态 chunk。
+        :return: 返回测试 chunk 列表。
+        """
+        del published_only
+        chunks = list(self.chunks_by_id.values())
+        if chunk_type is None:
+            return chunks
+        return [chunk for chunk in chunks if chunk.chunk_type == chunk_type]
+
+    def asset_by_id(
+        self,
+        asset_id: str,
+        *,
+        published_only: bool = True,
+    ) -> ClinicalSafetyAsset | None:
+        """按资产标识读取测试临床安全资产。
+
+        :param asset_id: 资产标识。
+        :param published_only: 是否仅返回发布态资产。
+        :return: 返回匹配资产或 None。
+        """
+        del published_only
+        return self.assets_by_id.get(asset_id)
+
+    def chunks_by_asset_id(
+        self,
+        asset_id: str,
+        *,
+        published_only: bool = True,
+    ) -> list[ClinicalSafetyChunk]:
+        """读取指定资产关联的测试 chunk。
+
+        :param asset_id: 资产标识。
+        :param published_only: 是否仅返回发布态 chunk。
+        :return: 返回关联 chunk 列表。
+        """
+        del published_only
+        chunk = self.chunks_by_id.get(asset_id)
+        return [chunk] if chunk is not None else []
+
+    def retrieve_vector_chunk_hits(
+        self,
+        query_embedding: Sequence[float],
+        *,
+        chunk_types: tuple[ClinicalSafetyChunkType, ...],
+        limit: int,
+        min_score: float,
+    ) -> list[ClinicalSafetyChunkHit]:
+        """根据本轮查询文本返回对应测试向量命中。
+
+        :param query_embedding: 查询 embedding。
+        :param chunk_types: 允许参与召回的 chunk 类型。
+        :param limit: 返回 chunk 命中数量上限。
+        :param min_score: 候选最低相似度分数。
+        :return: 返回匹配测试场景的向量命中。
+        """
+        del query_embedding, min_score
+        assert limit > 0
+        if "recognition" not in chunk_types:
+            return []
+        hits: list[ClinicalSafetyChunkHit] = []
+        for asset_id in self._matched_asset_ids(_current_test_input_text):
+            chunk = self.chunks_by_id[asset_id]
+            hits.append(
+                ClinicalSafetyChunkHit(
+                    chunk=chunk,
+                    score=0.91,
+                    distance=0.09,
+                    score_type="cosine_similarity",
+                    retrieval_source="clinical_safety_pgvector",
+                    embedding_model="test-embedding",
+                )
+            )
+        return hits[:limit]
+
+    def is_ready(self) -> bool:
+        """检查测试临床安全仓储是否就绪。
+
+        :return: 始终返回 True。
+        """
+        return True
+
+    def _matched_asset_ids(self, text: str) -> list[str]:
+        """根据测试输入选择临床安全资产。
+
+        :param text: 当前测试请求文本。
+        :return: 返回匹配的资产标识列表。
+        """
+        matches: list[str] = []
+        if "xylitol" in text or "无糖口香糖" in text:
+            matches.append("safety_toxin_xylitol")
+        if "巧克力" in text:
+            matches.append("safety_toxin_chocolate")
+        if "呼吸困难" in text or "站不起来" in text:
+            matches.append("safety_emergency_red_flag")
+        if "尿少尿频" in text or "尿频" in text:
+            matches.append("safety_urinary_obstruction")
+        if "多饮多尿" in text and "消瘦" in text:
+            matches.append("safety_senior_cat_polydipsia_weight_loss")
+        if "肚子胀" in text and "干呕" in text:
+            matches.append("safety_gdv")
+        if "牙龈发紫" in text or "呼吸很快" in text:
+            matches.append("safety_cyanosis")
+        return matches
+
+    def _assets(self) -> dict[str, ClinicalSafetyAsset]:
+        """构造 API 测试用临床安全资产。
+
+        :return: 返回按资产标识索引的资产字典。
+        """
+        return {
+            "safety_toxin_xylitol": ClinicalSafetyAsset(
+                asset_id="safety_toxin_xylitol",
+                asset_type="toxin",
+                canonical_name="木糖醇",
+                category="毒物",
+                species_scope=("dog",),
+                sex_scope=(),
+                age_scope=(),
+                severity="urgent",
+                action_class="emergency",
+                code="TOXIC_XYLITOL",
+                aliases=("xylitol", "无糖口香糖"),
+                symptoms=(),
+                recognition_phrases=("xylitol", "无糖口香糖"),
+            ),
+            "safety_toxin_chocolate": ClinicalSafetyAsset(
+                asset_id="safety_toxin_chocolate",
+                asset_type="toxin",
+                canonical_name="巧克力",
+                category="毒物",
+                species_scope=("dog", "cat"),
+                sex_scope=(),
+                age_scope=(),
+                severity="urgent",
+                action_class="emergency",
+                code="TOXIC_SUBSTANCE",
+                aliases=("巧克力",),
+                symptoms=(),
+                recognition_phrases=("巧克力",),
+            ),
+            "safety_emergency_red_flag": ClinicalSafetyAsset(
+                asset_id="safety_emergency_red_flag",
+                asset_type="emergency_red_flag",
+                canonical_name="呼吸困难或无法站立",
+                category="急症红旗",
+                species_scope=("cat", "dog"),
+                sex_scope=(),
+                age_scope=(),
+                severity="urgent",
+                action_class="emergency",
+                code="EMERGENCY_RED_FLAG",
+                symptoms=("呼吸困难", "站不起来"),
+                recognition_phrases=("呼吸困难", "站不起来"),
+            ),
+            "safety_urinary_obstruction": ClinicalSafetyAsset(
+                asset_id="safety_urinary_obstruction",
+                asset_type="danger_pattern",
+                canonical_name="尿频尿少尿道梗阻风险",
+                category="泌尿",
+                species_scope=("cat",),
+                sex_scope=("male",),
+                age_scope=(),
+                severity="urgent",
+                action_class="emergency",
+                code="PARTIAL_URINARY_OBSTRUCTION_RISK",
+                symptoms=("尿少尿频",),
+                recognition_phrases=("尿少尿频", "还能尿一点"),
+            ),
+            "safety_senior_cat_polydipsia_weight_loss": ClinicalSafetyAsset(
+                asset_id="safety_senior_cat_polydipsia_weight_loss",
+                asset_type="danger_pattern",
+                canonical_name="老年猫多饮多尿消瘦",
+                category="内分泌肾脏",
+                species_scope=("cat",),
+                sex_scope=(),
+                age_scope=("senior",),
+                severity="urgent",
+                action_class="same_day_visit",
+                code="SENIOR_CAT_POLYDIPSIA_WEIGHT_LOSS_RISK",
+                symptoms=("多饮多尿", "消瘦"),
+                recognition_phrases=("多饮多尿", "消瘦"),
+            ),
+            "safety_gdv": ClinicalSafetyAsset(
+                asset_id="safety_gdv",
+                asset_type="danger_pattern",
+                canonical_name="胃扩张扭转风险",
+                category="消化急症",
+                species_scope=("dog",),
+                sex_scope=(),
+                age_scope=(),
+                severity="urgent",
+                action_class="emergency",
+                code="GDV_RISK_PATTERN",
+                symptoms=("肚子胀", "干呕吐不出来"),
+                recognition_phrases=("肚子胀", "干呕吐不出来"),
+            ),
+            "safety_cyanosis": ClinicalSafetyAsset(
+                asset_id="safety_cyanosis",
+                asset_type="emergency_red_flag",
+                canonical_name="发绀发紫",
+                category="呼吸循环",
+                species_scope=("cat", "dog"),
+                sex_scope=(),
+                age_scope=(),
+                severity="urgent",
+                action_class="emergency",
+                code="CYANOSIS_RISK_PATTERN",
+                symptoms=("牙龈发紫", "呼吸很快"),
+                recognition_phrases=("牙龈发紫", "呼吸很快"),
+            ),
+        }
+
+
 _test_scope_repository: InMemoryScopeRepository | None = None
+_current_test_input_text = ""
 
 
 def _client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
@@ -260,6 +555,8 @@ def _client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
         Settings.from_env(),
         scope_repository=_test_scope_repository,
         turn_execution_gate=InMemoryTurnExecutionGate(),
+        clinical_safety_repository=StaticClinicalSafetyRepository(),
+        embedding_client=StaticEmbeddingClient(),
         input_safety_service=InputSafetyService(
             Settings.from_env(),
             repository=StaticInputSafetyRepository(),
@@ -508,6 +805,8 @@ def _payload(text: str, **extra: Any) -> dict[str, Any]:
     :param extra: 参数 extra。
     :return: 返回函数执行结果。
     """
+    global _current_test_input_text
+    _current_test_input_text = text
     vet_context = dict(
         extra.pop(
             "vet_context",

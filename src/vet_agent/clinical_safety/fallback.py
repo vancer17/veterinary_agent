@@ -17,9 +17,6 @@ if TYPE_CHECKING:
 
 ClinicalSafetyRetrievalStage = Literal[
     "vector",
-    "postgres_text",
-    "file_text",
-    "asset_fallback",
     "none",
 ]
 ClinicalSafetySemanticStage = Literal[

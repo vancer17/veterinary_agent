@@ -47,7 +47,6 @@ class Settings:
     request_timeout_seconds: float = 30.0
     data_dir: Path = Path(".data")
     seed_dir: Path = Path("assets/seeds")
-    clinical_safety_dir: Path = Path("assets/clinical_safety")
     clinical_safety_vector_min_score: float = 0.35
     database_url: str | None = None
     enable_rag_embeddings: bool = False
@@ -103,7 +102,6 @@ class Settings:
             request_timeout_seconds=float(os.getenv("LITELLM_TIMEOUT_SECONDS", os.getenv("QWEN_TIMEOUT_SECONDS", "30"))),
             data_dir=Path(os.getenv("VET_AGENT_DATA_DIR", ".data")),
             seed_dir=Path(os.getenv("VET_AGENT_SEED_DIR", "assets/seeds")),
-            clinical_safety_dir=Path(os.getenv("VET_AGENT_CLINICAL_SAFETY_DIR", "assets/clinical_safety")),
             clinical_safety_vector_min_score=float(os.getenv("CLINICAL_SAFETY_VECTOR_MIN_SCORE", "0.35")),
             database_url=os.getenv("DATABASE_URL"),
             enable_rag_embeddings=_bool_env("ENABLE_RAG_EMBEDDINGS", False),

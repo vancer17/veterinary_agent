@@ -14,11 +14,10 @@ from vet_agent import Settings
 from vet_agent import VetOrchestrator
 from vet_agent.clinical_safety import (
     ClinicalSafetyEvaluator,
+    ClinicalSafetyRepository,
     ClinicalSafetySemanticExtractorAgent,
     ClinicalSafetyRetriever,
     ClinicalSafetyThresholds,
-    FallbackClinicalSafetyRepository,
-    FileClinicalSafetyRepository,
     PostgresClinicalSafetyRepository,
 )
 from vet_agent.input_safety import (
@@ -41,7 +40,7 @@ from vet_agent.repositories import (
     PostgresTurnExecutionRepository,
     ScopeRepository,
 )
-from vet_agent.runtime import QwenClient, QwenEmbeddingClient
+from vet_agent.runtime import EmbeddingClient, QwenClient, QwenEmbeddingClient
 from vet_agent.services import (
     AccessControlService,
     ClinicalKnowledgeService,
@@ -78,6 +77,8 @@ class Container:
         scope_repository: ScopeRepository | None = None,
         turn_execution_gate: TurnExecutionGateProtocol | None = None,
         input_safety_service: InputSafetyService | None = None,
+        clinical_safety_repository: ClinicalSafetyRepository | None = None,
+        embedding_client: EmbeddingClient | None = None,
     ) -> None:
         """组装应用运行所需的仓储、模型客户端和业务服务。
 
@@ -85,6 +86,8 @@ class Container:
         :param scope_repository: 身份、宠物资料与会话范围仓储；仅测试或特殊嵌入场景可显式注入。
         :param turn_execution_gate: 单回合执行门禁；仅测试或特殊嵌入场景可显式注入。
         :param input_safety_service: 基础输入安全服务；仅测试或特殊嵌入场景可显式注入。
+        :param clinical_safety_repository: 临床安全向量仓储；仅测试或特殊嵌入场景可显式注入。
+        :param embedding_client: 向量化客户端；仅测试或特殊嵌入场景可显式注入。
         :return: 无返回值。
         """
         self.settings = settings
@@ -105,29 +108,28 @@ class Container:
             else LogicTraceStore(JsonDocumentStore(settings.data_dir / "logic_trace.jsonl"))
         )
         self.qwen_client = QwenClient(settings)
-        self.embedding_client = (
-            QwenEmbeddingClient(settings)
-            if settings.enable_rag_embeddings and settings.litellm_configured
+        runtime_embedding_client = QwenEmbeddingClient(settings) if settings.litellm_configured else None
+        self.embedding_client = embedding_client or (
+            runtime_embedding_client
+            if settings.enable_rag_embeddings
             else None
         )
+        self.clinical_safety_embedding_client = embedding_client or runtime_embedding_client
         file_rule_repository = FileRuleRepository(settings.seed_dir)
         file_knowledge_repository = FileKnowledgeRepository(settings.seed_dir)
-        file_clinical_safety_repository = FileClinicalSafetyRepository(settings.clinical_safety_dir)
         clinical_safety_thresholds = ClinicalSafetyThresholds(
             retrieval_min_score=settings.clinical_safety_vector_min_score,
         )
         self.clinical_safety_thresholds = clinical_safety_thresholds
-        self.clinical_safety_repository = (
-            FallbackClinicalSafetyRepository(
-                PostgresClinicalSafetyRepository(settings.database_url),
-                file_clinical_safety_repository,
-            )
-            if settings.database_url
-            else file_clinical_safety_repository
-        )
+        if clinical_safety_repository is not None:
+            self.clinical_safety_repository = clinical_safety_repository
+        elif not settings.database_url:
+            raise RuntimeError("DATABASE_URL is required for clinical safety candidate retrieval")
+        else:
+            self.clinical_safety_repository = PostgresClinicalSafetyRepository(settings.database_url)
         self.clinical_safety_retriever = ClinicalSafetyRetriever(
             self.clinical_safety_repository,
-            self.embedding_client,
+            self.clinical_safety_embedding_client,
             thresholds=clinical_safety_thresholds,
         )
         self.clinical_safety_semantic_extractor = ClinicalSafetySemanticExtractorAgent(

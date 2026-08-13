@@ -60,6 +60,27 @@ class FakeQwenClient:
         return self.raw_response
 
 
+class StaticEmbeddingClient:
+    """提供固定 embedding 的测试客户端。"""
+
+    @property
+    def available(self) -> bool:
+        """声明测试 embedding 客户端始终可用。
+
+        :return: 始终返回 True。
+        """
+        return True
+
+    def embed(self, text: str) -> list[float]:
+        """为测试查询返回固定 embedding。
+
+        :param text: 待向量化的查询文本。
+        :return: 返回固定二维向量。
+        """
+        assert text
+        return [0.2, 0.8]
+
+
 class StaticClinicalSafetyRepository:
     """提供固定临床安全资产和 chunk 的内存仓储。"""
 
@@ -137,33 +158,28 @@ class StaticClinicalSafetyRepository:
         limit: int,
         min_score: float,
     ) -> list[ClinicalSafetyChunkHit]:
-        """返回空向量命中，强制走文本回退路径。
+        """返回固定向量命中，模拟 PostgreSQL/pgvector 主路径。
 
         :param query_embedding: 查询向量。
         :param chunk_types: 允许参与召回的 chunk 类型。
         :param limit: 返回 chunk 命中数量上限。
         :param min_score: 候选最低相似度分数。
-        :return: 返回空列表。
+        :return: 返回固定向量命中列表。
         """
-        del query_embedding, chunk_types, limit, min_score
-        return []
-
-    def retrieve_text_chunk_hits(
-        self,
-        query: str,
-        *,
-        chunk_types: tuple[ClinicalSafetyChunkType, ...],
-        limit: int,
-    ) -> list[ClinicalSafetyChunkHit]:
-        """返回空文本命中，依赖资产结构化短语回退。
-
-        :param query: 用户查询文本。
-        :param chunk_types: 允许参与召回的 chunk 类型。
-        :param limit: 返回 chunk 命中数量上限。
-        :return: 返回空列表。
-        """
-        del query, chunk_types, limit
-        return []
+        assert list(query_embedding) == [0.2, 0.8]
+        assert self.chunk.chunk_type in chunk_types
+        assert limit > 0
+        assert min_score > 0
+        return [
+            ClinicalSafetyChunkHit(
+                chunk=self.chunk,
+                score=0.91,
+                distance=0.09,
+                score_type="cosine_similarity",
+                retrieval_source="clinical_safety_pgvector",
+                embedding_model="test-embedding",
+            )
+        ]
 
     def is_ready(self) -> bool:
         """声明测试仓储始终可用。
@@ -295,7 +311,7 @@ def test_clinical_safety_evaluator_treats_low_confidence_semantic_as_conservativ
     )
     retriever = ClinicalSafetyRetriever(
         StaticClinicalSafetyRepository(asset, chunk),
-        embedding_client=None,
+        embedding_client=StaticEmbeddingClient(),
         min_score=0.35,
     )
     evaluator = ClinicalSafetyEvaluator(retriever)
@@ -362,7 +378,7 @@ def test_clinical_safety_evaluator_uses_semantic_exposure_state_to_suppress_deni
         review_status="approved",
     )
     repository = StaticClinicalSafetyRepository(asset, chunk)
-    retriever = ClinicalSafetyRetriever(repository, embedding_client=None, min_score=0.35)
+    retriever = ClinicalSafetyRetriever(repository, embedding_client=StaticEmbeddingClient(), min_score=0.35)
     evaluator = ClinicalSafetyEvaluator(retriever)
 
     denied_semantic = ClinicalSafetySemanticResult(
@@ -448,7 +464,7 @@ def test_clinical_safety_evaluator_downgrades_resolved_recent_past_toxic_event()
     )
     retriever = ClinicalSafetyRetriever(
         StaticClinicalSafetyRepository(asset, chunk),
-        embedding_client=None,
+        embedding_client=StaticEmbeddingClient(),
         min_score=0.35,
     )
     evaluator = ClinicalSafetyEvaluator(retriever)
@@ -518,7 +534,7 @@ def test_clinical_safety_evaluator_keeps_ongoing_toxic_event_urgent() -> None:
     )
     retriever = ClinicalSafetyRetriever(
         StaticClinicalSafetyRepository(asset, chunk),
-        embedding_client=None,
+        embedding_client=StaticEmbeddingClient(),
         min_score=0.35,
     )
     evaluator = ClinicalSafetyEvaluator(retriever)
@@ -555,10 +571,10 @@ def test_clinical_safety_evaluator_keeps_ongoing_toxic_event_urgent() -> None:
     assert result.fallback_state.semantic.degraded is False
 
 
-def test_clinical_safety_evaluator_returns_explicit_fallback_resolution() -> None:
-    """验证临床安全裁决结果会显式暴露召回与语义回退状态。
+def test_clinical_safety_evaluator_returns_explicit_vector_resolution() -> None:
+    """验证临床安全裁决结果会显式暴露向量召回与语义状态。
 
-    :return: 无返回值；断言通过表示显式回退状态已贯穿召回和裁决层。
+    :return: 无返回值；断言通过表示向量召回状态已贯穿召回和裁决层。
     """
     asset = ClinicalSafetyAsset(
         asset_id="safety_human_drug_001",
@@ -588,7 +604,7 @@ def test_clinical_safety_evaluator_returns_explicit_fallback_resolution() -> Non
     )
     retriever = ClinicalSafetyRetriever(
         StaticClinicalSafetyRepository(asset, chunk),
-        embedding_client=None,
+        embedding_client=StaticEmbeddingClient(),
         min_score=0.35,
     )
     evaluator = ClinicalSafetyEvaluator(retriever)
@@ -616,17 +632,17 @@ def test_clinical_safety_evaluator_returns_explicit_fallback_resolution() -> Non
     )
 
     assert result.signals
-    assert result.fallback_state.retrieval.stage == "asset_fallback"
-    assert result.fallback_state.retrieval.degraded is True
-    assert "embedding_client_unavailable" in result.fallback_state.retrieval.reasons
+    assert result.fallback_state.retrieval.stage == "vector"
+    assert result.fallback_state.retrieval.degraded is False
+    assert result.fallback_state.retrieval.retrieval_source == "clinical_safety_pgvector"
     assert result.fallback_state.semantic.stage == "llm"
-    assert result.to_metadata()["fallback_state"]["retrieval"]["stage"] == "asset_fallback"
+    assert result.to_metadata()["fallback_state"]["retrieval"]["stage"] == "vector"
 
 
-def test_clinical_safety_evaluator_separates_vector_and_lexical_thresholds() -> None:
-    """验证向量裁决阈值与词面裁决阈值彼此独立。
+def test_clinical_safety_evaluator_uses_vector_thresholds() -> None:
+    """验证临床安全裁决只使用向量候选阈值。
 
-    :return: 无返回值；断言通过表示不同证据类型不会共用同一阈值语义。
+    :return: 无返回值；断言通过表示词面回退已退出候选裁决路径。
     """
     asset = ClinicalSafetyAsset(
         asset_id="safety_danger_pattern_001",
@@ -655,7 +671,7 @@ def test_clinical_safety_evaluator_separates_vector_and_lexical_thresholds() -> 
     )
     retriever = ClinicalSafetyRetriever(
         StaticClinicalSafetyRepository(asset, chunk),
-        embedding_client=None,
+        embedding_client=StaticEmbeddingClient(),
         min_score=0.35,
     )
     evaluator = ClinicalSafetyEvaluator(retriever)
@@ -678,8 +694,6 @@ def test_clinical_safety_evaluator_separates_vector_and_lexical_thresholds() -> 
     )
     vector_signal = evaluator._candidate_signal(
         vector_candidate,
-        normalized_query="",
-        age_text="3岁",
         semantic_result=None,
         allow_semantic_escalation=True,
     )
@@ -701,12 +715,10 @@ def test_clinical_safety_evaluator_separates_vector_and_lexical_thresholds() -> 
     )
     urgent_vector_signal = evaluator._candidate_signal(
         urgent_vector_candidate,
-        normalized_query="",
-        age_text="3岁",
         semantic_result=None,
         allow_semantic_escalation=True,
     )
-    lexical_candidate = ClinicalSafetyCandidate(
+    low_score_vector_candidate = ClinicalSafetyCandidate(
         asset=asset,
         score=0.28,
         chunk_hits=(
@@ -714,18 +726,16 @@ def test_clinical_safety_evaluator_separates_vector_and_lexical_thresholds() -> 
                 chunk=chunk,
                 score=0.28,
                 distance=0.0,
-                score_type="lexical_overlap",
-                retrieval_source="clinical_safety_asset_fallback",
+                score_type="cosine_similarity",
+                retrieval_source="clinical_safety_pgvector",
                 matched_terms=("轻微不适",),
             ),
         ),
-        score_type="lexical_overlap",
-        retrieval_source="clinical_safety_asset_fallback",
+        score_type="cosine_similarity",
+        retrieval_source="clinical_safety_pgvector",
     )
-    lexical_signal = evaluator._candidate_signal(
-        lexical_candidate,
-        normalized_query="轻微不适",
-        age_text="3岁",
+    low_score_vector_signal = evaluator._candidate_signal(
+        low_score_vector_candidate,
         semantic_result=None,
         allow_semantic_escalation=True,
     )
@@ -734,4 +744,4 @@ def test_clinical_safety_evaluator_separates_vector_and_lexical_thresholds() -> 
     assert vector_signal.severity == "caution"
     assert urgent_vector_signal is not None
     assert urgent_vector_signal.severity == "urgent"
-    assert lexical_signal is None
+    assert low_score_vector_signal is None
