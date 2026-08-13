@@ -18,10 +18,11 @@ from typing import Any, Protocol
 
 from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.exc import SQLAlchemyError
 
 from vet_agent import TrustedIdentity
-from vet_agent.db import IdempotencyRecordModel, make_session_factory
+from vet_agent.db import IdempotencyRecordModel, make_engine, make_session_factory
 
 
 class TurnIdempotencyClaimStatus(StrEnum):
@@ -175,6 +176,7 @@ class PostgresTurnExecutionRepository(TurnExecutionRepository):
         :param database_url: PostgreSQL 数据库连接地址。
         :return: 无返回值。
         """
+        self.engine: Engine = make_engine(database_url)
         self.session_factory = make_session_factory(database_url)
 
     @asynccontextmanager
@@ -185,21 +187,25 @@ class PostgresTurnExecutionRepository(TurnExecutionRepository):
         :return: 返回异步上下文管理器，进入后持有当前范围的 turn lock。
         """
         lock_key = self._lock_key(identity)
-        session = self.session_factory()
+        connection = self.engine.connect().execution_options(isolation_level="AUTOCOMMIT")
         try:
-            session.execute(select(func.pg_advisory_lock(lock_key)))
+            # pg_advisory_lock 是 session-level 锁；这里持有连接但不持有空闲事务，
+            # 避免长时间模型调用期间触发 PostgreSQL idle_in_transaction_session_timeout。
+            connection.execute(select(func.pg_advisory_lock(lock_key)))
         except SQLAlchemyError as exc:
-            session.close()
+            _close_connection_quietly(connection)
             raise TurnExecutionRepositoryError("failed to manage PostgreSQL turn lock") from exc
         try:
             yield
         finally:
             try:
-                session.execute(select(func.pg_advisory_unlock(lock_key)))
-            except SQLAlchemyError as exc:
-                raise TurnExecutionRepositoryError("failed to release PostgreSQL turn lock") from exc
+                connection.execute(select(func.pg_advisory_unlock(lock_key)))
+            except SQLAlchemyError:
+                # session-level advisory lock 会在连接关闭时由 PostgreSQL 自动释放；
+                # 释放阶段的连接失效不应覆盖已经完成的 Agent 业务响应。
+                pass
             finally:
-                session.close()
+                _close_connection_quietly(connection)
 
     def claim_idempotency(
         self,
@@ -495,3 +501,17 @@ class PostgresTurnExecutionRepository(TurnExecutionRepository):
         raw = f"{identity.user_id}:{identity.pet_id}:{identity.session_id}".encode("utf-8")
         value = int.from_bytes(hashlib.sha256(raw).digest()[:8], byteorder="big", signed=False)
         return value - (1 << 63)
+
+
+def _close_connection_quietly(connection: Connection) -> None:
+    """安静关闭 turn lock 专用数据库连接。
+
+    :param connection: turn lock 持有期间独占使用的 PostgreSQL 连接。
+    :return: 无返回值。
+    """
+    try:
+        connection.close()
+    except SQLAlchemyError:
+        # 连接已由服务端关闭时，session-level advisory lock 已随会话结束释放；
+        # 关闭阶段不应覆盖主业务链路已经生成的结果。
+        pass

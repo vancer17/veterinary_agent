@@ -12,10 +12,11 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 import pytest
+from sqlalchemy.exc import OperationalError
 
 from vet_agent import (
     AgentTurnRequest,
@@ -28,7 +29,12 @@ from vet_agent import (
     TurnOptions,
     VetContext,
 )
-from vet_agent.repositories import TurnExecutionRepository, TurnIdempotencyClaim, TurnIdempotencyClaimStatus
+from vet_agent.repositories import (
+    PostgresTurnExecutionRepository,
+    TurnExecutionRepository,
+    TurnIdempotencyClaim,
+    TurnIdempotencyClaimStatus,
+)
 from vet_agent.services import TurnExecutionConflictError, TurnExecutionGate
 
 
@@ -189,6 +195,72 @@ class InMemoryTurnExecutionRepository(TurnExecutionRepository):
         return identity.user_id, identity.pet_id, identity.session_id, idempotency_key
 
 
+class _BrokenUnlockConnection:
+    """模拟释放 advisory lock 时已经失效的 PostgreSQL 连接。
+
+    :return: 无返回值。
+    """
+
+    def __init__(self) -> None:
+        """初始化测试连接状态。
+
+        :return: 无返回值。
+        """
+        self.executions = 0
+        self.closed = False
+
+    def execution_options(self, **kwargs: Any) -> "_BrokenUnlockConnection":
+        """模拟 SQLAlchemy Connection.execution_options 链式调用。
+
+        :param kwargs: SQLAlchemy 连接执行选项。
+        :return: 返回当前测试连接。
+        """
+        del kwargs
+        return self
+
+    def execute(self, statement: Any) -> object:
+        """模拟 advisory lock 获取成功但释放时连接失效。
+
+        :param statement: SQLAlchemy 待执行语句。
+        :return: 获取锁阶段返回占位对象。
+        """
+        del statement
+        self.executions += 1
+        if self.executions == 1:
+            return object()
+        raise OperationalError("SELECT pg_advisory_unlock", {}, RuntimeError("server closed the connection"))
+
+    def close(self) -> None:
+        """记录测试连接已经关闭。
+
+        :return: 无返回值。
+        """
+        self.closed = True
+
+
+class _BrokenUnlockEngine:
+    """模拟只提供 turn lock 连接的 SQLAlchemy Engine。
+
+    :param connection: 用于本轮 turn lock 测试的连接对象。
+    :return: 无返回值。
+    """
+
+    def __init__(self, connection: _BrokenUnlockConnection) -> None:
+        """初始化测试 Engine。
+
+        :param connection: 用于本轮 turn lock 测试的连接对象。
+        :return: 无返回值。
+        """
+        self.connection = connection
+
+    def connect(self) -> _BrokenUnlockConnection:
+        """返回 turn lock 专用测试连接。
+
+        :return: 返回测试连接对象。
+        """
+        return self.connection
+
+
 def test_turn_execution_gate_replays_completed_response() -> None:
     """验证同一语义请求重复使用幂等键时重放首个响应。
 
@@ -313,6 +385,30 @@ def test_turn_execution_gate_treats_metadata_as_request_semantics() -> None:
         await gate.run(first_request, execute_first)
         with pytest.raises(TurnExecutionConflictError):
             await gate.run(second_request, execute_second)
+
+    asyncio.run(scenario())
+
+
+def test_postgres_turn_lock_does_not_mask_completed_turn_when_unlock_connection_is_closed() -> None:
+    """验证 PostgreSQL 锁释放连接失效时不覆盖已经完成的回合结果。
+
+    :return: 无返回值；断言通过表示释放阶段连接错误被限定在锁生命周期内。
+    """
+
+    async def scenario() -> None:
+        """执行 PostgreSQL advisory lock 释放失败回归测试场景。
+
+        :return: 无返回值。
+        """
+        repository = PostgresTurnExecutionRepository("postgresql://unused:unused@127.0.0.1/unused")
+        connection = _BrokenUnlockConnection()
+        repository.engine = cast(Any, _BrokenUnlockEngine(connection))
+
+        async with repository.turn_lock(TrustedIdentity(user_id="u_lock", pet_id="p_lock", session_id="s_lock")):
+            pass
+
+        assert connection.executions == 2
+        assert connection.closed is True
 
     asyncio.run(scenario())
 
