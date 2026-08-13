@@ -1,0 +1,385 @@
+{
+  "$defs": {
+    "ClinicalSafetyActionClassContract": {
+      "description": "表示发布态临床安全资产允许声明的动作分类。\n\n:return: 无返回值；动作分类只作为策略输入，不在运行时代码中直接生成最终动作。",
+      "enum": [
+        "emergency",
+        "same_day_visit",
+        "urgent_visit",
+        "safety_warning"
+      ],
+      "title": "ClinicalSafetyActionClassContract",
+      "type": "string"
+    },
+    "ClinicalSafetyAssetPublishContract": {
+      "additionalProperties": false,
+      "description": "表示单条发布态临床安全资产的严格契约。\n\n:param asset_id: 临床安全资产稳定标识。\n:param code: 已由资产治理域确认的对外安全信号编码。\n:param asset_type: 安全资产类型。\n:param canonical_name: 资产规范名称。\n:param category: 资产所属临床分类或原始资料分类。\n:param species_scope: 资产适用物种范围。\n:param sex_scope: 资产适用性别范围。\n:param age_scope: 资产适用年龄阶段范围。\n:param severity: 资产默认安全严重级别。\n:param action_class: 资产默认动作分类。\n:param aliases: 资产别名、英文名、商品名或俗称。\n:param carriers: 风险载体或暴露来源列表。\n:param user_expressions: 用户常见表达列表，仅用于离线向量文本生成。\n:param symptoms: 资产相关症状或风险线索。\n:param recognition_phrases: 离线生成 embedding 文本所需的召回短语集合。\n:param required_context: 后续裁决域消费的结构化上下文提示。\n:param decision_hints: 后续裁决域消费的枚举化策略提示。\n:param clinical_risk_summary: 临床风险摘要。\n:param triage_message: 对外分诊处置口径。\n:param source: 资料来源追踪信息。\n:param review_status: 审核状态；发布态严格契约只接受 approved。\n:param version: 资产版本。\n:param enabled: 是否允许进入运行时召回；发布态严格契约只接受 True。\n:param published_at: 资产发布时间。\n:param raw_text: 原始临床安全文本字段备份。\n:param metadata: 资产附加审计元数据。\n:return: 无返回值。",
+      "properties": {
+        "asset_id": {
+          "description": "临床安全资产稳定标识。",
+          "minLength": 1,
+          "title": "Asset Id",
+          "type": "string"
+        },
+        "code": {
+          "description": "已由资产治理域确认的对外安全信号编码。",
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Code",
+          "type": "string"
+        },
+        "asset_type": {
+          "$ref": "#/$defs/ClinicalSafetyAssetTypeContract",
+          "description": "安全资产类型。"
+        },
+        "canonical_name": {
+          "description": "资产规范名称。",
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Canonical Name",
+          "type": "string"
+        },
+        "category": {
+          "description": "资产所属临床分类或原始资料分类。",
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Category",
+          "type": "string"
+        },
+        "species_scope": {
+          "description": "资产适用物种范围。",
+          "items": {
+            "type": "string"
+          },
+          "title": "Species Scope",
+          "type": "array"
+        },
+        "sex_scope": {
+          "description": "资产适用性别范围。",
+          "items": {
+            "type": "string"
+          },
+          "title": "Sex Scope",
+          "type": "array"
+        },
+        "age_scope": {
+          "description": "资产适用年龄阶段范围。",
+          "items": {
+            "type": "string"
+          },
+          "title": "Age Scope",
+          "type": "array"
+        },
+        "severity": {
+          "$ref": "#/$defs/ClinicalSafetySeverityContract",
+          "description": "资产默认安全严重级别。"
+        },
+        "action_class": {
+          "$ref": "#/$defs/ClinicalSafetyActionClassContract",
+          "description": "资产默认动作分类。"
+        },
+        "aliases": {
+          "description": "资产别名、英文名、商品名或俗称。",
+          "items": {
+            "type": "string"
+          },
+          "title": "Aliases",
+          "type": "array"
+        },
+        "carriers": {
+          "description": "风险载体或暴露来源列表。",
+          "items": {
+            "type": "string"
+          },
+          "title": "Carriers",
+          "type": "array"
+        },
+        "user_expressions": {
+          "description": "用户常见表达列表，仅用于离线向量文本生成。",
+          "items": {
+            "type": "string"
+          },
+          "title": "User Expressions",
+          "type": "array"
+        },
+        "symptoms": {
+          "description": "资产相关症状或风险线索。",
+          "items": {
+            "type": "string"
+          },
+          "title": "Symptoms",
+          "type": "array"
+        },
+        "recognition_phrases": {
+          "description": "离线生成 embedding 文本所需的召回短语集合。",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Recognition Phrases",
+          "type": "array"
+        },
+        "required_context": {
+          "additionalProperties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "description": "后续裁决域消费的结构化上下文提示。",
+          "propertyNames": {
+            "$ref": "#/$defs/ClinicalSafetyContextKeyContract"
+          },
+          "title": "Required Context",
+          "type": "object"
+        },
+        "decision_hints": {
+          "additionalProperties": {
+            "$ref": "#/$defs/ClinicalSafetyDecisionHintValueContract"
+          },
+          "description": "后续裁决域消费的枚举化策略提示。",
+          "propertyNames": {
+            "$ref": "#/$defs/ClinicalSafetyDecisionHintKeyContract"
+          },
+          "title": "Decision Hints",
+          "type": "object"
+        },
+        "clinical_risk_summary": {
+          "description": "临床风险摘要。",
+          "minLength": 1,
+          "title": "Clinical Risk Summary",
+          "type": "string"
+        },
+        "triage_message": {
+          "description": "对外分诊处置口径。",
+          "minLength": 1,
+          "title": "Triage Message",
+          "type": "string"
+        },
+        "source": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "资料来源追踪信息。",
+          "title": "Source",
+          "type": "object"
+        },
+        "review_status": {
+          "const": "approved",
+          "description": "审核状态；发布态严格契约只接受 approved。",
+          "title": "Review Status",
+          "type": "string"
+        },
+        "version": {
+          "description": "资产版本。",
+          "minLength": 1,
+          "title": "Version",
+          "type": "string"
+        },
+        "enabled": {
+          "const": true,
+          "description": "是否允许进入运行时召回；发布态严格契约只接受 True。",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "published_at": {
+          "description": "资产发布时间。",
+          "format": "date-time",
+          "title": "Published At",
+          "type": "string"
+        },
+        "raw_text": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "原始临床安全文本字段备份。",
+          "title": "Raw Text",
+          "type": "object"
+        },
+        "metadata": {
+          "additionalProperties": true,
+          "description": "资产附加审计元数据。",
+          "title": "Metadata",
+          "type": "object"
+        }
+      },
+      "required": [
+        "asset_id",
+        "code",
+        "asset_type",
+        "canonical_name",
+        "category",
+        "severity",
+        "action_class",
+        "recognition_phrases",
+        "clinical_risk_summary",
+        "triage_message",
+        "source",
+        "review_status",
+        "version",
+        "enabled",
+        "published_at"
+      ],
+      "title": "ClinicalSafetyAssetPublishContract",
+      "type": "object"
+    },
+    "ClinicalSafetyAssetTypeContract": {
+      "description": "表示发布态临床安全资产允许使用的资产类型。\n\n:return: 无返回值；枚举值用于静态资产、数据库和策略输入之间保持一致。",
+      "enum": [
+        "toxin",
+        "human_drug",
+        "plant_toxin",
+        "chemical_toxin",
+        "emergency_red_flag",
+        "danger_pattern"
+      ],
+      "title": "ClinicalSafetyAssetTypeContract",
+      "type": "string"
+    },
+    "ClinicalSafetyContextKeyContract": {
+      "description": "表示发布态资产 required_context 允许声明的上下文字段。\n\n:return: 无返回值；上下文字段仅用于裁决域消费结构化上下文，不承载运行时关键词规则。",
+      "enum": [
+        "species",
+        "sex",
+        "age",
+        "symptoms"
+      ],
+      "title": "ClinicalSafetyContextKeyContract",
+      "type": "string"
+    },
+    "ClinicalSafetyDecisionHintKeyContract": {
+      "description": "表示发布态资产中允许出现的结构化策略提示键。\n\n:return: 无返回值；该枚举防止 decision_hints 退化为自由格式策略 DSL。",
+      "enum": [
+        "actual_exposure",
+        "possible_exposure",
+        "active_symptom",
+        "possible_symptom",
+        "historical_context",
+        "knowledge_question",
+        "prevention_question"
+      ],
+      "title": "ClinicalSafetyDecisionHintKeyContract",
+      "type": "string"
+    },
+    "ClinicalSafetyDecisionHintValueContract": {
+      "description": "表示发布态资产中允许出现的结构化策略提示值。\n\n:return: 无返回值；提示值只作为策略输入，不允许在 Python 运行时解释为最终动作。",
+      "enum": [
+        "safety_escalated",
+        "clinical_caution",
+        "completed_with_safety_warning",
+        "record_as_history"
+      ],
+      "title": "ClinicalSafetyDecisionHintValueContract",
+      "type": "string"
+    },
+    "ClinicalSafetyDocumentMetaContract": {
+      "additionalProperties": true,
+      "description": "表示临床安全发布态资产文档的元信息。\n\n:param document_schema: 静态资产文档类型，对应 JSON 中的 schema 字段。\n:param schema_version: 静态资产契约版本。\n:param version: 本批资产或 chunk 的业务版本。\n:param source_file: 原始来源文件路径。\n:param asset_count: 资产数量。\n:param chunk_count: chunk 数量；资产文档可为空。\n:param generated_at: 文档生成时间。\n:param source_meta: 原始来源元信息。\n:return: 无返回值。",
+      "properties": {
+        "schema": {
+          "description": "静态资产文档类型。",
+          "enum": [
+            "clinical_safety_assets",
+            "clinical_safety_chunks"
+          ],
+          "title": "Schema",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0.0",
+          "description": "静态资产契约版本。",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "version": {
+          "description": "本批资产或 chunk 的业务版本。",
+          "minLength": 1,
+          "title": "Version",
+          "type": "string"
+        },
+        "source_file": {
+          "description": "原始来源文件路径。",
+          "minLength": 1,
+          "title": "Source File",
+          "type": "string"
+        },
+        "asset_count": {
+          "description": "文档声明的资产数量。",
+          "minimum": 0,
+          "title": "Asset Count",
+          "type": "integer"
+        },
+        "chunk_count": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "文档声明的 chunk 数量；资产文档可为空。",
+          "title": "Chunk Count"
+        },
+        "generated_at": {
+          "description": "文档生成时间。",
+          "format": "date-time",
+          "title": "Generated At",
+          "type": "string"
+        },
+        "source_meta": {
+          "additionalProperties": true,
+          "description": "原始来源元信息。",
+          "title": "Source Meta",
+          "type": "object"
+        }
+      },
+      "required": [
+        "schema",
+        "schema_version",
+        "version",
+        "source_file",
+        "asset_count",
+        "generated_at"
+      ],
+      "title": "ClinicalSafetyDocumentMetaContract",
+      "type": "object"
+    },
+    "ClinicalSafetySeverityContract": {
+      "description": "表示发布态临床安全资产允许声明的默认严重级别。\n\n:return: 无返回值；最终动作仍由策略裁决域基于结构化候选统一产生。",
+      "enum": [
+        "info",
+        "caution",
+        "urgent",
+        "blocked"
+      ],
+      "title": "ClinicalSafetySeverityContract",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "表示发布态临床安全资产文档的严格契约。\n\n:param meta: 文档元信息，对应 JSON 中的 _meta 字段。\n:param assets: 发布态临床安全资产列表。\n:return: 无返回值。",
+  "properties": {
+    "_meta": {
+      "$ref": "#/$defs/ClinicalSafetyDocumentMetaContract",
+      "description": "文档元信息。"
+    },
+    "assets": {
+      "description": "发布态临床安全资产列表。",
+      "items": {
+        "$ref": "#/$defs/ClinicalSafetyAssetPublishContract"
+      },
+      "minItems": 1,
+      "title": "Assets",
+      "type": "array"
+    }
+  },
+  "required": [
+    "_meta",
+    "assets"
+  ],
+  "title": "ClinicalSafetyAssetDocumentPublishContract",
+  "type": "object"
+}

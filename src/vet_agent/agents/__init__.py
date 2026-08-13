@@ -19,7 +19,7 @@ from .semantic_extractor import (
     SemanticFact,
     SemanticIntent,
 )
-from .task_splitter import SplitTask, TaskSplitDecision, TaskSplitterAgent
+from .task_router import TaskRouterAgent
 
 __all__ = [
     "AnswerabilityDecision",
@@ -42,7 +42,5 @@ __all__ = [
     "SemanticExtractionResult",
     "SemanticFact",
     "SemanticIntent",
-    "SplitTask",
-    "TaskSplitDecision",
-    "TaskSplitterAgent",
+    "TaskRouterAgent",
 ]

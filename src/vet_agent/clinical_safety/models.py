@@ -1,12 +1,12 @@
 """
 文件：src/vet_agent/clinical_safety/models.py
 作用：定义 P0 临床安全资产、向量 chunk、召回命中与候选聚合模型。
-说明：本文件只承载安全领域数据契约和稳定编码规则，不承担数据库访问或模型调用。
+说明：本文件只承载安全领域数据契约，不承担数据库访问、模型调用或根据医学关键词推导资产编码。
 """
 
 from __future__ import annotations
 
-import re
+from datetime import datetime
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -27,36 +27,7 @@ ClinicalSafetyActionClass = Literal[
     "safety_warning",
 ]
 ClinicalSafetyChunkType = Literal["recognition", "clinical_risk", "triage_action"]
-ClinicalSafetyScoreType = Literal["cosine_similarity", "lexical_overlap"]
-
-
-def derive_clinical_safety_code(
-    asset_type: ClinicalSafetyAssetType,
-    canonical_name: str,
-) -> str:
-    """根据安全资产类型和规范名称生成稳定安全信号编码。
-
-    :param asset_type: 标准临床安全资产类型。
-    :param canonical_name: 安全资产规范名称。
-    :return: 返回稳定的临床安全信号编码。
-    """
-    normalized = canonical_name.lower()
-    if "木糖醇" in canonical_name or "xylitol" in normalized:
-        return "TOXIC_XYLITOL"
-    if "尿道梗阻" in canonical_name or "尿频尿少" in canonical_name:
-        return "PARTIAL_URINARY_OBSTRUCTION_RISK"
-    if "老年猫" in canonical_name and "多饮多尿" in canonical_name and "消瘦" in canonical_name:
-        return "SENIOR_CAT_POLYDIPSIA_WEIGHT_LOSS_RISK"
-    if "胃扩张扭转" in canonical_name or "胃扭转" in canonical_name or "gdv" in normalized:
-        return "GDV_RISK_PATTERN"
-    if "发绀" in canonical_name or "发紫" in canonical_name or "cyanosis" in normalized:
-        return "CYANOSIS_RISK_PATTERN"
-    if asset_type in {"toxin", "human_drug", "plant_toxin", "chemical_toxin"}:
-        return "TOXIC_SUBSTANCE"
-    if asset_type == "emergency_red_flag":
-        return "EMERGENCY_RED_FLAG"
-    slug = re.sub(r"[^A-Za-z0-9]+", "_", normalized).strip("_").upper()
-    return f"CLINICAL_SAFETY_{slug or 'UNKNOWN'}"
+ClinicalSafetyScoreType = Literal["cosine_similarity"]
 
 
 @dataclass(frozen=True)
@@ -85,6 +56,8 @@ class ClinicalSafetyAsset:
     :param source: 来源追踪信息。
     :param review_status: 审核状态。
     :param version: 资产版本。
+    :param enabled: 是否允许运行时召回。
+    :param published_at: 资产发布时间。
     :param raw_text: 原始长文本字段备份。
     :param metadata: 附加元数据。
     :return: 无返回值。
@@ -99,7 +72,7 @@ class ClinicalSafetyAsset:
     age_scope: tuple[str, ...]
     severity: SafetySeverity
     action_class: ClinicalSafetyActionClass
-    code: str = ""
+    code: str
     aliases: tuple[str, ...] = field(default_factory=tuple)
     carriers: tuple[str, ...] = field(default_factory=tuple)
     user_expressions: tuple[str, ...] = field(default_factory=tuple)
@@ -112,15 +85,25 @@ class ClinicalSafetyAsset:
     source: dict[str, str] = field(default_factory=dict)
     review_status: str = "pending"
     version: str = "v1"
+    enabled: bool = False
+    published_at: datetime | None = None
     raw_text: dict[str, str] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
 
-    def resolved_code(self) -> str:
-        """返回资产已有编码或根据资产内容推导稳定编码。
+    def __post_init__(self) -> None:
+        """校验临床安全资产运行时最小契约。
 
-        :return: 返回可写入安全信号的编码。
+        :return: 无返回值；校验通过表示资产具备候选召回链路所需的稳定标识和编码。
+        :raises ValueError: 资产缺少稳定标识或编码时抛出，避免运行时根据医学名称补齐。
         """
-        return self.code or derive_clinical_safety_code(self.asset_type, self.canonical_name)
+        asset_id = self.asset_id.strip()
+        if not asset_id:
+            raise ValueError("clinical safety asset_id is required")
+        code = self.code.strip()
+        if not code:
+            raise ValueError("clinical safety asset code is required")
+        object.__setattr__(self, "asset_id", asset_id)
+        object.__setattr__(self, "code", code)
 
     def to_dict(self) -> dict[str, Any]:
         """转换为可写入 JSON 的标准资产字典。
@@ -129,7 +112,7 @@ class ClinicalSafetyAsset:
         """
         return {
             "asset_id": self.asset_id,
-            "code": self.resolved_code(),
+            "code": self.code,
             "asset_type": self.asset_type,
             "canonical_name": self.canonical_name,
             "category": self.category,
@@ -150,6 +133,8 @@ class ClinicalSafetyAsset:
             "source": dict(self.source),
             "review_status": self.review_status,
             "version": self.version,
+            "enabled": self.enabled,
+            "published_at": self.published_at.isoformat() if self.published_at is not None else None,
             "raw_text": dict(self.raw_text),
             "metadata": dict(self.metadata),
         }
@@ -182,7 +167,7 @@ class ClinicalSafetyChunk:
     metadata: dict[str, Any]
     review_status: str = "pending"
     version: str = "v1"
-    enabled: bool = True
+    enabled: bool = False
     embedding_model: str | None = None
     embedding_dimension: int | None = None
     content_hash: str = ""
@@ -210,11 +195,11 @@ class ClinicalSafetyChunk:
 
 @dataclass(frozen=True)
 class ClinicalSafetyChunkHit:
-    """表示一次向量或文本召回命中的安全 chunk。
+    """表示一次 pgvector 向量召回命中的安全 chunk。
 
     :param chunk: 被召回的临床安全向量片段。
     :param score: 查询与片段之间的排序分数。
-    :param distance: 向量距离；文本召回时为 0。
+    :param distance: pgvector 余弦距离。
     :param score_type: 分数计算方式。
     :param retrieval_source: 命中来源。
     :param embedding_model: 查询或 chunk 使用的 embedding 模型。
@@ -226,7 +211,7 @@ class ClinicalSafetyChunkHit:
     score: float
     distance: float = 0.0
     score_type: ClinicalSafetyScoreType = "cosine_similarity"
-    retrieval_source: str = "clinical_safety_vector"
+    retrieval_source: str = "clinical_safety_pgvector"
     embedding_model: str | None = None
     matched_terms: tuple[str, ...] = field(default_factory=tuple)
 
@@ -247,7 +232,7 @@ class ClinicalSafetyCandidate:
     score: float
     chunk_hits: tuple[ClinicalSafetyChunkHit, ...]
     score_type: ClinicalSafetyScoreType = "cosine_similarity"
-    retrieval_source: str = "clinical_safety_vector"
+    retrieval_source: str = "clinical_safety_pgvector"
 
     def matched_terms(self) -> tuple[str, ...]:
         """汇总候选资产下所有召回片段的审计命中特征词。

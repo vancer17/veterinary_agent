@@ -17,6 +17,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 from scripts.clinical_safety import build_standard_safety_documents, load_safety_reference
+from vet_agent.clinical_safety import validate_clinical_safety_publish_contract
 
 
 def parse_args() -> argparse.Namespace:
@@ -46,8 +47,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--version", default="v1", help="生成资产版本。")
     parser.add_argument(
         "--review-status",
-        default="approved",
+        default="pending",
         help="生成资产的默认审核状态。",
+    )
+    parser.add_argument(
+        "--validate-publish",
+        action="store_true",
+        help="按发布态严格契约校验生成结果；仅 review-status=approved 时可使用。",
+    )
+    parser.add_argument(
+        "--allow-missing-embeddings",
+        action="store_true",
+        help="发布态校验时允许 chunk 暂缺 embedding 元信息；仅离线资产治理 dry-run 使用。",
     )
     return parser.parse_args()
 
@@ -65,6 +76,12 @@ def main() -> None:
         version=args.version,
         review_status=args.review_status,
     )
+    if args.validate_publish:
+        validate_clinical_safety_publish_contract(
+            asset_document,
+            chunk_document,
+            require_embeddings=not args.allow_missing_embeddings,
+        )
     args.asset_output.parent.mkdir(parents=True, exist_ok=True)
     args.chunk_output.parent.mkdir(parents=True, exist_ok=True)
     args.asset_output.write_text(json.dumps(asset_document, ensure_ascii=False, indent=2), encoding="utf-8")

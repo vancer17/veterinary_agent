@@ -17,14 +17,19 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from .dto import AgentTurnRequest, HealthResponse, IngressRequest, ReadyResponse
 from .errors import (
+    ApiIngressError,
+    ConflictError,
     ErrorResponse,
     InvalidRequestError,
     OrchestratorTimeoutError,
     OrchestratorUnavailableError,
 )
 from .orchestrator import Orchestrator, get_orchestrator
-from vet_agent import TrustedIdentity as CoreTrustedIdentity
+from vet_agent import AuthorizedScopeContext as CoreAuthorizedScopeContext
+from vet_agent import ScopeAssertion as CoreScopeAssertion
 from vet_agent import get_container
+from vet_agent.services import TurnExecutionConflictError, TurnExecutionDependencyError
+from vet_agent.task_routing import TaskRoutingError
 
 
 router = APIRouter()
@@ -118,8 +123,11 @@ async def _dispatch_turn(
     :return: 返回函数执行结果。
     """
     _apply_header_ids(payload, request)
-    turn_request = payload.to_agent_turn_request(source_path=request.url.path)
-    await _authorize_turn(payload, request)
+    authorized_scope_context = await _authorize_turn(payload, request)
+    turn_request = payload.to_agent_turn_request(
+        source_path=request.url.path,
+        authorized_scope_context=authorized_scope_context.model_dump(mode="json"),
+    )
 
     if not await orchestrator.is_ready():
         raise OrchestratorUnavailableError(
@@ -140,6 +148,27 @@ async def _dispatch_turn(
 
     try:
         response = await orchestrator.create_turn(turn_request)
+    except TurnExecutionConflictError as exc:
+        raise ConflictError(
+            str(exc),
+            request_id=turn_request.request_context.request_id,
+            trace_id=turn_request.request_context.trace_id,
+            details=exc.details,
+        ) from exc
+    except TurnExecutionDependencyError as exc:
+        raise OrchestratorUnavailableError(
+            str(exc),
+            request_id=turn_request.request_context.request_id,
+            trace_id=turn_request.request_context.trace_id,
+            details=exc.details,
+        ) from exc
+    except TaskRoutingError as exc:
+        raise OrchestratorUnavailableError(
+            str(exc),
+            request_id=turn_request.request_context.request_id,
+            trace_id=turn_request.request_context.trace_id,
+            details=exc.details,
+        ) from exc
     except TimeoutError as exc:
         raise OrchestratorTimeoutError(
             request_id=turn_request.request_context.request_id,
@@ -166,21 +195,67 @@ async def _stream_events(
     try:
         async for event in orchestrator.stream_turn(turn_request):
             yield _to_sse(event)
+    except TurnExecutionConflictError as exc:
+        yield _to_sse(
+            _turn_failed_event(
+                ConflictError(
+                    str(exc),
+                    request_id=turn_request.request_context.request_id,
+                    trace_id=turn_request.request_context.trace_id,
+                    details=exc.details,
+                )
+            )
+        )
+        return
+    except TurnExecutionDependencyError as exc:
+        yield _to_sse(
+            _turn_failed_event(
+                OrchestratorUnavailableError(
+                    str(exc),
+                    request_id=turn_request.request_context.request_id,
+                    trace_id=turn_request.request_context.trace_id,
+                    details=exc.details,
+                )
+            )
+        )
+        return
+    except TaskRoutingError as exc:
+        yield _to_sse(
+            _turn_failed_event(
+                OrchestratorUnavailableError(
+                    str(exc),
+                    request_id=turn_request.request_context.request_id,
+                    trace_id=turn_request.request_context.trace_id,
+                    details=exc.details,
+                )
+            )
+        )
+        return
     except TimeoutError as exc:
         error = OrchestratorTimeoutError(
             request_id=turn_request.request_context.request_id,
             trace_id=turn_request.request_context.trace_id,
         )
-        yield _to_sse(
-            {
-                "event": "turn.failed",
-                "code": error.code.value,
-                "message": error.message,
-                "request_id": turn_request.request_context.request_id,
-                "trace_id": turn_request.request_context.trace_id,
-            }
-        )
+        yield _to_sse(_turn_failed_event(error))
         return
+
+
+def _turn_failed_event(error: ApiIngressError) -> dict[str, Any]:
+    """构造流式响应中的 turn.failed 错误事件。
+
+    :param error: 入口层标准错误对象。
+    :return: 返回 SSE 事件载荷。
+    """
+    payload: dict[str, Any] = {
+        "event": "turn.failed",
+        "code": error.code.value,
+        "message": error.message,
+        "request_id": error.request_id,
+        "trace_id": error.trace_id,
+    }
+    if error.details is not None:
+        payload["details"] = error.details
+    return payload
 
 
 def _to_sse(event: Mapping[str, Any]) -> str:
@@ -273,24 +348,22 @@ def _header_value(request: Request, name: str) -> str | None:
     return None
 
 
-async def _authorize_turn(payload: IngressRequest, request: Request) -> None:
+async def _authorize_turn(payload: IngressRequest, request: Request) -> CoreAuthorizedScopeContext:
     """执行内部授权逻辑。
 
     :param payload: 请求载荷。
     :param request: 请求对象。
-    :return: 返回函数执行结果。
+    :return: 返回入口授权后生成的内部范围上下文快照。
     """
     container = get_container()
     principal = container.access_control.authenticate(request.headers)
-    await container.access_control.authorize(
-        CoreTrustedIdentity(
-            user_id=payload.vet_context.user_id,
-            session_id=payload.vet_context.session_id,
-            pet_id=payload.vet_context.pet_id,
-        ),
+    scope_assertion = CoreScopeAssertion.model_validate(payload.scope_assertion.model_dump(mode="json"))
+    scope_context = await container.access_control.authorize(
+        scope_assertion,
         pet_info=payload.vet_context.pet_info,
         principal=principal,
     )
+    return scope_context.to_authorized_snapshot()
 
 
 def _ready_checks(orchestrator_ready: bool) -> dict[str, bool]:

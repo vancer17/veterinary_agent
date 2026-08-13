@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 from vet_agent import Evidence
+from vet_agent.memory import MemoryPromptContext
 from vet_agent.repositories import KnowledgeHit
 from vet_agent.runtime import QwenClient
 from vet_agent.services import PetContext
@@ -34,7 +35,7 @@ class ResponseComposer:
         *,
         user_text: str,
         pet_context: PetContext,
-        memory: dict,
+        memory: MemoryPromptContext,
         knowledge_hits: list[KnowledgeHit],
         model: str,
         max_followup_questions: int,
@@ -45,7 +46,7 @@ class ResponseComposer:
 
         :param user_text: 用户输入文本。
         :param pet_context: 宠物上下文。
-        :param memory: 参数 memory。
+        :param memory: 已分层编译的结构化记忆提示词上下文。
         :param knowledge_hits: 参数 knowledge_hits。
         :param model: 模型名称。
         :param max_followup_questions: 参数 max_followup_questions。
@@ -55,7 +56,7 @@ class ResponseComposer:
         """
         questions = self.planner.plan(user_text, pet_context, max_followup_questions) if allow_followup else []
         knowledge_text = "\n".join(f"- {hit.title}: {hit.summary}" for hit in knowledge_hits)
-        memory_text = memory.get("pet", {}).get("last_summary") or "暂无可用历史记忆"
+        memory_text = memory.prompt_text or "暂无可用历史记忆"
         consultation_text = consultation_context or "尚未形成结构化问诊状态"
         mode_instruction = (
             "结构化问诊状态已足够。请给出阶段性最终建议，不要继续追问，除非出现急症兜底提醒。"
@@ -104,7 +105,7 @@ class ResponseComposer:
         if questions and "还需要确认" not in raw:
             raw = f"{raw}\n\n还需要确认的问题:\n" + "\n".join(f"{index + 1}. {q}" for index, q in enumerate(questions))
         sanitized, _ = self.safety.sanitize_output(raw)
-        return sanitized, pet_context.evidence
+        return sanitized, [*pet_context.evidence, *memory.evidence]
 
     def _fallback_reply(self) -> str:
         """执行 _fallback_reply 内部辅助逻辑。

@@ -1,7 +1,7 @@
 # =============================================================================
 # 文件: .github/workflows/try-run.yml
 # 作用: 提供手动触发的 CI try-run / dry-run 验证入口。
-# 范围: 支持 dry-run、通用门禁、仓库特色门禁和全量门禁，不自动推送镜像或部署环境。
+# 范围: 支持 dry-run、通用门禁、仓库特色门禁、外部真实 API 门禁和全量门禁，不自动推送镜像或部署环境。
 # 说明: 用于 PR 合并前、主干合并后、生产手动部署前的人工加严验证。
 # =============================================================================
 
@@ -19,6 +19,10 @@ on:
           - dry-run
           - common
           - repository
+          - clinical-safety-api
+          - memory-read-api
+          - task-routing-api
+          - external-api
           - full
       build_mem0_image:
         description: "Build self-hosted Mem0 and Dashboard images"
@@ -46,12 +50,24 @@ env:
   CI_BUILD_MEM0_IMAGE: ${{ inputs.build_mem0_image }}
   CI_BUILD_MEM0_DASHBOARD_IMAGE: ${{ inputs.build_mem0_image }}
   CI_BUILD_OPA_IMAGE: ${{ inputs.build_opa_image }}
+  EXTERNAL_API_TEST_DATABASE_URL: ${{ secrets.EXTERNAL_API_TEST_DATABASE_URL }}
+  EXTERNAL_API_TEST_LITELLM_BASE_URL: ${{ vars.EXTERNAL_API_TEST_LITELLM_BASE_URL }}
+  EXTERNAL_API_TEST_LITELLM_API_KEY: ${{ secrets.EXTERNAL_API_TEST_LITELLM_API_KEY }}
+  EXTERNAL_API_TEST_OPA_BASE_URL: ${{ vars.EXTERNAL_API_TEST_OPA_BASE_URL }}
+  EXTERNAL_API_TEST_MEM0_BASE_URL: ${{ vars.EXTERNAL_API_TEST_MEM0_BASE_URL }}
+  EXTERNAL_API_TEST_MEM0_API_KEY: ${{ secrets.EXTERNAL_API_TEST_MEM0_API_KEY }}
+  EXTERNAL_API_TEST_SSH_HOST: ${{ vars.EXTERNAL_API_TEST_SSH_HOST }}
+  EXTERNAL_API_TEST_SSH_PORT: ${{ vars.EXTERNAL_API_TEST_SSH_PORT }}
+  EXTERNAL_API_TEST_SSH_USER: ${{ vars.EXTERNAL_API_TEST_SSH_USER }}
+  EXTERNAL_API_TEST_TUNNEL_HTTP_SERVICES: ${{ vars.EXTERNAL_API_TEST_TUNNEL_HTTP_SERVICES }}
+  EXTERNAL_API_TEST_TIMEOUT_SECONDS: ${{ vars.EXTERNAL_API_TEST_TIMEOUT_SECONDS }}
 
 jobs:
   # ---------------------------------------------------------------------------
   # 手动 try-run
   # ---------------------------------------------------------------------------
   # dry-run 只解析配置并校验 CD 布局，不启动数据库、不构建镜像。
+  # clinical-safety-api、memory-read-api、task-routing-api 和 external-api 通过 SSH 隧道访问真实开发依赖。
   # common/repository/full 会按脚本入口执行对应强度。
   # ---------------------------------------------------------------------------
   try-run:
@@ -70,6 +86,20 @@ jobs:
 
       - name: Install uv
         run: python -m pip install --upgrade --index-url https://pypi.tuna.tsinghua.edu.cn/simple uv
+
+      - name: Prepare external API SSH key
+        if: ${{ inputs.gate_scope == 'clinical-safety-api' || inputs.gate_scope == 'memory-read-api' || inputs.gate_scope == 'task-routing-api' || inputs.gate_scope == 'external-api' }}
+        env:
+          EXTERNAL_API_TEST_SSH_PRIVATE_KEY: ${{ secrets.EXTERNAL_API_TEST_SSH_PRIVATE_KEY }}
+        run: |
+          if [ -z "$EXTERNAL_API_TEST_SSH_PRIVATE_KEY" ]; then
+            echo "缺少 secret: EXTERNAL_API_TEST_SSH_PRIVATE_KEY。" >&2
+            exit 1
+          fi
+          external_api_test_ssh_key="$RUNNER_TEMP/external_api_test_key"
+          printf '%s\n' "$EXTERNAL_API_TEST_SSH_PRIVATE_KEY" > "$external_api_test_ssh_key"
+          chmod 600 "$external_api_test_ssh_key"
+          printf 'EXTERNAL_API_TEST_SSH_KEY=%s\n' "$external_api_test_ssh_key" >> "$GITHUB_ENV"
 
       - name: Run selected gate scope
         run: bash scripts/ci/try-run.sh

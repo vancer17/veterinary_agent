@@ -14,6 +14,11 @@ from .knowledge import (
     PostgresKnowledgeRepository,
     evidence_from_hits,
 )
+from .memory_read import (
+    JsonMemoryReadRepository,
+    MemoryReadRepositoryError,
+    PostgresMemoryReadRepository,
+)
 from .rules import (
     ConsultationDomainRule,
     ConsultationRuleSet,
@@ -22,8 +27,20 @@ from .rules import (
     FileRuleRepository,
     PostgresRuleRepository,
     RuleRepository,
-    SafetyRule,
     compile_regex,
+)
+from .scope import (
+    PostgresScopeRepository,
+    ScopeRepository,
+    SessionBinding,
+    VerifiedPetProfile,
+)
+from .turn_execution import (
+    PostgresTurnExecutionRepository,
+    TurnExecutionRepository,
+    TurnExecutionRepositoryError,
+    TurnIdempotencyClaim,
+    TurnIdempotencyClaimStatus,
 )
 
 __all__ = [
@@ -36,10 +53,21 @@ __all__ = [
     "FileRuleRepository",
     "KnowledgeHit",
     "KnowledgeRepository",
+    "JsonMemoryReadRepository",
+    "MemoryReadRepositoryError",
     "PostgresKnowledgeRepository",
+    "PostgresMemoryReadRepository",
     "PostgresRuleRepository",
+    "PostgresScopeRepository",
+    "PostgresTurnExecutionRepository",
     "RuleRepository",
-    "SafetyRule",
+    "ScopeRepository",
+    "SessionBinding",
+    "TurnExecutionRepository",
+    "TurnExecutionRepositoryError",
+    "TurnIdempotencyClaim",
+    "TurnIdempotencyClaimStatus",
+    "VerifiedPetProfile",
     "compile_regex",
     "evidence_from_hits",
 ]

@@ -16,6 +16,7 @@ bash scripts/ci/repository/database-migration-check.sh
 
 # Mem0、Mem0 Dashboard 与 OPA 是本仓库生产交付的一部分，默认在仓库特色门禁中构建；
 # try-run 等轻量场景可通过 CI_BUILD_*_IMAGE=false 显式跳过。
+bash scripts/ci/repository/opa-policy-check.sh
 CI_BUILD_APP_IMAGE=false \
 CI_BUILD_MEM0_IMAGE="${CI_BUILD_MEM0_IMAGE:-true}" \
 CI_BUILD_MEM0_DASHBOARD_IMAGE="${CI_BUILD_MEM0_DASHBOARD_IMAGE:-true}" \

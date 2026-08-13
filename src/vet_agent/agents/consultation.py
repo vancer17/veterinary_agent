@@ -302,6 +302,7 @@ class ConsultationStateAgent:
         user_text: str,
         pet_context: PetContext,
         *,
+        task_domain: str,
         semantic_result: Any | None = None,
         clinical_safety_semantic: ClinicalSafetySemanticResult | None = None,
         max_questions: int,
@@ -311,6 +312,7 @@ class ConsultationStateAgent:
         :param previous: 上一轮持久化状态。
         :param user_text: 用户输入文本。
         :param pet_context: 宠物上下文。
+        :param task_domain: 已由任务路由器确定的稳定任务域。
         :param semantic_result: LLM 语义抽取结果。
         :param clinical_safety_semantic: 临床安全语义抽取结果。
         :param max_questions: 本轮最多追问数量。
@@ -321,7 +323,7 @@ class ConsultationStateAgent:
         if text and not state.chief_complaint:
             state.chief_complaint = text[:200]
 
-        state.domain = self._classify_domain(text, state.domain)
+        state.domain = task_domain
         self._prefill_from_pet_context(state, pet_context)
         self._extract_slots(state, text)
         semantic_applied = self._merge_semantic_result(state, semantic_result)
@@ -454,21 +456,6 @@ class ConsultationStateAgent:
             "resolution_state": semantic_result.resolution_state,
             "text": semantic_result.temporal_text,
         }
-
-    def _classify_domain(self, text: str, previous_domain: str) -> str:
-        """根据关键词识别本轮主要问诊领域。
-
-        :param text: 待处理文本。
-        :param previous_domain: 上一轮领域。
-        :return: 返回函数执行结果。
-        """
-        rules = self.rule_repository.consultation_rules()
-        for domain_rule in sorted(rules.domains.values(), key=lambda item: item.priority):
-            if domain_rule.domain == "general":
-                continue
-            if any(keyword in text for keyword in domain_rule.classifier_keywords):
-                return domain_rule.domain
-        return previous_domain if previous_domain != "general" else "general"
 
     def _prefill_from_pet_context(self, state: ConsultationState, pet_context: PetContext) -> None:
         """从后端宠物资料预填稳定事实。

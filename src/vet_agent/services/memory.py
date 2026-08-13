@@ -7,9 +7,6 @@
 
 from __future__ import annotations
 
-import asyncio
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import Any
 
@@ -25,20 +22,6 @@ class MemoryService:
         :return: 无返回值。
         """
         self.store = store
-        self._turn_locks: dict[str, asyncio.Lock] = {}
-        self._idempotency_locks: dict[str, asyncio.Lock] = {}
-
-    @asynccontextmanager
-    async def turn_lock(self, identity: TrustedIdentity) -> AsyncIterator[None]:
-        """执行 turn_lock 业务逻辑。
-
-        :param identity: 可信身份信息。
-        :return: 返回异步执行结果。
-        """
-        key = f"{identity.user_id}:{identity.pet_id}:{identity.session_id}"
-        lock = self._turn_locks.setdefault(key, asyncio.Lock())
-        async with lock:
-            yield
 
     async def read(self, identity: TrustedIdentity) -> dict[str, Any]:
         """读取指定范围内的持久化数据。
@@ -141,11 +124,14 @@ class MemoryService:
         self,
         identity: TrustedIdentity,
         states: dict[str, Any],
+        *,
+        clear_default_state: bool = False,
     ) -> None:
         """替换当前会话仍未完成的多任务问诊状态。
 
         :param identity: 可信身份信息。
         :param states: 未完成任务的活跃问诊状态集合。
+        :param clear_default_state: 是否在同一次写入中清理默认问诊状态；仅用于 __default__ 迁移到具体任务键的场景。
         :return: 返回函数执行结果。
         """
         data = self.store.load()
@@ -154,6 +140,9 @@ class MemoryService:
         session_memory = data.setdefault("sessions", {}).setdefault(identity.session_id, {"turns": []})
         session_memory["task_consultation_states"] = states
         data["pets"][identity.pet_id]["task_consultation_states"] = states
+        if clear_default_state:
+            session_memory.pop("consultation_state", None)
+            data["pets"][identity.pet_id].pop("consultation_state", None)
         self.store.save(data)
 
     async def clear_default_consultation_state(self, identity: TrustedIdentity) -> None:
@@ -230,176 +219,3 @@ class MemoryService:
             "updated_at": datetime.now(UTC).isoformat(),
         }
         self.store.save(data)
-
-    async def read_idempotency_response(
-        self,
-        identity: TrustedIdentity,
-        idempotency_key: str,
-    ) -> dict[str, Any] | None:
-        """执行 read_idempotency_response 业务逻辑。
-
-        :param identity: 可信身份信息。
-        :param idempotency_key: 幂等键。
-        :return: 返回函数执行结果。
-        """
-        data = self.store.load()
-        key = self._idempotency_key(identity, idempotency_key)
-        record = data.get("idempotency_records", {}).get(key)
-        if isinstance(record, dict):
-            snapshot = record.get("response_snapshot")
-            return dict(snapshot) if isinstance(snapshot, dict) else None
-        return None
-
-    async def begin_idempotency(
-        self,
-        identity: TrustedIdentity,
-        *,
-        idempotency_key: str,
-        request_id: str,
-        trace_id: str,
-        wait_seconds: float,
-        processing_ttl_seconds: float,
-    ) -> dict[str, Any]:
-        """执行 begin_idempotency 业务逻辑。
-
-        :param identity: 可信身份信息。
-        :param idempotency_key: 幂等键。
-        :param request_id: 请求标识。
-        :param trace_id: 链路追踪标识。
-        :param wait_seconds: 等待秒数。
-        :param processing_ttl_seconds: 处理中状态的过期秒数。
-        :return: 返回函数执行结果。
-        """
-        key = self._idempotency_key(identity, idempotency_key)
-        lock = self._idempotency_locks.setdefault(key, asyncio.Lock())
-        deadline = asyncio.get_running_loop().time() + wait_seconds
-        while True:
-            async with lock:
-                data = self.store.load()
-                records = data.setdefault("idempotency_records", {})
-                record = records.get(key)
-                if isinstance(record, dict):
-                    snapshot = record.get("response_snapshot")
-                    if record.get("status") == "completed" and isinstance(snapshot, dict):
-                        return {"state": "replayed", "response_snapshot": dict(snapshot)}
-                    if self._is_stale(self._parse_time(record.get("updated_at")), processing_ttl_seconds):
-                        records[key] = self._processing_record(request_id, trace_id)
-                        self.store.save(data)
-                        return {"state": "claimed"}
-                else:
-                    records[key] = self._processing_record(request_id, trace_id)
-                    self.store.save(data)
-                    return {"state": "claimed"}
-            if asyncio.get_running_loop().time() >= deadline:
-                return {"state": "busy"}
-            await asyncio.sleep(0.05)
-
-    async def save_idempotency_response(
-        self,
-        identity: TrustedIdentity,
-        *,
-        idempotency_key: str,
-        request_id: str,
-        trace_id: str,
-        response_snapshot: dict[str, Any],
-    ) -> None:
-        """执行 save_idempotency_response 业务逻辑。
-
-        :param identity: 可信身份信息。
-        :param idempotency_key: 幂等键。
-        :param request_id: 请求标识。
-        :param trace_id: 链路追踪标识。
-        :param response_snapshot: 响应快照。
-        :return: 返回函数执行结果。
-        """
-        data = self.store.load()
-        key = self._idempotency_key(identity, idempotency_key)
-        data.setdefault("idempotency_records", {})[key] = {
-            "request_id": request_id,
-            "trace_id": trace_id,
-            "response_id": response_snapshot.get("id"),
-            "status": "completed",
-            "response_snapshot": response_snapshot,
-            "updated_at": datetime.now(UTC).isoformat(),
-        }
-        self.store.save(data)
-
-    async def mark_idempotency_failed(
-        self,
-        identity: TrustedIdentity,
-        *,
-        idempotency_key: str,
-        request_id: str,
-        trace_id: str,
-        error_type: str,
-    ) -> None:
-        """执行 mark_idempotency_failed 业务逻辑。
-
-        :param identity: 可信身份信息。
-        :param idempotency_key: 幂等键。
-        :param request_id: 请求标识。
-        :param trace_id: 链路追踪标识。
-        :param error_type: 错误类型。
-        :return: 返回函数执行结果。
-        """
-        data = self.store.load()
-        key = self._idempotency_key(identity, idempotency_key)
-        data.setdefault("idempotency_records", {})[key] = {
-            "request_id": request_id,
-            "trace_id": trace_id,
-            "status": "failed",
-            "response_snapshot": None,
-            "error_type": error_type,
-            "updated_at": datetime.now(UTC).isoformat(),
-        }
-        self.store.save(data)
-
-    def _idempotency_key(self, identity: TrustedIdentity, idempotency_key: str) -> str:
-        """执行 _idempotency_key 内部辅助逻辑。
-
-        :param identity: 可信身份信息。
-        :param idempotency_key: 幂等键。
-        :return: 返回函数执行结果。
-        """
-        return f"{identity.user_id}:{identity.pet_id}:{identity.session_id}:{idempotency_key}"
-
-    def _processing_record(self, request_id: str, trace_id: str) -> dict[str, Any]:
-        """执行 _processing_record 内部辅助逻辑。
-
-        :param request_id: 请求标识。
-        :param trace_id: 链路追踪标识。
-        :return: 返回函数执行结果。
-        """
-        return {
-            "request_id": request_id,
-            "trace_id": trace_id,
-            "status": "processing",
-            "response_snapshot": None,
-            "updated_at": datetime.now(UTC).isoformat(),
-        }
-
-    def _parse_time(self, value: Any) -> datetime | None:
-        """执行内部解析逻辑。
-
-        :param value: 待处理值。
-        :return: 返回函数执行结果。
-        """
-        if not isinstance(value, str) or not value:
-            return None
-        try:
-            return datetime.fromisoformat(value)
-        except ValueError:
-            return None
-
-    def _is_stale(self, updated_at: datetime | None, ttl_seconds: float) -> bool:
-        """执行 _is_stale 内部辅助逻辑。
-
-        :param updated_at: 参数 updated_at。
-        :param ttl_seconds: 参数 ttl_seconds。
-        :return: 返回函数执行结果。
-        """
-        if updated_at is None:
-            return True
-        if updated_at.tzinfo is None:
-            updated_at = updated_at.replace(tzinfo=UTC)
-        return (datetime.now(UTC) - updated_at).total_seconds() > ttl_seconds

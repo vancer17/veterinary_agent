@@ -7,15 +7,11 @@
 
 from __future__ import annotations
 
-import asyncio
-import hashlib
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import delete, desc, func, select, update
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -23,46 +19,35 @@ from vet_agent import TrustedIdentity
 from vet_agent.db import (
     ConsultationStateModel,
     ConversationTurnModel,
-    IdempotencyRecordModel,
     make_session_factory,
     PetMemoryEpisodeModel,
     PetMemoryFactModel,
 )
+from vet_agent.memory import MemoryReadService
 
-from .semantic_memory import DisabledSemanticMemory
+from .semantic_memory import DisabledSemanticMemory, SemanticMemoryWriter
 
 
 DEFAULT_TASK_KEY = "__default__"
 
 
 class PostgresMemoryService:
-    def __init__(self, database_url: str, semantic_memory: Any | None = None) -> None:
+    def __init__(
+        self,
+        database_url: str,
+        memory_read_service: MemoryReadService,
+        semantic_memory: SemanticMemoryWriter | None = None,
+    ) -> None:
         """初始化当前对象。
 
         :param database_url: 数据库连接地址。
-        :param semantic_memory: 参数 semantic_memory。
+        :param memory_read_service: 结构化记忆读取服务，用于兼容旧管理接口读取。
+        :param semantic_memory: 语义记忆投影写入客户端。
         :return: 无返回值。
         """
         self.session_factory = make_session_factory(database_url)
         self.semantic_memory = semantic_memory or DisabledSemanticMemory()
-
-    @asynccontextmanager
-    async def turn_lock(self, identity: TrustedIdentity) -> AsyncIterator[None]:
-        """执行 turn_lock 业务逻辑。
-
-        :param identity: 可信身份信息。
-        :return: 返回异步执行结果。
-        """
-        lock_key = self._lock_key(identity)
-        session = self.session_factory()
-        try:
-            session.execute(select(func.pg_advisory_lock(lock_key)))
-            yield
-        finally:
-            try:
-                session.execute(select(func.pg_advisory_unlock(lock_key)))
-            finally:
-                session.close()
+        self.memory_read_service = memory_read_service
 
     async def read(self, identity: TrustedIdentity) -> dict[str, Any]:
         """读取指定范围内的持久化数据。
@@ -70,69 +55,8 @@ class PostgresMemoryService:
         :param identity: 可信身份信息。
         :return: 返回函数执行结果。
         """
-        with self.session_factory() as session:
-            turns = session.scalars(
-                select(ConversationTurnModel)
-                .where(
-                    ConversationTurnModel.user_id == identity.user_id,
-                    ConversationTurnModel.pet_id == identity.pet_id,
-                    ConversationTurnModel.session_id == identity.session_id,
-                )
-                .order_by(desc(ConversationTurnModel.created_at))
-                .limit(20)
-            ).all()
-            facts = session.scalars(
-                select(PetMemoryFactModel)
-                .where(
-                    PetMemoryFactModel.user_id == identity.user_id,
-                    PetMemoryFactModel.pet_id == identity.pet_id,
-                    PetMemoryFactModel.is_active.is_(True),
-                )
-                .order_by(PetMemoryFactModel.fact_type, PetMemoryFactModel.fact_key)
-            ).all()
-            episodes = session.scalars(
-                select(PetMemoryEpisodeModel)
-                .where(
-                    PetMemoryEpisodeModel.user_id == identity.user_id,
-                    PetMemoryEpisodeModel.pet_id == identity.pet_id,
-                )
-                .order_by(desc(PetMemoryEpisodeModel.created_at))
-                .limit(10)
-            ).all()
-            state_rows = session.scalars(
-                select(ConsultationStateModel).where(
-                    ConsultationStateModel.user_id == identity.user_id,
-                    ConsultationStateModel.pet_id == identity.pet_id,
-                    ConsultationStateModel.session_id == identity.session_id,
-                )
-            ).all()
-
-        semantic, semantic_error = await self._semantic_search(identity, self._semantic_query(turns), limit=5)
-        last_summary = turns[0].summary if turns else ""
-        return {
-            "owner": {},
-            "pet": {
-                "last_summary": last_summary,
-                "turns": [self._turn_dict(row) for row in turns],
-                "facts": [self._fact_dict(row) for row in facts],
-                "episodes": [self._episode_dict(row) for row in episodes],
-                "semantic_memories": semantic,
-                "semantic_memory_error": semantic_error,
-            },
-            "session": {
-                "last_summary": last_summary,
-                "turns": [self._turn_dict(row) for row in turns],
-                "consultation_state": next(
-                    (row.state for row in state_rows if row.task_key == DEFAULT_TASK_KEY),
-                    {},
-                ),
-                "task_consultation_states": {
-                    row.task_key: row.state
-                    for row in state_rows
-                    if row.task_key != DEFAULT_TASK_KEY
-                },
-            },
-        }
+        bundle = await self.memory_read_service.read_snapshot(identity)
+        return bundle.to_legacy_dict()
 
     async def remember_turn(
         self,
@@ -244,11 +168,18 @@ class PostgresMemoryService:
             ).all()
         return {row.task_key: dict(row.state) for row in rows}
 
-    async def save_task_consultation_states(self, identity: TrustedIdentity, states: dict[str, Any]) -> None:
+    async def save_task_consultation_states(
+        self,
+        identity: TrustedIdentity,
+        states: dict[str, Any],
+        *,
+        clear_default_state: bool = False,
+    ) -> None:
         """替换当前会话仍未完成的多任务问诊状态。
 
         :param identity: 可信身份信息。
         :param states: 未完成任务的活跃问诊状态集合。
+        :param clear_default_state: 是否在同一事务中清理默认问诊状态；仅用于 __default__ 迁移到具体任务键的场景。
         :return: 返回函数执行结果。
         """
         with self.session_factory.begin() as session:
@@ -262,6 +193,15 @@ class PostgresMemoryService:
             )
             for task_key, state in states.items():
                 self._upsert_state_in_session(session, identity, task_key, state)
+            if clear_default_state:
+                session.execute(
+                    delete(ConsultationStateModel).where(
+                        ConsultationStateModel.user_id == identity.user_id,
+                        ConsultationStateModel.pet_id == identity.pet_id,
+                        ConsultationStateModel.session_id == identity.session_id,
+                        ConsultationStateModel.task_key == DEFAULT_TASK_KEY,
+                    )
+                )
 
     async def clear_default_consultation_state(self, identity: TrustedIdentity) -> None:
         """清理当前会话的默认活跃问诊状态。
@@ -353,146 +293,6 @@ class PostgresMemoryService:
                 source_text=source_text,
                 metadata=metadata or {"source": "manual_correction"},
             )
-
-    async def read_idempotency_response(self, identity: TrustedIdentity, idempotency_key: str) -> dict[str, Any] | None:
-        """执行 read_idempotency_response 业务逻辑。
-
-        :param identity: 可信身份信息。
-        :param idempotency_key: 幂等键。
-        :return: 返回函数执行结果。
-        """
-        with self.session_factory() as session:
-            row = session.scalar(
-                select(IdempotencyRecordModel).where(
-                    IdempotencyRecordModel.user_id == identity.user_id,
-                    IdempotencyRecordModel.pet_id == identity.pet_id,
-                    IdempotencyRecordModel.session_id == identity.session_id,
-                    IdempotencyRecordModel.idempotency_key == idempotency_key,
-                )
-            )
-        return dict(row.response_snapshot) if row and row.response_snapshot else None
-
-    async def begin_idempotency(
-        self,
-        identity: TrustedIdentity,
-        *,
-        idempotency_key: str,
-        request_id: str,
-        trace_id: str,
-        wait_seconds: float,
-        processing_ttl_seconds: float,
-    ) -> dict[str, Any]:
-        """执行 begin_idempotency 业务逻辑。
-
-        :param identity: 可信身份信息。
-        :param idempotency_key: 幂等键。
-        :param request_id: 请求标识。
-        :param trace_id: 链路追踪标识。
-        :param wait_seconds: 等待秒数。
-        :param processing_ttl_seconds: 处理中状态的过期秒数。
-        :return: 返回函数执行结果。
-        """
-        deadline = asyncio.get_running_loop().time() + wait_seconds
-        while True:
-            inserted = self._insert_processing_idempotency(identity, idempotency_key, request_id, trace_id)
-            if inserted:
-                return {"state": "claimed"}
-
-            with self.session_factory() as session:
-                row = session.scalar(
-                    select(IdempotencyRecordModel).where(
-                        IdempotencyRecordModel.user_id == identity.user_id,
-                        IdempotencyRecordModel.pet_id == identity.pet_id,
-                        IdempotencyRecordModel.session_id == identity.session_id,
-                        IdempotencyRecordModel.idempotency_key == idempotency_key,
-                    )
-                )
-                if row and row.status == "completed" and row.response_snapshot:
-                    return {"state": "replayed", "response_snapshot": dict(row.response_snapshot)}
-                if row and self._is_stale(row.updated_at, processing_ttl_seconds):
-                    self._claim_stale_idempotency(identity, idempotency_key, request_id, trace_id)
-                    return {"state": "claimed"}
-
-            if asyncio.get_running_loop().time() >= deadline:
-                return {"state": "busy"}
-            await asyncio.sleep(0.08)
-
-    async def save_idempotency_response(
-        self,
-        identity: TrustedIdentity,
-        *,
-        idempotency_key: str,
-        request_id: str,
-        trace_id: str,
-        response_snapshot: dict[str, Any],
-    ) -> None:
-        """执行 save_idempotency_response 业务逻辑。
-
-        :param identity: 可信身份信息。
-        :param idempotency_key: 幂等键。
-        :param request_id: 请求标识。
-        :param trace_id: 链路追踪标识。
-        :param response_snapshot: 响应快照。
-        :return: 返回函数执行结果。
-        """
-        statement = pg_insert(IdempotencyRecordModel).values(
-            user_id=identity.user_id,
-            pet_id=identity.pet_id,
-            session_id=identity.session_id,
-            idempotency_key=idempotency_key,
-            request_id=request_id,
-            trace_id=trace_id,
-            response_id=response_snapshot.get("id"),
-            status="completed",
-            response_snapshot=response_snapshot,
-            updated_at=datetime.now(UTC),
-        )
-        statement = statement.on_conflict_do_update(
-            constraint="uq_idempotency_scope_key",
-            set_={
-                "request_id": request_id,
-                "trace_id": trace_id,
-                "response_id": response_snapshot.get("id"),
-                "status": "completed",
-                "response_snapshot": response_snapshot,
-                "updated_at": datetime.now(UTC),
-            },
-        )
-        with self.session_factory.begin() as session:
-            session.execute(statement)
-
-    async def mark_idempotency_failed(
-        self,
-        identity: TrustedIdentity,
-        *,
-        idempotency_key: str,
-        request_id: str,
-        trace_id: str,
-        error_type: str,
-    ) -> None:
-        """执行 mark_idempotency_failed 业务逻辑。
-
-        :param identity: 可信身份信息。
-        :param idempotency_key: 幂等键。
-        :param request_id: 请求标识。
-        :param trace_id: 链路追踪标识。
-        :param error_type: 错误类型。
-        :return: 返回函数执行结果。
-        """
-        statement = update(IdempotencyRecordModel).where(
-            IdempotencyRecordModel.user_id == identity.user_id,
-            IdempotencyRecordModel.pet_id == identity.pet_id,
-            IdempotencyRecordModel.session_id == identity.session_id,
-            IdempotencyRecordModel.idempotency_key == idempotency_key,
-        ).values(
-            request_id=request_id,
-            trace_id=trace_id,
-            status="failed",
-            response_snapshot=None,
-            updated_at=datetime.now(UTC),
-        )
-        with self.session_factory.begin() as session:
-            session.execute(statement)
 
     def _upsert_state(self, identity: TrustedIdentity, task_key: str, state: dict[str, Any]) -> None:
         """执行 _upsert_state 内部辅助逻辑。
@@ -591,102 +391,6 @@ class PostgresMemoryService:
         )
         session.execute(statement)
 
-    def _insert_processing_idempotency(
-        self,
-        identity: TrustedIdentity,
-        idempotency_key: str,
-        request_id: str,
-        trace_id: str,
-    ) -> bool:
-        """执行 _insert_processing_idempotency 内部辅助逻辑。
-
-        :param identity: 可信身份信息。
-        :param idempotency_key: 幂等键。
-        :param request_id: 请求标识。
-        :param trace_id: 链路追踪标识。
-        :return: 返回函数执行结果。
-        """
-        statement = pg_insert(IdempotencyRecordModel).values(
-            user_id=identity.user_id,
-            pet_id=identity.pet_id,
-            session_id=identity.session_id,
-            idempotency_key=idempotency_key,
-            request_id=request_id,
-            trace_id=trace_id,
-            response_id=None,
-            status="processing",
-            response_snapshot=None,
-            updated_at=datetime.now(UTC),
-        )
-        statement = statement.on_conflict_do_nothing(
-            constraint="uq_idempotency_scope_key",
-        ).returning(IdempotencyRecordModel.id)
-        with self.session_factory.begin() as session:
-            return session.scalar(statement) is not None
-
-    def _claim_stale_idempotency(
-        self,
-        identity: TrustedIdentity,
-        idempotency_key: str,
-        request_id: str,
-        trace_id: str,
-    ) -> None:
-        """执行 _claim_stale_idempotency 内部辅助逻辑。
-
-        :param identity: 可信身份信息。
-        :param idempotency_key: 幂等键。
-        :param request_id: 请求标识。
-        :param trace_id: 链路追踪标识。
-        :return: 返回函数执行结果。
-        """
-        statement = update(IdempotencyRecordModel).where(
-            IdempotencyRecordModel.user_id == identity.user_id,
-            IdempotencyRecordModel.pet_id == identity.pet_id,
-            IdempotencyRecordModel.session_id == identity.session_id,
-            IdempotencyRecordModel.idempotency_key == idempotency_key,
-        ).values(
-            request_id=request_id,
-            trace_id=trace_id,
-            response_id=None,
-            status="processing",
-            response_snapshot=None,
-            updated_at=datetime.now(UTC),
-        )
-        with self.session_factory.begin() as session:
-            session.execute(statement)
-
-    def _is_stale(self, updated_at: datetime | None, ttl_seconds: float) -> bool:
-        """执行 _is_stale 内部辅助逻辑。
-
-        :param updated_at: 参数 updated_at。
-        :param ttl_seconds: 参数 ttl_seconds。
-        :return: 返回函数执行结果。
-        """
-        if updated_at is None:
-            return True
-        if updated_at.tzinfo is None:
-            updated_at = updated_at.replace(tzinfo=UTC)
-        return (datetime.now(UTC) - updated_at).total_seconds() > ttl_seconds
-
-    async def _semantic_search(
-        self,
-        identity: TrustedIdentity,
-        query: str,
-        *,
-        limit: int,
-    ) -> tuple[list[dict[str, Any]], str | None]:
-        """执行 _semantic_search 内部辅助逻辑。
-
-        :param identity: 可信身份信息。
-        :param query: 检索查询。
-        :param limit: 返回数量上限。
-        :return: 返回函数执行结果。
-        """
-        try:
-            return await self.semantic_memory.search(identity, query, limit=limit), None
-        except Exception as exc:
-            return [], type(exc).__name__
-
     async def _semantic_add_turn(
         self,
         identity: TrustedIdentity,
@@ -720,24 +424,6 @@ class PostgresMemoryService:
         except Exception:
             return None
 
-    def _lock_key(self, identity: TrustedIdentity) -> int:
-        """执行 _lock_key 内部辅助逻辑。
-
-        :param identity: 可信身份信息。
-        :return: 返回函数执行结果。
-        """
-        raw = f"{identity.user_id}:{identity.pet_id}:{identity.session_id}".encode("utf-8")
-        value = int.from_bytes(hashlib.sha256(raw).digest()[:8], byteorder="big", signed=False)
-        return value - (1 << 63)
-
-    def _semantic_query(self, turns: list[ConversationTurnModel]) -> str:
-        """执行 _semantic_query 内部辅助逻辑。
-
-        :param turns: 参数 turns。
-        :return: 返回函数执行结果。
-        """
-        return turns[0].input_text if turns else "pet memory"
-
     def _episode_title(self, user_text: str) -> str:
         """执行 _episode_title 内部辅助逻辑。
 
@@ -745,51 +431,3 @@ class PostgresMemoryService:
         :return: 返回函数执行结果。
         """
         return (user_text.strip().splitlines()[0] or "本轮咨询")[:80]
-
-    def _turn_dict(self, row: ConversationTurnModel) -> dict[str, Any]:
-        """执行 _turn_dict 内部辅助逻辑。
-
-        :param row: 数据库行。
-        :return: 返回函数执行结果。
-        """
-        return {
-            "turn_id": row.turn_id,
-            "request_id": row.request_id,
-            "trace_id": row.trace_id,
-            "user_text": row.input_text,
-            "summary": row.summary,
-            "medical": row.medical,
-            "metadata": row.metadata_json or {},
-            "created_at": row.created_at.isoformat() if row.created_at else None,
-        }
-
-    def _fact_dict(self, row: PetMemoryFactModel) -> dict[str, Any]:
-        """执行 _fact_dict 内部辅助逻辑。
-
-        :param row: 数据库行。
-        :return: 返回函数执行结果。
-        """
-        return {
-            "fact_type": row.fact_type,
-            "fact_key": row.fact_key,
-            "fact_value": row.fact_value,
-            "confidence": row.confidence,
-            "source_turn_id": row.source_turn_id,
-            "source_text": row.source_text,
-            "metadata": row.metadata_json or {},
-            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
-        }
-
-    def _episode_dict(self, row: PetMemoryEpisodeModel) -> dict[str, Any]:
-        """执行 _episode_dict 内部辅助逻辑。
-
-        :param row: 数据库行。
-        :return: 返回函数执行结果。
-        """
-        return {
-            "title": row.title,
-            "summary": row.summary,
-            "memory_scope": row.memory_scope,
-            "metadata": row.metadata_json or {},
-            "created_at": row.created_at.isoformat() if row.created_at else None,
-        }

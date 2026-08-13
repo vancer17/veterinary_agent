@@ -10,14 +10,16 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Mapping
 from typing import Any
 
-from ingress.dto import AgentTurnRequest as IngressAgentTurnRequest
+from ingress import IngressAgentTurnRequest
 
 from vet_agent import Container
 from vet_agent import (
     AgentTurnRequest,
     AttachmentRef,
+    AuthorizedScopeContext,
     InputItem,
     RequestContext,
+    ScopeAssertion,
     TrustedIdentity,
     TurnOptions,
     VetContext,
@@ -137,6 +139,11 @@ class VetAgentIngressOrchestrator:
         """
         extra = request.turn_options.model_extra or {}
         max_followup_questions = getattr(request.turn_options, "max_followup_questions", None)
+        authorized_scope_context = (
+            AuthorizedScopeContext.model_validate(request.authorized_scope_context)
+            if request.authorized_scope_context is not None
+            else None
+        )
         return AgentTurnRequest(
             request_context=RequestContext(
                 request_id=request.request_context.request_id,
@@ -144,11 +151,13 @@ class VetAgentIngressOrchestrator:
                 response_mode=request.request_context.response_mode,
                 received_at=request.request_context.received_at,
             ),
+            scope_assertion=ScopeAssertion.model_validate(request.scope_assertion.model_dump(mode="json")),
             trusted_identity=TrustedIdentity(
-                user_id=request.trusted_identity.user_id,
-                session_id=request.trusted_identity.session_id,
-                pet_id=request.trusted_identity.pet_id,
+                user_id=request.scope_assertion.user_id,
+                session_id=request.scope_assertion.session_id,
+                pet_id=request.scope_assertion.pet_id,
             ),
+            authorized_scope_context=authorized_scope_context,
             input=self._input_items(request.input),
             attachments=[
                 AttachmentRef(
@@ -166,12 +175,7 @@ class VetAgentIngressOrchestrator:
                 idempotency_key=request.turn_options.idempotency_key,
                 max_followup_questions=int(max_followup_questions or extra.get("max_followup_questions", 3)),
             ),
-            vet_context=VetContext(
-                user_id=request.vet_context.user_id,
-                session_id=request.vet_context.session_id,
-                pet_id=request.vet_context.pet_id,
-                pet_info=request.vet_context.pet_info,
-            ),
+            vet_context=VetContext(pet_info=request.vet_context.pet_info),
         )
 
     def _input_items(self, value: Any) -> list[InputItem]:
