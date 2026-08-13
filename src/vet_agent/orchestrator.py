@@ -40,6 +40,7 @@ from vet_agent.clinical_safety import (
     ClinicalSafetySemanticResult,
 )
 from vet_agent.input_safety import InputSafetyDecision, InputSafetyRequestContext, InputSafetyService
+from vet_agent.observability import AgentPathNode, build_agent_path
 from vet_agent.repositories import RuleRepository
 from vet_agent.runtime import QwenClient
 from vet_agent.services import (
@@ -139,7 +140,10 @@ class VetOrchestrator:
                 decision=input_safety_decision,
                 model=model,
                 evidence=[],
-                agent_path=["InputSafetyService", "OPA"],
+                agent_path=build_agent_path(
+                    AgentPathNode.INPUT_SAFETY_SERVICE,
+                    AgentPathNode.INPUT_SAFETY_POLICY_OPA,
+                ),
             )
 
         assessment = SafetyAssessment.from_signals(list(input_safety_decision.signals))
@@ -156,10 +160,11 @@ class VetOrchestrator:
             pet_context_summary=pet_context.summary(),
             model=model,
         )
-        clinical_safety_result = self.clinical_safety.assess_with_resolution(
+        clinical_safety_result = await self.clinical_safety.assess_with_resolution(
             user_text,
             pet_context.summary(),
             age_text=str(pet_context.verified_profile.get("age") or ""),
+            request=request,
             semantic_result=clinical_semantic,
         )
         clinical_signals = clinical_safety_result.signals
@@ -170,15 +175,17 @@ class VetOrchestrator:
                 assessment=assessment,
                 model=model,
                 evidence=pet_context.evidence,
-                agent_path=[
-                    "InputSafetyService",
-                    "OPA",
-                    "PetContextAgent",
-                    "ClinicalSafetySemanticExtractorAgent",
-                    "ClinicalSafetyEvaluator",
-                ],
+                agent_path=build_agent_path(
+                    AgentPathNode.INPUT_SAFETY_SERVICE,
+                    AgentPathNode.INPUT_SAFETY_POLICY_OPA,
+                    AgentPathNode.PET_CONTEXT_AGENT,
+                    AgentPathNode.CLINICAL_SAFETY_SEMANTIC_EXTRACTOR_AGENT,
+                    AgentPathNode.CLINICAL_SAFETY_EVALUATOR,
+                    AgentPathNode.CLINICAL_SAFETY_POLICY_OPA,
+                ),
                 clinical_safety_semantic=clinical_semantic,
                 clinical_safety_resolution=clinical_safety_result,
+                input_safety_decision=input_safety_decision,
             )
 
         memory = await self.memory_service.read(request.trusted_identity)
@@ -279,19 +286,20 @@ class VetOrchestrator:
                 safety_signals=[*assessment.signals, *post_signals],
                 evidence=evidence,
                 metadata={
-                    "multi_agent_path": [
-                        "InputSafetyService",
-                        "OPA",
-                        "PetContextAgent",
-                        "ClinicalSafetySemanticExtractorAgent",
-                        "ClinicalSafetyEvaluator",
-                        "MemoryAgent",
-                        "ConsultationSemanticExtractorAgent",
-                        "ConsultationStateAgent",
-                        "AnswerabilityEvaluator",
-                        "KnowledgeAgent",
-                        "RagQuestionPlannerAgent",
-                    ],
+                    "multi_agent_path": build_agent_path(
+                        AgentPathNode.INPUT_SAFETY_SERVICE,
+                        AgentPathNode.INPUT_SAFETY_POLICY_OPA,
+                        AgentPathNode.PET_CONTEXT_AGENT,
+                        AgentPathNode.CLINICAL_SAFETY_SEMANTIC_EXTRACTOR_AGENT,
+                        AgentPathNode.CLINICAL_SAFETY_EVALUATOR,
+                        AgentPathNode.CLINICAL_SAFETY_POLICY_OPA,
+                        AgentPathNode.MEMORY_AGENT,
+                        AgentPathNode.CONSULTATION_SEMANTIC_EXTRACTOR_AGENT,
+                        AgentPathNode.CONSULTATION_STATE_AGENT,
+                        AgentPathNode.ANSWERABILITY_EVALUATOR,
+                        AgentPathNode.KNOWLEDGE_AGENT,
+                        AgentPathNode.RAG_QUESTION_PLANNER_AGENT,
+                    ),
                     "consultation_phase": consultation_decision.state.phase,
                     "consultation_state": consultation_decision.state.to_dict(),
                     "missing_slots": consultation_decision.missing_slots,
@@ -357,21 +365,22 @@ class VetOrchestrator:
             safety_signals=[*assessment.signals, *post_signals],
             evidence=evidence,
             metadata={
-                "multi_agent_path": [
-                    "InputSafetyService",
-                    "OPA",
-                    "PetContextAgent",
-                    "ClinicalSafetySemanticExtractorAgent",
-                    "ClinicalSafetyEvaluator",
-                    "MemoryAgent",
-                    "ConsultationSemanticExtractorAgent",
-                    "ConsultationStateAgent",
-                    "AnswerabilityEvaluator",
-                    "KnowledgeAgent",
-                    "QuestionPlannerAgent",
-                    "QwenResponseAgent",
-                    "SafetyReviewAgent",
-                ],
+                "multi_agent_path": build_agent_path(
+                    AgentPathNode.INPUT_SAFETY_SERVICE,
+                    AgentPathNode.INPUT_SAFETY_POLICY_OPA,
+                    AgentPathNode.PET_CONTEXT_AGENT,
+                    AgentPathNode.CLINICAL_SAFETY_SEMANTIC_EXTRACTOR_AGENT,
+                    AgentPathNode.CLINICAL_SAFETY_EVALUATOR,
+                    AgentPathNode.CLINICAL_SAFETY_POLICY_OPA,
+                    AgentPathNode.MEMORY_AGENT,
+                    AgentPathNode.CONSULTATION_SEMANTIC_EXTRACTOR_AGENT,
+                    AgentPathNode.CONSULTATION_STATE_AGENT,
+                    AgentPathNode.ANSWERABILITY_EVALUATOR,
+                    AgentPathNode.KNOWLEDGE_AGENT,
+                    AgentPathNode.QUESTION_PLANNER_AGENT,
+                    AgentPathNode.QWEN_RESPONSE_AGENT,
+                    AgentPathNode.SAFETY_REVIEW_AGENT,
+                ),
                 "litellm_configured": self.settings.litellm_configured,
                 "consultation_phase": consultation_decision.state.phase,
                 "consultation_state": consultation_decision.state.to_dict(),
@@ -400,6 +409,7 @@ class VetOrchestrator:
         agent_path: list[str],
         clinical_safety_semantic: ClinicalSafetySemanticResult | None = None,
         clinical_safety_resolution: ClinicalSafetyEvaluationResult | None = None,
+        input_safety_decision: InputSafetyDecision | None = None,
     ) -> AgentTurnResponse:
         """根据安全评估构造并持久化安全分诊响应。
 
@@ -410,6 +420,7 @@ class VetOrchestrator:
         :param agent_path: 当前安全分诊链路中参与的 Agent 名称。
         :param clinical_safety_semantic: 临床安全结构化语义结果。
         :param clinical_safety_resolution: 临床安全裁决和显式回退结果。
+        :param input_safety_decision: 已完成的基础输入安全策略裁决；为空时不写入审计字段。
         :return: 返回已持久化的安全分诊响应。
         """
         text = self.safety.forced_response(assessment)
@@ -452,6 +463,7 @@ class VetOrchestrator:
                     clinical_safety_semantic=clinical_safety_semantic,
                     clinical_safety_resolution=clinical_safety_resolution,
                 ),
+                **self._input_safety_metadata(input_safety_decision),
             },
         )
         response = await self._finalize_and_persist(request, response, medical=True)
@@ -538,6 +550,16 @@ class VetOrchestrator:
         if decision.blocked:
             return f"{message}\n\n请调整问题或补充合规的文本、附件用途后重新提交。"
         return f"{message}\n\n如需继续，请补充与宠物健康咨询直接相关的必要信息。"
+
+    def _input_safety_metadata(self, decision: InputSafetyDecision | None) -> dict[str, Any]:
+        """构造基础输入安全策略裁决 metadata。
+
+        :param decision: 基础输入安全策略裁决结果。
+        :return: 返回可合并到 Agent 响应 metadata 的输入安全审计字段。
+        """
+        if decision is None:
+            return {}
+        return {"input_safety_decision": decision.to_metadata()}
 
     async def _run_multi_task_turn(
         self,
@@ -707,20 +729,31 @@ class VetOrchestrator:
             evidence=all_evidence,
             metadata={
                 "multi_agent_path": [
-                    "InputSafetyService",
-                    "OPA",
-                    "PetContextAgent",
-                    "ClinicalSafetySemanticExtractorAgent",
-                    "ClinicalSafetyEvaluator",
-                    "MemoryAgent",
-                    "TaskRouterAgent",
-                    "ConsultationSemanticExtractorAgent",
-                    "ConsultationStateAgent",
-                    "AnswerabilityEvaluator",
-                    "KnowledgeAgent",
-                    *(["RagQuestionPlannerAgent"] if used_rag_question_planner else []),
-                    *(["QwenResponseAgent"] if used_response_composer else []),
-                    "SafetyReviewAgent",
+                    *build_agent_path(
+                        AgentPathNode.INPUT_SAFETY_SERVICE,
+                        AgentPathNode.INPUT_SAFETY_POLICY_OPA,
+                        AgentPathNode.PET_CONTEXT_AGENT,
+                        AgentPathNode.CLINICAL_SAFETY_SEMANTIC_EXTRACTOR_AGENT,
+                        AgentPathNode.CLINICAL_SAFETY_EVALUATOR,
+                        AgentPathNode.CLINICAL_SAFETY_POLICY_OPA,
+                        AgentPathNode.MEMORY_AGENT,
+                        AgentPathNode.TASK_ROUTER_AGENT,
+                        AgentPathNode.CONSULTATION_SEMANTIC_EXTRACTOR_AGENT,
+                        AgentPathNode.CONSULTATION_STATE_AGENT,
+                        AgentPathNode.ANSWERABILITY_EVALUATOR,
+                        AgentPathNode.KNOWLEDGE_AGENT,
+                    ),
+                    *(
+                        build_agent_path(AgentPathNode.RAG_QUESTION_PLANNER_AGENT)
+                        if used_rag_question_planner
+                        else []
+                    ),
+                    *(
+                        build_agent_path(AgentPathNode.QWEN_RESPONSE_AGENT)
+                        if used_response_composer
+                        else []
+                    ),
+                    *build_agent_path(AgentPathNode.SAFETY_REVIEW_AGENT),
                 ],
                 "task_count": len(tasks),
                 "task_router_strategy": split_decision.strategy,

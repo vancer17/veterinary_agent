@@ -1,22 +1,29 @@
 """
 文件：tests/test_clinical_safety_evaluator.py
-作用：验证临床安全 evaluator 过渡层对向量候选、可信语义和显式状态的归一行为。
-说明：本文件承接裁决过渡层测试；最终动作策略迁移到 OPA 后，应进一步迁入策略门面测试。
+作用：验证临床安全 evaluator 在 OPA 裁决迁移后的候选召回、策略输入组装与显式状态透出。
+说明：本文件使用显式注入的测试策略替身，不验证生产本地回退裁决；生产策略行为由 OPA Rego 测试覆盖。
 """
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Sequence
 
+from vet_agent import SafetySignal
 from vet_agent.clinical_safety import (
     ClinicalSafetyAsset,
     ClinicalSafetyAgeGroup,
+    ClinicalSafetyCandidate,
     ClinicalSafetyChunk,
     ClinicalSafetyChunkHit,
     ClinicalSafetyChunkType,
     ClinicalSafetyExposureState,
     ClinicalSafetyEvaluator,
     ClinicalSafetyIntentType,
+    ClinicalSafetyPolicyAction,
+    ClinicalSafetyPolicyClient,
+    ClinicalSafetyPolicyDecision,
+    ClinicalSafetyPolicyInput,
     ClinicalSafetyResolutionState,
     ClinicalSafetyRetriever,
     ClinicalSafetySex,
@@ -26,6 +33,162 @@ from vet_agent.clinical_safety import (
     ClinicalSafetyTemporalScope,
     ClinicalSafetyTemporalState,
 )
+
+
+TOXIC_TEST_ASSET_TYPES = {"toxin", "human_drug", "plant_toxin", "chemical_toxin"}
+
+
+class StaticClinicalSafetyPolicyClient(ClinicalSafetyPolicyClient):
+    """提供 evaluator 测试用的结构化临床安全策略替身。
+
+    说明：该替身只消费 evaluator 组装出的结构化候选与可信语义，不读取原始用户文本。
+    """
+
+    async def decide(self, policy_input: ClinicalSafetyPolicyInput) -> ClinicalSafetyPolicyDecision:
+        """根据结构化策略输入返回测试决策。
+
+        :param policy_input: evaluator 组装后的临床安全策略输入。
+        :return: 返回用于断言 evaluator 数据链的测试策略决策。
+        """
+        candidates = [
+            candidate
+            for candidate in policy_input.candidates
+            if not self._suppressed(candidate, policy_input)
+            and candidate.score >= policy_input.thresholds.signal_min_score
+        ]
+        if not candidates:
+            return ClinicalSafetyPolicyDecision(
+                action=ClinicalSafetyPolicyAction.ALLOW,
+                allow=True,
+                message="测试临床安全策略允许继续执行。",
+                metadata={"policy_backend": "static_test"},
+            )
+        signals = tuple(
+            SafetySignal(
+                code=candidate.asset.resolved_code(),
+                severity=self._severity(candidate, policy_input),
+                message=candidate.asset.triage_message
+                or candidate.asset.clinical_risk_summary
+                or f"命中临床安全风险：{candidate.asset.canonical_name}",
+                matched_terms=list(
+                    dict.fromkeys(
+                        [
+                            *candidate.matched_terms(),
+                            *(
+                                policy_input.semantic_result.high_risk_terms
+                                if policy_input.semantic_result is not None
+                                and policy_input.semantic_result.is_trusted()
+                                else ()
+                            ),
+                        ]
+                    )
+                ),
+            )
+            for candidate in candidates
+        )
+        action = (
+            ClinicalSafetyPolicyAction.ESCALATE
+            if any(signal.severity in {"urgent", "blocked"} for signal in signals)
+            else ClinicalSafetyPolicyAction.OBSERVE
+        )
+        return ClinicalSafetyPolicyDecision(
+            action=action,
+            allow=action != ClinicalSafetyPolicyAction.BLOCK,
+            message="测试临床安全策略完成结构化候选裁决。",
+            reasons=tuple(candidate.asset.resolved_code() for candidate in candidates),
+            signals=signals,
+            metadata={"policy_backend": "static_test"},
+        )
+
+    def is_ready(self) -> bool:
+        """声明测试策略客户端可用。
+
+        :return: 始终返回 True。
+        """
+        return True
+
+    def _suppressed(
+        self,
+        candidate: ClinicalSafetyCandidate,
+        policy_input: ClinicalSafetyPolicyInput,
+    ) -> bool:
+        """判断测试候选是否被可信否认暴露语义抑制。
+
+        :param candidate: 待判断的候选对象。
+        :param policy_input: evaluator 组装后的临床安全策略输入。
+        :return: 符合可信否认暴露抑制条件时返回 True。
+        """
+        semantic = policy_input.semantic_result
+        asset = candidate.asset
+        return bool(
+            semantic is not None
+            and semantic.is_trusted()
+            and asset.asset_type in TOXIC_TEST_ASSET_TYPES
+            and semantic.exposure_state == "denied"
+            and semantic.intent_type not in {"knowledge", "prevention"}
+        )
+
+    def _severity(
+        self,
+        candidate: ClinicalSafetyCandidate,
+        policy_input: ClinicalSafetyPolicyInput,
+    ) -> str:
+        """根据结构化候选和测试阈值返回安全信号级别。
+
+        :param candidate: 待转换为安全信号的候选对象。
+        :param policy_input: evaluator 组装后的临床安全策略输入。
+        :return: 返回 SafetySignal 可接受的严重级别。
+        """
+        asset = candidate.asset
+        score = candidate.score
+        if asset.severity == "urgent" or asset.action_class in {"emergency", "same_day_visit", "urgent_visit"}:
+            return "urgent"
+        if score >= policy_input.thresholds.urgent_min_score:
+            return "urgent"
+        return asset.severity
+
+
+class DuplicateSignalClinicalSafetyPolicyClient(ClinicalSafetyPolicyClient):
+    """提供重复安全信号合并测试用的策略替身。
+
+    说明：该替身模拟真实 OPA 将不同候选或语义项映射为同一安全编码的场景，
+    用于验证 evaluator 只负责审计展示去重，不执行临床动作裁决。
+    """
+
+    async def decide(self, policy_input: ClinicalSafetyPolicyInput) -> ClinicalSafetyPolicyDecision:
+        """返回包含重复安全编码的测试策略决策。
+
+        :param policy_input: evaluator 组装后的临床安全策略输入。
+        :return: 返回用于触发安全信号合并分支的测试策略决策。
+        """
+        del policy_input
+        return ClinicalSafetyPolicyDecision(
+            action=ClinicalSafetyPolicyAction.ESCALATE,
+            allow=True,
+            message="测试临床安全策略返回重复安全信号。",
+            signals=(
+                SafetySignal(
+                    code="CYANOSIS_RISK_PATTERN",
+                    severity="caution",
+                    message="命中较低等级测试信号。",
+                    matched_terms=["牙龈发紫", "呼吸很快"],
+                ),
+                SafetySignal(
+                    code="CYANOSIS_RISK_PATTERN",
+                    severity="urgent",
+                    message="命中较高等级测试信号。",
+                    matched_terms=[" 牙龈发紫 ", "牙龈发紫并呼吸很快"],
+                ),
+            ),
+            metadata={"policy_backend": "duplicate_signal_test"},
+        )
+
+    def is_ready(self) -> bool:
+        """声明重复信号测试策略客户端可用。
+
+        :return: 始终返回 True。
+        """
+        return True
 
 
 class StaticEmbeddingClient:
@@ -252,7 +415,7 @@ def _evaluator_for(
         embedding_client=StaticEmbeddingClient(),
         min_score=min_score,
     )
-    return ClinicalSafetyEvaluator(retriever)
+    return ClinicalSafetyEvaluator(retriever, StaticClinicalSafetyPolicyClient())
 
 
 def _trusted_toxic_semantic(
@@ -302,10 +465,10 @@ def _trusted_toxic_semantic(
     )
 
 
-def test_clinical_safety_evaluator_treats_low_confidence_semantic_as_conservative() -> None:
-    """验证低置信度语义不会把 evaluator 过渡层推向更激进升级。
+def test_clinical_safety_evaluator_passes_low_confidence_state_to_policy() -> None:
+    """验证低置信度语义只作为降级状态进入策略输入和结果 metadata。
 
-    :return: 无返回值；断言通过表示低置信语义只作为显式状态进入结果。
+    :return: 无返回值；断言通过表示 evaluator 不再用低置信语义执行 Python 裁决。
     """
     asset = _human_drug_asset()
     chunk = _recognition_chunk(asset, text="泰诺；对乙酰氨基酚；扑热息痛；呕吐")
@@ -317,46 +480,52 @@ def test_clinical_safety_evaluator_treats_low_confidence_semantic_as_conservativ
         source_text="我家猫误食泰诺后呕吐。",
     )
 
-    result = evaluator.assess_with_resolution(
-        "我家猫误食泰诺后呕吐。",
-        context_text="宠物画像: 物种=猫, 年龄=3岁",
-        age_text="3岁",
-        semantic_result=semantic,
+    result = asyncio.run(
+        evaluator.assess_with_resolution(
+            "我家猫误食泰诺后呕吐。",
+            context_text="宠物画像: 物种=猫, 年龄=3岁",
+            age_text="3岁",
+            semantic_result=semantic,
+        )
     )
 
     assert result.signals
-    assert result.signals[0].severity != "urgent"
-    assert result.signals[0].severity == "caution"
+    assert result.signals[0].severity == "urgent"
     assert result.fallback_state.semantic.stage == "llm_low_confidence"
     assert result.fallback_state.semantic.degraded is True
     assert result.fallback_state.semantic.strategy == "litellm_response_format_low_confidence"
+    assert result.policy_decision["policy_backend"] == "static_test"
 
 
-def test_clinical_safety_evaluator_uses_trusted_denied_exposure_to_suppress_signal() -> None:
-    """验证 evaluator 过渡层只使用可信否认暴露语义压制候选信号。
+def test_clinical_safety_evaluator_uses_policy_to_suppress_denied_exposure() -> None:
+    """验证可信否认暴露抑制由注入策略客户端完成。
 
-    :return: 无返回值；断言通过表示否认暴露断言已归入 evaluator 层。
+    :return: 无返回值；断言通过表示 evaluator 只负责组装策略输入。
     """
     asset = _human_drug_asset(symptoms=())
     chunk = _recognition_chunk(asset, text="泰诺；对乙酰氨基酚；扑热息痛")
     evaluator = _evaluator_for(asset, chunk)
 
-    denied_signals = evaluator.assess(
-        "家里有泰诺，已经收起来了，没有给它吃。",
-        context_text="宠物画像: 物种=猫, 年龄=3岁",
-        age_text="3岁",
-        semantic_result=_trusted_toxic_semantic(
-            exposure_state="denied",
-            symptom_state="unknown",
-            intent_type="other",
-            source_text="家里有泰诺，已经收起来了，没有给它吃。",
-        ),
+    denied_signals = asyncio.run(
+        evaluator.assess(
+            "家里有泰诺，已经收起来了，没有给它吃。",
+            context_text="宠物画像: 物种=猫, 年龄=3岁",
+            age_text="3岁",
+            semantic_result=_trusted_toxic_semantic(
+                exposure_state="denied",
+                symptom_state="unknown",
+                intent_type="other",
+                source_text="家里有泰诺，已经收起来了，没有给它吃。",
+            ),
+        )
     )
-    confirmed_signals = evaluator.assess(
-        "我家猫误食了泰诺，已经开始呕吐。",
-        context_text="宠物画像: 物种=猫, 年龄=3岁",
-        age_text="3岁",
-        semantic_result=_trusted_toxic_semantic(source_text="我家猫误食了泰诺，已经开始呕吐。"),
+    confirmed_signals = asyncio.run(
+        evaluator.assess(
+            "我家猫误食了泰诺，已经开始呕吐。",
+            context_text="宠物画像: 物种=猫, 年龄=3岁",
+            age_text="3岁",
+            semantic_result=_trusted_toxic_semantic(source_text="我家猫误食了泰诺，已经开始呕吐。"),
+        ),
     )
 
     assert denied_signals == []
@@ -365,30 +534,32 @@ def test_clinical_safety_evaluator_uses_trusted_denied_exposure_to_suppress_sign
     assert confirmed_signals[0].severity == "urgent"
 
 
-def test_clinical_safety_evaluator_downgrades_resolved_recent_past_toxic_event() -> None:
-    """验证 evaluator 过渡层对已恢复近期既往毒物事件执行保守降级。
+def test_clinical_safety_evaluator_keeps_temporal_state_as_policy_input() -> None:
+    """验证时间语义由策略输入透出，而非由 evaluator Python 分支降级。
 
-    :return: 无返回值；断言通过表示时间裁决断言已归入 evaluator 层。
+    :return: 无返回值；断言通过表示 evaluator 不再承担时间动作裁决。
     """
     asset = _human_drug_asset()
     chunk = _recognition_chunk(asset, text="泰诺；对乙酰氨基酚；扑热息痛；呕吐")
     evaluator = _evaluator_for(asset, chunk)
 
-    result = evaluator.assess_with_resolution(
-        "昨天误食泰诺，今天已经完全恢复。",
-        context_text="宠物画像: 物种=猫, 年龄=3岁",
-        age_text="3岁",
-        semantic_result=_trusted_toxic_semantic(
-            temporal_state="past",
-            temporal_scope="recent_past",
-            resolution_state="resolved",
-            source_text="昨天误食泰诺，今天已经完全恢复。",
-        ),
+    result = asyncio.run(
+        evaluator.assess_with_resolution(
+            "昨天误食泰诺，今天已经完全恢复。",
+            context_text="宠物画像: 物种=猫, 年龄=3岁",
+            age_text="3岁",
+            semantic_result=_trusted_toxic_semantic(
+                temporal_state="past",
+                temporal_scope="recent_past",
+                resolution_state="resolved",
+                source_text="昨天误食泰诺，今天已经完全恢复。",
+            ),
+        )
     )
 
     assert result.signals
     assert result.signals[0].code == "TOXIC_SUBSTANCE"
-    assert result.signals[0].severity == "caution"
+    assert result.signals[0].severity == "urgent"
     assert result.fallback_state.semantic.stage == "llm"
     assert result.fallback_state.semantic.degraded is False
 
@@ -402,11 +573,13 @@ def test_clinical_safety_evaluator_keeps_ongoing_toxic_event_urgent() -> None:
     chunk = _recognition_chunk(asset, text="泰诺；对乙酰氨基酚；扑热息痛；呕吐")
     evaluator = _evaluator_for(asset, chunk)
 
-    result = evaluator.assess_with_resolution(
-        "现在误食泰诺并正在呕吐。",
-        context_text="宠物画像: 物种=猫, 年龄=3岁",
-        age_text="3岁",
-        semantic_result=_trusted_toxic_semantic(source_text="现在误食泰诺并正在呕吐。"),
+    result = asyncio.run(
+        evaluator.assess_with_resolution(
+            "现在误食泰诺并正在呕吐。",
+            context_text="宠物画像: 物种=猫, 年龄=3岁",
+            age_text="3岁",
+            semantic_result=_trusted_toxic_semantic(source_text="现在误食泰诺并正在呕吐。"),
+        )
     )
 
     assert result.signals
@@ -425,11 +598,13 @@ def test_clinical_safety_evaluator_returns_explicit_vector_resolution() -> None:
     chunk = _recognition_chunk(asset, text="泰诺；对乙酰氨基酚；扑热息痛；呕吐")
     evaluator = _evaluator_for(asset, chunk)
 
-    result = evaluator.assess_with_resolution(
-        "我家猫误食泰诺后呕吐。",
-        context_text="宠物画像: 物种=猫, 年龄=3岁",
-        age_text="3岁",
-        semantic_result=_trusted_toxic_semantic(source_text="我家猫误食泰诺后呕吐。"),
+    result = asyncio.run(
+        evaluator.assess_with_resolution(
+            "我家猫误食泰诺后呕吐。",
+            context_text="宠物画像: 物种=猫, 年龄=3岁",
+            age_text="3岁",
+            semantic_result=_trusted_toxic_semantic(source_text="我家猫误食泰诺后呕吐。"),
+        )
     )
 
     assert result.signals
@@ -448,17 +623,50 @@ def test_clinical_safety_evaluator_uses_vector_thresholds() -> None:
     asset = _danger_pattern_asset()
     chunk = _recognition_chunk(asset, text="发绀；发紫；轻微不适")
 
-    vector_signal = _evaluator_for(asset, chunk, hit_score=0.68).assess("轻微不适")
-    urgent_vector_signal = _evaluator_for(asset, chunk, hit_score=0.78).assess("轻微不适")
-    low_score_vector_signal = _evaluator_for(
-        asset,
-        chunk,
-        hit_score=0.28,
-        min_score=0.20,
-    ).assess("轻微不适")
+    vector_signal = asyncio.run(_evaluator_for(asset, chunk, hit_score=0.68).assess("轻微不适"))
+    urgent_vector_signal = asyncio.run(_evaluator_for(asset, chunk, hit_score=0.78).assess("轻微不适"))
+    low_score_vector_signal = asyncio.run(
+        _evaluator_for(
+            asset,
+            chunk,
+            hit_score=0.28,
+            min_score=0.20,
+        ).assess("轻微不适")
+    )
 
     assert vector_signal
     assert vector_signal[0].severity == "caution"
     assert urgent_vector_signal
     assert urgent_vector_signal[0].severity == "urgent"
     assert low_score_vector_signal == []
+
+
+def test_clinical_safety_evaluator_compacts_duplicate_matched_terms() -> None:
+    """验证 evaluator 只对策略返回的命中词执行展示去重。
+
+    :return: 无返回值；断言通过表示重复命中词不会导致临床安全裁决链路异常。
+    """
+    asset = _danger_pattern_asset()
+    chunk = _recognition_chunk(asset, text="牙龈发紫并呼吸很快；牙龈发紫；呼吸很快")
+    retriever = ClinicalSafetyRetriever(
+        VectorHitClinicalSafetyRepository(asset, chunk),
+        embedding_client=StaticEmbeddingClient(),
+        min_score=0.35,
+    )
+    evaluator = ClinicalSafetyEvaluator(retriever, DuplicateSignalClinicalSafetyPolicyClient())
+
+    signals = asyncio.run(
+        evaluator.assess(
+            "猫现在牙龈发紫，呼吸很快。",
+            context_text="宠物画像: 物种=猫, 年龄=5岁",
+            age_text="5岁",
+        )
+    )
+
+    assert len(signals) == 1
+    assert signals[0] == SafetySignal(
+        code="CYANOSIS_RISK_PATTERN",
+        severity="urgent",
+        message="命中较高等级测试信号。",
+        matched_terms=["牙龈发紫并呼吸很快"],
+    )

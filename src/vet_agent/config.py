@@ -80,6 +80,10 @@ class Settings:
     input_safety_opa_package_path: str = "vet_agent.input_safety"
     input_safety_opa_rule_name: str = "decision"
     input_safety_opa_auth_token: str | None = None
+    clinical_safety_opa_base_url: str = "http://opa:8181/v1"
+    clinical_safety_opa_package_path: str = "vet_agent.clinical_safety"
+    clinical_safety_opa_rule_name: str = "decision"
+    clinical_safety_opa_auth_token: str | None = None
     enable_input_safety_guardrails: bool = False
     input_safety_guardrails_model: str = "openai/qwen-plus"
     input_safety_prompt_injection_threshold: float = 0.8
@@ -135,6 +139,20 @@ class Settings:
             input_safety_opa_package_path=os.getenv("INPUT_SAFETY_OPA_PACKAGE_PATH", "vet_agent.input_safety").strip(),
             input_safety_opa_rule_name=os.getenv("INPUT_SAFETY_OPA_RULE_NAME", "decision").strip(),
             input_safety_opa_auth_token=os.getenv("INPUT_SAFETY_OPA_AUTH_TOKEN") or None,
+            clinical_safety_opa_base_url=os.getenv(
+                "CLINICAL_SAFETY_OPA_BASE_URL",
+                os.getenv("INPUT_SAFETY_OPA_BASE_URL", "http://opa:8181/v1"),
+            ).strip().rstrip("/"),
+            clinical_safety_opa_package_path=os.getenv(
+                "CLINICAL_SAFETY_OPA_PACKAGE_PATH",
+                "vet_agent.clinical_safety",
+            ).strip(),
+            clinical_safety_opa_rule_name=os.getenv("CLINICAL_SAFETY_OPA_RULE_NAME", "decision").strip(),
+            clinical_safety_opa_auth_token=(
+                os.getenv("CLINICAL_SAFETY_OPA_AUTH_TOKEN")
+                or os.getenv("INPUT_SAFETY_OPA_AUTH_TOKEN")
+                or None
+            ),
             enable_input_safety_guardrails=_bool_env("ENABLE_INPUT_SAFETY_GUARDRAILS", False),
             input_safety_guardrails_model=os.getenv("INPUT_SAFETY_GUARDRAILS_MODEL", "openai/qwen-plus").strip(),
             input_safety_prompt_injection_threshold=float(os.getenv("INPUT_SAFETY_PROMPT_INJECTION_THRESHOLD", "0.8")),

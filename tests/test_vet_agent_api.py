@@ -22,6 +22,7 @@ from vet_agent import (
     AgentTurnRequest,
     AgentTurnResponse,
     Container,
+    SafetySignal,
     Settings,
     TrustedIdentity,
     VetAgentIngressOrchestrator,
@@ -30,6 +31,11 @@ from vet_agent import (
 from vet_agent.agents import TaskSplitterAgent
 from vet_agent.clinical_safety import (
     ClinicalSafetyAsset,
+    ClinicalSafetyCandidate,
+    ClinicalSafetyPolicyAction,
+    ClinicalSafetyPolicyClient,
+    ClinicalSafetyPolicyDecision,
+    ClinicalSafetyPolicyInput,
     ClinicalSafetyChunk,
     ClinicalSafetyChunkHit,
     ClinicalSafetyChunkType,
@@ -39,12 +45,112 @@ from vet_agent.input_safety import (
     LocalInputSafetyPolicyClient,
     StaticInputSafetyRepository,
 )
+from vet_agent.observability import AgentPathNode
 from vet_agent.repositories import FileRuleRepository, ScopeRepository, SessionBinding, VerifiedPetProfile
 from vet_agent.runtime import QwenClient
 from vet_agent.services import TurnExecutionGateProtocol, TurnExecutor
 
 
 app = create_app()
+
+
+def _assert_policy_path_is_named(
+    agent_path: Sequence[str],
+    *,
+    input_safety_expected: bool = True,
+    clinical_safety_expected: bool = False,
+) -> None:
+    """验证 Agent 审计路径使用具备领域语义的策略节点。
+
+    :param agent_path: API metadata.multi_agent_path 返回的审计路径。
+    :param input_safety_expected: 是否期望输入安全策略节点已经参与链路。
+    :param clinical_safety_expected: 是否期望临床安全策略节点已经参与链路。
+    :return: 无返回值；断言通过表示审计链路未退化为裸 OPA 命名。
+    """
+    assert "OPA" not in agent_path
+    if input_safety_expected:
+        assert AgentPathNode.INPUT_SAFETY_POLICY_OPA.value in agent_path
+    if clinical_safety_expected:
+        assert AgentPathNode.CLINICAL_SAFETY_POLICY_OPA.value in agent_path
+
+
+class StaticClinicalSafetyPolicyClient(ClinicalSafetyPolicyClient):
+    """为 API 测试提供显式注入的临床安全策略客户端。
+
+    说明：该替身只消费已召回候选和可信结构化语义，不扫描用户原始文本。
+    """
+
+    async def decide(self, policy_input: ClinicalSafetyPolicyInput) -> ClinicalSafetyPolicyDecision:
+        """根据结构化临床安全候选返回 API 测试决策。
+
+        :param policy_input: evaluator 已组装的临床安全策略输入。
+        :return: 返回用于 API 主链路断言的测试策略决策。
+        """
+        signals = tuple(
+            SafetySignal(
+                code=candidate.asset.resolved_code(),
+                severity=(
+                    "urgent"
+                    if candidate.asset.severity == "urgent"
+                    or candidate.asset.action_class in {"emergency", "same_day_visit", "urgent_visit"}
+                    or candidate.score >= policy_input.thresholds.urgent_min_score
+                    else candidate.asset.severity
+                ),
+                message=candidate.asset.triage_message
+                or candidate.asset.clinical_risk_summary
+                or f"命中临床安全风险：{candidate.asset.canonical_name}",
+                matched_terms=list(candidate.matched_terms()),
+            )
+            for candidate in policy_input.candidates
+            if candidate.score >= policy_input.thresholds.signal_min_score
+            and not self._context_mismatch(candidate, policy_input)
+        )
+        action = (
+            ClinicalSafetyPolicyAction.ESCALATE
+            if any(signal.severity in {"urgent", "blocked"} for signal in signals)
+            else ClinicalSafetyPolicyAction.OBSERVE
+            if signals
+            else ClinicalSafetyPolicyAction.ALLOW
+        )
+        return ClinicalSafetyPolicyDecision(
+            action=action,
+            allow=True,
+            message="API 测试临床安全策略完成结构化候选裁决。",
+            reasons=tuple(signal.code for signal in signals),
+            signals=signals,
+            metadata={"policy_backend": "static_api_test"},
+        )
+
+    def is_ready(self) -> bool:
+        """声明 API 测试策略客户端可用。
+
+        :return: 始终返回 True。
+        """
+        return True
+
+    def _context_mismatch(
+        self,
+        candidate: ClinicalSafetyCandidate,
+        policy_input: ClinicalSafetyPolicyInput,
+    ) -> bool:
+        """判断候选资产与可信结构化宠物上下文是否不匹配。
+
+        :param candidate: 已由测试向量仓储召回的临床安全候选。
+        :param policy_input: evaluator 已组装的临床安全策略输入。
+        :return: 可信物种、性别或年龄范围不适用时返回 True。
+        """
+        semantic = policy_input.semantic_result
+        if semantic is None or not semantic.is_trusted():
+            return False
+        asset = candidate.asset
+        if asset.species_scope and semantic.species != "unknown" and semantic.species not in asset.species_scope:
+            return True
+        if asset.sex_scope and semantic.sex != "unknown" and semantic.sex not in asset.sex_scope:
+            return True
+        return bool(
+            "senior" in asset.age_scope
+            and semantic.age_group not in {"senior", "unknown"}
+        )
 
 
 class InMemoryScopeRepository(ScopeRepository):
@@ -559,6 +665,7 @@ def _client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
         scope_repository=_test_scope_repository,
         turn_execution_gate=InMemoryTurnExecutionGate(),
         clinical_safety_repository=StaticClinicalSafetyRepository(),
+        clinical_safety_policy_client=StaticClinicalSafetyPolicyClient(),
         embedding_client=StaticEmbeddingClient(),
         input_safety_service=InputSafetyService(
             Settings.from_env(),
@@ -993,6 +1100,10 @@ def test_sync_turn_uses_litellm_gateway_and_evidence(tmp_path: Path, monkeypatch
     assert "线下兽医" in data["output_text"]
     assert data["evidence"]
     assert "InputSafetyService" in data["metadata"]["multi_agent_path"]
+    _assert_policy_path_is_named(
+        data["metadata"]["multi_agent_path"],
+        clinical_safety_expected=True,
+    )
 
 
 def test_toxic_substance_is_escalated(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1011,6 +1122,7 @@ def test_toxic_substance_is_escalated(tmp_path: Path, monkeypatch: pytest.Monkey
     assert data["status"] == "safety_escalated"
     assert "请尽快联系线下兽医医院" in data["output_text"]
     assert any(signal["code"] == "TOXIC_SUBSTANCE" for signal in data["safety_signals"])
+    assert data["metadata"]["input_safety_decision"]["allow"] is True
 
 
 def test_emergency_red_flag_skips_followup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1029,6 +1141,7 @@ def test_emergency_red_flag_skips_followup(tmp_path: Path, monkeypatch: pytest.M
     assert data["status"] == "safety_escalated"
     assert "请尽快联系线下兽医医院" in data["output_text"]
     assert any(signal["code"] == "EMERGENCY_RED_FLAG" for signal in data["safety_signals"])
+    assert data["metadata"]["input_safety_decision"]["allow"] is True
 
 
 def test_radiology_attachment_is_blocked(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1061,6 +1174,10 @@ def test_radiology_attachment_is_blocked(tmp_path: Path, monkeypatch: pytest.Mon
     assert "未开放影像判读能力" in data["output_text"]
     assert any(signal["code"] == "RADIOLOGY_GATE" for signal in data["safety_signals"])
     assert data["metadata"]["memory_extraction"]["skipped_reason"] == "input_safety_policy_stopped_main_chain"
+    _assert_policy_path_is_named(
+        data["metadata"]["multi_agent_path"],
+        clinical_safety_expected=False,
+    )
 
 
 @pytest.mark.parametrize(
@@ -1123,6 +1240,11 @@ def test_contextual_clinical_safety_escalates_hidden_risk_patterns(
     data = response.json()
     assert data["status"] == "safety_escalated"
     assert "ClinicalSafetyEvaluator" in data["metadata"]["multi_agent_path"]
+    _assert_policy_path_is_named(
+        data["metadata"]["multi_agent_path"],
+        clinical_safety_expected=True,
+    )
+    assert data["metadata"]["input_safety_decision"]["allow"] is True
     assert any(signal["code"] == expected_code for signal in data["safety_signals"])
 
 

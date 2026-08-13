@@ -256,11 +256,13 @@ class ClinicalSafetyEvaluationResult:
 
     :param signals: 临床安全裁决生成的安全信号。
     :param fallback_state: 临床安全链路的显式回退状态。
+    :param policy_decision: 临床安全策略裁决摘要。
     :return: 无返回值。
     """
 
     signals: list[SafetySignal]
     fallback_state: ClinicalSafetyFallbackState
+    policy_decision: dict[str, Any] = field(default_factory=dict)
 
     def to_metadata(self) -> dict[str, Any]:
         """转换为 Agent 响应 metadata 中的临床安全审计信息。
@@ -271,4 +273,5 @@ class ClinicalSafetyEvaluationResult:
             "agent": "ClinicalSafetyEvaluator",
             "signal_count": len(self.signals),
             "fallback_state": self.fallback_state.to_dict(),
+            "policy_decision": dict(self.policy_decision),
         }

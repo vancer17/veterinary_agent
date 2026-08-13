@@ -27,6 +27,14 @@ from .models import (
     SafetySeverity,
     derive_clinical_safety_code,
 )
+from .policy import (
+    ClinicalSafetyPolicyAction,
+    ClinicalSafetyPolicyClient,
+    ClinicalSafetyPolicyDecision,
+    ClinicalSafetyPolicyInput,
+    ClinicalSafetyPolicyRequestContext,
+    OpaClinicalSafetyPolicyClient,
+)
 from .thresholds import ClinicalSafetyThresholds
 from .semantic_extractor import (
     ClinicalSafetyIntentType,
@@ -67,6 +75,11 @@ __all__ = [
     "ClinicalSafetyExposureState",
     "ClinicalSafetyFallbackState",
     "ClinicalSafetyIntentType",
+    "ClinicalSafetyPolicyAction",
+    "ClinicalSafetyPolicyClient",
+    "ClinicalSafetyPolicyDecision",
+    "ClinicalSafetyPolicyInput",
+    "ClinicalSafetyPolicyRequestContext",
     "ClinicalSafetyScoreType",
     "ClinicalSafetyRetrievalResult",
     "ClinicalSafetyRetrievalStage",
@@ -88,6 +101,7 @@ __all__ = [
     "ClinicalSafetyVectorRepository",
     "ClinicalSafetyRetriever",
     "FileClinicalSafetyRepository",
+    "OpaClinicalSafetyPolicyClient",
     "PostgresClinicalSafetyRepository",
     "SafetySeverity",
     "derive_clinical_safety_code",
