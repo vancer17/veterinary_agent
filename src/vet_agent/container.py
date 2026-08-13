@@ -14,10 +14,12 @@ from vet_agent import Settings
 from vet_agent import VetOrchestrator
 from vet_agent.clinical_safety import (
     ClinicalSafetyEvaluator,
+    ClinicalSafetyPolicyClient,
     ClinicalSafetyRepository,
     ClinicalSafetySemanticExtractorAgent,
     ClinicalSafetyRetriever,
     ClinicalSafetyThresholds,
+    OpaClinicalSafetyPolicyClient,
     PostgresClinicalSafetyRepository,
 )
 from vet_agent.input_safety import (
@@ -78,6 +80,7 @@ class Container:
         turn_execution_gate: TurnExecutionGateProtocol | None = None,
         input_safety_service: InputSafetyService | None = None,
         clinical_safety_repository: ClinicalSafetyRepository | None = None,
+        clinical_safety_policy_client: ClinicalSafetyPolicyClient | None = None,
         embedding_client: EmbeddingClient | None = None,
     ) -> None:
         """组装应用运行所需的仓储、模型客户端和业务服务。
@@ -87,6 +90,7 @@ class Container:
         :param turn_execution_gate: 单回合执行门禁；仅测试或特殊嵌入场景可显式注入。
         :param input_safety_service: 基础输入安全服务；仅测试或特殊嵌入场景可显式注入。
         :param clinical_safety_repository: 临床安全向量仓储；仅测试或特殊嵌入场景可显式注入。
+        :param clinical_safety_policy_client: 临床安全策略客户端；仅测试或特殊嵌入场景可显式注入。
         :param embedding_client: 向量化客户端；仅测试或特殊嵌入场景可显式注入。
         :return: 无返回值。
         """
@@ -136,8 +140,14 @@ class Container:
             self.qwen_client,
             settings,
         )
+        self.clinical_safety_policy_client = (
+            clinical_safety_policy_client
+            if clinical_safety_policy_client is not None
+            else self._clinical_safety_policy_client(settings)
+        )
         self.clinical_safety_evaluator = ClinicalSafetyEvaluator(
             self.clinical_safety_retriever,
+            self.clinical_safety_policy_client,
             thresholds=self.clinical_safety_thresholds,
         )
         self.rule_repository = (
@@ -198,6 +208,7 @@ class Container:
             and self.rule_repository.is_ready()
             and self.knowledge_repository.is_ready()
             and self.clinical_safety_repository.is_ready()
+            and self.clinical_safety_policy_client.is_ready()
             and self.turn_execution_gate.is_ready()
         )
 
@@ -289,6 +300,21 @@ class Container:
         if settings.input_safety_policy_backend == "local":
             return LocalInputSafetyPolicyClient()
         raise RuntimeError(f"unsupported INPUT_SAFETY_POLICY_BACKEND: {settings.input_safety_policy_backend}")
+
+    def _clinical_safety_policy_client(self, settings: Settings) -> ClinicalSafetyPolicyClient:
+        """构造临床安全策略裁决客户端。
+
+        :param settings: 当前运行环境的应用配置。
+        :return: 返回临床安全 OPA 策略客户端。
+        """
+        return OpaClinicalSafetyPolicyClient(
+            base_url=settings.clinical_safety_opa_base_url,
+            version="v1",
+            package_path=settings.clinical_safety_opa_package_path,
+            rule_name=settings.clinical_safety_opa_rule_name,
+            auth_token=settings.clinical_safety_opa_auth_token,
+            timeout_seconds=settings.request_timeout_seconds,
+        )
 
 
 @lru_cache
