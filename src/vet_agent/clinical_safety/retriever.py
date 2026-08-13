@@ -122,14 +122,16 @@ class ClinicalSafetyRetriever:
                 ),
             )
 
-        candidates = self._aggregate_candidates(vector_hits, limit=limit)
+        candidates, aggregate_reasons = self._aggregate_candidates(vector_hits, limit=limit)
         if not candidates:
             return ClinicalSafetyRetrievalResult(
                 candidates=[],
                 state=ClinicalSafetyRetrievalState(
                     stage="none",
                     degraded=True,
-                    reasons=self._compact_reasons([*vector_reasons, "vector_candidate_count_zero"]),
+                    reasons=self._compact_reasons(
+                        [*vector_reasons, *aggregate_reasons, "vector_candidate_count_zero"]
+                    ),
                     vector_hit_count=len(vector_hits),
                     candidate_count=0,
                 ),
@@ -139,8 +141,8 @@ class ClinicalSafetyRetriever:
             candidates=candidates,
             state=ClinicalSafetyRetrievalState(
                 stage="vector",
-                degraded=False,
-                reasons=(),
+                degraded=bool(aggregate_reasons),
+                reasons=aggregate_reasons,
                 retrieval_source=self._primary_retrieval_source(vector_hits),
                 vector_hit_count=len(vector_hits),
                 candidate_count=len(candidates),
@@ -187,24 +189,27 @@ class ClinicalSafetyRetriever:
         hits: list[ClinicalSafetyChunkHit],
         *,
         limit: int,
-    ) -> list[ClinicalSafetyCandidate]:
+    ) -> tuple[list[ClinicalSafetyCandidate], tuple[str, ...]]:
         """按安全资产聚合 chunk 命中并补充审计命中词。
 
         :param hits: chunk 级召回命中。
         :param limit: 返回资产候选数量上限。
-        :return: 返回聚合后的临床安全候选。
+        :return: 返回聚合后的临床安全候选和聚合阶段异常原因。
         """
         grouped_hits: dict[str, list[ClinicalSafetyChunkHit]] = defaultdict(list)
         for hit in hits:
             grouped_hits[hit.chunk.asset_id].append(hit)
 
         candidates: list[ClinicalSafetyCandidate] = []
+        reasons: list[str] = []
         for asset_id, raw_asset_hits in grouped_hits.items():
             try:
                 asset = self.repository.asset_by_id(asset_id, published_only=True)
-            except Exception:
-                asset = None
+            except Exception as exc:
+                reasons.append(f"clinical_safety_asset_read_failed:{type(exc).__name__}")
+                continue
             if asset is None:
+                reasons.append("invalid_asset_reference")
                 continue
             asset_hits = [replace(hit, matched_terms=self._matched_terms_from_hit(hit)) for hit in raw_asset_hits]
             candidates.append(
@@ -216,7 +221,7 @@ class ClinicalSafetyRetriever:
                     retrieval_source=self._retrieval_source(asset_hits),
                 )
             )
-        return sorted(candidates, key=lambda item: item.score, reverse=True)[:limit]
+        return sorted(candidates, key=lambda item: item.score, reverse=True)[:limit], self._compact_reasons(reasons)
 
     def _matched_terms_from_hit(self, hit: ClinicalSafetyChunkHit) -> tuple[str, ...]:
         """从 chunk 命中中提取审计命中词。

@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Protocol, Sequence, cast
 
@@ -134,7 +135,7 @@ class FileClinicalSafetyRepository(ClinicalSafetyAssetRepository):
         self._chunks: list[ClinicalSafetyChunk] | None = None
         self._asset_index: dict[str, ClinicalSafetyAsset] | None = None
 
-    def assets(self, *, published_only: bool = False) -> list[ClinicalSafetyAsset]:
+    def assets(self, *, published_only: bool = True) -> list[ClinicalSafetyAsset]:
         """读取临床安全资产文件内容。
 
         :param published_only: 是否仅返回已审核发布的资产。
@@ -149,7 +150,7 @@ class FileClinicalSafetyRepository(ClinicalSafetyAssetRepository):
         self,
         *,
         chunk_type: ClinicalSafetyChunkType | None = None,
-        published_only: bool = False,
+        published_only: bool = True,
     ) -> list[ClinicalSafetyChunk]:
         """读取临床安全 chunk 文件内容。
 
@@ -169,7 +170,7 @@ class FileClinicalSafetyRepository(ClinicalSafetyAssetRepository):
         self,
         asset_id: str,
         *,
-        published_only: bool = False,
+        published_only: bool = True,
     ) -> ClinicalSafetyAsset | None:
         """按资产标识读取文件中的临床安全资产。
 
@@ -182,7 +183,9 @@ class FileClinicalSafetyRepository(ClinicalSafetyAssetRepository):
         asset = self._asset_index.get(asset_id)
         if asset is None:
             return None
-        if published_only and asset.review_status != PUBLISHED_REVIEW_STATUS:
+        if published_only and not (
+            asset.enabled and asset.review_status == PUBLISHED_REVIEW_STATUS and asset.published_at is not None
+        ):
             return None
         return asset
 
@@ -190,7 +193,7 @@ class FileClinicalSafetyRepository(ClinicalSafetyAssetRepository):
         self,
         asset_id: str,
         *,
-        published_only: bool = False,
+        published_only: bool = True,
     ) -> list[ClinicalSafetyChunk]:
         """读取指定资产关联的文件 chunk。
 
@@ -242,14 +245,14 @@ class FileClinicalSafetyRepository(ClinicalSafetyAssetRepository):
         """
         return ClinicalSafetyAsset(
             asset_id=str(item.get("asset_id", "")),
-            asset_type=self._asset_type(item.get("asset_type", "danger_pattern")),
+            asset_type=self._asset_type(item.get("asset_type")),
             canonical_name=str(item.get("canonical_name", "")),
             category=str(item.get("category", "")),
             species_scope=self._tuple_of_text(item.get("species_scope", [])),
             sex_scope=self._tuple_of_text(item.get("sex_scope", [])),
             age_scope=self._tuple_of_text(item.get("age_scope", [])),
-            severity=self._severity(item.get("severity", "caution")),
-            action_class=self._action_class(item.get("action_class", "safety_warning")),
+            severity=self._severity(item.get("severity")),
+            action_class=self._action_class(item.get("action_class")),
             code=str(item.get("code", "")).strip(),
             aliases=self._tuple_of_text(item.get("aliases", [])),
             carriers=self._tuple_of_text(item.get("carriers", [])),
@@ -263,6 +266,8 @@ class FileClinicalSafetyRepository(ClinicalSafetyAssetRepository):
             source=self._dict_of_text(item.get("source", {})),
             review_status=str(item.get("review_status", "pending")),
             version=str(item.get("version", "v1")),
+            enabled=bool(item.get("enabled", False)),
+            published_at=self._optional_datetime(item.get("published_at")),
             raw_text=self._dict_of_text(item.get("raw_text", {})),
             metadata=dict(item.get("metadata", {})) if isinstance(item.get("metadata", {}), dict) else {},
         )
@@ -276,13 +281,13 @@ class FileClinicalSafetyRepository(ClinicalSafetyAssetRepository):
         return ClinicalSafetyChunk(
             chunk_id=str(item.get("chunk_id", "")),
             asset_id=str(item.get("asset_id", "")),
-            chunk_type=self._chunk_type(item.get("chunk_type", "recognition")),
+            chunk_type=self._chunk_type(item.get("chunk_type")),
             title=str(item.get("title", "")),
             embedding_text=str(item.get("embedding_text", "")),
             metadata=dict(item.get("metadata", {})) if isinstance(item.get("metadata", {}), dict) else {},
             review_status=str(item.get("review_status", "pending")),
             version=str(item.get("version", "v1")),
-            enabled=bool(item.get("enabled", True)),
+            enabled=bool(item.get("enabled", False)),
             embedding_model=self._optional_text(item.get("embedding_model")),
             embedding_dimension=self._optional_int(item.get("embedding_dimension")),
             content_hash=str(item.get("content_hash", "")),
@@ -302,7 +307,11 @@ class FileClinicalSafetyRepository(ClinicalSafetyAssetRepository):
         """
         if not published_only:
             return list(assets)
-        return [asset for asset in assets if asset.review_status == PUBLISHED_REVIEW_STATUS]
+        return [
+            asset
+            for asset in assets
+            if asset.enabled and asset.review_status == PUBLISHED_REVIEW_STATUS and asset.published_at is not None
+        ]
 
     def _filter_chunks(
         self,
@@ -321,7 +330,13 @@ class FileClinicalSafetyRepository(ClinicalSafetyAssetRepository):
         return [
             chunk
             for chunk in chunks
-            if chunk.enabled and chunk.review_status == PUBLISHED_REVIEW_STATUS
+            if (
+                chunk.enabled
+                and chunk.review_status == PUBLISHED_REVIEW_STATUS
+                and chunk.embedding_model is not None
+                and chunk.embedding_dimension is not None
+                and bool(chunk.content_hash.strip())
+            )
         ]
 
     def _tuple_of_text(self, value: Any) -> tuple[str, ...]:
@@ -373,7 +388,7 @@ class FileClinicalSafetyRepository(ClinicalSafetyAssetRepository):
         }
         if normalized in allowed:
             return cast(ClinicalSafetyAssetType, normalized)
-        return "danger_pattern"
+        raise ValueError(f"invalid clinical safety asset_type: {value}")
 
     def _action_class(self, value: Any) -> ClinicalSafetyActionClass:
         """校验并返回标准安全处置动作分类。
@@ -385,7 +400,7 @@ class FileClinicalSafetyRepository(ClinicalSafetyAssetRepository):
         allowed = {"emergency", "same_day_visit", "urgent_visit", "safety_warning"}
         if normalized in allowed:
             return cast(ClinicalSafetyActionClass, normalized)
-        return "safety_warning"
+        raise ValueError(f"invalid clinical safety action_class: {value}")
 
     def _chunk_type(self, value: Any) -> ClinicalSafetyChunkType:
         """校验并返回标准临床安全 chunk 类型。
@@ -396,7 +411,7 @@ class FileClinicalSafetyRepository(ClinicalSafetyAssetRepository):
         normalized = str(value).strip()
         if normalized in {"recognition", "clinical_risk", "triage_action"}:
             return cast(ClinicalSafetyChunkType, normalized)
-        return "recognition"
+        raise ValueError(f"invalid clinical safety chunk_type: {value}")
 
     def _severity(self, value: Any) -> SafetySeverity:
         """校验并返回安全规则严重级别。
@@ -407,7 +422,7 @@ class FileClinicalSafetyRepository(ClinicalSafetyAssetRepository):
         normalized = str(value).strip().lower()
         if normalized in {"info", "caution", "urgent", "blocked"}:
             return cast(SafetySeverity, normalized)
-        return "caution"
+        raise ValueError(f"invalid clinical safety severity: {value}")
 
     def _optional_text(self, value: Any) -> str | None:
         """转换可选文本字段。
@@ -430,3 +445,18 @@ class FileClinicalSafetyRepository(ClinicalSafetyAssetRepository):
             return int(value) if value is not None else None
         except (TypeError, ValueError):
             return None
+
+    def _optional_datetime(self, value: Any) -> datetime | None:
+        """转换可选发布时间字段。
+
+        :param value: 原始 JSON 值。
+        :return: 有效 ISO 时间字符串时返回 datetime，否则返回 None。
+        """
+        if isinstance(value, datetime):
+            return value
+        if value is None:
+            return None
+        text = str(value).strip()
+        if not text:
+            return None
+        return datetime.fromisoformat(text.replace("Z", "+00:00"))

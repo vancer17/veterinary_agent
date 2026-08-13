@@ -1,0 +1,79 @@
+{
+  "_meta": {
+    "schema": "clinical_safety_assets",
+    "schema_version": "1.0.0",
+    "version": "template-v1",
+    "source_file": "docs/standards/clinical-safety/clinical-safety-assets.publish.example.json",
+    "asset_count": 1,
+    "generated_at": "2026-08-13T08:00:00+00:00",
+    "source_meta": {
+      "template": true,
+      "purpose": "publish_contract_example"
+    }
+  },
+  "assets": [
+    {
+      "asset_id": "clinical_safety_template_example_001",
+      "code": "TEMPLATE_CLINICAL_RISK_SAMPLE",
+      "asset_type": "danger_pattern",
+      "canonical_name": "示例临床风险",
+      "category": "模板示例",
+      "species_scope": [
+        "dog",
+        "cat"
+      ],
+      "sex_scope": [],
+      "age_scope": [],
+      "severity": "urgent",
+      "action_class": "same_day_visit",
+      "aliases": [
+        "模板示例",
+        "示例风险"
+      ],
+      "carriers": [],
+      "user_expressions": [
+        "示例症状"
+      ],
+      "symptoms": [
+        "示例症状"
+      ],
+      "recognition_phrases": [
+        "示例临床风险",
+        "示例症状",
+        "模板示例",
+        "示例风险"
+      ],
+      "required_context": {
+        "species": [
+          "dog",
+          "cat"
+        ],
+        "symptoms": [
+          "示例症状"
+        ]
+      },
+      "decision_hints": {
+        "active_symptom": "safety_escalated"
+      },
+      "clinical_risk_summary": "这是一个仅用于说明结构的示例临床安全资产。",
+      "triage_message": "这是一个仅用于说明结构的示例分诊口径。",
+      "source": {
+        "source_file": "docs/standards/clinical-safety/clinical-safety-assets.publish.example.json",
+        "source_path": "$.assets[0]",
+        "source_text": "这是一个仅用于说明结构的示例资产，不代表真实临床结论。"
+      },
+      "review_status": "approved",
+      "version": "template-v1",
+      "enabled": true,
+      "published_at": "2026-08-13T08:00:00+00:00",
+      "raw_text": {
+        "title": "示例临床风险",
+        "body": "这是一个仅用于说明结构的示例原始文本。"
+      },
+      "metadata": {
+        "template": true,
+        "review_note": "仅用于模板说明"
+      }
+    }
+  ]
+}

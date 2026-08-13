@@ -67,6 +67,8 @@
 
 临床安全资产数据用于表达可召回的、经过审核的临床风险知识片段。
 
+资产数据必须先满足 `docs/architecture/clinical-safety-asset-contract.md` 中定义的发布态严格契约，不能仅因 JSON 可解析或字段大致存在就被视为生产可信源。
+
 资产数据当前负责：
 
 1. 保存稳定资产编码、资产类型、严重级别、适用范围和审计来源。
@@ -81,6 +83,7 @@
 3. 作为问诊状态、RAG 知识库或长期记忆事实表的替代品。
 4. 在数据库层实现策略动作或临床状态机。
 5. 通过开发样例 JSON 作为生产可信源。
+6. 在运行时根据规范名称、别名、症状或短语推导安全信号编码。
 
 ### 2.3 结构化语义结果职责
 
@@ -330,3 +333,4 @@ Fail Fast 的含义不是完全停止回答，而是不能把不可信的规则�
 2. `docs/architecture/identity-pet-session-scope-change-summary.md`
 3. `docs/architecture/turn-execution-idempotency-lock-change-summary.md`
 4. `docs/architecture/input-safety-candidates-change-summary.md`
+5. `docs/architecture/clinical-safety-asset-contract.md`

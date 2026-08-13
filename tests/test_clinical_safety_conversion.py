@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from scripts.clinical_safety import build_standard_safety_documents, load_safety_reference
+from vet_agent.clinical_safety import validate_clinical_safety_publish_contract
 
 
 def test_safety_reference_converts_to_standard_assets() -> None:
@@ -33,6 +34,8 @@ def test_safety_reference_converts_to_standard_assets() -> None:
     assert asset_document["_meta"]["asset_count"] == 130
     assert chunk_document["_meta"]["chunk_count"] == 390
     assert len(chunks) == len(assets) * 3
+    assert all(asset["review_status"] == "pending" and asset["enabled"] is False for asset in assets)
+    assert all(chunk["review_status"] == "pending" and chunk["enabled"] is False for chunk in chunks)
     xylitol = _find_asset(assets, "木糖醇")
     assert xylitol["code"] == "TOXIC_XYLITOL"
     assert xylitol["asset_type"] == "toxin"
@@ -63,6 +66,33 @@ def test_safety_reference_converts_to_standard_assets() -> None:
         set(cyanosis["recognition_phrases"])
     )
     assert "发绀" in _recognition_chunk_text(chunks, cyanosis["asset_id"])
+
+
+def test_safety_reference_can_pass_publish_contract() -> None:
+    """验证原始安全参考数据经过转换后可进入发布态严格契约校验。
+
+    :return: 无返回值；断言通过表示离线转换结果具备严格发布态结构。
+    """
+    source = Path("scripts/clinical_safety/assets/vet_safety_reference.json")
+    payload = load_safety_reference(source)
+
+    asset_document, chunk_document = build_standard_safety_documents(
+        payload,
+        source_file=str(source),
+        version="v1",
+        review_status="approved",
+    )
+
+    contract = validate_clinical_safety_publish_contract(
+        asset_document,
+        chunk_document,
+        require_embeddings=False,
+    )
+
+    assert contract.asset_count == 130
+    assert contract.chunk_count == 390
+    assert all(asset.review_status == "approved" and asset.enabled for asset in contract.asset_document.assets)
+    assert all(chunk.review_status == "approved" and chunk.enabled for chunk in contract.chunk_document.chunks)
 
 
 def _find_asset(assets: list[dict[str, Any]], canonical_name: str) -> dict[str, Any]:
