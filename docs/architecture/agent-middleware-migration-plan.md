@@ -55,9 +55,10 @@ flowchart TD
   M -->|需要追问| N[FollowupRagService.plan 追问相关 RAG]
   N --> O[FollowupRagPlanner.generate 动态追问]
   M -->|可以回答| P[AnswerRagService.retrieve 回答相关 RAG]
-  P --> Q[ResponseComposer.compose 生成回复]
+  P --> Q[ResponseGenerationContextBuilder.build 回复生成上下文编译]
+  Q --> Q2[ResponseGenerationService.generate 生成回复]
   O --> R[SafetyAgent.sanitize_output 输出清洗]
-  Q --> R
+  Q2 --> R
   R --> S[SafetyReviewAgent.review_response 输出安全复核]
   S --> T[MemoryExtractionAgent.extract 长期记忆候选抽取]
   T --> U[MemoryService.upsert_pet_fact 写入长期事实]
@@ -85,8 +86,8 @@ flowchart TD
 | 11 | 问诊状态与回答充分性 | `ConsultationStateAgent.update`、`AnswerabilityEvaluator`、`ConsultationStateModel` | PostgreSQL/pgvector、OPA | PostgreSQL 保存活跃问诊状态；OPA 只裁决“是否允许阶段性回答/是否必须追问”等动作门槛 | 不把槽位状态机迁移到 Rego，不把活跃状态写入 Mem0 |
 | 12 | 追问相关 RAG | `FollowupRagService`、`FollowupRagQueryBuilder`、`FollowupRagServiceProtocol` | LlamaIndex、PostgreSQL/pgvector、LiteLLM `response_format` | LlamaIndex 替代手写检索编排；PostgreSQL/pgvector 作为生产向量存储；response_format 替代追问规划 JSON 解析 | 通过 `FollowupRagServiceProtocol` 保持 `KnowledgeHit`、`Evidence` 和追问计划契约 |
 | 13 | 回答相关 RAG | `AnswerRagService`、`AnswerRagQueryBuilder`、`AnswerRagServiceProtocol` | LlamaIndex、PostgreSQL/pgvector | 替代 pgvector/text/file 的低质量回退查询编排；只读取已启用、已审核且有 embedding 的知识 chunk | 通过 `AnswerRagServiceProtocol` 暴露回答证据上下文，不依赖旧 `KnowledgeService` |
-| 14 | 回复生成上下文编译 | `ResponseComposer.compose`、`PostgresMemoryService.read` | Mem0、PostgreSQL/pgvector | Mem0 提供与本轮主诉相关的历史语义记忆；PostgreSQL 提供权威事实和最近对话摘要 | 后续引入 `MemoryContextBuilder`，避免直接消费原始记忆结构 |
-| 15 | 回复生成 | `ResponseComposer.compose`、`QwenClient.chat` | LiteLLM、Guardrails | LiteLLM 继续统一模型网关；Guardrails 可在输出前后做约束验证 | 自然语言回复暂不强制结构化，只强化审计与输出检查 |
+| 14 | 回复生成上下文编译 | `ResponseGenerationContextBuilder.build`、`MemoryContextBuilder.build` | Mem0、PostgreSQL/pgvector | `MemoryContextBuilder` 仅编译权威事实、当前会话窗口、episode 与 Mem0 语义线索；`ResponseGenerationContextBuilder` 再按结构化边界合并临床安全、回答充分性、可信宠物资料、问诊状态、回答 RAG 与当前任务 | 已移除 `ResponseComposer` 内联拼接和 `ConsultationStateService.format_state_for_prompt`；编译器只格式化上游结构化结果，不重新执行语义理解、冲突裁决或关键词状态机 |
+| 15 | 回复生成 | `ResponseGenerationService.generate`、`QwenClient.chat` | LiteLLM、Guardrails | LiteLLM 继续统一模型网关；回复生成服务只负责上下文编译后的自然语言生成，输出清洗与安全复核继续位于后续独立阶段 | 已移除硬编码回复回退；模型依赖不可用、answer 契约不满足或回答 RAG 无命中时直接 Fail Fast |
 | 16 | 输出清洗与安全复核 | `SafetyAgent.sanitize_output`、`SafetyReviewAgent.review_response` | Guardrails、OPA | Guardrails 检测格式、剂量和越界内容；OPA 决定放行、改写、阻断或升级 | 先以 observe 模式并行记录，再切为 enforce |
 | 17 | 长期记忆候选抽取 | `MemoryExtractionAgent.extract`、`Mem0RestSemanticMemory.add_turn` | LiteLLM `response_format`、Mem0、OPA | response_format 替代 `_extract_json()`；Mem0 可提供语义记忆候选；OPA 替代 `MemoryWritePolicy` 中的硬编码写入策略 | 禁止 `_rule_candidates()` 或 Mem0 结果直接产生可写权威事实 |
 | 18 | 长期事实写入 | `PostgresMemoryService.upsert_pet_fact`、`PetMemoryFactModel` | PostgreSQL/pgvector、OPA | PostgreSQL 保存权威事实、来源、置信度和有效期；OPA 写入前裁决主体、事实类型、确认状态和冲突策略 | 保持数据库写入接口不变，Mem0 只保存语义投影 |

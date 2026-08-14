@@ -14,6 +14,10 @@ from typing import Any, Literal
 from vet_agent import Evidence
 
 
+MemoryContextScope = Literal["pet", "session_shared", "task"]
+MemoryContextAuthority = Literal["authoritative", "conversational", "episode", "semantic_hint"]
+
+
 @dataclass(frozen=True)
 class AuthoritativeMemoryFact:
     """表示 PostgreSQL 长期事实库中的权威记忆事实。
@@ -285,11 +289,45 @@ class MemoryPromptContext:
     """表示回复生成 Agent 可消费的记忆提示词上下文。
 
     :param prompt_text: 已分层编译后的记忆提示词。
+    :param sections: 已按范围和可信等级切分的模型可见记忆分区。
     :param evidence: 记忆读取产生的可展示证据。
     :param metadata: 记忆上下文编译审计摘要。
     :return: 无返回值。
     """
 
     prompt_text: str
+    sections: tuple["MemoryContextSection", ...] = field(default_factory=tuple)
     evidence: tuple[Evidence, ...] = field(default_factory=tuple)
     metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class MemoryContextSection:
+    """表示回复生成阶段可消费的一条结构化记忆分区。
+
+    :param scope: 记忆适用范围，区分宠物级、会话共享级和任务级上下文。
+    :param authority: 记忆可信等级，区分权威事实、会话摘要、历史事件和语义线索。
+    :param content: 可进入模型上下文的业务内容，不包含内部标识和原始置信度。
+    :param source_label: 面向模型和排障的安全来源标签。
+    :param task_key: 任务级记忆的显式任务归属；为空时不得猜测任务归属。
+    :return: 无返回值；该对象用于在回复生成前隔离记忆范围和可信等级。
+    """
+
+    scope: MemoryContextScope
+    authority: MemoryContextAuthority
+    content: str
+    source_label: str
+    task_key: str | None = None
+
+    def to_metadata(self) -> dict[str, Any]:
+        """转换为响应 metadata 使用的结构化记忆分区摘要。
+
+        :return: 返回不包含完整内部对象的记忆分区摘要。
+        """
+        return {
+            "scope": self.scope,
+            "authority": self.authority,
+            "source_label": self.source_label,
+            "task_key": self.task_key,
+            "content_chars": len(self.content),
+        }

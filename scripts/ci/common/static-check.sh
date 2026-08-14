@@ -64,7 +64,7 @@ for shell_entrypoint in scripts/ci/*.sh scripts/ci/common/*.sh scripts/ci/reposi
 done
 
 # Makefile 入口只做 dry-run 解析，避免静态检查阶段执行实际命令。
-make -n ci-common ci-repository ci-cd-layout ci-dry-run ci-try-run cd-verify-release cd-resolve-images cd-build-images cd-sync-production cd-deploy-production cd-health-check >/dev/null
+make -n ci-common ci-repository ci-cd-layout ci-dry-run ci-try-run ci-response-generation-api cd-verify-release cd-resolve-images cd-build-images cd-sync-production cd-deploy-production cd-health-check >/dev/null
 
 if command -v actionlint >/dev/null 2>&1; then
     actionlint .github/workflows/*.yml

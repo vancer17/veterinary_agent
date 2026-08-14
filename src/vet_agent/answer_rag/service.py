@@ -94,6 +94,7 @@ class AnswerRagService(AnswerRagServiceProtocol):
                 "answer RAG retrieval returned no hits",
                 details={"query": query, "top_k": self.top_k, "min_score": self.min_score},
             )
+        self._validate_retrieval_hits(retrieval.hits)
         return AnswerRagResult(
             strategy=AnswerRagStrategy.LLAMA_INDEX_PGVECTOR,
             retrieval=retrieval,
@@ -159,3 +160,31 @@ class AnswerRagService(AnswerRagServiceProtocol):
             return None
         domain = str(request.task_domain or request.consultation_state.get("domain") or "").strip()
         return domain or None
+
+    def _validate_retrieval_hits(self, hits: list[object]) -> None:
+        """校验回答 RAG 返回的命中是否满足回复生成最小证据契约。
+
+        :param hits: 回答 RAG 检索器返回的知识命中列表。
+        :return: 无返回值。
+        :raises AnswerRagDependencyError: 任一命中缺少标题、摘要、来源或分数非法时抛出。
+        """
+        for index, hit in enumerate(hits):
+            title = str(getattr(hit, "title", "") or "").strip()
+            summary = str(getattr(hit, "summary", "") or "").strip()
+            source = str(getattr(hit, "source", "") or "").strip()
+            score = getattr(hit, "score", None)
+            if not title or not summary or not source:
+                raise AnswerRagDependencyError(
+                    "answer RAG retrieval returned incomplete evidence",
+                    details={
+                        "index": index,
+                        "has_title": bool(title),
+                        "has_summary": bool(summary),
+                        "has_source": bool(source),
+                    },
+                )
+            if not isinstance(score, int | float) or score < 0 or score > 1:
+                raise AnswerRagDependencyError(
+                    "answer RAG retrieval returned invalid evidence score",
+                    details={"index": index, "score": score},
+                )

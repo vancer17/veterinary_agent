@@ -56,6 +56,10 @@ from vet_agent.memory import (
     MemoryReadService,
     make_memory_projection_client,
 )
+from vet_agent.response_generation import (
+    ResponseGenerationContextBuilder,
+    ResponseGenerationService,
+)
 from vet_agent.repositories import (
     FileRuleRepository,
     JsonConsultationStateRepository,
@@ -187,6 +191,15 @@ class Container:
             else LogicTraceStore(JsonDocumentStore(settings.data_dir / "logic_trace.jsonl"))
         )
         self.qwen_client = QwenClient(settings)
+        # 回复生成提示词同时承载问诊状态、记忆与回答 RAG，复用现有记忆预算推导，
+        # 避免新增只在单一调用点生效的悬空环境变量。
+        response_prompt_max_chars: int = max(12_000, settings.memory_prompt_max_chars * 2)
+        self.response_generation_service = ResponseGenerationService(
+            qwen_client=self.qwen_client,
+            context_builder=ResponseGenerationContextBuilder(
+                max_prompt_chars=response_prompt_max_chars,
+            ),
+        )
         runtime_embedding_client = QwenEmbeddingClient(settings) if settings.litellm_configured else None
         self.embedding_client = embedding_client or (
             runtime_embedding_client
@@ -284,6 +297,7 @@ class Container:
             memory_context_builder=self.memory_context_builder,
             trace_store=self.trace_store,
             answer_rag_service=self.answer_rag_service,
+            response_generation_service=self.response_generation_service,
             qwen_client=self.qwen_client,
             rule_repository=self.rule_repository,
             consultation_state_service=self.consultation_state_service,
@@ -308,6 +322,7 @@ class Container:
             and self.rule_repository.is_ready()
             and self.answer_rag_service.is_ready()
             and self.followup_rag_service.is_ready()
+            and self.response_generation_service.is_ready()
             and self.clinical_safety_repository.is_ready()
             and self.clinical_safety_policy_client.is_ready()
             and self.consultation_state_service.is_ready()

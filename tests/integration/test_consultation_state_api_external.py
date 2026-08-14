@@ -1,8 +1,10 @@
 """
 =============================================================================
 文件：tests/integration/test_consultation_state_api_external.py
-作用：通过真实 PostgreSQL、LiteLLM 与 OPA 验证问诊状态与回答充分性 API 纵向链路。
-范围：覆盖 ConsultationSemanticExtractorAgent、ConsultationStateService、OPA 问诊回答充分性策略与 API 响应审计 metadata。
+作用：通过真实 PostgreSQL、LiteLLM、OPA 与可选 Mem0 验证问诊状态、回答充分性
+      以及回复生成上下文编译 API 纵向链路。
+范围：覆盖 ConsultationSemanticExtractorAgent、ConsultationStateService、OPA 问诊回答充分性策略、
+      回答 RAG、ResponseGenerationContextBuilder、真实 Qwen 回复调用与 API 响应审计 metadata。
 说明：本测试仅在显式开启 RUN_CONSULTATION_STATE_API_EXTERNAL_TEST 时执行，供 try-run
       或人工发布前加严验证使用；可按需通过 SSH 隧道连接远程开发依赖。
 =============================================================================
@@ -15,6 +17,7 @@ import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, TypeVar
 from uuid import uuid4
 
@@ -155,8 +158,34 @@ CONSULTATION_SLOT_BASELINE: tuple[dict[str, Any], ...] = (
 _T = TypeVar("_T")
 
 
+class ExternalApiEnvironment(dict[str, str]):
+    """表示真实外部 API 集成测试配置，并在异常日志中隐藏敏感值。
+
+    :return: 无返回值；该类型仅用于测试配置传递和安全 repr 展示。
+    """
+
+    _SENSITIVE_KEYS = frozenset(
+        {
+            "LITELLM_API_KEY",
+            "MEM0_API_KEY",
+            "OPA_AUTH_TOKEN",
+        }
+    )
+
+    def __repr__(self) -> str:
+        """生成不包含外部服务密钥的配置对象表示。
+
+        :return: 返回可用于 pytest 异常日志的脱敏配置摘要。
+        """
+        safe_values = {
+            key: "<redacted>" if key in self._SENSITIVE_KEYS else value
+            for key, value in self.items()
+        }
+        return f"{type(self).__name__}({safe_values!r})"
+
+
 @pytest.fixture
-def external_env() -> dict[str, str]:
+def external_env() -> ExternalApiEnvironment:
     """读取问诊状态外部 API 集成测试所需配置。
 
     :return: 返回外部依赖配置字典。
@@ -204,7 +233,9 @@ def external_env() -> dict[str, str]:
         or os.getenv("INPUT_SAFETY_OPA_AUTH_TOKEN")
         or "",
     }
-    return {**required, **optional, "ENABLE_MEM0": "true" if enable_mem0 else "false"}
+    return ExternalApiEnvironment(
+        {**required, **optional, "ENABLE_MEM0": "true" if enable_mem0 else "false"}
+    )
 
 
 @pytest.fixture
@@ -303,16 +334,18 @@ def external_client(
     monkeypatch: pytest.MonkeyPatch,
     external_env: dict[str, str],
     external_database: str,
+    tmp_path: Path,
 ) -> Iterator[TestClient]:
     """构造接入真实外部依赖的本地 API 测试客户端。
 
     :param monkeypatch: pytest 环境变量替换工具。
     :param external_env: 外部依赖配置。
     :param external_database: 已校验的数据库连接串。
+    :param tmp_path: 当前测试进程使用的临时本地数据目录。
     :return: 返回 FastAPI 测试客户端。
     """
     del external_database
-    with _configured_environment(monkeypatch, external_env):
+    with _configured_environment(monkeypatch, external_env, data_dir=tmp_path):
         container = Container(Settings.from_env())
         set_container(container)
         set_orchestrator(VetAgentIngressOrchestrator(container))
@@ -526,15 +559,179 @@ def test_consultation_state_api_completes_when_user_requests_answer_now(
     )
 
 
+def _response_generation_real_service_turn(
+    external_client: TestClient,
+    external_prefix: str,
+) -> dict[str, Any]:
+    """执行一次真实外部服务驱动的回复生成回合。
+
+    :param external_client: 接入真实外部依赖的 API 测试客户端。
+    :param external_prefix: 本轮测试使用的唯一数据前缀。
+    :return: 返回最终完成态的 API 响应 JSON。
+    """
+    profile = _profile()
+    user_id, pet_id, session_id = _scope_ids(external_prefix)
+    response = external_client.post(
+        "/agent/turns",
+        json=_payload(
+            "别再追问了，直接说目前怎么看。它是狗，3岁，12公斤，今天早上开始软便，精神和食欲正常，没有呕吐，也没有血便。",
+            user_id=user_id,
+            pet_id=pet_id,
+            session_id=session_id,
+            profile=profile,
+            idempotency_key=f"{external_prefix}_response_generation_turn_1",
+        ),
+    )
+
+    assert response.status_code == 200, response.text
+    data = response.json()
+    if data["status"] == "requires_followup":
+        # 真实问诊语义模型可能对首次“直接回答”意图给出不同置信结果；
+        # 第二回合显式声明为追问补充，沿用已持久化的结构化事实，以验证最终 answer 分支而非模型措辞快照。
+        response = external_client.post(
+            "/agent/turns",
+            json=_payload(
+                "补充上一轮信息：没有其他异常，我明确要求现在基于已有资料给出阶段性回答，不再继续追问。",
+                user_id=user_id,
+                pet_id=pet_id,
+                session_id=session_id,
+                profile=profile,
+                idempotency_key=f"{external_prefix}_response_generation_turn_2",
+            ),
+        )
+        assert response.status_code == 200, response.text
+        data = response.json()
+
+    return data
+
+
+@pytest.mark.integration
+def test_response_generation_context_compilation_api_uses_real_services(
+    external_client: TestClient,
+    external_env: dict[str, str],
+    external_prefix: str,
+) -> None:
+    """验证回复生成上下文编译 API 集成测试使用真实外部服务。
+
+    :param external_client: 接入真实外部依赖的 API 测试客户端。
+    :param external_env: LiteLLM、OPA 与可选 Mem0 的外部依赖配置。
+    :param external_prefix: 本轮测试使用的唯一数据前缀。
+    :return: 无返回值；断言通过表示回答分支、上下文编译与真实模型调用契约成立。
+    """
+    data = _response_generation_real_service_turn(external_client, external_prefix)
+
+    assert data["status"] == "completed", {
+        "status": data["status"],
+        "answerability": data.get("metadata", {}).get("answerability"),
+    }
+    assert data["output_text"].strip()
+    assert data["vet_result"]["route"] == "standard_consultation"
+
+    response_generation = data["metadata"].get("response_generation")
+    assert response_generation is not None
+    assert response_generation["strategy"] == "qwen_response_generation"
+
+    context_metadata = response_generation["context"]
+    assert context_metadata["consultation_ready"] is True
+    assert context_metadata["answerability"]["decision"] == "answer"
+    assert context_metadata["prompt_chars"] > 0
+    assert context_metadata["system_prompt_chars"] > 0
+    assert context_metadata["user_prompt_chars"] > 0
+    assert context_metadata["content_budget_chars"] > 0
+    assert context_metadata["answer_rag"]["retrieval"]["hit_count"] >= 1
+    assert (
+        context_metadata["clinical_safety_resolution"]["policy_decision"]["policy_backend"]
+        == "opa"
+    )
+
+    memory_read = data["metadata"]["memory_read"]
+    assert memory_read["audit"]["source"] == "postgres_authoritative_memory_with_mem0_projection"
+    if external_env["ENABLE_MEM0"] == "true":
+        assert memory_read["audit"]["details"]["mem0_enabled"] is True
+    else:
+        assert memory_read["audit"]["details"]["mem0_enabled"] is False
+        assert memory_read["audit"]["semantic_status"] == "disabled"
+
+    path = data["metadata"]["multi_agent_path"]
+    assert AgentPathNode.ANSWER_RAG_SERVICE.value in path
+    assert AgentPathNode.ANSWER_RAG_RETRIEVER.value in path
+    assert AgentPathNode.RESPONSE_GENERATION_CONTEXT_BUILDER.value in path
+    assert AgentPathNode.QWEN_RESPONSE_AGENT.value in path
+    assert AgentPathNode.SAFETY_REVIEW_AGENT.value in path
+    assert path.index(AgentPathNode.ANSWER_RAG_RETRIEVER.value) < path.index(
+        AgentPathNode.RESPONSE_GENERATION_CONTEXT_BUILDER.value
+    )
+    assert path.index(AgentPathNode.RESPONSE_GENERATION_CONTEXT_BUILDER.value) < path.index(
+        AgentPathNode.QWEN_RESPONSE_AGENT.value
+    )
+    assert path.index(AgentPathNode.QWEN_RESPONSE_AGENT.value) < path.index(
+        AgentPathNode.SAFETY_REVIEW_AGENT.value
+    )
+
+
+@pytest.mark.integration
+def test_response_generation_context_compilation_api_exposes_only_model_visible_projection_fields(
+    external_client: TestClient,
+    external_prefix: str,
+) -> None:
+    """验证真实服务链路下的回复生成上下文只暴露模型可见投影字段。
+
+    :param external_client: 接入真实外部依赖的 API 测试客户端。
+    :param external_prefix: 本轮测试使用的唯一数据前缀。
+    :return: 无返回值；断言通过表示回复生成边界收束已生效。
+    """
+    data = _response_generation_real_service_turn(external_client, external_prefix)
+    response_generation = data["metadata"].get("response_generation")
+    assert response_generation is not None
+
+    context_metadata = response_generation["context"]
+    visible_projection = context_metadata["model_visible_projection"]
+
+    assert visible_projection["clinical_safety_fields"] == [
+        "action",
+        "allow",
+        "message",
+        "reasons",
+    ]
+    assert visible_projection["answerability_fields"] == [
+        "decision",
+        "answer_scope",
+        "reason",
+        "unresolved_slots",
+    ]
+
+    memory_sections = visible_projection["memory_sections"]
+    assert memory_sections
+    for section in memory_sections:
+        assert set(section) == {
+            "scope",
+            "authority",
+            "source_label",
+            "task_key",
+            "content_chars",
+        }
+        assert section["scope"] in {"pet", "session_shared"}
+        assert section["authority"] in {
+            "authoritative",
+            "conversational",
+            "episode",
+            "semantic_hint",
+        }
+        assert section["content_chars"] > 0
+
+
 @contextmanager
 def _configured_environment(
     monkeypatch: pytest.MonkeyPatch,
     external_env: dict[str, str],
+    *,
+    data_dir: Path,
 ) -> Iterator[None]:
     """向当前进程注入问诊状态外部 API 集成测试配置。
 
     :param monkeypatch: pytest 环境变量替换工具。
     :param external_env: 外部依赖配置。
+    :param data_dir: 当前测试进程使用的临时本地数据目录。
     :return: 返回上下文管理器迭代器。
     """
     values = {
@@ -561,6 +758,10 @@ def _configured_environment(
         "QWEN_CIRCUIT_BREAKER_FAILURE_THRESHOLD": "20",
         "LITELLM_TIMEOUT_SECONDS": str(_timeout()),
         "REQUIRE_API_AUTH": "false",
+        "VET_AGENT_DATA_DIR": str(data_dir),
+        # 外部 API 集成测试只使用本轮写入 PostgreSQL 的结构化目录和 RAG 基线，
+        # 显式指向临时空目录，避免远程容器路径或仓库静态资产进入测试可信边界。
+        "VET_AGENT_SEED_DIR": str(data_dir / "unused-seeds"),
     }
     if external_env["ENABLE_MEM0"] == "true":
         values["MEM0_BASE_URL"] = external_env["MEM0_BASE_URL"].rstrip("/")
