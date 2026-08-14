@@ -7,28 +7,18 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from typing import Any
-from uuid import uuid4
-
-from sqlalchemy import delete, select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.orm import Session
 
 from vet_agent import TrustedIdentity
-from vet_agent.db import (
-    ConsultationStateModel,
-    ConversationTurnModel,
-    make_session_factory,
-    PetMemoryEpisodeModel,
-    PetMemoryFactModel,
-)
 from vet_agent.memory import MemoryReadService
+from vet_agent.repositories import (
+    ConsultationStateRepository,
+    MemoryWriteRepository,
+    PostgresConsultationStateRepository,
+    PostgresMemoryWriteRepository,
+)
 
 from .semantic_memory import DisabledSemanticMemory, SemanticMemoryWriter
-
-
-DEFAULT_TASK_KEY = "__default__"
 
 
 class PostgresMemoryService:
@@ -37,17 +27,28 @@ class PostgresMemoryService:
         database_url: str,
         memory_read_service: MemoryReadService,
         semantic_memory: SemanticMemoryWriter | None = None,
+        consultation_state_repository: ConsultationStateRepository | None = None,
+        memory_write_repository: MemoryWriteRepository | None = None,
     ) -> None:
-        """初始化当前对象。
+        """初始化 PostgreSQL 记忆业务服务及其数据仓储。
 
         :param database_url: 数据库连接地址。
         :param memory_read_service: 结构化记忆读取服务，用于兼容旧管理接口读取。
         :param semantic_memory: 语义记忆投影写入客户端。
+        :param consultation_state_repository: 活跃问诊状态仓储；未提供时按数据库地址构造 PostgreSQL 实现。
+        :param memory_write_repository: 结构化记忆写入仓储；未提供时按数据库地址构造 PostgreSQL 实现。
         :return: 无返回值。
         """
-        self.session_factory = make_session_factory(database_url)
         self.semantic_memory = semantic_memory or DisabledSemanticMemory()
         self.memory_read_service = memory_read_service
+        self.consultation_state_repository = (
+            consultation_state_repository
+            or PostgresConsultationStateRepository(database_url)
+        )
+        self.memory_write_repository = (
+            memory_write_repository
+            or PostgresMemoryWriteRepository(database_url)
+        )
 
     async def read(self, identity: TrustedIdentity) -> dict[str, Any]:
         """读取指定范围内的持久化数据。
@@ -67,106 +68,49 @@ class PostgresMemoryService:
         medical: bool,
         metadata: dict[str, Any] | None = None,
     ) -> None:
-        """执行 remember_turn 业务逻辑。
+        """编排当前回合的结构化记忆写入与语义记忆投影。
 
-        :param identity: 可信身份信息。
+        :param identity: 当前可信用户、宠物与会话范围。
         :param user_text: 用户输入文本。
-        :param summary: 参数 summary。
+        :param summary: Agent 回合摘要或响应摘要。
         :param medical: 是否属于医疗咨询回合。
-        :param metadata: 附加元数据。
-        :return: 返回函数执行结果。
+        :param metadata: 回合附加审计元数据。
+        :return: 无返回值。
         """
-        metadata = metadata or {}
-        turn_id = str(metadata.get("turn_id") or f"turn_memory_{uuid4().hex}")
-        request_id = str(metadata.get("request_id") or f"memory_req_{uuid4().hex}")
-        trace_id = str(metadata.get("trace_id") or request_id)
-        status = str(metadata.get("status") or "completed")
-        with self.session_factory.begin() as session:
-            statement = pg_insert(ConversationTurnModel).values(
-                turn_id=turn_id,
-                request_id=request_id,
-                trace_id=trace_id,
-                user_id=identity.user_id,
-                session_id=identity.session_id,
-                pet_id=identity.pet_id,
-                input_text=user_text[:4000],
-                summary=summary[:4000],
-                status=status,
-                medical=medical,
-                metadata_json=metadata,
-                response_snapshot=metadata.get("response_snapshot"),
-            )
-            statement = statement.on_conflict_do_nothing(index_elements=["request_id"])
-            session.execute(statement)
-            if medical:
-                session.add(
-                    PetMemoryEpisodeModel(
-                        user_id=identity.user_id,
-                        pet_id=identity.pet_id,
-                        session_id=identity.session_id,
-                        turn_id=turn_id,
-                        title=self._episode_title(user_text),
-                        summary=summary[:1200],
-                        memory_scope="medium",
-                        metadata_json={"source": "conversation_turn", **metadata},
-                    )
-                )
-            if metadata.get("source") == "memory_correction":
-                self._upsert_fact_in_session(
-                    session,
-                    identity,
-                    fact_type="owner_preference",
-                    fact_key="answer_style",
-                    fact_value=summary[:1000],
-                    confidence=1.0,
-                    source_turn_id=turn_id,
-                    source_text=user_text,
-                    metadata={"source": "user_correction"},
-                )
-        await self._semantic_add_turn(identity, user_text=user_text, summary=summary, metadata=metadata)
+        write_metadata = metadata or {}
+        self.memory_write_repository.remember_turn(
+            identity,
+            user_text=user_text,
+            summary=summary,
+            medical=medical,
+            metadata=write_metadata,
+        )
+        await self._semantic_add_turn(identity, user_text=user_text, summary=summary, metadata=write_metadata)
 
     async def read_consultation_state(self, identity: TrustedIdentity) -> dict[str, Any]:
-        """执行 read_consultation_state 业务逻辑。
+        """通过问诊状态仓储读取默认活跃问诊状态。
 
-        :param identity: 可信身份信息。
-        :return: 返回函数执行结果。
+        :param identity: 当前可信用户、宠物与会话范围。
+        :return: 返回默认活跃问诊状态。
         """
-        with self.session_factory() as session:
-            row = session.scalar(
-                select(ConsultationStateModel).where(
-                    ConsultationStateModel.user_id == identity.user_id,
-                    ConsultationStateModel.pet_id == identity.pet_id,
-                    ConsultationStateModel.session_id == identity.session_id,
-                    ConsultationStateModel.task_key == DEFAULT_TASK_KEY,
-                )
-            )
-        return dict(row.state) if row else {}
+        return self.consultation_state_repository.read_default(identity)
 
     async def save_consultation_state(self, identity: TrustedIdentity, state: dict[str, Any]) -> None:
-        """执行 save_consultation_state 业务逻辑。
+        """通过问诊状态仓储保存默认活跃问诊状态。
 
-        :param identity: 可信身份信息。
-        :param state: 参数 state。
-        :return: 返回函数执行结果。
+        :param identity: 当前可信用户、宠物与会话范围。
+        :param state: 待保存的结构化问诊状态。
+        :return: 无返回值。
         """
-        self._upsert_state(identity, DEFAULT_TASK_KEY, state)
+        self.consultation_state_repository.save_default(identity, state)
 
     async def read_task_consultation_states(self, identity: TrustedIdentity) -> dict[str, Any]:
-        """执行 read_task_consultation_states 业务逻辑。
+        """通过问诊状态仓储读取多任务活跃问诊状态。
 
-        :param identity: 可信身份信息。
-        :return: 返回函数执行结果。
+        :param identity: 当前可信用户、宠物与会话范围。
+        :return: 返回任务键到问诊状态的映射。
         """
-        with self.session_factory() as session:
-            rows = session.scalars(
-                select(ConsultationStateModel).where(
-                    ConsultationStateModel.user_id == identity.user_id,
-                    ConsultationStateModel.pet_id == identity.pet_id,
-                    ConsultationStateModel.session_id == identity.session_id,
-                    ConsultationStateModel.task_key != DEFAULT_TASK_KEY,
-                )
-            ).all()
-        return {row.task_key: dict(row.state) for row in rows}
+        return self.consultation_state_repository.read_tasks(identity)
 
     async def save_task_consultation_states(
         self,
@@ -175,86 +119,44 @@ class PostgresMemoryService:
         *,
         clear_default_state: bool = False,
     ) -> None:
-        """替换当前会话仍未完成的多任务问诊状态。
+        """通过问诊状态仓储替换多任务活跃问诊状态。
 
-        :param identity: 可信身份信息。
+        :param identity: 当前可信用户、宠物与会话范围。
         :param states: 未完成任务的活跃问诊状态集合。
-        :param clear_default_state: 是否在同一事务中清理默认问诊状态；仅用于 __default__ 迁移到具体任务键的场景。
-        :return: 返回函数执行结果。
+        :param clear_default_state: 是否同时清理默认问诊状态；用于默认任务迁移到具体任务键的场景。
+        :return: 无返回值。
         """
-        with self.session_factory.begin() as session:
-            session.execute(
-                delete(ConsultationStateModel).where(
-                    ConsultationStateModel.user_id == identity.user_id,
-                    ConsultationStateModel.pet_id == identity.pet_id,
-                    ConsultationStateModel.session_id == identity.session_id,
-                    ConsultationStateModel.task_key != DEFAULT_TASK_KEY,
-                )
-            )
-            for task_key, state in states.items():
-                self._upsert_state_in_session(session, identity, task_key, state)
-            if clear_default_state:
-                session.execute(
-                    delete(ConsultationStateModel).where(
-                        ConsultationStateModel.user_id == identity.user_id,
-                        ConsultationStateModel.pet_id == identity.pet_id,
-                        ConsultationStateModel.session_id == identity.session_id,
-                        ConsultationStateModel.task_key == DEFAULT_TASK_KEY,
-                    )
-                )
+        self.consultation_state_repository.replace_tasks(
+            identity,
+            states,
+            clear_default=clear_default_state,
+        )
 
     async def clear_default_consultation_state(self, identity: TrustedIdentity) -> None:
-        """清理当前会话的默认活跃问诊状态。
+        """通过问诊状态仓储清理默认活跃问诊状态。
 
-        :param identity: 可信身份信息。
-        :return: 返回函数执行结果。
+        :param identity: 当前可信用户、宠物与会话范围。
+        :return: 无返回值。
         """
-        with self.session_factory.begin() as session:
-            session.execute(
-                delete(ConsultationStateModel).where(
-                    ConsultationStateModel.user_id == identity.user_id,
-                    ConsultationStateModel.pet_id == identity.pet_id,
-                    ConsultationStateModel.session_id == identity.session_id,
-                    ConsultationStateModel.task_key == DEFAULT_TASK_KEY,
-                )
-            )
+        self.consultation_state_repository.clear_default(identity)
 
     async def clear_consultation_state(self, identity: TrustedIdentity) -> None:
-        """清理当前会话所有活跃问诊状态。
+        """通过问诊状态仓储清理全部活跃问诊状态。
 
-        :param identity: 可信身份信息。
-        :return: 返回函数执行结果。
+        :param identity: 当前可信用户、宠物与会话范围。
+        :return: 无返回值。
         """
-        with self.session_factory.begin() as session:
-            session.execute(
-                delete(ConsultationStateModel).where(
-                    ConsultationStateModel.user_id == identity.user_id,
-                    ConsultationStateModel.pet_id == identity.pet_id,
-                    ConsultationStateModel.session_id == identity.session_id,
-                )
-            )
+        self.consultation_state_repository.clear_all(identity)
 
     async def delete_pet_memory(self, pet_id: str, user_id: str | None = None) -> None:
-        """执行 delete_pet_memory 业务逻辑。
+        """编排结构化记忆、活跃问诊状态和语义投影的宠物范围删除。
 
-        :param pet_id: 参数 pet_id。
-        :param user_id: 参数 user_id。
-        :return: 返回函数执行结果。
+        :param pet_id: 待删除的宠物标识。
+        :param user_id: 可选的用户范围限制。
+        :return: 无返回值。
         """
-        with self.session_factory.begin() as session:
-            turn_where = [ConversationTurnModel.pet_id == pet_id]
-            state_where = [ConsultationStateModel.pet_id == pet_id]
-            episode_where = [PetMemoryEpisodeModel.pet_id == pet_id]
-            fact_where = [PetMemoryFactModel.pet_id == pet_id]
-            if user_id:
-                turn_where.append(ConversationTurnModel.user_id == user_id)
-                state_where.append(ConsultationStateModel.user_id == user_id)
-                episode_where.append(PetMemoryEpisodeModel.user_id == user_id)
-                fact_where.append(PetMemoryFactModel.user_id == user_id)
-            session.execute(delete(ConversationTurnModel).where(*turn_where))
-            session.execute(delete(ConsultationStateModel).where(*state_where))
-            session.execute(delete(PetMemoryEpisodeModel).where(*episode_where))
-            session.execute(delete(PetMemoryFactModel).where(*fact_where))
+        self.memory_write_repository.delete_for_pet(pet_id, user_id)
+        self.consultation_state_repository.delete_for_pet(pet_id, user_id)
         await self._semantic_delete_pet(pet_id, user_id=user_id)
 
     async def upsert_pet_fact(
@@ -269,9 +171,9 @@ class PostgresMemoryService:
         source_text: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> None:
-        """执行 upsert_pet_fact 业务逻辑。
+        """通过结构化记忆写入仓储保存宠物长期事实。
 
-        :param identity: 可信身份信息。
+        :param identity: 当前可信用户与宠物范围。
         :param fact_type: 事实类型。
         :param fact_key: 事实键名。
         :param fact_value: 事实内容。
@@ -279,117 +181,18 @@ class PostgresMemoryService:
         :param source_turn_id: 参数 source_turn_id。
         :param source_text: 事实来源文本。
         :param metadata: 附加元数据。
-        :return: 返回函数执行结果。
+        :return: 无返回值。
         """
-        with self.session_factory.begin() as session:
-            self._upsert_fact_in_session(
-                session,
-                identity,
-                fact_type=fact_type,
-                fact_key=fact_key,
-                fact_value=fact_value,
-                confidence=confidence,
-                source_turn_id=source_turn_id,
-                source_text=source_text,
-                metadata=metadata or {"source": "manual_correction"},
-            )
-
-    def _upsert_state(self, identity: TrustedIdentity, task_key: str, state: dict[str, Any]) -> None:
-        """执行 _upsert_state 内部辅助逻辑。
-
-        :param identity: 可信身份信息。
-        :param task_key: 参数 task_key。
-        :param state: 参数 state。
-        :return: 返回函数执行结果。
-        """
-        with self.session_factory.begin() as session:
-            self._upsert_state_in_session(session, identity, task_key, state)
-
-    def _upsert_state_in_session(
-        self,
-        session: Session,
-        identity: TrustedIdentity,
-        task_key: str,
-        state: dict[str, Any],
-    ) -> None:
-        """在已有数据库会话中写入问诊状态。
-
-        :param session: 数据库会话。
-        :param identity: 可信身份信息。
-        :param task_key: 任务状态键。
-        :param state: 问诊状态。
-        :return: 返回函数执行结果。
-        """
-        statement = pg_insert(ConsultationStateModel).values(
-            user_id=identity.user_id,
-            pet_id=identity.pet_id,
-            session_id=identity.session_id,
-            task_key=task_key,
-            state=state,
-            updated_at=datetime.now(UTC),
-        )
-        statement = statement.on_conflict_do_update(
-            constraint="uq_consultation_states_scope",
-            set_={
-                "state": state,
-                "version": ConsultationStateModel.version + 1,
-                "updated_at": datetime.now(UTC),
-            },
-        )
-        session.execute(statement)
-
-    def _upsert_fact_in_session(
-        self,
-        session: Session,
-        identity: TrustedIdentity,
-        *,
-        fact_type: str,
-        fact_key: str,
-        fact_value: str,
-        confidence: float,
-        source_turn_id: str | None,
-        source_text: str | None,
-        metadata: dict[str, Any],
-    ) -> None:
-        """执行 _upsert_fact_in_session 内部辅助逻辑。
-
-        :param session: 数据库会话。
-        :param identity: 可信身份信息。
-        :param fact_type: 事实类型。
-        :param fact_key: 事实键名。
-        :param fact_value: 事实内容。
-        :param confidence: 置信度。
-        :param source_turn_id: 参数 source_turn_id。
-        :param source_text: 事实来源文本。
-        :param metadata: 附加元数据。
-        :return: 返回函数执行结果。
-        """
-        statement = pg_insert(PetMemoryFactModel).values(
-            user_id=identity.user_id,
-            pet_id=identity.pet_id,
+        self.memory_write_repository.upsert_pet_fact(
+            identity,
             fact_type=fact_type,
             fact_key=fact_key,
             fact_value=fact_value,
             confidence=confidence,
             source_turn_id=source_turn_id,
             source_text=source_text,
-            is_active=True,
-            metadata_json=metadata,
-            updated_at=datetime.now(UTC),
+            metadata=metadata or {"source": "manual_correction"},
         )
-        statement = statement.on_conflict_do_update(
-            constraint="uq_pet_memory_facts_key",
-            set_={
-                "fact_value": fact_value,
-                "confidence": confidence,
-                "source_turn_id": source_turn_id,
-                "source_text": source_text,
-                "is_active": True,
-                "metadata": metadata,
-                "updated_at": datetime.now(UTC),
-            },
-        )
-        session.execute(statement)
 
     async def _semantic_add_turn(
         self,
@@ -423,11 +226,3 @@ class PostgresMemoryService:
             await self.semantic_memory.delete_pet(pet_id, user_id=user_id)
         except Exception:
             return None
-
-    def _episode_title(self, user_text: str) -> str:
-        """执行 _episode_title 内部辅助逻辑。
-
-        :param user_text: 用户输入文本。
-        :return: 返回函数执行结果。
-        """
-        return (user_text.strip().splitlines()[0] or "本轮咨询")[:80]

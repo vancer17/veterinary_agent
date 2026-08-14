@@ -41,9 +41,12 @@ from vet_agent.repositories import (
     FileKnowledgeRepository,
     FallbackRuleRepository,
     FileRuleRepository,
+    JsonConsultationStateRepository,
     JsonMemoryReadRepository,
     PostgresKnowledgeRepository,
+    PostgresConsultationStateRepository,
     PostgresMemoryReadRepository,
+    PostgresMemoryWriteRepository,
     PostgresRuleRepository,
     PostgresScopeRepository,
     PostgresTurnExecutionRepository,
@@ -119,10 +122,21 @@ class Container:
         self.turn_execution_gate = self._turn_execution_gate(settings, turn_execution_gate)
         self.semantic_memory = make_semantic_memory(settings)
         self.memory_projection_client = make_memory_projection_client(settings)
+        memory_store = JsonDocumentStore(settings.data_dir / "memory.json")
+        self.consultation_state_repository = (
+            PostgresConsultationStateRepository(settings.database_url)
+            if settings.database_url
+            else JsonConsultationStateRepository(memory_store)
+        )
+        self.memory_write_repository = (
+            PostgresMemoryWriteRepository(settings.database_url)
+            if settings.database_url
+            else None
+        )
         self.memory_read_repository = (
             PostgresMemoryReadRepository(settings.database_url)
             if settings.database_url
-            else JsonMemoryReadRepository(JsonDocumentStore(settings.data_dir / "memory.json"))
+            else JsonMemoryReadRepository(memory_store)
         )
         self.memory_read_service = MemoryReadService(
             settings,
@@ -135,9 +149,14 @@ class Container:
                 settings.database_url,
                 memory_read_service=self.memory_read_service,
                 semantic_memory=self.semantic_memory,
+                consultation_state_repository=self.consultation_state_repository,
+                memory_write_repository=self.memory_write_repository,
             )
             if settings.database_url
-            else MemoryService(JsonDocumentStore(settings.data_dir / "memory.json"))
+            else MemoryService(
+                memory_store,
+                consultation_state_repository=self.consultation_state_repository,
+            )
         )
         self.access_control = AccessControlService(settings, self.scope_service)
         self.input_safety_service = self._input_safety_service(settings, input_safety_service)
@@ -265,6 +284,12 @@ class Container:
             and self.clinical_safety_policy_client.is_ready()
             and self.turn_execution_gate.is_ready()
             and self.memory_read_service.is_ready()
+            and self.consultation_state_repository.is_ready()
+            and (
+                self.memory_write_repository.is_ready()
+                if self.memory_write_repository is not None
+                else True
+            )
             and self.task_router.is_ready()
         )
 

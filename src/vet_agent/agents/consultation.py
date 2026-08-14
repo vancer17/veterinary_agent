@@ -1,79 +1,56 @@
 """
+=============================================================================
 文件：src/vet_agent/agents/consultation.py
-作用：维护多轮问诊状态、抽取语义事实，并基于证据充分性决定回答或追问。
-说明：本文件遵循项目标准文件树编排；跨包引用应通过对应包的 __init__.py 暴露能力。
+作用：维护当前会话与任务范围内的活跃问诊状态，并基于结构化证据判断回答或追问。
+范围：位于问诊语义抽取之后、追问 RAG 或回答 RAG 之前；本层只消费
+      已通过结构化契约校验的问诊事实，不重新解析用户原始文本。
+说明：本文件不执行关键词、正则或 seed 规则抽取，不写入长期记忆事实，
+      不更新服务端可信宠物资料；核心槽位仅作为工作记忆的派生视图，
+      长期事实治理由后续记忆写入链路负责。
+=============================================================================
 """
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, field
 from typing import Any
 
 from vet_agent.clinical_safety import ClinicalSafetySemanticResult
-from vet_agent.repositories import ConsultationRuleSet, RuleRepository, compile_regex
+from vet_agent.repositories import ConsultationRuleSet, RuleRepository
 from vet_agent.services import PetContext
+
+from .semantic_extractor import ConsultationFactKey, ConsultationFactStatus, SemanticExtractionResult
 
 
 SlotValue = str | bool | None
 
-ANSWER_NOW_PATTERNS = (
-    "别问",
-    "不要再问",
-    "不用再问",
-    "别再追问",
-    "不要追问",
-    "直接答",
-    "直接回答",
-    "直接说",
-    "先回答",
-    "先给我",
-    "先告诉我",
-    "给个判断",
-    "给出判断",
-    "只需要告诉我",
-)
-NORMAL_PATTERNS = (
-    "正常",
-    "没变",
-    "没有变化",
-    "没减少",
-    "没有减少",
-    "和平时一样",
-    "和平常一样",
-    "跟平时一样",
-    "跟平常一样",
-    "和以前一样",
-    "照常",
-    "还行",
-    "可以",
-    "不错",
-    "很好",
-    "挺好",
-)
-APPETITE_PATTERNS = ("食欲", "胃口", "饭量", "吃饭", "进食", "吃东西", "饮水", "喝水", "主食", "吃完", "清空")
-APPETITE_DECLINE_PATTERNS = ("不吃", "食欲差", "食欲下降", "吃得少", "饭量减少", "喝水少")
-MENTAL_PATTERNS = ("精神", "活跃", "活动", "反应", "叫它", "叫名字", "互动", "玩", "玩具")
-MENTAL_DECLINE_PATTERNS = ("没精神", "精神差", "萎靡", "嗜睡", "趴着不动", "反应差")
-VOMITING_NEGATIVE_PATTERNS = ("没有呕吐", "没呕吐", "没有吐", "没吐", "不吐", "未吐", "无呕吐")
-VOMITING_POSITIVE_PATTERNS = ("呕吐", "吐了", "一直吐", "干呕")
-STOOL_NORMAL_PATTERNS = ("大便正常", "便便正常", "排便正常", "没拉稀", "没有腹泻", "没有拉肚子", "没拉肚子")
-STOOL_ABNORMAL_PATTERNS = ("拉稀", "腹泻", "软便", "水样便", "血便", "黑便", "便血")
-BREATHING_NORMAL_PATTERNS = ("呼吸正常", "没有咳", "没咳", "不喘", "没有喘", "呼吸没问题")
-BREATHING_ABNORMAL_PATTERNS = ("咳", "喘", "呼吸快", "呼吸费力", "张口呼吸", "鼻音", "打喷嚏", "流鼻涕")
-PAIN_OR_MOBILITY_PATTERNS = ("疼", "跛", "瘸", "站不稳", "走路异常", "不让碰", "腹部绷紧", "躲开", "缩成一团")
-ONSET_PATTERN = re.compile(
-    r"(刚刚|今天|昨天|前天|昨晚|早上|中午|晚上|最近|这几天|这两天|这两三天|半小时|一小时|"
-    r"\d+\s*(分钟|小时|天|周|个月)|[一二两三四五六七八九十]+个?多?月|[一二两三四五六七八九十]+天)"
-)
-
 
 @dataclass
 class ConsultationState:
+    """表示当前 session 与任务范围内的活跃问诊状态。
+
+    :param chief_complaint: 当前问诊主诉原文摘要。
+    :param domain: 当前任务路由确定的问诊领域。
+    :param phase: 当前问诊阶段。
+    :param slots: 当前回答提示词兼容使用的核心槽位派生视图。
+    :param working_facts: 当前会话范围内的结构化核心事实工作记忆。
+    :param observations: 当前会话范围内无法归入核心槽位的开放观察。
+    :param asked_questions: 已问过的追问问题。
+    :param followup_rounds: 当前任务连续追问轮数。
+    :param evidence_profile: 结构化证据画像。
+    :param answerability: 回答充分性策略结果。
+    :param user_intent: 本轮用户意图信号。
+    :param semantic_extraction: 本轮问诊语义抽取 metadata。
+    :param temporal_context: 临床安全链路提供的时间上下文摘要。
+    :return: 无返回值。
+    """
+
     chief_complaint: str | None = None
     domain: str = "general"
     phase: str = "collecting_info"
     slots: dict[str, SlotValue] = field(default_factory=dict)
+    working_facts: list[dict[str, Any]] = field(default_factory=list)
+    observations: list[dict[str, Any]] = field(default_factory=list)
     asked_questions: list[str] = field(default_factory=list)
     followup_rounds: int = 0
     evidence_profile: dict[str, Any] = field(default_factory=dict)
@@ -96,6 +73,8 @@ class ConsultationState:
             domain=data.get("domain") or "general",
             phase=data.get("phase") or "collecting_info",
             slots=dict(data.get("slots") or {}),
+            working_facts=list(data.get("working_facts") or []),
+            observations=list(data.get("observations") or []),
             asked_questions=list(data.get("asked_questions") or []),
             followup_rounds=int(data.get("followup_rounds") or 0),
             evidence_profile=dict(data.get("evidence_profile") or {}),
@@ -115,6 +94,8 @@ class ConsultationState:
             "domain": self.domain,
             "phase": self.phase,
             "slots": self.slots,
+            "working_facts": self.working_facts,
+            "observations": self.observations,
             "asked_questions": self.asked_questions,
             "followup_rounds": self.followup_rounds,
             "evidence_profile": self.evidence_profile,
@@ -127,6 +108,17 @@ class ConsultationState:
 
 @dataclass(frozen=True)
 class AnswerabilityDecision:
+    """表示回答充分性策略给出的下一步动作建议。
+
+    :param decision: 策略动作，answer 表示阶段性回答，ask 表示继续追问。
+    :param mode: 决策模式。
+    :param answer_scope: 回答范围。
+    :param blocking_slots: 仍阻塞回答的高价值证据槽位。
+    :param unresolved_slots: 尚未确认但可能不再阻塞的证据槽位。
+    :param reason: 决策原因。
+    :return: 无返回值。
+    """
+
     decision: str
     mode: str
     answer_scope: str
@@ -151,6 +143,16 @@ class AnswerabilityDecision:
 
 @dataclass(frozen=True)
 class ConsultationDecision:
+    """表示问诊状态合并后的本轮业务决策。
+
+    :param state: 更新后的活跃问诊状态。
+    :param ready: 是否进入阶段性回答路径。
+    :param missing_slots: 本轮仍建议追问的槽位。
+    :param questions: 本轮要输出的追问问题。
+    :param answerability: 回答充分性策略 metadata。
+    :return: 无返回值。
+    """
+
     state: ConsultationState
     ready: bool
     missing_slots: list[str]
@@ -159,7 +161,10 @@ class ConsultationDecision:
 
 
 class AnswerabilityEvaluator:
-    """基于语义证据充分性判断本轮应该回答还是继续追问。"""
+    """基于语义证据充分性判断本轮应该回答还是继续追问。
+
+    :return: 无返回值。
+    """
 
     def __init__(self, *, max_followup_rounds: int = 2) -> None:
         """初始化回答充分性评估器。
@@ -184,18 +189,33 @@ class AnswerabilityEvaluator:
         :return: 返回函数执行结果。
         """
         del required_slots
+        if state.user_intent.get("answer_now"):
+            return self._answer(
+                "user_requested_answer_now",
+                [],
+                unresolved_slots,
+                "用户明确要求根据现有信息先给阶段性判断。",
+            )
+
         if not unresolved_slots:
             return self._answer("slot_complete", [], unresolved_slots, "规则建议关注的信息均已确认。")
 
         has_minimum = self._has_minimum_context(state)
-        if state.user_intent.get("answer_now") and has_minimum:
-            return self._answer("user_requested_answer_now", [], unresolved_slots, "用户明确要求先给阶段性判断。")
-
         if state.followup_rounds >= self.max_followup_rounds and has_minimum:
-            return self._answer("max_followup_rounds_reached", [], unresolved_slots, "已达到连续追问轮数上限。")
+            return self._answer(
+                "max_followup_rounds_reached",
+                [],
+                unresolved_slots,
+                "已达到连续追问轮数上限。",
+            )
 
         if state.followup_rounds >= 1 and self._has_sufficient_semantic_evidence(state):
-            return self._answer("sufficient_semantic_evidence", [], unresolved_slots, "已获得足够的主诉、时间、整体状态或领域相关证据。")
+            return self._answer(
+                "sufficient_semantic_evidence",
+                [],
+                unresolved_slots,
+                "已获得足够的主诉、时间、整体状态或领域相关证据。",
+            )
 
         blocking_slots = self._blocking_slots(state, unresolved_slots)
         return AnswerabilityDecision(
@@ -250,7 +270,13 @@ class AnswerabilityEvaluator:
         profile = state.evidence_profile or {}
         known_categories = [
             category
-            for category in ("time_course", "systemic_status", "intake_output", "domain_specific")
+            for category in (
+                "time_course",
+                "systemic_status",
+                "intake_output",
+                "domain_specific",
+                "open_observations",
+            )
             if profile.get(category, {}).get("status") == "known"
         ]
         return len(known_categories) >= 2
@@ -284,7 +310,10 @@ class AnswerabilityEvaluator:
 
 
 class ConsultationStateAgent:
-    """Builds structured consultation context across turns before final advice."""
+    """在多轮问诊链路中合并结构化事实并生成回答充分性决策。
+
+    :return: 无返回值。
+    """
 
     def __init__(self, rule_repository: RuleRepository, *, max_followup_rounds: int = 2) -> None:
         """初始化当前对象。
@@ -303,7 +332,7 @@ class ConsultationStateAgent:
         pet_context: PetContext,
         *,
         task_domain: str,
-        semantic_result: Any | None = None,
+        semantic_result: SemanticExtractionResult | None = None,
         clinical_safety_semantic: ClinicalSafetySemanticResult | None = None,
         max_questions: int,
     ) -> ConsultationDecision:
@@ -313,7 +342,7 @@ class ConsultationStateAgent:
         :param user_text: 用户输入文本。
         :param pet_context: 宠物上下文。
         :param task_domain: 已由任务路由器确定的稳定任务域。
-        :param semantic_result: LLM 语义抽取结果。
+        :param semantic_result: 结构化问诊语义抽取结果。
         :param clinical_safety_semantic: 临床安全语义抽取结果。
         :param max_questions: 本轮最多追问数量。
         :return: 返回函数执行结果。
@@ -325,12 +354,9 @@ class ConsultationStateAgent:
 
         state.domain = task_domain
         self._prefill_from_pet_context(state, pet_context)
-        self._extract_slots(state, text)
-        semantic_applied = self._merge_semantic_result(state, semantic_result)
-        if not semantic_applied:
-            self._extract_semantic_slots(state, text)
+        self._merge_semantic_result(state, semantic_result)
         self._merge_clinical_safety_temporal_context(state, clinical_safety_semantic)
-        state.user_intent = self._merge_user_intent(self._detect_user_intent(text), semantic_result)
+        state.user_intent = self._semantic_intent(semantic_result)
 
         rules = self.rule_repository.consultation_rules()
         required = self._required_slots(rules, state.domain)
@@ -392,7 +418,8 @@ class ConsultationStateAgent:
         reason_section = f"\n\n为什么先问这些？\n{reasons}" if reasons else ""
         return (
             "我先不武断下结论，先补一个最会影响分诊建议的关键上下文。"
-            "这样可以避免把普通护理问题误判成疾病，也避免在证据不足时给出不可靠建议。\n\n"
+            "这样可以避免把普通护理问题误判成疾病，"
+            "也避免在证据不足时给出不可靠建议。\n\n"
             f"已知信息:\n{known or '- 目前只有你的主诉，还缺关键问诊信息。'}\n\n"
             f"本轮仍需确认: {missing or '关键问诊信息'}\n\n"
             f"请先回答:\n{questions}{reason_section}\n\n"
@@ -409,6 +436,14 @@ class ConsultationStateAgent:
         for slot, value in state.slots.items():
             if value:
                 lines.append(f"{slot}: {value}")
+        if state.observations:
+            lines.append("开放观察:")
+            for observation in state.observations[-6:]:
+                label = str(observation.get("label") or observation.get("category") or "观察")
+                value = str(observation.get("value") or "")
+                status = str(observation.get("status") or "unknown")
+                if value:
+                    lines.append(f"- {label}: {value}（{status}）")
         answerability = state.answerability or {}
         if answerability:
             unresolved = "、".join(answerability.get("unresolved_slots") or []) or "无"
@@ -472,49 +507,52 @@ class ConsultationStateAgent:
         if profile.get("weight_kg"):
             state.slots.setdefault("weight", f"{profile['weight_kg']}kg")
 
-    def _extract_slots(self, state: ConsultationState, text: str) -> None:
-        """按规则抽取高置信度槽位事实。
-
-        :param state: 问诊状态。
-        :param text: 待处理文本。
-        :return: 无返回值。
-        """
-        rules = self.rule_repository.consultation_rules()
-        for slot_rule in rules.slots.values():
-            value = self._extract_slot_value(slot_rule.slot_name, slot_rule.extraction_rules, text)
-            if value:
-                state.slots[slot_rule.slot_name] = value
-
-    def _merge_semantic_result(self, state: ConsultationState, semantic_result: Any | None) -> bool:
+    def _merge_semantic_result(
+        self,
+        state: ConsultationState,
+        semantic_result: SemanticExtractionResult | None,
+    ) -> bool:
         """将 LLM 语义抽取结果合并到问诊状态。
 
         :param state: 当前问诊状态。
-        :param semantic_result: LLM 语义抽取结果。
-        :return: 返回函数执行结果。
+        :param semantic_result: 结构化问诊语义抽取结果。
+        :return: 有可信事实进入当前问诊状态时返回 True。
         """
-        metadata = self._semantic_metadata(semantic_result)
+        metadata = semantic_result.to_metadata() if semantic_result is not None else {}
         if metadata:
             state.semantic_extraction = metadata
-        facts = self._semantic_facts(semantic_result)
-        if not facts:
+        if semantic_result is None or not semantic_result.is_trusted():
             return False
+        facts = semantic_result.facts
+        applied_observation_count = self._merge_semantic_observations(state, semantic_result)
+        if not facts:
+            if state.semantic_extraction:
+                state.semantic_extraction["applied_fact_keys"] = []
+                state.semantic_extraction["applied_observation_count"] = applied_observation_count
+                state.semantic_extraction["used_as_primary_semantic_path"] = applied_observation_count > 0
+            return applied_observation_count > 0
 
         rules = self.rule_repository.consultation_rules()
-        intent = self._semantic_intent(semantic_result)
-        correction = bool(intent.get("correction"))
+        correction = semantic_result.intent.correction
         applied_keys: list[str] = []
         for fact in facts:
-            key = str(self._item_value(fact, "key") or "").strip()
-            status = str(self._item_value(fact, "status") or "confirmed").strip().lower()
-            value = str(self._item_value(fact, "value") or "").strip()
+            self._merge_core_working_fact(state, fact.to_dict(), correction=correction)
+            key = fact.key.value
+            status = fact.status
+            value = fact.value.strip()
             if key not in rules.slots:
                 continue
-            if status in {"unknown", "uncertain"}:
+            if status in {
+                ConsultationFactStatus.UNKNOWN,
+                ConsultationFactStatus.UNCERTAIN,
+            }:
                 continue
-            if key in {"species", "life_stage_or_age", "weight"} and state.slots.get(key) and not correction:
+            if fact.key in {
+                ConsultationFactKey.SPECIES,
+                ConsultationFactKey.LIFE_STAGE_OR_AGE,
+                ConsultationFactKey.WEIGHT,
+            } and state.slots.get(key) and not correction:
                 continue
-            if status == "negative" and not value:
-                value = self._negative_slot_value(key)
             if not value:
                 continue
             state.slots[key] = value[:160]
@@ -522,153 +560,154 @@ class ConsultationStateAgent:
 
         if state.semantic_extraction:
             state.semantic_extraction["applied_fact_keys"] = applied_keys
-            state.semantic_extraction["used_as_primary_semantic_path"] = bool(applied_keys)
-        return bool(applied_keys)
+            state.semantic_extraction["applied_observation_count"] = applied_observation_count
+            state.semantic_extraction["used_as_primary_semantic_path"] = bool(applied_keys or applied_observation_count)
+        return bool(applied_keys or applied_observation_count)
 
-    def _merge_user_intent(self, rule_intent: dict[str, Any], semantic_result: Any | None) -> dict[str, Any]:
-        """合并规则兜底意图与 LLM 语义意图。
-
-        :param rule_intent: 规则兜底识别出的用户意图。
-        :param semantic_result: LLM 语义抽取结果。
-        :return: 返回函数执行结果。
-        """
-        semantic_intent = self._semantic_intent(semantic_result)
-        return {
-            "answer_now": bool(rule_intent.get("answer_now") or semantic_intent.get("answer_now")),
-            "wants_triage": bool(semantic_intent.get("wants_triage")),
-            "correction": bool(semantic_intent.get("correction")),
-            "matched_patterns": list(rule_intent.get("matched_patterns") or []),
-            "raw_intent": str(semantic_intent.get("raw_intent") or "")[:120],
-        }
-
-    def _semantic_metadata(self, semantic_result: Any | None) -> dict[str, Any]:
-        """读取语义抽取结果的 metadata。
-
-        :param semantic_result: LLM 语义抽取结果。
-        :return: 返回函数执行结果。
-        """
-        if semantic_result is None:
-            return {}
-        to_metadata = getattr(semantic_result, "to_metadata", None)
-        if callable(to_metadata):
-            metadata = to_metadata()
-            return dict(metadata) if isinstance(metadata, dict) else {}
-        if isinstance(semantic_result, dict):
-            return dict(semantic_result)
-        return {}
-
-    def _semantic_facts(self, semantic_result: Any | None) -> list[Any]:
-        """读取语义抽取结果中的事实列表。
-
-        :param semantic_result: LLM 语义抽取结果。
-        :return: 返回函数执行结果。
-        """
-        if semantic_result is None:
-            return []
-        facts = getattr(semantic_result, "facts", None)
-        if facts is None and isinstance(semantic_result, dict):
-            facts = semantic_result.get("facts")
-        return list(facts or [])
-
-    def _semantic_intent(self, semantic_result: Any | None) -> dict[str, Any]:
+    def _semantic_intent(self, semantic_result: SemanticExtractionResult | None) -> dict[str, Any]:
         """读取语义抽取结果中的用户意图。
 
-        :param semantic_result: LLM 语义抽取结果。
-        :return: 返回函数执行结果。
+        :param semantic_result: 结构化问诊语义抽取结果。
+        :return: 返回回答充分性策略可消费的意图字典。
         """
-        if semantic_result is None:
+        if semantic_result is None or not semantic_result.is_trusted():
             return {}
-        intent = getattr(semantic_result, "intent", None)
-        if intent is None and isinstance(semantic_result, dict):
-            intent = semantic_result.get("intent")
-        if intent is None:
-            metadata = self._semantic_metadata(semantic_result)
-            intent = metadata.get("intent")
-        if hasattr(intent, "to_dict"):
-            intent = intent.to_dict()
-        return dict(intent) if isinstance(intent, dict) else {}
-
-    def _item_value(self, item: Any, key: str) -> Any:
-        """从 dataclass、Pydantic 对象或字典中读取字段值。
-
-        :param item: 数据项。
-        :param key: 字段名。
-        :return: 返回函数执行结果。
-        """
-        if isinstance(item, dict):
-            return item.get(key)
-        return getattr(item, key, None)
-
-    def _negative_slot_value(self, key: str) -> str:
-        """返回否定事实对应的默认槽位值。
-
-        :param key: 槽位名称。
-        :return: 返回函数执行结果。
-        """
-        defaults = {
-            "vomiting": "无呕吐",
-            "stool": "未见排便相关异常",
-            "breathing": "呼吸未见明显异常",
-            "pain_or_mobility": "未见明显疼痛或活动异常",
+        return {
+            "answer_now": semantic_result.intent.answer_now,
+            "wants_triage": semantic_result.intent.wants_triage,
+            "correction": semantic_result.intent.correction,
+            "raw_intent": semantic_result.intent.raw_intent[:120],
         }
-        return defaults.get(key, "用户明确否认相关异常")
 
-    def _extract_semantic_slots(self, state: ConsultationState, text: str) -> None:
-        """抽取更宽泛的自然语言事实，补足固定规则覆盖不足的问题。
+    def _merge_core_working_fact(
+        self,
+        state: ConsultationState,
+        fact: dict[str, Any],
+        *,
+        correction: bool,
+    ) -> None:
+        """将核心事实写入当前会话工作记忆。
 
         :param state: 当前问诊状态。
-        :param text: 待处理文本。
+        :param fact: 已通过结构化契约校验的核心事实字典。
+        :param correction: 本轮是否为用户明确纠正语境。
         :return: 无返回值。
         """
-        if not text:
+        key = str(fact.get("key") or "").strip()
+        if not key:
             return
-        if self._has_any(text, APPETITE_DECLINE_PATTERNS):
-            state.slots["appetite"] = "食欲或饮水下降"
-        elif self._has_any(text, APPETITE_PATTERNS) and self._has_any(text, NORMAL_PATTERNS):
-            state.slots["appetite"] = "食欲/饮水基本正常"
+        record = {
+            "kind": "core_fact",
+            "key": key,
+            "value": str(fact.get("value") or "")[:160],
+            "status": str(fact.get("status") or "unknown"),
+            "confidence": float(fact.get("confidence") or 0.0),
+            "source_text": str(fact.get("source_text") or "")[:160],
+            "category": str(fact.get("category") or "other"),
+            "source": "consultation_semantic_extractor",
+        }
+        state.working_facts = self._upsert_current_fact(
+            state.working_facts,
+            record,
+            key=key,
+            replace_existing=correction or record["status"] in {"confirmed", "negative", "contradicted"},
+            limit=64,
+        )
 
-        if self._has_any(text, MENTAL_DECLINE_PATTERNS):
-            state.slots["mental_status"] = "精神变差"
-        elif ("精神食欲" in text or "精神和食欲" in text or "精神、食欲" in text) and self._has_any(text, NORMAL_PATTERNS):
-            state.slots["mental_status"] = "精神基本正常"
-            state.slots["appetite"] = "食欲/饮水基本正常"
-        elif self._has_any(text, MENTAL_PATTERNS) and self._has_any(text, NORMAL_PATTERNS):
-            state.slots["mental_status"] = "精神基本正常"
+    def _merge_semantic_observations(
+        self,
+        state: ConsultationState,
+        semantic_result: SemanticExtractionResult,
+    ) -> int:
+        """将开放式结构化观察写入当前会话工作记忆。
 
-        if self._has_any(text, VOMITING_NEGATIVE_PATTERNS):
-            state.slots["vomiting"] = "无呕吐"
-        elif self._has_any(text, VOMITING_POSITIVE_PATTERNS):
-            state.slots["vomiting"] = "有呕吐"
-
-        if self._has_any(text, STOOL_NORMAL_PATTERNS):
-            state.slots["stool"] = "大便基本正常"
-        elif self._has_any(text, STOOL_ABNORMAL_PATTERNS):
-            state.slots["stool"] = "有排便相关异常"
-
-        if self._has_any(text, BREATHING_NORMAL_PATTERNS):
-            state.slots["breathing"] = "呼吸未见明显异常"
-        elif self._has_any(text, BREATHING_ABNORMAL_PATTERNS):
-            state.slots["breathing"] = "有呼吸相关表现"
-
-        if self._has_any(text, PAIN_OR_MOBILITY_PATTERNS):
-            state.slots["pain_or_mobility"] = "有疼痛或活动相关线索"
-
-        onset_match = ONSET_PATTERN.search(text)
-        if onset_match and not state.slots.get("onset"):
-            state.slots["onset"] = onset_match.group(0)
-
-        age_match = re.search(r"(\d+|一|二|两|三|四|五|六|七|八|九|十)\s*(岁|个月|月|年)", text)
-        if age_match:
-            state.slots["life_stage_or_age"] = age_match.group(0)
-
-    def _detect_user_intent(self, text: str) -> dict[str, Any]:
-        """识别用户是否明确希望停止追问并先获得阶段性回答。
-
-        :param text: 待处理文本。
-        :return: 返回函数执行结果。
+        :param state: 当前问诊状态。
+        :param semantic_result: 结构化问诊语义抽取结果。
+        :return: 返回本轮新增或更新的开放观察数量。
         """
-        matched = [pattern for pattern in ANSWER_NOW_PATTERNS if pattern in text]
-        return {"answer_now": bool(matched), "matched_patterns": matched}
+        applied_count = 0
+        for observation in semantic_result.observations:
+            if observation.status in {
+                ConsultationFactStatus.UNKNOWN,
+                ConsultationFactStatus.UNCERTAIN,
+            }:
+                continue
+            record = observation.to_dict()
+            record["kind"] = "open_observation"
+            record["source"] = "consultation_semantic_extractor"
+            state.observations = self._append_unique_record(
+                state.observations,
+                record,
+                identity_fields=("category", "status", "value"),
+                limit=48,
+            )
+            applied_count += 1
+        return applied_count
+
+    def _upsert_current_fact(
+        self,
+        records: list[dict[str, Any]],
+        record: dict[str, Any],
+        *,
+        key: str,
+        replace_existing: bool,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        """按核心事实 key 更新当前工作记忆。
+
+        :param records: 原有工作记忆记录。
+        :param record: 本轮待写入记录。
+        :param key: 核心事实键名。
+        :param replace_existing: 是否替换同 key 的既有当前事实。
+        :param limit: 最大保留记录数。
+        :return: 返回更新后的工作记忆记录。
+        """
+        if replace_existing:
+            records = [item for item in records if str(item.get("key") or "") != key]
+        updated = self._append_unique_record(
+            records,
+            record,
+            identity_fields=("kind", "key", "status", "value"),
+            limit=limit,
+        )
+        return updated
+
+    def _append_unique_record(
+        self,
+        records: list[dict[str, Any]],
+        record: dict[str, Any],
+        *,
+        identity_fields: tuple[str, ...],
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        """追加去重后的结构化记录，并控制当前会话状态体积。
+
+        :param records: 原有结构化记录列表。
+        :param record: 待追加结构化记录。
+        :param identity_fields: 用于判定重复的字段集合。
+        :param limit: 最大保留记录数。
+        :return: 返回追加后的结构化记录列表。
+        """
+        if self._record_identity_exists(records, record, identity_fields=identity_fields):
+            return records[-limit:]
+        return [*records, record][-limit:]
+
+    def _record_identity_exists(
+        self,
+        records: list[dict[str, Any]],
+        record: dict[str, Any],
+        *,
+        identity_fields: tuple[str, ...],
+    ) -> bool:
+        """判断结构化记录是否已存在。
+
+        :param records: 已有结构化记录列表。
+        :param record: 待检查结构化记录。
+        :param identity_fields: 用于判定重复的字段集合。
+        :return: 存在相同身份记录时返回 True，否则返回 False。
+        """
+        identity = tuple(str(record.get(field) or "") for field in identity_fields)
+        return any(tuple(str(item.get(field) or "") for field in identity_fields) == identity for item in records)
 
     def _build_evidence_profile(self, state: ConsultationState, unresolved_slots: list[str]) -> dict[str, Any]:
         """构建宽泛语义证据维度，避免固定槽位成为唯一门槛。
@@ -690,9 +729,30 @@ class ConsultationStateAgent:
                 state,
                 ["breathing", "pain_or_mobility", "behavior_context", "current_food"],
             ),
+            "open_observations": self._open_observation_profile(state),
         }
         profile["unresolved_slots"] = unresolved_slots
         return profile
+
+    def _open_observation_profile(self, state: ConsultationState) -> dict[str, Any]:
+        """构建开放式结构化观察的证据画像摘要。
+
+        :param state: 当前问诊状态。
+        :return: 返回开放观察证据画像。
+        """
+        observations = [
+            item
+            for item in state.observations
+            if item.get("value") and item.get("status") not in {"unknown", "uncertain"}
+        ]
+        categories = sorted({str(item.get("category") or "other") for item in observations})
+        labels = [str(item.get("label") or item.get("category") or "观察") for item in observations[-6:]]
+        return {
+            "status": "known" if observations else "unknown",
+            "count": len(observations),
+            "categories": categories[:12],
+            "labels": labels,
+        }
 
     def _time_course_profile(self, state: ConsultationState) -> dict[str, Any]:
         """构建包含时间槽位和临床安全时间语义的时间证据画像。
@@ -777,51 +837,3 @@ class ConsultationStateAgent:
         :return: 返回函数执行结果。
         """
         return rules.slots[slot].label if slot in rules.slots else slot
-
-    def _extract_slot_value(self, slot_name: str, extraction_rules: list[dict[str, Any]], text: str) -> str | None:
-        """按单个槽位规则抽取事实。
-
-        :param slot_name: 槽位名称。
-        :param extraction_rules: 抽取规则。
-        :param text: 待处理文本。
-        :return: 返回函数执行结果。
-        """
-        for rule in extraction_rules:
-            match_type = rule.get("match_type")
-            if match_type == "keyword":
-                patterns = rule.get("patterns", [])
-                if any(pattern in text for pattern in patterns):
-                    return str(rule.get("value") or patterns[0])
-            if match_type == "keyword_value":
-                for pattern in rule.get("patterns", []):
-                    if pattern in text:
-                        return str(rule.get("value") or pattern)
-            if match_type in {"regex", "regex_value"}:
-                for match in compile_regex(rule["pattern"]).finditer(text):
-                    value = str(rule.get("value") or match.group(0))
-                    if slot_name == "life_stage_or_age" and not self._valid_age_value(value):
-                        continue
-                    return value
-            if match_type == "text_if_keyword":
-                if any(pattern in text for pattern in rule.get("patterns", [])):
-                    return text[:120]
-            if match_type == "text" and text:
-                return text[:160]
-        return None
-
-    def _valid_age_value(self, value: str) -> bool:
-        """过滤把“两个喷嚏”等量词误抽成年龄的正则结果。
-
-        :param value: 候选年龄文本。
-        :return: 返回函数执行结果。
-        """
-        return "岁" in value or "月" in value or "年" in value
-
-    def _has_any(self, text: str, patterns: tuple[str, ...]) -> bool:
-        """判断文本中是否包含任一模式。
-
-        :param text: 待处理文本。
-        :param patterns: 候选模式。
-        :return: 返回函数执行结果。
-        """
-        return any(pattern in text for pattern in patterns)
