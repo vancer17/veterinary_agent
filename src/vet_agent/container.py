@@ -22,6 +22,11 @@ from vet_agent.clinical_safety import (
     OpaClinicalSafetyPolicyClient,
     PostgresClinicalSafetyRepository,
 )
+from vet_agent.consultation_state import (
+    ConsultationAnswerabilityPolicyClient,
+    ConsultationStateService,
+    OpaConsultationAnswerabilityPolicyClient,
+)
 from vet_agent.input_safety import (
     GuardrailsInputSafetyDetector,
     InputSafetyPolicyClient,
@@ -39,7 +44,6 @@ from vet_agent.memory import (
 from vet_agent.repositories import (
     FallbackKnowledgeRepository,
     FileKnowledgeRepository,
-    FallbackRuleRepository,
     FileRuleRepository,
     JsonConsultationStateRepository,
     JsonMemoryReadRepository,
@@ -99,6 +103,7 @@ class Container:
         input_safety_service: InputSafetyService | None = None,
         clinical_safety_repository: ClinicalSafetyRepository | None = None,
         clinical_safety_policy_client: ClinicalSafetyPolicyClient | None = None,
+        consultation_answerability_policy_client: ConsultationAnswerabilityPolicyClient | None = None,
         embedding_client: EmbeddingClient | None = None,
         task_routing_domain_repository: TaskRoutingDomainRepository | None = None,
         task_routing_policy_client: TaskRoutingPolicyClient | None = None,
@@ -111,6 +116,7 @@ class Container:
         :param input_safety_service: 基础输入安全服务；仅测试或特殊嵌入场景可显式注入。
         :param clinical_safety_repository: 临床安全向量仓储；仅测试或特殊嵌入场景可显式注入。
         :param clinical_safety_policy_client: 临床安全策略客户端；仅测试或特殊嵌入场景可显式注入。
+        :param consultation_answerability_policy_client: 问诊回答充分性策略客户端；仅测试或特殊嵌入场景可显式注入。
         :param embedding_client: 向量化客户端；仅测试或特殊嵌入场景可显式注入。
         :param task_routing_domain_repository: 任务路由任务域目录仓储；仅测试或特殊嵌入场景可显式注入。
         :param task_routing_policy_client: 任务路由策略客户端；仅测试或特殊嵌入场景可显式注入。
@@ -221,9 +227,19 @@ class Container:
         )
         self.task_router = TaskRouterAgent(self.task_routing_service)
         self.rule_repository = (
-            FallbackRuleRepository(PostgresRuleRepository(settings.database_url), file_rule_repository)
+            PostgresRuleRepository(settings.database_url)
             if settings.database_url
             else file_rule_repository
+        )
+        self.consultation_answerability_policy_client = (
+            consultation_answerability_policy_client
+            if consultation_answerability_policy_client is not None
+            else self._consultation_answerability_policy_client(settings)
+        )
+        self.consultation_state_service = ConsultationStateService(
+            self.rule_repository,
+            self.consultation_answerability_policy_client,
+            max_followup_rounds=settings.consultation_max_followup_rounds,
         )
         self.knowledge_repository = (
             FallbackKnowledgeRepository(
@@ -261,6 +277,7 @@ class Container:
             knowledge_service=KnowledgeService(self.knowledge_repository),
             qwen_client=self.qwen_client,
             rule_repository=self.rule_repository,
+            consultation_state_service=self.consultation_state_service,
             clinical_safety_evaluator=self.clinical_safety_evaluator,
             clinical_safety_semantic_extractor=self.clinical_safety_semantic_extractor,
             turn_execution_gate=self.turn_execution_gate,
@@ -282,6 +299,7 @@ class Container:
             and self.knowledge_repository.is_ready()
             and self.clinical_safety_repository.is_ready()
             and self.clinical_safety_policy_client.is_ready()
+            and self.consultation_state_service.is_ready()
             and self.turn_execution_gate.is_ready()
             and self.memory_read_service.is_ready()
             and self.consultation_state_repository.is_ready()
@@ -326,6 +344,24 @@ class Container:
             package_path=settings.task_routing_opa_package_path,
             rule_name=settings.task_routing_opa_rule_name,
             auth_token=settings.task_routing_opa_auth_token,
+            timeout_seconds=settings.request_timeout_seconds,
+        )
+
+    def _consultation_answerability_policy_client(
+        self,
+        settings: Settings,
+    ) -> ConsultationAnswerabilityPolicyClient:
+        """构造问诊回答充分性策略客户端。
+
+        :param settings: 当前运行环境配置。
+        :return: 返回问诊回答充分性策略客户端。
+        """
+        return OpaConsultationAnswerabilityPolicyClient(
+            base_url=settings.consultation_answerability_opa_base_url,
+            version="v1",
+            package_path=settings.consultation_answerability_opa_package_path,
+            rule_name=settings.consultation_answerability_opa_rule_name,
+            auth_token=settings.consultation_answerability_opa_auth_token,
             timeout_seconds=settings.request_timeout_seconds,
         )
 

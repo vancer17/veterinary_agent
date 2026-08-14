@@ -75,6 +75,12 @@ class ConsultationRuleSet:
     safety_net_text: str
 
 
+CONSULTATION_SAFETY_NET_TEXT = (
+    "如果已经出现呼吸困难、抽搐、持续呕吐、血便、误食毒物、无法站立、明显腹胀或大出血，"
+    "请不要等待线上追问，直接去线下兽医急诊。"
+)
+
+
 class RuleRepository(Protocol):
     """定义问诊目录读取仓储协议。
 
@@ -136,7 +142,7 @@ class FileRuleRepository:
         return ConsultationRuleSet(
             domains=domains,
             slots=slots,
-            safety_net_text=raw.get("safety_net_text", ""),
+            safety_net_text=raw.get("safety_net_text") or CONSULTATION_SAFETY_NET_TEXT,
         )
 
     def is_ready(self) -> bool:
@@ -195,7 +201,7 @@ class PostgresRuleRepository:
             )
             for row in slot_rows
         }
-        return ConsultationRuleSet(domains=domains, slots=slots, safety_net_text="")
+        return ConsultationRuleSet(domains=domains, slots=slots, safety_net_text=CONSULTATION_SAFETY_NET_TEXT)
 
     def is_ready(self) -> bool:
         """检查当前组件是否就绪。
