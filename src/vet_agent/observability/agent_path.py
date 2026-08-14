@@ -30,8 +30,9 @@ class AgentPathNode(StrEnum):
     CONSULTATION_STATE_SERVICE = "ConsultationStateService"
     CONSULTATION_ANSWERABILITY_POLICY_OPA = "ConsultationAnswerabilityPolicyOPA"
     KNOWLEDGE_AGENT = "KnowledgeAgent"
-    QUESTION_PLANNER_AGENT = "QuestionPlannerAgent"
-    RAG_QUESTION_PLANNER_AGENT = "RagQuestionPlannerAgent"
+    FOLLOWUP_RAG_SERVICE = "FollowupRagService"
+    FOLLOWUP_RAG_RETRIEVER = "FollowupRagRetriever"
+    FOLLOWUP_RAG_PLANNER = "FollowupRagPlanner"
     QWEN_RESPONSE_AGENT = "QwenResponseAgent"
     SAFETY_REVIEW_AGENT = "SafetyReviewAgent"
 

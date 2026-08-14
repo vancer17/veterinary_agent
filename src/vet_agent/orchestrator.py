@@ -21,9 +21,6 @@ from vet_agent.agents import (
     ConsultationStateService,
     MemoryExtractionAgent,
     MemoryFactCandidate,
-    QuestionPlanner,
-    RagFollowupPlan,
-    RagQuestionPlannerAgent,
     ResponseComposer,
     SafetyAgent,
     SafetyAssessment,
@@ -45,6 +42,7 @@ from vet_agent.clinical_safety import (
     ClinicalSafetySemanticExtractorAgent,
     ClinicalSafetySemanticResult,
 )
+from vet_agent.followup_rag import FollowupRagPlan, FollowupRagRequest, FollowupRagServiceProtocol
 from vet_agent.input_safety import InputSafetyDecision, InputSafetyRequestContext, InputSafetyService
 from vet_agent.memory import MemoryContextBuilder, MemoryPromptContext, MemoryReadBundle, MemoryReadService
 from vet_agent.observability import AgentPathNode, build_agent_path
@@ -87,6 +85,7 @@ class VetOrchestrator:
         turn_execution_gate: TurnExecutionGateProtocol,
         input_safety_service: InputSafetyService,
         task_router: TaskRouterAgent,
+        followup_rag_service: FollowupRagServiceProtocol,
     ) -> None:
         """初始化当前对象。
 
@@ -105,6 +104,7 @@ class VetOrchestrator:
         :param turn_execution_gate: 单回合执行门禁，负责 turn lock 与幂等基础设施控制。
         :param input_safety_service: 基础输入安全候选与 OPA 策略裁决服务。
         :param task_router: 结构化任务路由 Agent。
+        :param followup_rag_service: 追问相关 RAG 服务，仅在 OPA ask 分支生成结构化追问计划。
         :return: 无返回值。
         """
         self.settings = settings
@@ -123,9 +123,9 @@ class VetOrchestrator:
         self.semantic_extractor = ConsultationSemanticExtractorAgent(qwen_client, settings)
         self.consultation = consultation_state_service
         self.task_router = task_router
-        self.rag_question_planner = RagQuestionPlannerAgent(qwen_client)
+        self.followup_rag_service = followup_rag_service
         self.memory_extractor = MemoryExtractionAgent(qwen_client, settings)
-        self.composer = ResponseComposer(qwen_client, self.safety, QuestionPlanner())
+        self.composer = ResponseComposer(qwen_client, self.safety)
         self.reasoning_display = ReasoningDisplayBuilder()
 
     async def run_turn(self, request: AgentTurnRequest) -> AgentTurnResponse:
@@ -282,7 +282,7 @@ class VetOrchestrator:
         )
 
         if not consultation_decision.ready:
-            followup_plan, knowledge_evidence, consultation_decision = await self._plan_followup_questions(
+            followup_plan, knowledge_evidence, consultation_decision = await self._create_followup_rag_plan(
                 user_text=user_text,
                 pet_context=pet_context,
                 consultation_decision=consultation_decision,
@@ -349,7 +349,9 @@ class VetOrchestrator:
                         AgentPathNode.CONSULTATION_STATE_SERVICE,
                         AgentPathNode.CONSULTATION_ANSWERABILITY_POLICY_OPA,
                         AgentPathNode.KNOWLEDGE_AGENT,
-                        AgentPathNode.RAG_QUESTION_PLANNER_AGENT,
+                        AgentPathNode.FOLLOWUP_RAG_SERVICE,
+                        AgentPathNode.FOLLOWUP_RAG_RETRIEVER,
+                        AgentPathNode.FOLLOWUP_RAG_PLANNER,
                     ),
                     "consultation_phase": consultation_decision.state.phase,
                     "consultation_state": consultation_decision.state.to_dict(),
@@ -431,7 +433,6 @@ class VetOrchestrator:
                     AgentPathNode.CONSULTATION_STATE_SERVICE,
                     AgentPathNode.CONSULTATION_ANSWERABILITY_POLICY_OPA,
                     AgentPathNode.KNOWLEDGE_AGENT,
-                    AgentPathNode.QUESTION_PLANNER_AGENT,
                     AgentPathNode.QWEN_RESPONSE_AGENT,
                     AgentPathNode.SAFETY_REVIEW_AGENT,
                 ),
@@ -665,7 +666,7 @@ class VetOrchestrator:
         all_evidence: list[Evidence] = []
         all_safety_signals = list(assessment.signals)
         task_summaries: list[dict[str, Any]] = []
-        used_rag_question_planner = False
+        used_followup_rag_service = False
         used_response_composer = False
 
         for index, task in enumerate(tasks, start=1):
@@ -698,7 +699,7 @@ class VetOrchestrator:
                 max_questions=request.turn_options.max_followup_questions,
             )
             user_evidence = self.reasoning_display.user_answer_evidence(consultation_decision.state.to_dict())
-            followup_plan: RagFollowupPlan | None = None
+            followup_plan: FollowupRagPlan | None = None
 
             if consultation_decision.ready:
                 knowledge_hits, knowledge_evidence = await self.knowledge_service.retrieve(task.text)
@@ -717,14 +718,14 @@ class VetOrchestrator:
                 segment_type = "medical_consultation"
                 evidence = [*user_evidence, *context_evidence, *knowledge_evidence]
             else:
-                followup_plan, knowledge_evidence, consultation_decision = await self._plan_followup_questions(
+                followup_plan, knowledge_evidence, consultation_decision = await self._create_followup_rag_plan(
                     user_text=task.text,
                     pet_context=pet_context,
                     consultation_decision=consultation_decision,
                     model=model,
                     max_questions=request.turn_options.max_followup_questions,
                 )
-                used_rag_question_planner = True
+                used_followup_rag_service = True
                 output_text = self.consultation.format_followup_response(
                     consultation_decision,
                     question_reasons=followup_plan.reason_lines(),
@@ -822,8 +823,12 @@ class VetOrchestrator:
                         AgentPathNode.KNOWLEDGE_AGENT,
                     ),
                     *(
-                        build_agent_path(AgentPathNode.RAG_QUESTION_PLANNER_AGENT)
-                        if used_rag_question_planner
+                        build_agent_path(
+                            AgentPathNode.FOLLOWUP_RAG_SERVICE,
+                            AgentPathNode.FOLLOWUP_RAG_RETRIEVER,
+                            AgentPathNode.FOLLOWUP_RAG_PLANNER,
+                        )
+                        if used_followup_rag_service
                         else []
                     ),
                     *(
@@ -1008,16 +1013,16 @@ class VetOrchestrator:
         )
         return bool(has_consultation_trace and phase in {"", "collecting_info"})
 
-    async def _plan_followup_questions(
+    async def _create_followup_rag_plan(
         self,
         *,
         user_text: str,
-        pet_context,
+        pet_context: PetContext,
         consultation_decision: ConsultationDecision,
         model: str,
         max_questions: int,
-    ) -> tuple[RagFollowupPlan, list, ConsultationDecision]:
-        """基于知识库反推下一轮追问，并写回问诊决策。
+    ) -> tuple[FollowupRagPlan, list[Evidence], ConsultationDecision]:
+        """基于追问相关 RAG 生成下一轮追问计划并写回问诊状态。
 
         :param user_text: 用户本轮输入文本。
         :param pet_context: 宠物上下文。
@@ -1026,82 +1031,28 @@ class VetOrchestrator:
         :param max_questions: 最多追问数量。
         :return: 返回追问规划、知识库证据列表与更新后的问诊决策。
         """
-        query = self._followup_knowledge_query(
-            user_text=user_text,
-            pet_context=pet_context,
-            consultation_decision=consultation_decision,
-        )
-        try:
-            knowledge_hits, knowledge_evidence = await self.knowledge_service.retrieve(query)
-        except Exception:
-            knowledge_hits = []
-            knowledge_evidence = []
-
-        fallback_questions = list(consultation_decision.questions)
-        plan = await self.rag_question_planner.plan(
-            user_text=user_text,
-            pet_context_summary=pet_context.summary(),
-            consultation_state=consultation_decision.state.to_dict(),
-            missing_slots=consultation_decision.missing_slots,
-            fallback_questions=fallback_questions,
-            knowledge_hits=knowledge_hits,
-            model=model,
-            max_questions=max_questions,
-        )
-        if plan.questions:
-            recent_questions = (
-                consultation_decision.state.asked_questions[-len(fallback_questions) :]
-                if fallback_questions
-                else []
-            )
-            if fallback_questions and recent_questions == fallback_questions:
-                consultation_decision.state.asked_questions = consultation_decision.state.asked_questions[
-                    : -len(fallback_questions)
-                ]
-            planned_questions = plan.question_texts()
-            for question in planned_questions:
-                if question not in consultation_decision.state.asked_questions:
-                    consultation_decision.state.asked_questions.append(question)
-            consultation_decision = ConsultationDecision(
-                state=consultation_decision.state,
-                ready=consultation_decision.ready,
+        plan = await self.followup_rag_service.plan(
+            FollowupRagRequest(
+                user_text=user_text,
+                pet_context_summary=pet_context.summary(),
+                consultation_state=consultation_decision.state.to_dict(),
                 missing_slots=consultation_decision.missing_slots,
-                questions=planned_questions,
                 answerability=consultation_decision.answerability,
+                model=model,
+                max_questions=max_questions,
             )
-        return plan, knowledge_evidence, consultation_decision
-
-    def _followup_knowledge_query(
-        self,
-        *,
-        user_text: str,
-        pet_context,
-        consultation_decision: ConsultationDecision,
-    ) -> str:
-        """构造用于反推追问的知识库检索查询。
-
-        :param user_text: 用户本轮输入文本。
-        :param pet_context: 宠物上下文。
-        :param consultation_decision: 当前问诊决策。
-        :return: 返回函数执行结果。
-        """
-        state = consultation_decision.state.to_dict()
-        slots = state.get("slots") or {}
-        missing = "、".join(consultation_decision.missing_slots) or "无"
-        answerability = state.get("answerability") or {}
-        semantic = state.get("semantic_extraction") or {}
-        return "\n".join(
-            [
-                user_text,
-                f"宠物资料: {pet_context.summary()}",
-                f"问诊方向: {consultation_decision.state.domain}",
-                f"已知槽位: {slots}",
-                f"语义抽取结果: {semantic}",
-                f"本轮仍阻塞回答的高价值证据: {missing}",
-                f"回答充分性判断: {answerability}",
-                "请检索与风险分层、鉴别观察点、下一步问诊要点相关的兽医知识。",
-            ]
         )
+        planned_questions = plan.question_texts()
+        consultation_decision.state.asked_questions.extend(planned_questions)
+        consultation_decision.state.followup_rounds += 1
+        updated_decision = ConsultationDecision(
+            state=consultation_decision.state,
+            ready=consultation_decision.ready,
+            missing_slots=consultation_decision.missing_slots,
+            questions=planned_questions,
+            answerability=consultation_decision.answerability,
+        )
+        return plan, plan.to_evidence(), updated_decision
 
     async def stream_turn(self, request: AgentTurnRequest) -> AsyncIterator[str]:
         """以流式事件形式执行一个 Agent 对话回合。

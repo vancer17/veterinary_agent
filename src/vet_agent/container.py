@@ -27,6 +27,14 @@ from vet_agent.consultation_state import (
     ConsultationStateService,
     OpaConsultationAnswerabilityPolicyClient,
 )
+from vet_agent.followup_rag import (
+    FollowupRagQueryBuilder,
+    FollowupRagService,
+    FollowupRagServiceProtocol,
+    LiteLlmFollowupQuestionPlanner,
+    LlamaIndexFollowupKnowledgeRetriever,
+    PostgresFollowupRagKnowledgeRepository,
+)
 from vet_agent.input_safety import (
     GuardrailsInputSafetyDetector,
     InputSafetyPolicyClient,
@@ -105,6 +113,7 @@ class Container:
         clinical_safety_policy_client: ClinicalSafetyPolicyClient | None = None,
         consultation_answerability_policy_client: ConsultationAnswerabilityPolicyClient | None = None,
         embedding_client: EmbeddingClient | None = None,
+        followup_rag_service: FollowupRagServiceProtocol | None = None,
         task_routing_domain_repository: TaskRoutingDomainRepository | None = None,
         task_routing_policy_client: TaskRoutingPolicyClient | None = None,
     ) -> None:
@@ -118,6 +127,7 @@ class Container:
         :param clinical_safety_policy_client: 临床安全策略客户端；仅测试或特殊嵌入场景可显式注入。
         :param consultation_answerability_policy_client: 问诊回答充分性策略客户端；仅测试或特殊嵌入场景可显式注入。
         :param embedding_client: 向量化客户端；仅测试或特殊嵌入场景可显式注入。
+        :param followup_rag_service: 追问相关 RAG 服务；仅测试或特殊嵌入场景可显式注入。
         :param task_routing_domain_repository: 任务路由任务域目录仓储；仅测试或特殊嵌入场景可显式注入。
         :param task_routing_policy_client: 任务路由策略客户端；仅测试或特殊嵌入场景可显式注入。
         :return: 无返回值。
@@ -249,6 +259,7 @@ class Container:
             if settings.database_url
             else file_knowledge_repository
         )
+        self.followup_rag_service = self._followup_rag_service(settings, followup_rag_service)
         self.report_service = ReportIngestionService(
             PostgresReportStore(settings.database_url)
             if settings.database_url
@@ -283,6 +294,7 @@ class Container:
             turn_execution_gate=self.turn_execution_gate,
             input_safety_service=self.input_safety_service,
             task_router=self.task_router,
+            followup_rag_service=self.followup_rag_service,
         )
 
     @property
@@ -297,6 +309,7 @@ class Container:
             and self.input_safety_service.is_ready()
             and self.rule_repository.is_ready()
             and self.knowledge_repository.is_ready()
+            and self.followup_rag_service.is_ready()
             and self.clinical_safety_repository.is_ready()
             and self.clinical_safety_policy_client.is_ready()
             and self.consultation_state_service.is_ready()
@@ -309,6 +322,45 @@ class Container:
                 else True
             )
             and self.task_router.is_ready()
+        )
+
+    def _followup_rag_service(
+        self,
+        settings: Settings,
+        service: FollowupRagServiceProtocol | None,
+    ) -> FollowupRagServiceProtocol:
+        """构造追问相关 RAG 服务。
+
+        :param settings: 当前运行环境配置。
+        :param service: 外部显式注入的追问 RAG 服务。
+        :return: 返回追问 RAG 服务。
+        :raises RuntimeError: 生产数据库或 embedding 客户端未配置且未显式注入测试替身时抛出。
+        """
+        if service is not None:
+            return service
+        if not settings.database_url:
+            raise RuntimeError(
+                "DATABASE_URL is required for followup RAG; "
+                "inject an explicit test service for embedded tests"
+            )
+        embedding_client = self.embedding_client or self.clinical_safety_embedding_client
+        if embedding_client is None or not embedding_client.available:
+            raise RuntimeError(
+                "embedding client is required for followup RAG; "
+                "provide an available LiteLLM embedding client or inject an explicit test service"
+            )
+        repository = PostgresFollowupRagKnowledgeRepository(settings.database_url)
+        retriever = LlamaIndexFollowupKnowledgeRetriever(
+            repository=repository,
+            embedding_client=embedding_client,
+        )
+        planner = LiteLlmFollowupQuestionPlanner(self.qwen_client)
+        return FollowupRagService(
+            retriever=retriever,
+            planner=planner,
+            query_builder=FollowupRagQueryBuilder(),
+            top_k=settings.followup_rag_top_k,
+            min_score=settings.followup_rag_vector_min_score,
         )
 
     def _task_routing_domain_repository(

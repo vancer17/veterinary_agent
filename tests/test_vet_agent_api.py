@@ -40,13 +40,21 @@ from vet_agent.clinical_safety import (
     ClinicalSafetyChunkType,
 )
 from vet_agent.consultation_state import LocalConsultationAnswerabilityPolicyClient
+from vet_agent.followup_rag import (
+    FollowupRagPlan,
+    FollowupRagQuestion,
+    FollowupRagRequest,
+    FollowupRagRetrievalResult,
+    FollowupRagServiceProtocol,
+    FollowupRagStrategy,
+)
 from vet_agent.input_safety import (
     InputSafetyService,
     LocalInputSafetyPolicyClient,
     StaticInputSafetyRepository,
 )
 from vet_agent.observability import AgentPathNode
-from vet_agent.repositories import FileRuleRepository, ScopeRepository, SessionBinding, VerifiedPetProfile
+from vet_agent.repositories import FileRuleRepository, KnowledgeHit, ScopeRepository, SessionBinding, VerifiedPetProfile
 from vet_agent.runtime import QwenClient
 from vet_agent.services import MemoryService, TurnExecutionGateProtocol, TurnExecutor
 from vet_agent.stores import JsonDocumentStore
@@ -647,6 +655,139 @@ class StaticClinicalSafetyRepository:
         }
 
 
+class StaticFollowupRagService(FollowupRagServiceProtocol):
+    """为 API 主链路测试提供显式注入的追问 RAG 服务替身。
+
+    :return: 无返回值；该替身只模拟已通过生产 FollowupRagService 校验后的结果。
+    """
+
+    async def plan(self, request: FollowupRagRequest) -> FollowupRagPlan:
+        """生成测试范围内的结构化追问计划。
+
+        :param request: 追问 RAG 结构化请求。
+        :return: 返回静态追问计划。
+        """
+        hit = self._knowledge_hit()
+        retrieval = FollowupRagRetrievalResult(
+            query="static_api_followup_rag_query",
+            hits=[hit],
+            node_count=1,
+            backend="static_api_followup_rag",
+            min_score=1.0,
+            top_k=1,
+        )
+        return FollowupRagPlan(
+            questions=self._questions(request),
+            strategy=FollowupRagStrategy.STATIC_TEST,
+            retrieval=retrieval,
+            rationale="API 测试替身返回已通过契约校验的追问计划。",
+        )
+
+    def is_ready(self) -> bool:
+        """检查测试追问 RAG 服务是否就绪。
+
+        :return: 始终返回 True。
+        """
+        return True
+
+    def _knowledge_hit(self) -> KnowledgeHit:
+        """构造测试用追问 RAG 证据命中。
+
+        :return: 返回测试知识命中。
+        """
+        return KnowledgeHit(
+            title="消化道症状",
+            summary="饭后蜷缩、腹部紧绷、呕吐腹泻和精神食欲变化会影响消化道不适的分诊追问优先级。",
+            source="static_followup_rag_test",
+            public_citation=True,
+            score=1.0,
+            metadata={
+                "chunk_id": "knowledge_chunk:test_digestive_followup",
+                "chunk_type": "followup_questions",
+            },
+        )
+
+    def _questions(self, request: FollowupRagRequest) -> list[FollowupRagQuestion]:
+        """按测试缺失槽位构造追问问题。
+
+        :param request: 追问 RAG 结构化请求。
+        :return: 返回不超过本轮上限的问题列表。
+        """
+        missing_slots = set(request.missing_slots)
+        planned: list[FollowupRagQuestion] = []
+        candidates = [
+            (
+                "mental_status",
+                "它缩成一团时，腹部有没有明显紧绷，或被抱起、轻碰肚子时躲开？",
+                "知识库提示姿势改变要优先区分疼痛、腹部不适和普通休息状态。",
+                10,
+            ),
+            (
+                "onset",
+                "这种缩着趴通常是在饭后多久出现，每次会持续多长时间？",
+                "发生时间和进食关系能帮助判断是否更偏向短暂胃肠不适。",
+                20,
+            ),
+            (
+                "vomiting",
+                "有没有呕吐、反酸、干呕，或者想吐但吐不出来的表现？",
+                "呕吐和干呕会影响消化道风险分层与就医紧迫度。",
+                30,
+            ),
+            (
+                "stool",
+                "最近大便次数、软硬和颜色有没有变化，是否见到血或黏液？",
+                "粪便变化可帮助判断胃肠道刺激、炎症或出血风险。",
+                40,
+            ),
+            (
+                "appetite",
+                "这两天主餐、零食和饮水量和平时相比有没有明显减少？",
+                "食欲和饮水变化会影响是否需要更积极线下评估。",
+                50,
+            ),
+        ]
+        for slot, question, reason, priority in candidates:
+            if slot not in missing_slots:
+                continue
+            planned.append(self._question(slot, question, reason, priority))
+            if len(planned) >= request.max_questions:
+                return planned
+
+        for slot in request.missing_slots:
+            if len(planned) >= request.max_questions:
+                break
+            if any(item.slot == slot for item in planned):
+                continue
+            planned.append(
+                self._question(
+                    slot,
+                    f"请补充 {slot} 这一项相关信息，尤其是开始时间、严重程度和是否正在加重。",
+                    "该证据仍会影响本轮能否进入阶段性回答。",
+                    90,
+                )
+            )
+        return planned
+
+    def _question(self, slot: str, question: str, reason: str, priority: int) -> FollowupRagQuestion:
+        """构造测试范围内的追问问题对象。
+
+        :param slot: 问题对应的缺失槽位。
+        :param question: 面向用户的问题文本。
+        :param reason: 问题依据摘要。
+        :param priority: 问题优先级。
+        :return: 返回追问问题对象。
+        """
+        return FollowupRagQuestion(
+            slot=slot,
+            question=question,
+            reason=reason,
+            evidence_chunk_ids=["knowledge_chunk:test_digestive_followup"],
+            evidence_titles=["消化道症状"],
+            priority=priority,
+        )
+
+
 _test_scope_repository: InMemoryScopeRepository | None = None
 _current_test_input_text = ""
 _last_response_composer_prompt = ""
@@ -678,6 +819,7 @@ def _client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
         clinical_safety_policy_client=StaticClinicalSafetyPolicyClient(),
         consultation_answerability_policy_client=LocalConsultationAnswerabilityPolicyClient(),
         embedding_client=StaticEmbeddingClient(),
+        followup_rag_service=StaticFollowupRagService(),
         input_safety_service=InputSafetyService(
             settings,
             repository=StaticInputSafetyRepository(),
@@ -752,27 +894,6 @@ async def _fake_litellm_send_chat(
     """
     del self, model, temperature
     user_text = _message_text(messages)
-    if "RagQuestionPlannerAgent" in user_text and "缩成一团" in user_text:
-        return """
-        {
-          "questions": [
-            {
-              "slot": "mental_status",
-              "question": "它缩成一团时，腹部有没有明显紧绷，或被抱起、轻碰肚子时躲开？",
-              "reason": "知识库提示姿势改变要优先区分疼痛、腹部不适和普通休息状态。",
-              "evidence_titles": ["消化道症状"],
-              "priority": 10
-            },
-            {
-              "slot": "onset",
-              "question": "这种缩着趴通常是在饭后多久出现，每次会持续多长时间？",
-              "reason": "发生时间和进食关系能帮助判断是否更偏向短暂胃肠不适。",
-              "evidence_titles": ["消化道症状"],
-              "priority": 20
-            }
-          ]
-        }
-        """
     if "image_url" in user_text:
         return """
         {
@@ -2183,10 +2304,12 @@ def test_rag_guided_followup_uses_knowledge_to_plan_questions(tmp_path: Path, mo
     data = response.json()
     assert data["status"] == "requires_followup"
     assert data["vet_result"]["route"] == "rag_guided_followup"
-    assert "RagQuestionPlannerAgent" in data["metadata"]["multi_agent_path"]
+    assert AgentPathNode.FOLLOWUP_RAG_SERVICE.value in data["metadata"]["multi_agent_path"]
+    assert AgentPathNode.FOLLOWUP_RAG_RETRIEVER.value in data["metadata"]["multi_agent_path"]
+    assert AgentPathNode.FOLLOWUP_RAG_PLANNER.value in data["metadata"]["multi_agent_path"]
     assert "QwenResponseAgent" not in data["metadata"]["multi_agent_path"]
     plan = data["metadata"]["followup_question_plan"]
-    assert plan["strategy"] == "rag_llm_question_planner"
+    assert plan["strategy"] == FollowupRagStrategy.STATIC_TEST.value
     assert plan["questions"][0]["evidence_titles"] == ["消化道症状"]
     assert {item["slot"] for item in plan["questions"]}.issubset(set(data["metadata"]["missing_slots"]))
     for question in plan["questions"]:
