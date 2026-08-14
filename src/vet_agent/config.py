@@ -55,6 +55,10 @@ class Settings:
     task_routing_opa_package_path: str = "vet_agent.task_routing"
     task_routing_opa_rule_name: str = "decision"
     task_routing_opa_auth_token: str | None = None
+    consultation_answerability_opa_base_url: str = "http://opa:8181/v1"
+    consultation_answerability_opa_package_path: str = "vet_agent.consultation_state"
+    consultation_answerability_opa_rule_name: str = "decision"
+    consultation_answerability_opa_auth_token: str | None = None
     enable_llm_semantic_extraction: bool = True
     semantic_extraction_min_confidence: float = 0.65
     consultation_max_followup_rounds: int = 2
@@ -129,6 +133,20 @@ class Settings:
             ).strip(),
             task_routing_opa_rule_name=os.getenv("TASK_ROUTING_OPA_RULE_NAME", "decision").strip(),
             task_routing_opa_auth_token=os.getenv("TASK_ROUTING_OPA_AUTH_TOKEN") or None,
+            consultation_answerability_opa_base_url=os.getenv(
+                "CONSULTATION_ANSWERABILITY_OPA_BASE_URL",
+                "http://opa:8181/v1",
+            ).strip().rstrip("/"),
+            consultation_answerability_opa_package_path=os.getenv(
+                "CONSULTATION_ANSWERABILITY_OPA_PACKAGE_PATH",
+                "vet_agent.consultation_state",
+            ).strip(),
+            consultation_answerability_opa_rule_name=os.getenv(
+                "CONSULTATION_ANSWERABILITY_OPA_RULE_NAME",
+                "decision",
+            ).strip(),
+            consultation_answerability_opa_auth_token=os.getenv("CONSULTATION_ANSWERABILITY_OPA_AUTH_TOKEN")
+            or None,
             enable_llm_semantic_extraction=_bool_env("ENABLE_LLM_SEMANTIC_EXTRACTION", True),
             semantic_extraction_min_confidence=float(os.getenv("SEMANTIC_EXTRACTION_MIN_CONFIDENCE", "0.65")),
             consultation_max_followup_rounds=int(os.getenv("CONSULTATION_MAX_FOLLOWUP_ROUNDS", "2")),
