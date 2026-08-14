@@ -26,6 +26,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from ingress import create_app, set_orchestrator
 from vet_agent import Container, Settings, VetAgentIngressOrchestrator, set_container
+from vet_agent.answer_rag import AnswerRagStrategy
 from vet_agent.db import ConsultationDomainModel, ConsultationSlotModel, KnowledgeChunkModel, make_session_factory
 from vet_agent.followup_rag import FollowupRagStrategy
 from vet_agent.observability import AgentPathNode
@@ -40,6 +41,10 @@ FOLLOWUP_RAG_BASELINE_CHUNK_TYPE = "followup_questions"
 FOLLOWUP_RAG_BASELINE_SOURCE = "consultation_state_external_api_test_followup_rag"
 FOLLOWUP_RAG_BASELINE_TITLE = "犬软便追问知识外部 API 基线"
 FOLLOWUP_RAG_BASELINE_VERSION = "consultation_state_external_api_test"
+ANSWER_RAG_BASELINE_CHUNK_TYPE = "home_advice"
+ANSWER_RAG_BASELINE_SOURCE = "consultation_state_external_api_test_answer_rag"
+ANSWER_RAG_BASELINE_TITLE = "犬软便回答知识外部 API 基线"
+ANSWER_RAG_BASELINE_VERSION = "consultation_state_external_api_test"
 SUPPORTED_ALEMBIC_VERSIONS = {
     "0014_task_routing_domain_catalog",
     "0015_consultation_semantic_extraction_contract",
@@ -255,6 +260,13 @@ def external_database(external_env: dict[str, str], external_prefix: str) -> Ite
         """
         _prepare_followup_rag_baseline(database_url, external_env, external_prefix)
 
+    def prepare_answer_rag_baseline() -> None:
+        """写入回答相关 RAG 的真实知识基线。
+
+        :return: 无返回值。
+        """
+        _prepare_answer_rag_baseline(database_url, external_env, external_prefix)
+
     def assert_catalog_ready() -> None:
         """校验问诊领域与槽位目录已经可供运行时读取。
 
@@ -262,15 +274,24 @@ def external_database(external_env: dict[str, str], external_prefix: str) -> Ite
         """
         _assert_consultation_catalog_ready(database_url)
 
+    def assert_answer_rag_ready() -> None:
+        """校验回答相关 RAG 的真实知识基线已经写入。
+
+        :return: 无返回值。
+        """
+        _assert_answer_rag_baseline_ready(database_url, external_prefix)
+
     _with_database_retry(cleanup_database, action="清理问诊状态测试前缀数据")
     _with_database_retry(assert_schema_ready, action="校验问诊状态数据库基线")
     _with_database_retry(prepare_catalog_baseline, action="写入问诊状态目录基线")
     _with_database_retry(prepare_followup_rag_baseline, action="写入追问 RAG 真实知识基线")
+    _with_database_retry(prepare_answer_rag_baseline, action="写入回答 RAG 真实知识基线")
     _with_database_retry(assert_catalog_ready, action="校验问诊状态目录基线")
     _with_database_retry(
         lambda: _assert_followup_rag_baseline_ready(database_url, external_prefix),
         action="校验追问 RAG 真实知识基线",
     )
+    _with_database_retry(assert_answer_rag_ready, action="校验回答 RAG 真实知识基线")
     try:
         yield database_url
     finally:
@@ -414,7 +435,7 @@ def test_consultation_state_api_requires_followup_with_real_services(
     assert AgentPathNode.CONSULTATION_SEMANTIC_EXTRACTOR_AGENT.value in path
     assert AgentPathNode.CONSULTATION_STATE_SERVICE.value in path
     assert AgentPathNode.CONSULTATION_ANSWERABILITY_POLICY_OPA.value in path
-    assert AgentPathNode.KNOWLEDGE_AGENT.value in path
+    assert "KnowledgeAgent" not in path
     assert AgentPathNode.FOLLOWUP_RAG_SERVICE.value in path
     assert AgentPathNode.FOLLOWUP_RAG_RETRIEVER.value in path
     assert AgentPathNode.FOLLOWUP_RAG_PLANNER.value in path
@@ -442,10 +463,10 @@ def test_consultation_state_api_completes_when_user_requests_answer_now(
     pet_id = f"{external_prefix}_pet"
     session_id = f"{external_prefix}_session"
 
-    first = external_client.post(
+    response = external_client.post(
         "/agent/turns",
         json=_payload(
-            "我家狗今天有点软便，精神正常。",
+            "别再追问了，直接说目前怎么看。它是狗，3岁，12公斤，今天早上开始软便，精神和食欲正常，没有呕吐，也没有血便。",
             user_id=user_id,
             pet_id=pet_id,
             session_id=session_id,
@@ -453,23 +474,9 @@ def test_consultation_state_api_completes_when_user_requests_answer_now(
             idempotency_key=f"{external_prefix}_turn_1",
         ),
     )
-    assert first.status_code == 200, first.text
-    assert first.json()["status"] == "requires_followup"
 
-    second = external_client.post(
-        "/agent/turns",
-        json=_payload(
-            "别再追问了，直接说目前怎么看。它是狗，3岁，12公斤，今天早上开始，精神食欲正常，没有呕吐，大便软便但没有血。",
-            user_id=user_id,
-            pet_id=pet_id,
-            session_id=session_id,
-            profile=profile,
-            idempotency_key=f"{external_prefix}_turn_2",
-        ),
-    )
-
-    assert second.status_code == 200, second.text
-    data = second.json()
+    assert response.status_code == 200, response.text
+    data = response.json()
     assert data["status"] == "completed"
     assert data["vet_result"]["route"] == "standard_consultation"
     assert data["metadata"]["consultation_phase"] == "ready_to_answer"
@@ -496,9 +503,27 @@ def test_consultation_state_api_completes_when_user_requests_answer_now(
     assert AgentPathNode.CONSULTATION_SEMANTIC_EXTRACTOR_AGENT.value in path
     assert AgentPathNode.CONSULTATION_STATE_SERVICE.value in path
     assert AgentPathNode.CONSULTATION_ANSWERABILITY_POLICY_OPA.value in path
+    assert AgentPathNode.ANSWER_RAG_SERVICE.value in path
+    assert AgentPathNode.ANSWER_RAG_RETRIEVER.value in path
     assert AgentPathNode.QWEN_RESPONSE_AGENT.value in path
     assert AgentPathNode.FOLLOWUP_RAG_SERVICE.value not in path
     assert AgentPathNode.ANSWERABILITY_EVALUATOR.value not in path
+    assert path.index(AgentPathNode.ANSWER_RAG_SERVICE.value) < path.index(AgentPathNode.QWEN_RESPONSE_AGENT.value)
+    assert path.index(AgentPathNode.ANSWER_RAG_RETRIEVER.value) < path.index(AgentPathNode.QWEN_RESPONSE_AGENT.value)
+    assert data["metadata"]["answer_rag"]["strategy"] == AnswerRagStrategy.LLAMA_INDEX_PGVECTOR.value
+    assert data["metadata"]["answer_rag"]["retrieval"]["backend"] == "llamaindex_node_adapter_pgvector_knowledge_chunks"
+    assert data["metadata"]["answer_rag"]["retrieval"]["node_count"] >= 1
+    assert data["metadata"]["answer_rag"]["retrieval"]["hit_count"] >= 1
+    assert any(
+        hit["metadata"].get("prefix") == external_prefix
+        for hit in data["metadata"]["answer_rag"]["retrieval"]["hits"]
+    )
+    assert any(
+        evidence["metadata"].get("type") == "answer_rag_knowledge"
+        and evidence["metadata"].get("evidence_id", "").startswith("knowledge_chunk:")
+        and evidence["metadata"].get("prefix") == external_prefix
+        for evidence in data["evidence"]
+    )
 
 
 @contextmanager
@@ -816,11 +841,10 @@ def _prepare_followup_rag_baseline(
             text(
                 """
                 DELETE FROM knowledge_chunks
-                WHERE ingestion_batch = :prefix
-                   OR metadata ->> 'prefix' = :prefix
+                WHERE source = :source
                 """
             ),
-            {"prefix": prefix},
+            {"source": ANSWER_RAG_BASELINE_SOURCE},
         )
         session.add(
             KnowledgeChunkModel(
@@ -864,11 +888,11 @@ def _assert_followup_rag_baseline_ready(database_url: str, prefix: str) -> None:
                 SELECT title, source, enabled, review_status, embedding IS NOT NULL AS has_embedding,
                        coalesce(metadata ->> 'chunk_type', 'NULL') AS chunk_type
                 FROM knowledge_chunks
-                WHERE ingestion_batch = :prefix
-                   OR metadata ->> 'prefix' = :prefix
+                WHERE (ingestion_batch = :prefix OR metadata ->> 'prefix' = :prefix)
+                  AND source = :source
                 """
             ),
-            {"prefix": prefix},
+            {"prefix": prefix, "source": FOLLOWUP_RAG_BASELINE_SOURCE},
         ).mappings().one_or_none()
     if row is None:
         pytest.fail("外部数据库缺少追问相关 RAG 的真实知识基线。")
@@ -880,6 +904,107 @@ def _assert_followup_rag_baseline_ready(database_url: str, prefix: str) -> None:
         pytest.fail(f"追问相关 RAG 基线 chunk_type 不匹配：{row['chunk_type']!r}。")
     if not row["enabled"] or row["review_status"] != "approved" or not row["has_embedding"]:
         pytest.fail("追问相关 RAG 基线未满足启用、审核通过或向量可用条件。")
+
+
+def _prepare_answer_rag_baseline(
+    database_url: str,
+    external_env: dict[str, str],
+    prefix: str,
+) -> None:
+    """向外部数据库写入回答相关 RAG 的真实知识基线。
+
+    :param database_url: 数据库连接串。
+    :param external_env: 外部依赖配置。
+    :param prefix: 测试数据前缀。
+    :return: 无返回值。
+    """
+    embedding_text = _answer_rag_embedding_text()
+    embedding = _embedding_vector(external_env, embedding_text)
+    if len(embedding) != EXPECTED_EMBEDDING_DIMENSION:
+        pytest.fail(f"外部 embedding 维度不符合 knowledge_chunks.embedding 要求：{len(embedding)}。")
+
+    session_factory = make_session_factory(database_url)
+    with session_factory.begin() as session:
+        session.execute(
+            text(
+                """
+                DELETE FROM knowledge_chunks
+                WHERE source = :source
+                """
+            ),
+            {"source": ANSWER_RAG_BASELINE_SOURCE},
+        )
+        session.add(
+            KnowledgeChunkModel(
+                source=ANSWER_RAG_BASELINE_SOURCE,
+                title=ANSWER_RAG_BASELINE_TITLE,
+                content=embedding_text,
+                embedding=embedding,
+                public_citation=True,
+                copyright_risk="low",
+                domain="gastrointestinal",
+                species="dog",
+                source_url=None,
+                version=ANSWER_RAG_BASELINE_VERSION,
+                enabled=True,
+                review_status="approved",
+                quality_score=1.0,
+                last_reviewed_at=datetime.now(UTC),
+                disabled_reason=None,
+                ingestion_batch=prefix,
+                metadata_json={
+                    "chunk_type": ANSWER_RAG_BASELINE_CHUNK_TYPE,
+                    "consultation_state_external_api_test": True,
+                    "prefix": prefix,
+                },
+            )
+        )
+
+
+def _assert_answer_rag_baseline_ready(database_url: str, prefix: str) -> None:
+    """确认回答相关 RAG 的真实知识基线已经写入。
+
+    :param database_url: 数据库连接串。
+    :param prefix: 测试数据前缀。
+    :return: 无返回值。
+    """
+    session_factory = make_session_factory(database_url)
+    with session_factory() as session:
+        row = session.execute(
+            text(
+                """
+                SELECT title, source, enabled, review_status, embedding IS NOT NULL AS has_embedding,
+                       coalesce(metadata ->> 'chunk_type', 'NULL') AS chunk_type
+                FROM knowledge_chunks
+                WHERE (ingestion_batch = :prefix OR metadata ->> 'prefix' = :prefix)
+                  AND source = :source
+                """
+            ),
+            {"prefix": prefix, "source": ANSWER_RAG_BASELINE_SOURCE},
+        ).mappings().one_or_none()
+    if row is None:
+        pytest.fail("外部数据库缺少回答相关 RAG 的真实知识基线。")
+    if row["title"] != ANSWER_RAG_BASELINE_TITLE:
+        pytest.fail(f"回答相关 RAG 基线标题不匹配：{row['title']!r}。")
+    if row["source"] != ANSWER_RAG_BASELINE_SOURCE:
+        pytest.fail(f"回答相关 RAG 基线来源不匹配：{row['source']!r}。")
+    if row["chunk_type"] != ANSWER_RAG_BASELINE_CHUNK_TYPE:
+        pytest.fail(f"回答相关 RAG 基线 chunk_type 不匹配：{row['chunk_type']!r}。")
+    if not row["enabled"] or row["review_status"] != "approved" or not row["has_embedding"]:
+        pytest.fail("回答相关 RAG 基线未满足启用、审核通过或向量可用条件。")
+
+
+def _answer_rag_embedding_text() -> str:
+    """构造回答相关 RAG 外部 API 测试使用的真实知识正文。
+
+    :return: 返回用于真实 embedding 的知识文本。
+    """
+    return (
+        "犬软便回答知识基线：当狗 3 岁、12 公斤，今天早上开始软便，精神和食欲正常，没有呕吐、"
+        "没有血便时，可以先给阶段性观察建议。重点关注接下来 24 到 48 小时的精神状态、饮水、"
+        "排便次数、便便是否变稀或带血、是否出现腹痛、呕吐、黑便、持续腹泻或明显萎靡。"
+        "如果出现红旗信号，或者软便持续加重，就应尽快线下就医。"
+    )
 
 
 def _assert_consultation_catalog_ready(database_url: str) -> None:

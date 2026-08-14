@@ -442,7 +442,7 @@ RAG 追问规划只在 OPA 裁决为 `ask` 后执行；回答 RAG 和最终回�
 | TODO | 后续归属 | 当前处理 |
 |---|---|---|
 | 管理后台维护问诊领域和槽位目录 | 管理后台/数据资产治理 | 当前仅要求数据库目录可读，不在本阶段实现治理界面 |
-| LlamaIndex 替换追问相关 RAG 编排 | 后续 RAG 迁移阶段 | 当前保持既有 `KnowledgeService` 与 `RagQuestionPlannerAgent` 边界 |
+| LlamaIndex 替换追问相关 RAG 编排 | 已完成于追问相关 RAG 迁移 | 当前由 `FollowupRagService`、`FollowupRagPlanner` 和 `FollowupRagServiceProtocol` 承载 |
 | 最终回答结构化输出和 Guardrails 输出约束 | 回复生成与输出安全阶段 | 当前只保证是否进入回答由 OPA 裁决 |
 | 长期记忆写入 OPA 策略 | 长期记忆候选与事实写入阶段 | 当前不把活跃问诊状态直接写入长期事实 |
 | 纠正、删除和事实冲突治理 | 删除与纠正治理阶段 | 当前仅在当前会话状态内处理纠正语义 |

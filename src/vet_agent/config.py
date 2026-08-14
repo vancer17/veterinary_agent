@@ -12,6 +12,15 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
+DEFAULT_ANSWER_RAG_ALLOWED_CHUNK_TYPES: tuple[str, ...] = (
+    "condition_overview",
+    "triage",
+    "red_flags",
+    "medication_direction",
+    "home_advice",
+)
+
+
 def _bool_env(name: str, default: bool) -> bool:
     """读取布尔环境变量。
 
@@ -50,6 +59,10 @@ class Settings:
     clinical_safety_vector_min_score: float = 0.35
     followup_rag_top_k: int = 4
     followup_rag_vector_min_score: float = 0.35
+    answer_rag_top_k: int = 5
+    answer_rag_vector_min_score: float = 0.35
+    answer_rag_allowed_chunk_types: tuple[str, ...] = DEFAULT_ANSWER_RAG_ALLOWED_CHUNK_TYPES
+    answer_rag_filter_by_domain: bool = False
     database_url: str | None = None
     enable_rag_embeddings: bool = False
     task_routing_max_task_count: int = 5
@@ -124,6 +137,12 @@ class Settings:
             clinical_safety_vector_min_score=float(os.getenv("CLINICAL_SAFETY_VECTOR_MIN_SCORE", "0.35")),
             followup_rag_top_k=int(os.getenv("FOLLOWUP_RAG_TOP_K", "4")),
             followup_rag_vector_min_score=float(os.getenv("FOLLOWUP_RAG_VECTOR_MIN_SCORE", "0.35")),
+            answer_rag_top_k=int(os.getenv("ANSWER_RAG_TOP_K", "5")),
+            answer_rag_vector_min_score=float(os.getenv("ANSWER_RAG_VECTOR_MIN_SCORE", "0.35")),
+            answer_rag_allowed_chunk_types=(
+                _csv_env("ANSWER_RAG_ALLOWED_CHUNK_TYPES") or DEFAULT_ANSWER_RAG_ALLOWED_CHUNK_TYPES
+            ),
+            answer_rag_filter_by_domain=_bool_env("ANSWER_RAG_FILTER_BY_DOMAIN", False),
             database_url=os.getenv("DATABASE_URL"),
             enable_rag_embeddings=_bool_env("ENABLE_RAG_EMBEDDINGS", False),
             task_routing_max_task_count=int(os.getenv("TASK_ROUTING_MAX_TASK_COUNT", "5")),

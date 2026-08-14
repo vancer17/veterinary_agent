@@ -395,7 +395,7 @@ def _ready_checks(orchestrator_ready: bool) -> dict[str, bool]:
     return {
         "ingress_config": True,
         "rule_repository": orchestrator_ready,
-        "knowledge_repository": orchestrator_ready,
+        "answer_rag_service": orchestrator_ready,
         "orchestrator": orchestrator_ready,
     }
 

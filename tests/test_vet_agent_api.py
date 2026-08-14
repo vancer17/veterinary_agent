@@ -47,7 +47,13 @@ from vet_agent.followup_rag import (
     FollowupRagRequest,
     FollowupRagRetrievalResult,
     FollowupRagServiceProtocol,
-    FollowupRagStrategy,
+)
+from vet_agent.answer_rag import (
+    AnswerRagRequest,
+    AnswerRagResult,
+    AnswerRagRetrievalResult,
+    AnswerRagServiceProtocol,
+    AnswerRagStrategy,
 )
 from vet_agent.input_safety import (
     InputSafetyService,
@@ -798,6 +804,62 @@ class StaticFollowupRagService(FollowupRagServiceProtocol):
         )
 
 
+class StaticAnswerRagService(AnswerRagServiceProtocol):
+    """为 API 主链路测试提供显式注入的回答相关 RAG 服务替身。
+
+    :return: 无返回值；该替身只模拟已通过生产 AnswerRagService 校验后的结果。
+    """
+
+    async def retrieve(self, request: AnswerRagRequest) -> AnswerRagResult:
+        """生成测试范围内的结构化回答相关 RAG 结果。
+
+        :param request: 回答 RAG 结构化请求。
+        :return: 返回静态回答相关 RAG 结果。
+        """
+        if str(request.answerability.get("decision") or "").strip() != "answer":
+            raise AssertionError("StaticAnswerRagService 仅允许在 answer 分支被调用。")
+        hit = self._knowledge_hit(request)
+        retrieval = AnswerRagRetrievalResult(
+            query="static_api_answer_rag_query",
+            hits=[hit],
+            node_count=1,
+            backend="static_api_answer_rag",
+            min_score=0.9,
+            top_k=1,
+        )
+        return AnswerRagResult(
+            strategy=AnswerRagStrategy.STATIC_TEST,
+            retrieval=retrieval,
+        )
+
+    def is_ready(self) -> bool:
+        """检查测试回答相关 RAG 服务是否就绪。
+
+        :return: 始终返回 True。
+        """
+        return True
+
+    def _knowledge_hit(self, request: AnswerRagRequest) -> KnowledgeHit:
+        """构造测试用回答相关 RAG 证据命中。
+
+        :param request: 回答 RAG 结构化请求。
+        :return: 返回测试知识命中。
+        """
+        domain = request.task_domain or str(request.consultation_state.get("domain") or "general")
+        return KnowledgeHit(
+            title="回答相关知识",
+            summary="在回答阶段，系统应优先使用已审核知识片段作为证据，再组织临床建议。",
+            source="static_answer_rag_test",
+            public_citation=True,
+            score=0.95,
+            metadata={
+                "chunk_id": "knowledge_chunk:test_answer_rag",
+                "chunk_type": "condition_overview",
+                "domain": domain,
+            },
+        )
+
+
 _test_scope_repository: InMemoryScopeRepository | None = None
 _current_test_input_text = ""
 _last_response_composer_prompt = ""
@@ -829,6 +891,7 @@ def _client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
         clinical_safety_policy_client=StaticClinicalSafetyPolicyClient(),
         consultation_answerability_policy_client=LocalConsultationAnswerabilityPolicyClient(),
         embedding_client=StaticEmbeddingClient(),
+        answer_rag_service=StaticAnswerRagService(),
         followup_rag_service=StaticFollowupRagService(),
         input_safety_service=InputSafetyService(
             settings,

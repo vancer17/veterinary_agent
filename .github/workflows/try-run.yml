@@ -22,6 +22,7 @@ on:
           - clinical-safety-api
           - memory-read-api
           - task-routing-api
+          - answer-rag-api
           - external-api
           - full
       build_mem0_image:
@@ -67,7 +68,7 @@ jobs:
   # 手动 try-run
   # ---------------------------------------------------------------------------
   # dry-run 只解析配置并校验 CD 布局，不启动数据库、不构建镜像。
-  # clinical-safety-api、memory-read-api、task-routing-api 和 external-api 通过 SSH 隧道访问真实开发依赖。
+  # clinical-safety-api、memory-read-api、task-routing-api、answer-rag-api 和 external-api 通过 SSH 隧道访问真实开发依赖。
   # common/repository/full 会按脚本入口执行对应强度。
   # ---------------------------------------------------------------------------
   try-run:
@@ -88,7 +89,7 @@ jobs:
         run: python -m pip install --upgrade --index-url https://pypi.tuna.tsinghua.edu.cn/simple uv
 
       - name: Prepare external API SSH key
-        if: ${{ inputs.gate_scope == 'clinical-safety-api' || inputs.gate_scope == 'memory-read-api' || inputs.gate_scope == 'task-routing-api' || inputs.gate_scope == 'external-api' }}
+        if: ${{ inputs.gate_scope == 'clinical-safety-api' || inputs.gate_scope == 'memory-read-api' || inputs.gate_scope == 'task-routing-api' || inputs.gate_scope == 'answer-rag-api' || inputs.gate_scope == 'external-api' }}
         env:
           EXTERNAL_API_TEST_SSH_PRIVATE_KEY: ${{ secrets.EXTERNAL_API_TEST_SSH_PRIVATE_KEY }}
         run: |

@@ -6,14 +6,7 @@
 
 
 
-from .knowledge import (
-    FallbackKnowledgeRepository,
-    FileKnowledgeRepository,
-    KnowledgeHit,
-    KnowledgeRepository,
-    PostgresKnowledgeRepository,
-    evidence_from_hits,
-)
+from .knowledge import KnowledgeHit
 from .consultation_state import (
     DEFAULT_TASK_KEY as CONSULTATION_DEFAULT_TASK_KEY,
     ConsultationStateRepository,
@@ -55,17 +48,13 @@ __all__ = [
     "ConsultationRuleSet",
     "ConsultationSlotRule",
     "ConsultationStateRepository",
-    "FallbackKnowledgeRepository",
     "FallbackRuleRepository",
-    "FileKnowledgeRepository",
     "FileRuleRepository",
     "KnowledgeHit",
-    "KnowledgeRepository",
     "JsonMemoryReadRepository",
     "JsonConsultationStateRepository",
     "MemoryReadRepositoryError",
     "MemoryWriteRepository",
-    "PostgresKnowledgeRepository",
     "PostgresMemoryReadRepository",
     "PostgresMemoryWriteRepository",
     "PostgresConsultationStateRepository",
@@ -80,5 +69,4 @@ __all__ = [
     "TurnIdempotencyClaim",
     "TurnIdempotencyClaimStatus",
     "VerifiedPetProfile",
-    "evidence_from_hits",
 ]

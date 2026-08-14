@@ -3,7 +3,7 @@
 这是一个面向宠物主人的 FastAPI 兽医 Agent 原型，按需求文档实现第一阶段能力:
 
 - API 接入层: `/agent/turns`、`/openai/v1/responses`、`/health`、`/ready`
-- 多 Agent 编排: `SafetyAgent -> PetContextAgent -> MemoryAgent -> KnowledgeAgent -> QuestionPlannerAgent -> QwenResponseAgent -> SafetyReviewAgent`
+- 多 Agent 编排: `SafetyAgent -> PetContextAgent -> MemoryAgent -> TaskRouterAgent -> ConsultationStateService -> (FollowupRagService / AnswerRagService) -> QwenResponseAgent -> SafetyReviewAgent`
 - 硬安全规则: 急症红旗、有毒食物/危险人药、不给具体剂量、片子不判读
 - 记忆与留痕: PostgreSQL 存储主人/宠物/会话记忆和涉诊涉药 trace，基于 vendor/mem0/server 封装的自托管 Mem0 REST Server + pgvector 提供语义记忆增强
 - LLM 网关: 通过 LiteLLM Proxy 统一调用通义千问，默认模型 `qwen-plus`
@@ -139,11 +139,11 @@ curl -X POST http://127.0.0.1:8000/agent/turns \
 - `QWEN_VISION_MODEL`: 报告图片解析使用的视觉模型，默认 `qwen-vl-plus`
 - `MEM0_BASE_URL` / `MEM0_API_KEY`: app 侧自托管 Mem0 REST Server 配置，compose 中默认指向 `http://mem0:8000`
 - `VET_AGENT_DATA_DIR`: 记忆和留痕数据目录
-- `DATABASE_URL`: PostgreSQL 连接串；配置后优先读取数据库规则/RAG，失败时回退 `assets/seeds`
+- `DATABASE_URL`: PostgreSQL 连接串；生产环境的回答 RAG、追问 RAG、临床安全向量召回和状态服务均依赖数据库，不提供文本、文件或 seed 回退
 - `DATABASE_POOL_SIZE` / `DATABASE_MAX_OVERFLOW`: SQLAlchemy 连接池容量参数，需结合 `APP_WORKERS` 与 PostgreSQL `max_connections` 统一规划
 - `DATABASE_STATEMENT_TIMEOUT_MS` / `DATABASE_IDLE_IN_TRANSACTION_TIMEOUT_MS`: PostgreSQL 连接级 SQL 超时参数，防止异常查询或空闲事务长期占用连接
 - `QWEN_EMBEDDING_DIMENSION`: embedding 输出维度，默认 `1024`，需与 `pgvector` 字段、Mem0 collection 和 LiteLLM 模型路由保持一致
-- `VET_AGENT_SEED_DIR`: 本地规则和知识 seed 目录，默认 `assets/seeds`
+- `VET_AGENT_SEED_DIR`: 本地开发或显式导入脚本使用的规则 seed 目录，默认 `assets/seeds`；不作为回答 RAG 或追问 RAG 的生产回退
 - `OSS_BUCKET` / `OSS_PREFIX` / `OSS_ENDPOINT`: 报告解析只接受该 OSS 桶和 endpoint 下的图片地址；Dev 默认 `infra-dev-file-storage` 与 `oss-cn-hangzhou-internal.aliyuncs.com`
 
 ## PostgreSQL + pgvector

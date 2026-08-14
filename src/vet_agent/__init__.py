@@ -4,7 +4,7 @@
 说明：重型对象通过延迟导入暴露，避免包初始化阶段触发循环依赖。
 """
 
-from .config import Settings
+from .config import DEFAULT_ANSWER_RAG_ALLOWED_CHUNK_TYPES, Settings
 from .contracts import (
     AgentTurnRequest,
     AgentTurnResponse,
@@ -37,6 +37,7 @@ __all__ = [
     "AttachmentRef",
     "AuthorizedScopeContext",
     "Container",
+    "DEFAULT_ANSWER_RAG_ALLOWED_CHUNK_TYPES",
     "ErrorResponse",
     "Evidence",
     "IngressRequest",
