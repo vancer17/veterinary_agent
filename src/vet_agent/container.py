@@ -51,6 +51,16 @@ from vet_agent.input_safety import (
     OpaInputSafetyPolicyClient,
     PostgresInputSafetyRepository,
 )
+from vet_agent.output_safety import (
+    DisabledOutputSafetyPolicyClient,
+    GuardrailsOutputSafetyDetector,
+    LocalOutputSafetyPolicyClient,
+    OpaOutputSafetyPolicyClient,
+    OutputSafetyPolicyClient,
+    OutputSafetyService,
+    PostgresOutputSafetyRepository,
+    StaticOutputSafetyRepository,
+)
 from vet_agent.memory import (
     MemoryContextBuilder,
     MemoryReadService,
@@ -116,6 +126,7 @@ class Container:
         scope_repository: ScopeRepository | None = None,
         turn_execution_gate: TurnExecutionGateProtocol | None = None,
         input_safety_service: InputSafetyService | None = None,
+        output_safety_service: OutputSafetyService | None = None,
         clinical_safety_repository: ClinicalSafetyRepository | None = None,
         clinical_safety_policy_client: ClinicalSafetyPolicyClient | None = None,
         consultation_answerability_policy_client: ConsultationAnswerabilityPolicyClient | None = None,
@@ -131,6 +142,7 @@ class Container:
         :param scope_repository: 身份、宠物资料与会话范围仓储；仅测试或特殊嵌入场景可显式注入。
         :param turn_execution_gate: 单回合执行门禁；仅测试或特殊嵌入场景可显式注入。
         :param input_safety_service: 基础输入安全服务；仅测试或特殊嵌入场景可显式注入。
+        :param output_safety_service: 输出安全复核服务；仅测试或特殊嵌入场景可显式注入。
         :param clinical_safety_repository: 临床安全向量仓储；仅测试或特殊嵌入场景可显式注入。
         :param clinical_safety_policy_client: 临床安全策略客户端；仅测试或特殊嵌入场景可显式注入。
         :param consultation_answerability_policy_client: 问诊回答充分性策略客户端；仅测试或特殊嵌入场景可显式注入。
@@ -185,6 +197,7 @@ class Container:
         )
         self.access_control = AccessControlService(settings, self.scope_service)
         self.input_safety_service = self._input_safety_service(settings, input_safety_service)
+        self.output_safety_service = self._output_safety_service(settings, output_safety_service)
         self.trace_store = (
             PostgresLogicTraceStore(settings.database_url)
             if settings.database_url
@@ -299,12 +312,12 @@ class Container:
             answer_rag_service=self.answer_rag_service,
             response_generation_service=self.response_generation_service,
             qwen_client=self.qwen_client,
-            rule_repository=self.rule_repository,
             consultation_state_service=self.consultation_state_service,
             clinical_safety_evaluator=self.clinical_safety_evaluator,
             clinical_safety_semantic_extractor=self.clinical_safety_semantic_extractor,
             turn_execution_gate=self.turn_execution_gate,
             input_safety_service=self.input_safety_service,
+            output_safety_service=self.output_safety_service,
             task_router=self.task_router,
             followup_rag_service=self.followup_rag_service,
         )
@@ -319,6 +332,7 @@ class Container:
             self.settings.litellm_configured
             and self.access_control.is_ready()
             and self.input_safety_service.is_ready()
+            and self.output_safety_service.is_ready()
             and self.rule_repository.is_ready()
             and self.answer_rag_service.is_ready()
             and self.followup_rag_service.is_ready()
@@ -556,6 +570,67 @@ class Container:
         if settings.input_safety_policy_backend == "local":
             return LocalInputSafetyPolicyClient()
         raise RuntimeError(f"unsupported INPUT_SAFETY_POLICY_BACKEND: {settings.input_safety_policy_backend}")
+
+    def _output_safety_service(
+        self,
+        settings: Settings,
+        output_safety_service: OutputSafetyService | None,
+    ) -> OutputSafetyService:
+        """构造输出安全候选与策略裁决服务。
+
+        :param settings: 当前运行环境的应用配置。
+        :param output_safety_service: 外部显式注入的输出安全服务。
+        :return: 返回输出安全服务实例。
+        :raises RuntimeError: 启用输出安全但数据库未配置时抛出。
+        """
+        if output_safety_service is not None:
+            return output_safety_service
+        if not settings.enable_output_safety or settings.output_safety_mode == "disabled":
+            return OutputSafetyService(
+                settings,
+                repository=StaticOutputSafetyRepository(),
+                detectors=(),
+                policy_client=DisabledOutputSafetyPolicyClient(),
+            )
+        if not settings.database_url:
+            raise RuntimeError("DATABASE_URL is required for output safety candidate definitions")
+        repository = PostgresOutputSafetyRepository(settings.database_url)
+        detectors = (
+            (
+                GuardrailsOutputSafetyDetector(
+                    settings,
+                    repository,
+                    protected_system_prompt="兽医 Agent 内部系统提示、策略上下文和工具链路仅供内部执行，不得出现在面向用户的回复中。",
+                ),
+            )
+            if settings.enable_output_safety_guardrails
+            else ()
+        )
+        return OutputSafetyService(
+            settings,
+            repository=repository,
+            detectors=detectors,
+            policy_client=self._output_safety_policy_client(settings),
+        )
+
+    def _output_safety_policy_client(self, settings: Settings) -> OutputSafetyPolicyClient:
+        """构造输出安全策略裁决客户端。
+
+        :param settings: 当前运行环境的应用配置。
+        :return: 返回输出安全策略客户端。
+        """
+        if settings.output_safety_policy_backend == "opa":
+            return OpaOutputSafetyPolicyClient(
+                base_url=settings.output_safety_opa_base_url,
+                version="v1",
+                package_path=settings.output_safety_opa_package_path,
+                rule_name=settings.output_safety_opa_rule_name,
+                auth_token=settings.output_safety_opa_auth_token,
+                timeout_seconds=settings.request_timeout_seconds,
+            )
+        if settings.output_safety_policy_backend == "local":
+            return LocalOutputSafetyPolicyClient()
+        raise RuntimeError(f"unsupported OUTPUT_SAFETY_POLICY_BACKEND: {settings.output_safety_policy_backend}")
 
     def _clinical_safety_policy_client(self, settings: Settings) -> ClinicalSafetyPolicyClient:
         """构造临床安全策略裁决客户端。

@@ -21,9 +21,7 @@ from vet_agent.agents import (
     ConsultationStateService,
     MemoryExtractionAgent,
     MemoryFactCandidate,
-    SafetyAgent,
     SafetyAssessment,
-    SafetyReviewAgent,
     TaskRouterAgent,
 )
 from vet_agent import Settings
@@ -46,7 +44,7 @@ from vet_agent.followup_rag import FollowupRagPlan, FollowupRagRequest, Followup
 from vet_agent.input_safety import InputSafetyDecision, InputSafetyRequestContext, InputSafetyService
 from vet_agent.memory import MemoryContextBuilder, MemoryPromptContext, MemoryReadBundle, MemoryReadService
 from vet_agent.observability import AgentPathNode, build_agent_path
-from vet_agent.repositories import RuleRepository
+from vet_agent.output_safety import OutputSafetyService
 from vet_agent.response_generation import (
     ResponseGenerationRequest,
     ResponseGenerationServiceProtocol,
@@ -82,12 +80,12 @@ class VetOrchestrator:
         answer_rag_service: AnswerRagServiceProtocol,
         response_generation_service: ResponseGenerationServiceProtocol,
         qwen_client: QwenClient,
-        rule_repository: RuleRepository,
         consultation_state_service: ConsultationStateService,
         clinical_safety_evaluator: ClinicalSafetyEvaluator,
         clinical_safety_semantic_extractor: ClinicalSafetySemanticExtractorAgent,
         turn_execution_gate: TurnExecutionGateProtocol,
         input_safety_service: InputSafetyService,
+        output_safety_service: OutputSafetyService,
         task_router: TaskRouterAgent,
         followup_rag_service: FollowupRagServiceProtocol,
     ) -> None:
@@ -102,12 +100,12 @@ class VetOrchestrator:
         :param answer_rag_service: 回答相关 RAG 服务，仅在 OPA answer 分支生成结构化回答证据。
         :param response_generation_service: 回复生成上下文编译与模型调用服务。
         :param qwen_client: 参数 qwen_client。
-        :param rule_repository: 参数 rule_repository。
         :param consultation_state_service: 问诊状态与回答充分性服务。
         :param clinical_safety_evaluator: 结构化临床安全评估器。
         :param clinical_safety_semantic_extractor: 临床安全结构化语义抽取器。
         :param turn_execution_gate: 单回合执行门禁，负责 turn lock 与幂等基础设施控制。
         :param input_safety_service: 基础输入安全候选与 OPA 策略裁决服务。
+        :param output_safety_service: 输出安全候选与策略裁决服务。
         :param task_router: 结构化任务路由 Agent。
         :param followup_rag_service: 追问相关 RAG 服务，仅在 OPA ask 分支生成结构化追问计划。
         :return: 无返回值。
@@ -120,12 +118,11 @@ class VetOrchestrator:
         self.trace_store = trace_store
         self.turn_execution_gate = turn_execution_gate
         self.input_safety_service = input_safety_service
+        self.output_safety_service = output_safety_service
         self.answer_rag_service = answer_rag_service
         self.response_generation_service = response_generation_service
-        self.safety = SafetyAgent(rule_repository)
         self.clinical_safety = clinical_safety_evaluator
         self.clinical_safety_semantic_extractor = clinical_safety_semantic_extractor
-        self.safety_review = SafetyReviewAgent(self.safety)
         self.semantic_extractor = ConsultationSemanticExtractorAgent(qwen_client, settings)
         self.consultation = consultation_state_service
         self.task_router = task_router
@@ -304,7 +301,6 @@ class VetOrchestrator:
                 consultation_decision,
                 question_reasons=followup_plan.reason_lines(),
             )
-            output_text, post_signals = self.safety.sanitize_output(output_text)
             user_evidence = self.reasoning_display.user_answer_evidence(consultation_decision.state.to_dict())
             evidence = [*user_evidence, *pet_context.evidence, *knowledge_evidence]
             segment = VetSegment(
@@ -320,7 +316,7 @@ class VetOrchestrator:
                 evidence=evidence,
                 consultation_state=consultation_decision.state.to_dict(),
                 missing_slots=consultation_decision.missing_slots,
-                safety_signals=[*assessment.signals, *post_signals],
+                safety_signals=assessment.signals,
             )
             segment.reasoning_display = reasoning_display
             segment.references = self.reasoning_display.references_from_evidence(evidence)
@@ -338,7 +334,7 @@ class VetOrchestrator:
                     "route": "rag_guided_followup",
                     "audit_tier": "A",
                 },
-                safety_signals=[*assessment.signals, *post_signals],
+                safety_signals=assessment.signals,
                 evidence=evidence,
                 metadata={
                     "multi_agent_path": build_agent_path(
@@ -396,7 +392,6 @@ class VetOrchestrator:
             model=model,
         )
         output_text = response_generation_result.text
-        output_text, post_signals = self.safety.sanitize_output(output_text)
         user_evidence = self.reasoning_display.user_answer_evidence(consultation_decision.state.to_dict())
         evidence = [*user_evidence, *response_generation_result.evidence, *answer_rag_evidence]
         segment = VetSegment(
@@ -412,7 +407,7 @@ class VetOrchestrator:
             evidence=evidence,
             consultation_state=consultation_decision.state.to_dict(),
             missing_slots=consultation_decision.missing_slots,
-            safety_signals=[*assessment.signals, *post_signals],
+            safety_signals=assessment.signals,
         )
         segment.reasoning_display = reasoning_display
         segment.references = self.reasoning_display.references_from_evidence(evidence)
@@ -430,7 +425,7 @@ class VetOrchestrator:
                 "route": "standard_consultation",
                 "audit_tier": "A",
             },
-            safety_signals=[*assessment.signals, *post_signals],
+            safety_signals=assessment.signals,
             evidence=evidence,
             metadata={
                 "multi_agent_path": build_agent_path(
@@ -446,11 +441,10 @@ class VetOrchestrator:
                     AgentPathNode.CONSULTATION_STATE_SERVICE,
                     AgentPathNode.CONSULTATION_ANSWERABILITY_POLICY_OPA,
                     AgentPathNode.ANSWER_RAG_SERVICE,
-                    AgentPathNode.ANSWER_RAG_RETRIEVER,
-                    AgentPathNode.RESPONSE_GENERATION_CONTEXT_BUILDER,
-                    AgentPathNode.QWEN_RESPONSE_AGENT,
-                    AgentPathNode.SAFETY_REVIEW_AGENT,
-                ),
+                        AgentPathNode.ANSWER_RAG_RETRIEVER,
+                        AgentPathNode.RESPONSE_GENERATION_CONTEXT_BUILDER,
+                        AgentPathNode.QWEN_RESPONSE_AGENT,
+                    ),
                 "litellm_configured": self.settings.litellm_configured,
                 "consultation_phase": consultation_decision.state.phase,
                 "consultation_state": consultation_decision.state.to_dict(),
@@ -502,9 +496,8 @@ class VetOrchestrator:
         :param input_safety_decision: 已完成的基础输入安全策略裁决；为空时不写入审计字段。
         :return: 返回已持久化的安全分诊响应。
         """
-        text = self.safety.forced_response(assessment)
-        text, post_signals = self.safety.sanitize_output(text)
-        signals = [*assessment.signals, *post_signals]
+        text = self._safety_triage_response_text(assessment)
+        signals = assessment.signals
         segment = VetSegment(
             type="safety_triage",
             title="安全分诊",
@@ -549,6 +542,27 @@ class VetOrchestrator:
         await self.memory_service.clear_consultation_state(request.trusted_identity)
         return response
 
+    def _safety_triage_response_text(self, assessment: SafetyAssessment) -> str:
+        """根据已裁决安全信号生成临床安全分诊响应文本。
+
+        :param assessment: 已完成的安全评估结果。
+        :return: 返回面向用户的安全分诊文本。
+        """
+        urgent_signals = [signal for signal in assessment.signals if signal.severity in {"urgent", "blocked"}]
+        if urgent_signals:
+            reasons = "；".join(signal.message for signal in urgent_signals if signal.message)
+            matched = "、".join(term for signal in urgent_signals for term in signal.matched_terms)
+            prefix = "你描述里有需要优先线下处理的高风险信号"
+            if reasons:
+                prefix = f"{prefix}：{reasons}"
+            if matched:
+                prefix = f"{prefix}，相关线索: {matched}"
+            return (
+                f"{prefix}。请尽快联系线下兽医医院，若症状正在发生或持续加重，请按急诊处理。\n\n"
+                "路上尽量保持宠物安静和保暖，不要自行喂人药或给不确定的药物。"
+            )
+        return "当前信息需要进一步确认。"
+
     async def _input_safety_response(
         self,
         *,
@@ -569,8 +583,7 @@ class VetOrchestrator:
         """
         status = "blocked" if decision.blocked else "safety_escalated"
         text = self._input_safety_response_text(decision)
-        text, post_signals = self.safety.sanitize_output(text)
-        signals = [*decision.signals, *post_signals]
+        signals = list(decision.signals)
         segment = VetSegment(
             type="input_safety",
             title="输入安全",
@@ -608,7 +621,7 @@ class VetOrchestrator:
                 "input_safety_decision": decision.to_metadata(),
             },
         )
-        response = self.safety_review.review_response(response)
+        response = await self.output_safety_service.review_response(response)
         response.metadata["memory_extraction"] = {
             "agent": "MemoryExtractionAgent",
             "stored_fact_count": 0,
@@ -774,8 +787,6 @@ class VetOrchestrator:
             else:
                 updated_task_states[task.state_key] = consultation_decision.state.to_dict()
 
-            output_text, post_signals = self.safety.sanitize_output(output_text)
-            all_safety_signals.extend(post_signals)
             all_evidence.extend(evidence)
 
             segment = VetSegment(
@@ -792,7 +803,7 @@ class VetOrchestrator:
                 evidence=evidence,
                 consultation_state=consultation_decision.state.to_dict(),
                 missing_slots=consultation_decision.missing_slots,
-                safety_signals=[*assessment.signals, *post_signals],
+                safety_signals=assessment.signals,
             )
             segment.reasoning_display = reasoning_display
             segment.references = self.reasoning_display.references_from_evidence(evidence)
@@ -883,7 +894,6 @@ class VetOrchestrator:
                         if used_response_generation
                         else []
                     ),
-                    *build_agent_path(AgentPathNode.SAFETY_REVIEW_AGENT),
                 ],
                 "task_count": len(tasks),
                 "task_router": routing_decision.to_metadata(),
@@ -1226,7 +1236,7 @@ class VetOrchestrator:
         :param medical: 是否属于医疗咨询回合。
         :return: 返回函数执行结果。
         """
-        response = self.safety_review.review_response(response)
+        response = await self.output_safety_service.review_response(response)
         extracted_facts = await self._extract_and_store_facts(request, response) if medical else []
         response.metadata["memory_extraction"] = {
             "agent": "MemoryExtractionAgent",

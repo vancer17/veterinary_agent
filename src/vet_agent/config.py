@@ -108,6 +108,17 @@ class Settings:
     input_safety_opa_package_path: str = "vet_agent.input_safety"
     input_safety_opa_rule_name: str = "decision"
     input_safety_opa_auth_token: str | None = None
+    enable_output_safety: bool = False
+    output_safety_mode: str = "disabled"
+    output_safety_policy_backend: str = "local"
+    output_safety_policy_always_call: bool = False
+    output_safety_opa_base_url: str = "http://opa:8181/v1"
+    output_safety_opa_package_path: str = "vet_agent.output_safety"
+    output_safety_opa_rule_name: str = "decision"
+    output_safety_opa_auth_token: str | None = None
+    enable_output_safety_guardrails: bool = False
+    output_safety_max_chars: int = 16_000
+    output_safety_system_prompt_leakage_threshold: int = 40
     clinical_safety_opa_base_url: str = "http://opa:8181/v1"
     clinical_safety_opa_package_path: str = "vet_agent.clinical_safety"
     clinical_safety_opa_rule_name: str = "decision"
@@ -125,6 +136,8 @@ class Settings:
 
         :return: 返回完整的应用配置对象。
         """
+        enable_output_safety = _bool_env("ENABLE_OUTPUT_SAFETY", False)
+        output_safety_mode_default = "observe" if enable_output_safety else "disabled"
         return cls(
             default_model=os.getenv("QWEN_MODEL", "qwen-plus"),
             qwen_embedding_model=os.getenv("QWEN_EMBEDDING_MODEL", "text-embedding-v4"),
@@ -204,6 +217,29 @@ class Settings:
             input_safety_opa_package_path=os.getenv("INPUT_SAFETY_OPA_PACKAGE_PATH", "vet_agent.input_safety").strip(),
             input_safety_opa_rule_name=os.getenv("INPUT_SAFETY_OPA_RULE_NAME", "decision").strip(),
             input_safety_opa_auth_token=os.getenv("INPUT_SAFETY_OPA_AUTH_TOKEN") or None,
+            enable_output_safety=enable_output_safety,
+            output_safety_mode=os.getenv("OUTPUT_SAFETY_MODE", output_safety_mode_default).strip().lower(),
+            output_safety_policy_backend=os.getenv("OUTPUT_SAFETY_POLICY_BACKEND", "local").strip().lower(),
+            output_safety_policy_always_call=_bool_env("OUTPUT_SAFETY_POLICY_ALWAYS_CALL", False),
+            output_safety_opa_base_url=os.getenv(
+                "OUTPUT_SAFETY_OPA_BASE_URL",
+                os.getenv("INPUT_SAFETY_OPA_BASE_URL", "http://opa:8181/v1"),
+            ).strip().rstrip("/"),
+            output_safety_opa_package_path=os.getenv(
+                "OUTPUT_SAFETY_OPA_PACKAGE_PATH",
+                "vet_agent.output_safety",
+            ).strip(),
+            output_safety_opa_rule_name=os.getenv("OUTPUT_SAFETY_OPA_RULE_NAME", "decision").strip(),
+            output_safety_opa_auth_token=(
+                os.getenv("OUTPUT_SAFETY_OPA_AUTH_TOKEN")
+                or os.getenv("INPUT_SAFETY_OPA_AUTH_TOKEN")
+                or None
+            ),
+            enable_output_safety_guardrails=_bool_env("ENABLE_OUTPUT_SAFETY_GUARDRAILS", False),
+            output_safety_max_chars=int(os.getenv("OUTPUT_SAFETY_MAX_CHARS", "16000")),
+            output_safety_system_prompt_leakage_threshold=int(
+                os.getenv("OUTPUT_SAFETY_SYSTEM_PROMPT_LEAKAGE_THRESHOLD", "40")
+            ),
             clinical_safety_opa_base_url=os.getenv(
                 "CLINICAL_SAFETY_OPA_BASE_URL",
                 os.getenv("INPUT_SAFETY_OPA_BASE_URL", "http://opa:8181/v1"),

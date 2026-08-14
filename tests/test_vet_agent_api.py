@@ -2809,21 +2809,6 @@ def test_memory_extraction_does_not_persist_pet_info_facts(
     assert profile.profile == {"species": "dog"}
     assert profile.source.startswith("test-bff:test-main-service:master_pet_info:p_extract")
 
-
-def test_safety_review_removes_dosage_expression() -> None:
-    """验证对应业务场景是否符合预期。
-
-    :return: 无返回值；断言通过表示场景符合预期。
-    """
-    from vet_agent.agents import SafetyAgent, SafetyReviewAgent
-
-    reviewer = SafetyReviewAgent(SafetyAgent())
-    result = reviewer.review_text("You can give 5 mg/kg twice daily.")
-
-    assert "5 mg/kg" not in result.text
-    assert any(signal.code == "DOSAGE_REMOVED" for signal in result.signals)
-
-
 def test_report_parse_extracts_structured_lab_items(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证对应业务场景是否符合预期。
 
