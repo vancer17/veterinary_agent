@@ -29,7 +29,7 @@
 |---|---|---|
 | LiteLLM `response_format` | 替代手写 JSON 提取与非结构化 LLM 输出解析 | 不直接决定医疗动作，不替代业务策略 |
 | OPA | 替代分散的硬编码动作策略、记忆写入策略和安全动作裁决 | 不承载医学推理，不实现问诊状态机 |
-| LlamaIndex | 替代手写低质量检索、文本兜底和部分 RAG 编排适配逻辑 | 不绕过 `KnowledgeService` 业务门面 |
+| LlamaIndex | 替代手写低质量检索、文本兜底和部分 RAG 编排适配逻辑 | 不绕过 `FollowupRagService`、`AnswerRagService` 业务边界 |
 | Mem0 | 替代手写语义记忆召回、跨轮相关历史筛选和部分记忆候选生成 | 不替代权威事实库、活跃问诊状态、幂等状态和策略裁决 |
 | PostgreSQL/pgvector | 替代本地 JSON、seed 文件生产主路径、静态资产主路径和手写向量存储 | 不替代 OPA 策略、LlamaIndex 检索编排、Mem0 语义记忆和 LiteLLM 结构化输出 |
 | Guardrails | 可选增强输入与输出安全边界、格式约束和风险拦截 | 不作为唯一安全裁决源，不替代 OPA 审计策略 |
@@ -52,9 +52,9 @@ flowchart TD
   J --> K[ConsultationSemanticExtractorAgent.extract 问诊语义抽取]
   K --> L[ConsultationStateAgent.update 问诊状态与回答充分性]
   L --> M{是否需要追问}
-  M -->|需要追问| N[KnowledgeService.retrieve 追问相关 RAG]
-  N --> O[RagQuestionPlannerAgent.plan 动态追问]
-  M -->|可以回答| P[KnowledgeService.retrieve 回答相关 RAG]
+  M -->|需要追问| N[FollowupRagService.plan 追问相关 RAG]
+  N --> O[FollowupRagPlanner.generate 动态追问]
+  M -->|可以回答| P[AnswerRagService.retrieve 回答相关 RAG]
   P --> Q[ResponseComposer.compose 生成回复]
   O --> R[SafetyAgent.sanitize_output 输出清洗]
   Q --> R
@@ -83,8 +83,8 @@ flowchart TD
 | 9 | 多任务拆分 | `TaskRouterAgent.route`、`TaskRoutingService`、`TaskExecutionPlan` | LiteLLM `response_format`、Pydantic、OPA、PostgreSQL/pgvector | 结构化输出替代手写 JSON 解析；任务域目录由 `task_routing_domains` 提供；OPA 校验任务数量、任务域、任务键和已有任务引用；依赖、契约或策略失败直接 Fail Fast | 移除 `TaskSplitterAgent`、`RuleTaskSplitter`、`classifier_keywords` 和所有关键词回退路径 |
 | 10 | 问诊语义抽取 | `ConsultationSemanticExtractorAgent.extract` | LiteLLM `response_format` | 替代 `_extract_json()`；结构化事实进入问诊状态 | 保留 `SemanticExtractorOutput`，移除手写 JSON 提取 |
 | 11 | 问诊状态与回答充分性 | `ConsultationStateAgent.update`、`AnswerabilityEvaluator`、`ConsultationStateModel` | PostgreSQL/pgvector、OPA | PostgreSQL 保存活跃问诊状态；OPA 只裁决“是否允许阶段性回答/是否必须追问”等动作门槛 | 不把槽位状态机迁移到 Rego，不把活跃状态写入 Mem0 |
-| 12 | 追问相关 RAG | `_plan_followup_questions`、`KnowledgeService.retrieve` | LlamaIndex、PostgreSQL/pgvector、LiteLLM `response_format` | LlamaIndex 替代手写检索编排；PostgreSQL/pgvector 作为生产向量存储；response_format 替代追问规划 JSON 解析 | 保持 `KnowledgeHit` 和 `Evidence` 输出契约 |
-| 13 | 回答相关 RAG | `KnowledgeService.retrieve`、`PostgresKnowledgeRepository`、`KnowledgeChunkModel` | LlamaIndex、PostgreSQL/pgvector | 替代 pgvector/text/file 的低质量回退查询编排；保留 PostgreSQL/pgvector 作为向量与元数据底座 | 通过 `KnowledgeRepository` 协议适配，不改调用方 |
+| 12 | 追问相关 RAG | `FollowupRagService`、`FollowupRagQueryBuilder`、`FollowupRagServiceProtocol` | LlamaIndex、PostgreSQL/pgvector、LiteLLM `response_format` | LlamaIndex 替代手写检索编排；PostgreSQL/pgvector 作为生产向量存储；response_format 替代追问规划 JSON 解析 | 通过 `FollowupRagServiceProtocol` 保持 `KnowledgeHit`、`Evidence` 和追问计划契约 |
+| 13 | 回答相关 RAG | `AnswerRagService`、`AnswerRagQueryBuilder`、`AnswerRagServiceProtocol` | LlamaIndex、PostgreSQL/pgvector | 替代 pgvector/text/file 的低质量回退查询编排；只读取已启用、已审核且有 embedding 的知识 chunk | 通过 `AnswerRagServiceProtocol` 暴露回答证据上下文，不依赖旧 `KnowledgeService` |
 | 14 | 回复生成上下文编译 | `ResponseComposer.compose`、`PostgresMemoryService.read` | Mem0、PostgreSQL/pgvector | Mem0 提供与本轮主诉相关的历史语义记忆；PostgreSQL 提供权威事实和最近对话摘要 | 后续引入 `MemoryContextBuilder`，避免直接消费原始记忆结构 |
 | 15 | 回复生成 | `ResponseComposer.compose`、`QwenClient.chat` | LiteLLM、Guardrails | LiteLLM 继续统一模型网关；Guardrails 可在输出前后做约束验证 | 自然语言回复暂不强制结构化，只强化审计与输出检查 |
 | 16 | 输出清洗与安全复核 | `SafetyAgent.sanitize_output`、`SafetyReviewAgent.review_response` | Guardrails、OPA | Guardrails 检测格式、剂量和越界内容；OPA 决定放行、改写、阻断或升级 | 先以 observe 模式并行记录，再切为 enforce |
@@ -141,7 +141,7 @@ LlamaIndex 应替代以下模式：
 
 LlamaIndex 不应绕过以下边界：
 
-1. `KnowledgeService.retrieve()` 业务门面。
+1. `FollowupRagService` 和 `AnswerRagService` 业务服务边界。
 2. `KnowledgeHit` 和 `Evidence` 响应契约。
 3. 数据资产审核状态与版权元数据过滤。
 4. 临床安全裁决的策略边界。

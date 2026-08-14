@@ -33,18 +33,23 @@ case "$scope" in
     task-routing-api)
         bash scripts/integration/run-task-routing-api-smoke.sh
         ;;
+    answer-rag-api)
+        bash scripts/integration/run-answer-rag-api-smoke.sh
+        ;;
     external-api)
-        # 聚合外部 API 门禁，用于发布前一次性验证当前已迁移的真实依赖主路径。
+        # 聚合外部 API 门禁，用于发布前一次性验证当前已迁移的真实依赖主路径，
+        # 包括临床安全、记忆读取、多任务拆分与回答相关 RAG。
         bash scripts/integration/run-external-api-smoke.sh
         bash scripts/integration/run-memory-read-api-smoke.sh
         bash scripts/integration/run-task-routing-api-smoke.sh
+        bash scripts/integration/run-answer-rag-api-smoke.sh
         ;;
     full)
         bash scripts/ci/run-all.sh
         ;;
     *)
         echo "不支持的 try-run scope: ${scope}" >&2
-        echo "可选值: dry-run, common, repository, clinical-safety-api, memory-read-api, task-routing-api, external-api, full" >&2
+        echo "可选值: dry-run, common, repository, clinical-safety-api, memory-read-api, task-routing-api, answer-rag-api, external-api, full" >&2
         exit 1
         ;;
 esac

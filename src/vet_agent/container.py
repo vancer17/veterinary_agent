@@ -27,6 +27,13 @@ from vet_agent.consultation_state import (
     ConsultationStateService,
     OpaConsultationAnswerabilityPolicyClient,
 )
+from vet_agent.answer_rag import (
+    AnswerRagQueryBuilder,
+    AnswerRagService,
+    AnswerRagServiceProtocol,
+    LlamaIndexAnswerKnowledgeRetriever,
+    PostgresAnswerRagKnowledgeRepository,
+)
 from vet_agent.followup_rag import (
     FollowupRagQueryBuilder,
     FollowupRagService,
@@ -50,12 +57,9 @@ from vet_agent.memory import (
     make_memory_projection_client,
 )
 from vet_agent.repositories import (
-    FallbackKnowledgeRepository,
-    FileKnowledgeRepository,
     FileRuleRepository,
     JsonConsultationStateRepository,
     JsonMemoryReadRepository,
-    PostgresKnowledgeRepository,
     PostgresConsultationStateRepository,
     PostgresMemoryReadRepository,
     PostgresMemoryWriteRepository,
@@ -71,7 +75,6 @@ from vet_agent.services import (
     JsonClinicalKnowledgeStore,
     JsonRagGovernanceStore,
     JsonReportStore,
-    KnowledgeService,
     LogicTraceStore,
     MemoryService,
     PetContextProvider,
@@ -113,6 +116,7 @@ class Container:
         clinical_safety_policy_client: ClinicalSafetyPolicyClient | None = None,
         consultation_answerability_policy_client: ConsultationAnswerabilityPolicyClient | None = None,
         embedding_client: EmbeddingClient | None = None,
+        answer_rag_service: AnswerRagServiceProtocol | None = None,
         followup_rag_service: FollowupRagServiceProtocol | None = None,
         task_routing_domain_repository: TaskRoutingDomainRepository | None = None,
         task_routing_policy_client: TaskRoutingPolicyClient | None = None,
@@ -127,6 +131,7 @@ class Container:
         :param clinical_safety_policy_client: 临床安全策略客户端；仅测试或特殊嵌入场景可显式注入。
         :param consultation_answerability_policy_client: 问诊回答充分性策略客户端；仅测试或特殊嵌入场景可显式注入。
         :param embedding_client: 向量化客户端；仅测试或特殊嵌入场景可显式注入。
+        :param answer_rag_service: 回答相关 RAG 服务；仅测试或特殊嵌入场景可显式注入。
         :param followup_rag_service: 追问相关 RAG 服务；仅测试或特殊嵌入场景可显式注入。
         :param task_routing_domain_repository: 任务路由任务域目录仓储；仅测试或特殊嵌入场景可显式注入。
         :param task_routing_policy_client: 任务路由策略客户端；仅测试或特殊嵌入场景可显式注入。
@@ -188,9 +193,9 @@ class Container:
             if settings.enable_rag_embeddings
             else None
         )
-        self.clinical_safety_embedding_client = embedding_client or runtime_embedding_client
+        self.rag_embedding_client = embedding_client or runtime_embedding_client
+        self.clinical_safety_embedding_client = self.rag_embedding_client
         file_rule_repository = FileRuleRepository(settings.seed_dir)
-        file_knowledge_repository = FileKnowledgeRepository(settings.seed_dir)
         clinical_safety_thresholds = ClinicalSafetyThresholds(
             retrieval_min_score=settings.clinical_safety_vector_min_score,
         )
@@ -251,14 +256,7 @@ class Container:
             self.consultation_answerability_policy_client,
             max_followup_rounds=settings.consultation_max_followup_rounds,
         )
-        self.knowledge_repository = (
-            FallbackKnowledgeRepository(
-                PostgresKnowledgeRepository(settings.database_url, self.embedding_client),
-                file_knowledge_repository,
-            )
-            if settings.database_url
-            else file_knowledge_repository
-        )
+        self.answer_rag_service = self._answer_rag_service(settings, answer_rag_service)
         self.followup_rag_service = self._followup_rag_service(settings, followup_rag_service)
         self.report_service = ReportIngestionService(
             PostgresReportStore(settings.database_url)
@@ -285,7 +283,7 @@ class Container:
             memory_read_service=self.memory_read_service,
             memory_context_builder=self.memory_context_builder,
             trace_store=self.trace_store,
-            knowledge_service=KnowledgeService(self.knowledge_repository),
+            answer_rag_service=self.answer_rag_service,
             qwen_client=self.qwen_client,
             rule_repository=self.rule_repository,
             consultation_state_service=self.consultation_state_service,
@@ -308,7 +306,7 @@ class Container:
             and self.access_control.is_ready()
             and self.input_safety_service.is_ready()
             and self.rule_repository.is_ready()
-            and self.knowledge_repository.is_ready()
+            and self.answer_rag_service.is_ready()
             and self.followup_rag_service.is_ready()
             and self.clinical_safety_repository.is_ready()
             and self.clinical_safety_policy_client.is_ready()
@@ -322,6 +320,45 @@ class Container:
                 else True
             )
             and self.task_router.is_ready()
+        )
+
+    def _answer_rag_service(
+        self,
+        settings: Settings,
+        service: AnswerRagServiceProtocol | None,
+    ) -> AnswerRagServiceProtocol:
+        """构造回答相关 RAG 服务。
+
+        :param settings: 当前运行环境配置。
+        :param service: 外部显式注入的回答 RAG 服务。
+        :return: 返回回答 RAG 服务。
+        :raises RuntimeError: 生产数据库或 embedding 客户端未配置且未显式注入测试替身时抛出。
+        """
+        if service is not None:
+            return service
+        if not settings.database_url:
+            raise RuntimeError(
+                "DATABASE_URL is required for answer RAG; "
+                "inject an explicit test service for embedded tests"
+            )
+        embedding_client = self.rag_embedding_client
+        if embedding_client is None or not embedding_client.available:
+            raise RuntimeError(
+                "embedding client is required for answer RAG; "
+                "provide an available LiteLLM embedding client or inject an explicit test service"
+            )
+        repository = PostgresAnswerRagKnowledgeRepository(settings.database_url)
+        retriever = LlamaIndexAnswerKnowledgeRetriever(
+            repository=repository,
+            embedding_client=embedding_client,
+        )
+        return AnswerRagService(
+            retriever=retriever,
+            query_builder=AnswerRagQueryBuilder(),
+            top_k=settings.answer_rag_top_k,
+            min_score=settings.answer_rag_vector_min_score,
+            allowed_chunk_types=settings.answer_rag_allowed_chunk_types,
+            filter_by_domain=settings.answer_rag_filter_by_domain,
         )
 
     def _followup_rag_service(
@@ -354,10 +391,9 @@ class Container:
             repository=repository,
             embedding_client=embedding_client,
         )
-        planner = LiteLlmFollowupQuestionPlanner(self.qwen_client)
         return FollowupRagService(
             retriever=retriever,
-            planner=planner,
+            planner=LiteLlmFollowupQuestionPlanner(self.qwen_client),
             query_builder=FollowupRagQueryBuilder(),
             top_k=settings.followup_rag_top_k,
             min_score=settings.followup_rag_vector_min_score,

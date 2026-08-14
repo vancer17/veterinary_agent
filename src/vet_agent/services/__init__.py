@@ -13,7 +13,6 @@ from .clinical_knowledge import (
     PostgresClinicalKnowledgeStore,
 )
 from .context import PetContext, PetContextProvider
-from .knowledge import KnowledgeService
 from .memory import MemoryService
 from .postgres_memory import PostgresMemoryService
 from .postgres_trace import PostgresLogicTraceStore
@@ -54,7 +53,6 @@ __all__ = [
     "JsonClinicalKnowledgeStore",
     "JsonRagGovernanceStore",
     "JsonReportStore",
-    "KnowledgeService",
     "LogicTraceStore",
     "MemoryService",
     "PetContext",
