@@ -13,22 +13,19 @@ from vet_agent.repositories import KnowledgeHit
 from vet_agent.runtime import QwenClient
 from vet_agent.services import PetContext
 
-from .question_planner import QuestionPlanner
 from .safety import SafetyAgent
 
 
 class ResponseComposer:
-    def __init__(self, qwen: QwenClient, safety: SafetyAgent, planner: QuestionPlanner) -> None:
+    def __init__(self, qwen: QwenClient, safety: SafetyAgent) -> None:
         """初始化当前对象。
 
         :param qwen: 参数 qwen。
         :param safety: 参数 safety。
-        :param planner: 参数 planner。
         :return: 无返回值。
         """
         self.qwen = qwen
         self.safety = safety
-        self.planner = planner
 
     async def compose(
         self,
@@ -54,14 +51,14 @@ class ResponseComposer:
         :param allow_followup: 参数 allow_followup。
         :return: 返回函数执行结果。
         """
-        questions = self.planner.plan(user_text, pet_context, max_followup_questions) if allow_followup else []
+        del max_followup_questions
         knowledge_text = "\n".join(f"- {hit.title}: {hit.summary}" for hit in knowledge_hits)
         memory_text = memory.prompt_text or "暂无可用历史记忆"
         consultation_text = consultation_context or "尚未形成结构化问诊状态"
         mode_instruction = (
             "结构化问诊状态已足够。请给出阶段性最终建议，不要继续追问，除非出现急症兜底提醒。"
             if not allow_followup
-            else f"信息可能仍不完整。每轮最多问 {max_followup_questions} 个关键问题。"
+            else "信息不足时只说明无法给出最终判断，不要自行生成追问；追问问题由 FollowupRagService 负责。"
         )
         prompt = f"""
 你是面向宠物主人的兽医 AI 助手。必须遵守:
@@ -102,8 +99,6 @@ class ResponseComposer:
             )
         except Exception:
             raw = self._fallback_reply()
-        if questions and "还需要确认" not in raw:
-            raw = f"{raw}\n\n还需要确认的问题:\n" + "\n".join(f"{index + 1}. {q}" for index, q in enumerate(questions))
         sanitized, _ = self.safety.sanitize_output(raw)
         return sanitized, [*pet_context.evidence, *memory.evidence]
 

@@ -26,7 +26,8 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from ingress import create_app, set_orchestrator
 from vet_agent import Container, Settings, VetAgentIngressOrchestrator, set_container
-from vet_agent.db import ConsultationDomainModel, ConsultationSlotModel, make_session_factory
+from vet_agent.db import ConsultationDomainModel, ConsultationSlotModel, KnowledgeChunkModel, make_session_factory
+from vet_agent.followup_rag import FollowupRagStrategy
 from vet_agent.observability import AgentPathNode
 
 
@@ -35,6 +36,10 @@ DEFAULT_EXTERNAL_TIMEOUT_SECONDS = 75.0
 DEFAULT_DATABASE_RETRY_ATTEMPTS = 3
 DEFAULT_DATABASE_RETRY_DELAY_SECONDS = 2.0
 EXPECTED_EMBEDDING_DIMENSION = 1024
+FOLLOWUP_RAG_BASELINE_CHUNK_TYPE = "followup_questions"
+FOLLOWUP_RAG_BASELINE_SOURCE = "consultation_state_external_api_test_followup_rag"
+FOLLOWUP_RAG_BASELINE_TITLE = "犬软便追问知识外部 API 基线"
+FOLLOWUP_RAG_BASELINE_VERSION = "consultation_state_external_api_test"
 SUPPORTED_ALEMBIC_VERSIONS = {
     "0014_task_routing_domain_catalog",
     "0015_consultation_semantic_extraction_contract",
@@ -222,6 +227,7 @@ def external_database(external_env: dict[str, str], external_prefix: str) -> Ite
 
         :return: 无返回值。
         """
+        _cleanup_followup_rag_baseline(database_url, external_prefix)
         _cleanup_database_prefix(database_url, external_prefix)
         if external_env["ENABLE_MEM0"] == "true":
             _cleanup_mem0_scope(external_env, user_id=user_id, pet_id=pet_id)
@@ -242,6 +248,13 @@ def external_database(external_env: dict[str, str], external_prefix: str) -> Ite
         """
         _prepare_consultation_catalog_baseline(database_url)
 
+    def prepare_followup_rag_baseline() -> None:
+        """写入追问相关 RAG 的真实知识基线。
+
+        :return: 无返回值。
+        """
+        _prepare_followup_rag_baseline(database_url, external_env, external_prefix)
+
     def assert_catalog_ready() -> None:
         """校验问诊领域与槽位目录已经可供运行时读取。
 
@@ -252,7 +265,12 @@ def external_database(external_env: dict[str, str], external_prefix: str) -> Ite
     _with_database_retry(cleanup_database, action="清理问诊状态测试前缀数据")
     _with_database_retry(assert_schema_ready, action="校验问诊状态数据库基线")
     _with_database_retry(prepare_catalog_baseline, action="写入问诊状态目录基线")
+    _with_database_retry(prepare_followup_rag_baseline, action="写入追问 RAG 真实知识基线")
     _with_database_retry(assert_catalog_ready, action="校验问诊状态目录基线")
+    _with_database_retry(
+        lambda: _assert_followup_rag_baseline_ready(database_url, external_prefix),
+        action="校验追问 RAG 真实知识基线",
+    )
     try:
         yield database_url
     finally:
@@ -365,6 +383,22 @@ def test_consultation_state_api_requires_followup_with_real_services(
     assert data["metadata"]["answerability"]["mode"] == "needs_high_value_evidence"
     assert data["metadata"]["input_safety_decision"]["policy_backend"] == "opa"
     assert data["metadata"]["clinical_safety_resolution"]["policy_decision"]["policy_backend"] == "opa"
+    assert data["metadata"]["followup_question_plan"] is not None
+    followup_plan = data["metadata"]["followup_question_plan"]
+    assert followup_plan["strategy"] == FollowupRagStrategy.LLAMA_INDEX_PGVECTOR_STRUCTURED.value
+    assert followup_plan["retrieval"]["backend"] == "llamaindex_node_adapter_pgvector_knowledge_chunks"
+    assert followup_plan["retrieval"]["hit_count"] >= 1
+    assert any(
+        hit["title"] == FOLLOWUP_RAG_BASELINE_TITLE
+        for hit in followup_plan["retrieval"]["hits"]
+    )
+    assert followup_plan["questions"]
+    assert all(item["slot"] in data["metadata"]["missing_slots"] for item in followup_plan["questions"])
+    assert all(item["evidence_chunk_ids"] for item in followup_plan["questions"])
+    assert any(
+        FOLLOWUP_RAG_BASELINE_TITLE in item["evidence_titles"]
+        for item in followup_plan["questions"]
+    )
 
     memory_read = data["metadata"]["memory_read"]
     assert memory_read["audit"]["source"] == "postgres_authoritative_memory_with_mem0_projection"
@@ -380,7 +414,10 @@ def test_consultation_state_api_requires_followup_with_real_services(
     assert AgentPathNode.CONSULTATION_SEMANTIC_EXTRACTOR_AGENT.value in path
     assert AgentPathNode.CONSULTATION_STATE_SERVICE.value in path
     assert AgentPathNode.CONSULTATION_ANSWERABILITY_POLICY_OPA.value in path
-    assert AgentPathNode.RAG_QUESTION_PLANNER_AGENT.value in path
+    assert AgentPathNode.KNOWLEDGE_AGENT.value in path
+    assert AgentPathNode.FOLLOWUP_RAG_SERVICE.value in path
+    assert AgentPathNode.FOLLOWUP_RAG_RETRIEVER.value in path
+    assert AgentPathNode.FOLLOWUP_RAG_PLANNER.value in path
     assert AgentPathNode.QWEN_RESPONSE_AGENT.value not in path
     assert AgentPathNode.ANSWERABILITY_EVALUATOR.value not in path
     assert "我先不武断下结论" in data["output_text"]
@@ -460,7 +497,7 @@ def test_consultation_state_api_completes_when_user_requests_answer_now(
     assert AgentPathNode.CONSULTATION_STATE_SERVICE.value in path
     assert AgentPathNode.CONSULTATION_ANSWERABILITY_POLICY_OPA.value in path
     assert AgentPathNode.QWEN_RESPONSE_AGENT.value in path
-    assert AgentPathNode.RAG_QUESTION_PLANNER_AGENT.value not in path
+    assert AgentPathNode.FOLLOWUP_RAG_SERVICE.value not in path
     assert AgentPathNode.ANSWERABILITY_EVALUATOR.value not in path
 
 
@@ -756,6 +793,95 @@ def _prepare_consultation_catalog_baseline(database_url: str) -> None:
             )
 
 
+def _prepare_followup_rag_baseline(
+    database_url: str,
+    external_env: dict[str, str],
+    prefix: str,
+) -> None:
+    """向外部数据库写入追问相关 RAG 的真实知识基线。
+
+    :param database_url: 数据库连接串。
+    :param external_env: 外部依赖配置。
+    :param prefix: 测试数据前缀。
+    :return: 无返回值。
+    """
+    embedding_text = _followup_rag_embedding_text()
+    embedding = _embedding_vector(external_env, embedding_text)
+    if len(embedding) != EXPECTED_EMBEDDING_DIMENSION:
+        pytest.fail(f"外部 embedding 维度不符合 knowledge_chunks.embedding 要求：{len(embedding)}。")
+
+    session_factory = make_session_factory(database_url)
+    with session_factory.begin() as session:
+        session.execute(
+            text(
+                """
+                DELETE FROM knowledge_chunks
+                WHERE ingestion_batch = :prefix
+                   OR metadata ->> 'prefix' = :prefix
+                """
+            ),
+            {"prefix": prefix},
+        )
+        session.add(
+            KnowledgeChunkModel(
+                source=FOLLOWUP_RAG_BASELINE_SOURCE,
+                title=FOLLOWUP_RAG_BASELINE_TITLE,
+                content=embedding_text,
+                embedding=embedding,
+                public_citation=True,
+                copyright_risk="low",
+                domain="gastrointestinal",
+                species="dog",
+                source_url=None,
+                version=FOLLOWUP_RAG_BASELINE_VERSION,
+                enabled=True,
+                review_status="approved",
+                quality_score=1.0,
+                last_reviewed_at=datetime.now(UTC),
+                disabled_reason=None,
+                ingestion_batch=prefix,
+                metadata_json={
+                    "chunk_type": FOLLOWUP_RAG_BASELINE_CHUNK_TYPE,
+                    "consultation_state_external_api_test": True,
+                    "prefix": prefix,
+                },
+            )
+        )
+
+
+def _assert_followup_rag_baseline_ready(database_url: str, prefix: str) -> None:
+    """确认追问相关 RAG 的真实知识基线已经写入。
+
+    :param database_url: 数据库连接串。
+    :param prefix: 测试数据前缀。
+    :return: 无返回值。
+    """
+    session_factory = make_session_factory(database_url)
+    with session_factory() as session:
+        row = session.execute(
+            text(
+                """
+                SELECT title, source, enabled, review_status, embedding IS NOT NULL AS has_embedding,
+                       coalesce(metadata ->> 'chunk_type', 'NULL') AS chunk_type
+                FROM knowledge_chunks
+                WHERE ingestion_batch = :prefix
+                   OR metadata ->> 'prefix' = :prefix
+                """
+            ),
+            {"prefix": prefix},
+        ).mappings().one_or_none()
+    if row is None:
+        pytest.fail("外部数据库缺少追问相关 RAG 的真实知识基线。")
+    if row["title"] != FOLLOWUP_RAG_BASELINE_TITLE:
+        pytest.fail(f"追问相关 RAG 基线标题不匹配：{row['title']!r}。")
+    if row["source"] != FOLLOWUP_RAG_BASELINE_SOURCE:
+        pytest.fail(f"追问相关 RAG 基线来源不匹配：{row['source']!r}。")
+    if row["chunk_type"] != FOLLOWUP_RAG_BASELINE_CHUNK_TYPE:
+        pytest.fail(f"追问相关 RAG 基线 chunk_type 不匹配：{row['chunk_type']!r}。")
+    if not row["enabled"] or row["review_status"] != "approved" or not row["has_embedding"]:
+        pytest.fail("追问相关 RAG 基线未满足启用、审核通过或向量可用条件。")
+
+
 def _assert_consultation_catalog_ready(database_url: str) -> None:
     """确认问诊领域与槽位目录具备本测试所需的最小基线。
 
@@ -841,6 +967,27 @@ def _cleanup_database_prefix(database_url: str, prefix: str) -> None:
             )
 
 
+def _cleanup_followup_rag_baseline(database_url: str, prefix: str) -> None:
+    """按测试前缀清理追问相关 RAG 的真实知识基线。
+
+    :param database_url: 数据库连接串。
+    :param prefix: 测试数据前缀。
+    :return: 无返回值。
+    """
+    session_factory = make_session_factory(database_url)
+    with session_factory.begin() as session:
+        session.execute(
+            text(
+                """
+                DELETE FROM knowledge_chunks
+                WHERE ingestion_batch = :prefix
+                   OR metadata ->> 'prefix' = :prefix
+                """
+            ),
+            {"prefix": prefix},
+        )
+
+
 def _cleanup_mem0_scope(external_env: dict[str, str], *, user_id: str, pet_id: str) -> None:
     """按用户与宠物范围清理真实 Mem0 测试记忆。
 
@@ -923,6 +1070,20 @@ def _embedding_vector(
     embedding.raise_for_status()
     vector = embedding.json()["data"][0]["embedding"]
     return [float(value) for value in vector]
+
+
+def _followup_rag_embedding_text() -> str:
+    """构造追问相关 RAG 外部 API 测试使用的真实知识正文。
+
+    :return: 返回用于真实 embedding 的知识文本。
+    """
+    return (
+        "犬软便追问知识基线：当狗今天有点软便、精神正常，或饭后缩成一团趴着时，"
+        "优先追问腹部是否紧绷或疼痛、碰肚子会不会躲开、有没有呼吸变快、费力、张口呼吸，"
+        "以及是否伴随呕吐、干呕、腹泻、便血、食欲下降、饮水变化或精神变差。"
+        "这条知识不要求优先追问起病时间，而是用于帮助判断当前更需要补充哪类高价值证据。"
+        "这条知识只用于指导追问顺序，不提供诊断或治疗结论。"
+    )
 
 
 def _opa_data_url(base_url: str, package_name: str, rule_name: str) -> str:
