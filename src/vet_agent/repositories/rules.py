@@ -1,17 +1,21 @@
 """
+=============================================================================
 文件：src/vet_agent/repositories/rules.py
-作用：提供规则库与 RAG 知识库的数据访问能力。
-说明：本文件遵循项目标准文件树编排；跨包引用应通过对应包的 __init__.py 暴露能力。
+作用：提供问诊领域、槽位展示与追问文案的数据访问能力。
+范围：本仓储只暴露问诊状态与追问规划所需的结构化目录信息；
+      不保存、不读取、不编译自然语言关键词或正则抽取规则。
+说明：问诊语义抽取已迁移至 LiteLLM response_format 与 Pydantic 契约，
+      运行时不得通过本仓储恢复旧版关键词/正则事实抽取路径。
+=============================================================================
 """
 
 
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Protocol
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
@@ -26,6 +30,14 @@ from vet_agent.db import (
 
 @dataclass(frozen=True)
 class ConsultationDomainRule:
+    """表示问诊领域目录中的领域配置。
+
+    :param domain: 问诊领域稳定标识。
+    :param required_slots: 当前领域建议关注的问诊事实槽位。
+    :param priority: 领域排序优先级。
+    :return: 无返回值。
+    """
+
     domain: str
     required_slots: list[str]
     priority: int = 100
@@ -33,25 +45,46 @@ class ConsultationDomainRule:
 
 @dataclass(frozen=True)
 class ConsultationSlotRule:
+    """表示问诊槽位展示与追问文案配置。
+
+    :param slot_name: 问诊槽位稳定标识。
+    :param question: 面向用户的默认追问文案。
+    :param label: 面向用户展示的槽位标签。
+    :param priority: 槽位排序优先级。
+    :return: 无返回值。
+    """
+
     slot_name: str
     question: str
     label: str
-    extraction_rules: list[dict[str, Any]]
     priority: int = 100
 
 
 @dataclass(frozen=True)
 class ConsultationRuleSet:
+    """表示问诊状态和追问规划可消费的规则目录快照。
+
+    :param domains: 问诊领域目录。
+    :param slots: 问诊槽位展示和追问文案目录。
+    :param safety_net_text: 默认安全兜底文案。
+    :return: 无返回值。
+    """
+
     domains: dict[str, ConsultationDomainRule]
     slots: dict[str, ConsultationSlotRule]
     safety_net_text: str
 
 
 class RuleRepository(Protocol):
-    def consultation_rules(self) -> ConsultationRuleSet:
-        """执行 consultation_rules 业务逻辑。
+    """定义问诊目录读取仓储协议。
 
-        :return: 返回函数执行结果。
+    :return: 无返回值。
+    """
+
+    def consultation_rules(self) -> ConsultationRuleSet:
+        """读取问诊领域与追问文案目录。
+
+        :return: 返回问诊规则目录快照。
         """
         ...
 
@@ -64,6 +97,11 @@ class RuleRepository(Protocol):
 
 
 class FileRuleRepository:
+    """基于 seed JSON 文件的问诊目录仓储。
+
+    :return: 无返回值。
+    """
+
     def __init__(self, seed_dir: Path) -> None:
         """初始化当前对象。
 
@@ -73,9 +111,9 @@ class FileRuleRepository:
         self.seed_dir = seed_dir
 
     def consultation_rules(self) -> ConsultationRuleSet:
-        """执行 consultation_rules 业务逻辑。
+        """从开发或测试 seed 文件读取问诊目录。
 
-        :return: 返回函数执行结果。
+        :return: 返回问诊规则目录快照。
         """
         raw = json.loads((self.seed_dir / "consultation_rules.json").read_text(encoding="utf-8"))
         domains = {
@@ -91,7 +129,6 @@ class FileRuleRepository:
                 slot_name=item["slot_name"],
                 question=item["question"],
                 label=item["label"],
-                extraction_rules=list(item.get("extraction_rules", [])),
                 priority=int(item.get("priority", 100)),
             )
             for item in raw.get("slots", [])
@@ -111,6 +148,11 @@ class FileRuleRepository:
 
 
 class PostgresRuleRepository:
+    """基于 SQLAlchemy 的 PostgreSQL 问诊目录仓储。
+
+    :return: 无返回值。
+    """
+
     def __init__(self, database_url: str) -> None:
         """初始化当前对象。
 
@@ -121,9 +163,9 @@ class PostgresRuleRepository:
         self.session_factory = make_session_factory(database_url)
 
     def consultation_rules(self) -> ConsultationRuleSet:
-        """执行 consultation_rules 业务逻辑。
+        """从 PostgreSQL 读取问诊目录。
 
-        :return: 返回函数执行结果。
+        :return: 返回问诊规则目录快照。
         """
         with self.session_factory() as session:
             domain_rows = session.scalars(
@@ -149,7 +191,6 @@ class PostgresRuleRepository:
                 slot_name=row.slot_name,
                 question=row.question,
                 label=row.label,
-                extraction_rules=list(row.extraction_rules or []),
                 priority=int(row.priority or 100),
             )
             for row in slot_rows
@@ -171,6 +212,11 @@ class PostgresRuleRepository:
 
 
 class FallbackRuleRepository:
+    """组合主仓储和备用仓储的问诊目录读取仓储。
+
+    :return: 无返回值。
+    """
+
     def __init__(self, primary: RuleRepository, fallback: RuleRepository) -> None:
         """初始化当前对象。
 
@@ -182,9 +228,9 @@ class FallbackRuleRepository:
         self.fallback = fallback
 
     def consultation_rules(self) -> ConsultationRuleSet:
-        """执行 consultation_rules 业务逻辑。
+        """读取主仓储问诊目录，并在显式配置的兼容场景下使用 fallback。
 
-        :return: 返回函数执行结果。
+        :return: 返回问诊规则目录快照。
         """
         try:
             rules = self.primary.consultation_rules()
@@ -202,16 +248,7 @@ class FallbackRuleRepository:
         return self.primary.is_ready() or self.fallback.is_ready()
 
 
-def compile_regex(pattern: str) -> re.Pattern[str]:
-    """执行 compile_regex 业务逻辑。
-
-    :param pattern: 参数 pattern。
-    :return: 返回函数执行结果。
-    """
-    return re.compile(pattern, re.IGNORECASE)
-
-
-def _count_enabled(session: Session, model) -> int:
+def _count_enabled(session: Session, model: type) -> int:
     """执行 _count_enabled 内部辅助逻辑。
 
     :param session: 数据库会话。

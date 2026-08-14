@@ -14,11 +14,18 @@ from .knowledge import (
     PostgresKnowledgeRepository,
     evidence_from_hits,
 )
+from .consultation_state import (
+    DEFAULT_TASK_KEY as CONSULTATION_DEFAULT_TASK_KEY,
+    ConsultationStateRepository,
+    JsonConsultationStateRepository,
+    PostgresConsultationStateRepository,
+)
 from .memory_read import (
     JsonMemoryReadRepository,
     MemoryReadRepositoryError,
     PostgresMemoryReadRepository,
 )
+from .memory_write import MemoryWriteRepository, PostgresMemoryWriteRepository
 from .rules import (
     ConsultationDomainRule,
     ConsultationRuleSet,
@@ -27,7 +34,6 @@ from .rules import (
     FileRuleRepository,
     PostgresRuleRepository,
     RuleRepository,
-    compile_regex,
 )
 from .scope import (
     PostgresScopeRepository,
@@ -44,9 +50,11 @@ from .turn_execution import (
 )
 
 __all__ = [
+    "CONSULTATION_DEFAULT_TASK_KEY",
     "ConsultationDomainRule",
     "ConsultationRuleSet",
     "ConsultationSlotRule",
+    "ConsultationStateRepository",
     "FallbackKnowledgeRepository",
     "FallbackRuleRepository",
     "FileKnowledgeRepository",
@@ -54,9 +62,13 @@ __all__ = [
     "KnowledgeHit",
     "KnowledgeRepository",
     "JsonMemoryReadRepository",
+    "JsonConsultationStateRepository",
     "MemoryReadRepositoryError",
+    "MemoryWriteRepository",
     "PostgresKnowledgeRepository",
     "PostgresMemoryReadRepository",
+    "PostgresMemoryWriteRepository",
+    "PostgresConsultationStateRepository",
     "PostgresRuleRepository",
     "PostgresScopeRepository",
     "PostgresTurnExecutionRepository",
@@ -68,6 +80,5 @@ __all__ = [
     "TurnIdempotencyClaim",
     "TurnIdempotencyClaimStatus",
     "VerifiedPetProfile",
-    "compile_regex",
     "evidence_from_hits",
 ]

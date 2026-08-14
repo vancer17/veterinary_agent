@@ -7,17 +7,28 @@
 
 
 from .composer import ResponseComposer
-from .consultation import AnswerabilityDecision, AnswerabilityEvaluator, ConsultationDecision, ConsultationState, ConsultationStateAgent
+from .consultation import (
+    AnswerabilityDecision,
+    AnswerabilityEvaluator,
+    ConsultationDecision,
+    ConsultationState,
+    ConsultationStateAgent,
+)
 from .memory_extraction import MemoryExtractionAgent, MemoryFactCandidate
 from .question_planner import QuestionPlanner
 from .rag_question_planner import RagFollowupPlan, RagFollowupQuestion, RagQuestionPlannerAgent
 from .safety import SafetyAgent, SafetyAssessment
 from .safety_review import SafetyReviewAgent, SafetyReviewResult
 from .semantic_extractor import (
+    ConsultationFactCategory,
+    ConsultationFactKey,
+    ConsultationFactStatus,
     ConsultationSemanticExtractorAgent,
+    ConsultationSemanticStrategy,
     SemanticExtractionResult,
     SemanticFact,
     SemanticIntent,
+    SemanticObservation,
 )
 from .task_router import TaskRouterAgent
 
@@ -38,9 +49,14 @@ __all__ = [
     "SafetyAssessment",
     "SafetyReviewAgent",
     "SafetyReviewResult",
+    "ConsultationFactCategory",
+    "ConsultationFactKey",
+    "ConsultationFactStatus",
     "ConsultationSemanticExtractorAgent",
+    "ConsultationSemanticStrategy",
     "SemanticExtractionResult",
     "SemanticFact",
     "SemanticIntent",
+    "SemanticObservation",
     "TaskRouterAgent",
 ]
