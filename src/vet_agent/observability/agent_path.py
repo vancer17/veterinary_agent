@@ -34,6 +34,7 @@ class AgentPathNode(StrEnum):
     FOLLOWUP_RAG_SERVICE = "FollowupRagService"
     FOLLOWUP_RAG_RETRIEVER = "FollowupRagRetriever"
     FOLLOWUP_RAG_PLANNER = "FollowupRagPlanner"
+    RESPONSE_GENERATION_CONTEXT_BUILDER = "ResponseGenerationContextBuilder"
     QWEN_RESPONSE_AGENT = "QwenResponseAgent"
     SAFETY_REVIEW_AGENT = "SafetyReviewAgent"
 

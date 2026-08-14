@@ -290,6 +290,54 @@ def test_answer_rag_service_fails_fast_when_retrieval_has_no_hits() -> None:
         asyncio.run(service.retrieve(_request()))
 
 
+def test_answer_rag_service_rejects_incomplete_retrieval_hit() -> None:
+    """验证回答 RAG 服务拒绝字段不完整的知识命中。
+
+    :return: 无返回值；断言通过表示空标题、空摘要或空来源不会进入回复生成链路。
+    """
+    service = AnswerRagService(
+        retriever=_retriever(
+            KnowledgeHit(
+                title="",
+                summary="",
+                source="",
+                public_citation=False,
+                score=0.8,
+            )
+        ),
+        query_builder=AnswerRagQueryBuilder(),
+        top_k=3,
+        min_score=0.35,
+    )
+
+    with pytest.raises(AnswerRagDependencyError, match="incomplete evidence"):
+        asyncio.run(service.retrieve(_request()))
+
+
+def test_answer_rag_service_rejects_invalid_retrieval_score() -> None:
+    """验证回答 RAG 服务拒绝非法检索分数。
+
+    :return: 无返回值；断言通过表示检索分数不会以非法状态进入下游审计和回复生成。
+    """
+    service = AnswerRagService(
+        retriever=_retriever(
+            KnowledgeHit(
+                title="呕吐观察建议",
+                summary="应观察呕吐频率、精神状态和饮水情况。",
+                source="answer_rag_unit_test",
+                public_citation=True,
+                score=1.5,
+            )
+        ),
+        query_builder=AnswerRagQueryBuilder(),
+        top_k=3,
+        min_score=0.35,
+    )
+
+    with pytest.raises(AnswerRagDependencyError, match="invalid evidence score"):
+        asyncio.run(service.retrieve(_request()))
+
+
 def test_answer_rag_query_builder_rejects_malformed_structured_fields() -> None:
     """验证查询构造器不会把非法结构化字段静默转换为空对象。
 

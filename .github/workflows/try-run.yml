@@ -23,6 +23,7 @@ on:
           - memory-read-api
           - task-routing-api
           - answer-rag-api
+          - response-generation-api
           - external-api
           - full
       build_mem0_image:
@@ -57,6 +58,7 @@ env:
   EXTERNAL_API_TEST_OPA_BASE_URL: ${{ vars.EXTERNAL_API_TEST_OPA_BASE_URL }}
   EXTERNAL_API_TEST_MEM0_BASE_URL: ${{ vars.EXTERNAL_API_TEST_MEM0_BASE_URL }}
   EXTERNAL_API_TEST_MEM0_API_KEY: ${{ secrets.EXTERNAL_API_TEST_MEM0_API_KEY }}
+  EXTERNAL_API_TEST_ENABLE_MEM0: ${{ vars.EXTERNAL_API_TEST_ENABLE_MEM0 }}
   EXTERNAL_API_TEST_SSH_HOST: ${{ vars.EXTERNAL_API_TEST_SSH_HOST }}
   EXTERNAL_API_TEST_SSH_PORT: ${{ vars.EXTERNAL_API_TEST_SSH_PORT }}
   EXTERNAL_API_TEST_SSH_USER: ${{ vars.EXTERNAL_API_TEST_SSH_USER }}
@@ -68,12 +70,16 @@ jobs:
   # 手动 try-run
   # ---------------------------------------------------------------------------
   # dry-run 只解析配置并校验 CD 布局，不启动数据库、不构建镜像。
-  # clinical-safety-api、memory-read-api、task-routing-api、answer-rag-api 和 external-api 通过 SSH 隧道访问真实开发依赖。
+  # clinical-safety-api、memory-read-api、task-routing-api、answer-rag-api、
+  # response-generation-api 和 external-api 通过 SSH 隧道访问真实开发依赖。
   # common/repository/full 会按脚本入口执行对应强度。
   # ---------------------------------------------------------------------------
   try-run:
     name: Try Run
     runs-on: ubuntu-latest
+    # 外部依赖密钥、SSH 私钥和开发环境变量统一放在该受保护 Environment；
+    # dry-run/common/repository 虽不使用这些值，但共用一个手动验证入口以避免流程分叉。
+    environment: external-integration
     steps:
       - name: Checkout
         uses: actions/checkout@v4

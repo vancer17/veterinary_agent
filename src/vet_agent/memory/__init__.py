@@ -14,6 +14,9 @@ from .errors import (
 )
 from .models import (
     AuthoritativeMemoryFact,
+    MemoryContextAuthority,
+    MemoryContextScope,
+    MemoryContextSection,
     MemoryPromptContext,
     MemoryReadAudit,
     MemoryReadBundle,
@@ -33,10 +36,13 @@ __all__ = [
     "AuthoritativeMemoryFact",
     "DisabledMemoryProjectionClient",
     "Mem0MemoryProjectionClient",
+    "MemoryContextAuthority",
     "MemoryContextBuilder",
     "MemoryProjectionClient",
     "MemoryProjectionClientError",
     "MemoryProjectionScopeError",
+    "MemoryContextScope",
+    "MemoryContextSection",
     "MemoryPromptContext",
     "MemoryReadAudit",
     "MemoryReadBundle",

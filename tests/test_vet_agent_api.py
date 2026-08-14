@@ -862,7 +862,7 @@ class StaticAnswerRagService(AnswerRagServiceProtocol):
 
 _test_scope_repository: InMemoryScopeRepository | None = None
 _current_test_input_text = ""
-_last_response_composer_prompt = ""
+_last_response_generation_prompt = ""
 
 
 def _client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
@@ -946,8 +946,8 @@ def _reset_container_after_test() -> Iterator[None]:
     :return: 返回 pytest fixture 迭代器。
     """
     yield
-    global _last_response_composer_prompt
-    _last_response_composer_prompt = ""
+    global _last_response_generation_prompt
+    _last_response_generation_prompt = ""
     _clear_test_container()
 
 
@@ -979,9 +979,9 @@ async def _fake_litellm_send_chat(
           ]
         }
         """
-    if "结构化问诊状态已足够" in user_text:
-        global _last_response_composer_prompt
-        _last_response_composer_prompt = user_text
+    if "上游回答充分性已允许阶段性回答" in user_text:
+        global _last_response_generation_prompt
+        _last_response_generation_prompt = user_text
         return (
             "分诊/紧急度: 目前根据已补充的信息，暂未看到必须立即急诊的红旗，但仍需要继续观察变化。\n"
             "可能方向与依据: 更偏向轻度、短时的消化道不适或饮食刺激。\n"
@@ -2489,6 +2489,7 @@ def test_answer_now_intent_stops_followup_funnel(tmp_path: Path, monkeypatch: py
     assert data["metadata"]["consultation_phase"] == "ready_to_answer"
     assert data["metadata"]["missing_slots"] == []
     assert data["metadata"]["answerability"]["mode"] == "user_requested_answer_now"
+    assert AgentPathNode.RESPONSE_GENERATION_CONTEXT_BUILDER.value in data["metadata"]["multi_agent_path"]
     assert "QwenResponseAgent" in data["metadata"]["multi_agent_path"]
     assert "请先回答" not in data["output_text"]
 
@@ -2659,8 +2660,12 @@ def test_consultation_second_turn_completes_after_context_is_built(tmp_path: Pat
     memory_read = data["metadata"]["memory_read"]["audit"]
     assert memory_read["session_turns_count"] == 1
     assert memory_read["semantic_status"] == "disabled"
-    assert "当前会话上下文" in _last_response_composer_prompt
-    assert "它有点拉稀，怎么办？" in _last_response_composer_prompt
+    response_generation = data["metadata"]["response_generation"]
+    assert response_generation["strategy"] == "qwen_response_generation"
+    assert response_generation["context"]["consultation_ready"] is True
+    assert "当前会话上下文" in _last_response_generation_prompt
+    assert "助手摘要" in _last_response_generation_prompt
+    assert "用户：它有点拉稀，怎么办？" not in _last_response_generation_prompt
     assert "阶段性最终建议" not in data["output_text"]
     assert "请先回答" not in data["output_text"]
     assert "线下兽医" in data["output_text"]

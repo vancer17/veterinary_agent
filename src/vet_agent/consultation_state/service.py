@@ -162,47 +162,6 @@ class ConsultationStateService:
             f"{rules.safety_net_text}"
         )
 
-    def format_state_for_prompt(self, state: ConsultationState) -> str:
-        """将问诊状态格式化为最终回答 Agent 的上下文。
-
-        :param state: 问诊状态。
-        :return: 返回格式化后的上下文文本。
-        """
-        lines = [f"主诉: {state.chief_complaint or '未知'}", f"方向: {state.domain}"]
-        for slot, value in state.slots.items():
-            if value:
-                lines.append(f"{slot}: {value}")
-        if state.observations:
-            lines.append("开放观察:")
-            for observation in state.observations[-6:]:
-                label = str(observation.get("label") or observation.get("category") or "观察")
-                value = str(observation.get("value") or "")
-                status = str(observation.get("status") or "unknown")
-                if value:
-                    lines.append(f"- {label}: {value}（{status}）")
-        answerability = state.answerability or {}
-        if answerability:
-            unresolved = "、".join(answerability.get("unresolved_slots") or []) or "无"
-            lines.append(
-                f"回答充分性: {answerability.get('decision')} / {answerability.get('mode')} / "
-                f"{answerability.get('reason')}"
-            )
-            lines.append(f"未确认但不再机械阻塞的证据: {unresolved}")
-        semantic = state.semantic_extraction or {}
-        if semantic:
-            lines.append(
-                f"语义抽取: {semantic.get('strategy')} / "
-                f"applied={semantic.get('applied_fact_keys') or []}"
-            )
-        if state.temporal_context:
-            lines.append(
-                "临床安全时间上下文: "
-                f"{state.temporal_context.get('scope', 'unclear')} / "
-                f"{state.temporal_context.get('resolution_state', 'unknown')} / "
-                f"{state.temporal_context.get('text', '') or '未提供时间原文'}"
-            )
-        return "\n".join(lines)
-
     def is_ready(self) -> bool:
         """检查问诊状态服务是否就绪。
 

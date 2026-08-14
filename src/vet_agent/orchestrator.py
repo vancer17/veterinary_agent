@@ -21,7 +21,6 @@ from vet_agent.agents import (
     ConsultationStateService,
     MemoryExtractionAgent,
     MemoryFactCandidate,
-    ResponseComposer,
     SafetyAgent,
     SafetyAssessment,
     SafetyReviewAgent,
@@ -48,6 +47,10 @@ from vet_agent.input_safety import InputSafetyDecision, InputSafetyRequestContex
 from vet_agent.memory import MemoryContextBuilder, MemoryPromptContext, MemoryReadBundle, MemoryReadService
 from vet_agent.observability import AgentPathNode, build_agent_path
 from vet_agent.repositories import RuleRepository
+from vet_agent.response_generation import (
+    ResponseGenerationRequest,
+    ResponseGenerationServiceProtocol,
+)
 from vet_agent.runtime import QwenClient
 from vet_agent.services import (
     LogicTraceStore,
@@ -77,6 +80,7 @@ class VetOrchestrator:
         memory_context_builder: MemoryContextBuilder,
         trace_store: LogicTraceStore,
         answer_rag_service: AnswerRagServiceProtocol,
+        response_generation_service: ResponseGenerationServiceProtocol,
         qwen_client: QwenClient,
         rule_repository: RuleRepository,
         consultation_state_service: ConsultationStateService,
@@ -96,6 +100,7 @@ class VetOrchestrator:
         :param memory_context_builder: 记忆提示词上下文编译器。
         :param trace_store: 参数 trace_store。
         :param answer_rag_service: 回答相关 RAG 服务，仅在 OPA answer 分支生成结构化回答证据。
+        :param response_generation_service: 回复生成上下文编译与模型调用服务。
         :param qwen_client: 参数 qwen_client。
         :param rule_repository: 参数 rule_repository。
         :param consultation_state_service: 问诊状态与回答充分性服务。
@@ -116,6 +121,7 @@ class VetOrchestrator:
         self.turn_execution_gate = turn_execution_gate
         self.input_safety_service = input_safety_service
         self.answer_rag_service = answer_rag_service
+        self.response_generation_service = response_generation_service
         self.safety = SafetyAgent(rule_repository)
         self.clinical_safety = clinical_safety_evaluator
         self.clinical_safety_semantic_extractor = clinical_safety_semantic_extractor
@@ -125,7 +131,6 @@ class VetOrchestrator:
         self.task_router = task_router
         self.followup_rag_service = followup_rag_service
         self.memory_extractor = MemoryExtractionAgent(qwen_client, settings)
-        self.composer = ResponseComposer(qwen_client, self.safety)
         self.reasoning_display = ReasoningDisplayBuilder()
 
     async def run_turn(self, request: AgentTurnRequest) -> AgentTurnResponse:
@@ -378,19 +383,22 @@ class VetOrchestrator:
             model=model,
         )
 
-        output_text, context_evidence = await self.composer.compose(
-            user_text=task.text,
-            pet_context=pet_context,
-            memory=memory_context,
-            knowledge_hits=answer_rag_result.hits,
+        response_generation_result = await self.response_generation_service.generate(
+            ResponseGenerationRequest(
+                task=task,
+                pet_context=pet_context,
+                memory_context=memory_context,
+                consultation_decision=consultation_decision,
+                answer_rag_result=answer_rag_result,
+                clinical_safety_semantic=clinical_semantic,
+                clinical_safety_resolution=clinical_safety_result,
+            ),
             model=model,
-            max_followup_questions=request.turn_options.max_followup_questions,
-            consultation_context=self.consultation.format_state_for_prompt(consultation_decision.state),
-            allow_followup=False,
         )
+        output_text = response_generation_result.text
         output_text, post_signals = self.safety.sanitize_output(output_text)
         user_evidence = self.reasoning_display.user_answer_evidence(consultation_decision.state.to_dict())
-        evidence = [*user_evidence, *context_evidence, *answer_rag_evidence]
+        evidence = [*user_evidence, *response_generation_result.evidence, *answer_rag_evidence]
         segment = VetSegment(
             type="medical_consultation",
             title="症状判断与下一步",
@@ -439,6 +447,7 @@ class VetOrchestrator:
                     AgentPathNode.CONSULTATION_ANSWERABILITY_POLICY_OPA,
                     AgentPathNode.ANSWER_RAG_SERVICE,
                     AgentPathNode.ANSWER_RAG_RETRIEVER,
+                    AgentPathNode.RESPONSE_GENERATION_CONTEXT_BUILDER,
                     AgentPathNode.QWEN_RESPONSE_AGENT,
                     AgentPathNode.SAFETY_REVIEW_AGENT,
                 ),
@@ -457,6 +466,7 @@ class VetOrchestrator:
                 "memory_context": memory_context.metadata,
                 "task_router": routing_decision.to_metadata(),
                 "answer_rag": answer_rag_result.to_metadata(),
+                "response_generation": response_generation_result.to_metadata(),
             },
         )
         response = await self._finalize_and_persist(request, response, medical=True)
@@ -675,7 +685,7 @@ class VetOrchestrator:
         task_summaries: list[dict[str, Any]] = []
         used_answer_rag_service = False
         used_followup_rag_service = False
-        used_response_composer = False
+        used_response_generation = False
 
         for index, task in enumerate(tasks, start=1):
             task_previous_state = self._state_for_task(
@@ -709,6 +719,7 @@ class VetOrchestrator:
             user_evidence = self.reasoning_display.user_answer_evidence(consultation_decision.state.to_dict())
             followup_plan: FollowupRagPlan | None = None
             answer_rag_result: AnswerRagResult | None = None
+            response_generation_metadata: dict[str, Any] | None = None
 
             if consultation_decision.ready:
                 answer_rag_result, answer_rag_evidence = await self._create_answer_rag_context(
@@ -718,21 +729,29 @@ class VetOrchestrator:
                     task_domain=task.domain,
                     model=model,
                 )
-                output_text, context_evidence = await self.composer.compose(
-                    user_text=task.text,
-                    pet_context=pet_context,
-                    memory=memory_context,
-                    knowledge_hits=answer_rag_result.hits,
+                response_generation_result = await self.response_generation_service.generate(
+                    ResponseGenerationRequest(
+                        task=task,
+                        pet_context=pet_context,
+                        memory_context=memory_context,
+                        consultation_decision=consultation_decision,
+                        answer_rag_result=answer_rag_result,
+                        clinical_safety_semantic=clinical_safety_semantic,
+                        clinical_safety_resolution=clinical_safety_resolution,
+                    ),
                     model=model,
-                    max_followup_questions=request.turn_options.max_followup_questions,
-                    consultation_context=self.consultation.format_state_for_prompt(consultation_decision.state),
-                    allow_followup=False,
                 )
+                output_text = response_generation_result.text
                 used_answer_rag_service = True
-                used_response_composer = True
+                used_response_generation = True
+                response_generation_metadata = response_generation_result.to_metadata()
                 segment_status = "completed"
                 segment_type = "medical_consultation"
-                evidence = [*user_evidence, *context_evidence, *answer_rag_evidence]
+                evidence = [
+                    *user_evidence,
+                    *response_generation_result.evidence,
+                    *answer_rag_evidence,
+                ]
             else:
                 followup_plan, knowledge_evidence, consultation_decision = await self._create_followup_rag_plan(
                     user_text=task.text,
@@ -790,6 +809,7 @@ class VetOrchestrator:
                     "semantic_extraction": consultation_decision.state.semantic_extraction,
                     "followup_question_plan": followup_plan.to_metadata() if followup_plan else None,
                     "answer_rag": answer_rag_result.to_metadata() if answer_rag_result else None,
+                    "response_generation": response_generation_metadata,
                 }
             )
 
@@ -856,8 +876,11 @@ class VetOrchestrator:
                         else []
                     ),
                     *(
-                        build_agent_path(AgentPathNode.QWEN_RESPONSE_AGENT)
-                        if used_response_composer
+                        build_agent_path(
+                            AgentPathNode.RESPONSE_GENERATION_CONTEXT_BUILDER,
+                            AgentPathNode.QWEN_RESPONSE_AGENT,
+                        )
+                        if used_response_generation
                         else []
                     ),
                     *build_agent_path(AgentPathNode.SAFETY_REVIEW_AGENT),
