@@ -11,17 +11,33 @@ from datetime import UTC, datetime
 from typing import Any
 
 from vet_agent import TrustedIdentity
+from vet_agent.repositories import ConsultationStateRepository, JsonConsultationStateRepository
 from vet_agent.stores import JsonDocumentStore
 
 
 class MemoryService:
-    def __init__(self, store: JsonDocumentStore) -> None:
-        """初始化当前对象。
+    """基于 JSON 文档的记忆业务服务，供显式测试或嵌入场景使用。
 
-        :param store: 参数 store。
+    :return: 无返回值。
+    """
+
+    def __init__(
+        self,
+        store: JsonDocumentStore,
+        consultation_state_repository: ConsultationStateRepository | None = None,
+    ) -> None:
+        """初始化 JSON 记忆业务服务及问诊状态仓储。
+
+        :param store: JSON 记忆文档存储。
+        :param consultation_state_repository: 活跃问诊状态仓储；
+            未提供时使用当前文档存储构造测试实现。
         :return: 无返回值。
         """
         self.store = store
+        self.consultation_state_repository = (
+            consultation_state_repository
+            or JsonConsultationStateRepository(store)
+        )
 
     async def read(self, identity: TrustedIdentity) -> dict[str, Any]:
         """读取指定范围内的持久化数据。
@@ -76,49 +92,33 @@ class MemoryService:
         self.store.save(data)
 
     async def read_consultation_state(self, identity: TrustedIdentity) -> dict[str, Any]:
-        """执行 read_consultation_state 业务逻辑。
+        """通过问诊状态仓储读取默认活跃问诊状态。
 
-        :param identity: 可信身份信息。
-        :return: 返回函数执行结果。
+        :param identity: 当前可信用户、宠物与会话范围。
+        :return: 返回默认活跃问诊状态。
         """
-        data = self.store.load()
-        return (
-            data.get("sessions", {})
-            .get(identity.session_id, {})
-            .get("consultation_state", {})
-        )
+        return self.consultation_state_repository.read_default(identity)
 
     async def save_consultation_state(
         self,
         identity: TrustedIdentity,
         state: dict[str, Any],
     ) -> None:
-        """执行 save_consultation_state 业务逻辑。
+        """通过问诊状态仓储保存默认活跃问诊状态。
 
-        :param identity: 可信身份信息。
-        :param state: 参数 state。
-        :return: 返回函数执行结果。
+        :param identity: 当前可信用户、宠物与会话范围。
+        :param state: 待保存的结构化问诊状态。
+        :return: 无返回值。
         """
-        data = self.store.load()
-        data.setdefault("owners", {}).setdefault(identity.user_id, {})
-        data.setdefault("pets", {}).setdefault(identity.pet_id, {"turns": []})
-        session_memory = data.setdefault("sessions", {}).setdefault(identity.session_id, {"turns": []})
-        session_memory["consultation_state"] = state
-        data["pets"][identity.pet_id]["consultation_state"] = state
-        self.store.save(data)
+        self.consultation_state_repository.save_default(identity, state)
 
     async def read_task_consultation_states(self, identity: TrustedIdentity) -> dict[str, Any]:
-        """执行 read_task_consultation_states 业务逻辑。
+        """通过问诊状态仓储读取多任务活跃问诊状态。
 
-        :param identity: 可信身份信息。
-        :return: 返回函数执行结果。
+        :param identity: 当前可信用户、宠物与会话范围。
+        :return: 返回任务键到问诊状态的映射。
         """
-        data = self.store.load()
-        return (
-            data.get("sessions", {})
-            .get(identity.session_id, {})
-            .get("task_consultation_states", {})
-        )
+        return self.consultation_state_repository.read_tasks(identity)
 
     async def save_task_consultation_states(
         self,
@@ -127,47 +127,35 @@ class MemoryService:
         *,
         clear_default_state: bool = False,
     ) -> None:
-        """替换当前会话仍未完成的多任务问诊状态。
+        """通过问诊状态仓储替换多任务活跃问诊状态。
 
-        :param identity: 可信身份信息。
+        :param identity: 当前可信用户、宠物与会话范围。
         :param states: 未完成任务的活跃问诊状态集合。
-        :param clear_default_state: 是否在同一次写入中清理默认问诊状态；仅用于 __default__ 迁移到具体任务键的场景。
-        :return: 返回函数执行结果。
+        :param clear_default_state: 是否在同一次写入中清理默认问诊状态；
+            仅用于 __default__ 迁移到具体任务键的场景。
+        :return: 无返回值。
         """
-        data = self.store.load()
-        data.setdefault("owners", {}).setdefault(identity.user_id, {})
-        data.setdefault("pets", {}).setdefault(identity.pet_id, {"turns": []})
-        session_memory = data.setdefault("sessions", {}).setdefault(identity.session_id, {"turns": []})
-        session_memory["task_consultation_states"] = states
-        data["pets"][identity.pet_id]["task_consultation_states"] = states
-        if clear_default_state:
-            session_memory.pop("consultation_state", None)
-            data["pets"][identity.pet_id].pop("consultation_state", None)
-        self.store.save(data)
+        self.consultation_state_repository.replace_tasks(
+            identity,
+            states,
+            clear_default=clear_default_state,
+        )
 
     async def clear_default_consultation_state(self, identity: TrustedIdentity) -> None:
-        """清理当前会话的默认活跃问诊状态。
+        """通过问诊状态仓储清理默认活跃问诊状态。
 
-        :param identity: 可信身份信息。
-        :return: 返回函数执行结果。
+        :param identity: 当前可信用户、宠物与会话范围。
+        :return: 无返回值。
         """
-        data = self.store.load()
-        data.get("sessions", {}).get(identity.session_id, {}).pop("consultation_state", None)
-        data.get("pets", {}).get(identity.pet_id, {}).pop("consultation_state", None)
-        self.store.save(data)
+        self.consultation_state_repository.clear_default(identity)
 
     async def clear_consultation_state(self, identity: TrustedIdentity) -> None:
-        """清理当前会话所有活跃问诊状态。
+        """通过问诊状态仓储清理全部活跃问诊状态。
 
-        :param identity: 可信身份信息。
-        :return: 返回函数执行结果。
+        :param identity: 当前可信用户、宠物与会话范围。
+        :return: 无返回值。
         """
-        data = self.store.load()
-        data.get("sessions", {}).get(identity.session_id, {}).pop("consultation_state", None)
-        data.get("sessions", {}).get(identity.session_id, {}).pop("task_consultation_states", None)
-        data.get("pets", {}).get(identity.pet_id, {}).pop("consultation_state", None)
-        data.get("pets", {}).get(identity.pet_id, {}).pop("task_consultation_states", None)
-        self.store.save(data)
+        self.consultation_state_repository.clear_all(identity)
 
     async def delete_pet_memory(self, pet_id: str, user_id: str | None = None) -> None:
         """执行 delete_pet_memory 业务逻辑。
@@ -179,6 +167,7 @@ class MemoryService:
         data = self.store.load()
         data.get("pets", {}).pop(pet_id, None)
         self.store.save(data)
+        self.consultation_state_repository.delete_for_pet(pet_id, user_id)
 
     async def upsert_pet_fact(
         self,

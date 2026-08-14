@@ -117,7 +117,7 @@ def seed_task_routing_domains(session: Session) -> None:
 
 
 def seed_consultation(session: Session, path: Path) -> None:
-    """写入问诊分流 seed。
+    """写入问诊领域与槽位目录 seed。
 
     :param session: 数据库会话。
     :param path: 问诊规则 JSON 文件路径。
@@ -138,7 +138,6 @@ def seed_consultation(session: Session, path: Path) -> None:
             session.add(model)
         model.question = item["question"]
         model.label = item["label"]
-        model.extraction_rules = item.get("extraction_rules", [])
         model.priority = int(item.get("priority", 100))
 
 

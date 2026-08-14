@@ -750,43 +750,6 @@ async def _fake_litellm_send_chat(
     """
     del self, model, temperature
     user_text = _message_text(messages)
-    if "ConsultationSemanticExtractorAgent" in user_text and "没以前积极" in user_text:
-        return """
-        {
-          "facts": [
-            {
-              "key": "appetite",
-              "value": "仍会进食但主动性下降",
-              "status": "confirmed",
-              "confidence": 0.91,
-              "source_text": "饭还是吃的，就是没以前积极",
-              "category": "intake_output"
-            },
-            {
-              "key": "mental_status",
-              "value": "整体活跃度较平时轻度下降",
-              "status": "confirmed",
-              "confidence": 0.88,
-              "source_text": "没以前积极",
-              "category": "systemic_status"
-            },
-            {
-              "key": "vomiting",
-              "value": "没有把东西吐出来",
-              "status": "negative",
-              "confidence": 0.9,
-              "source_text": "没有把东西吐出来，只是像反胃",
-              "category": "intake_output"
-            }
-          ],
-          "intent": {
-            "answer_now": true,
-            "wants_triage": true,
-            "correction": false,
-            "raw_intent": "用户希望根据现有材料先判断"
-          }
-        }
-        """
     if "RagQuestionPlannerAgent" in user_text and "缩成一团" in user_text:
         return """
         {
@@ -917,6 +880,9 @@ async def _fake_litellm_send_structured_chat(
                 ]
             }
         return response_model.model_validate(payload)
+    if prompt_payload.get("task") == "将用户本轮输入归一为结构化问诊事实、开放观察与意图信号。":
+        request_text = str(prompt_payload.get("user_text") or "")
+        return response_model.model_validate(_consultation_semantic_payload(request_text))
     if prompt_payload.get("task") != "将用户输入归一为临床安全结构化语义。":
         return response_model.model_validate_json("{}")
     request_text = str(prompt_payload.get("user_text") or "")
@@ -972,6 +938,249 @@ async def _fake_litellm_send_structured_chat(
             }
         )
     return response_model.model_validate(payload)
+
+
+def _consultation_semantic_payload(request_text: str) -> dict[str, Any]:
+    """构造测试用结构化问诊语义抽取结果。
+
+    :param request_text: 用户本轮输入文本。
+    :return: 返回符合问诊语义抽取 Pydantic 契约的测试结果。
+    """
+    facts: list[dict[str, Any]] = []
+    observations: list[dict[str, Any]] = []
+    intent = {
+        "answer_now": False,
+        "wants_triage": False,
+        "correction": False,
+        "raw_intent": "",
+    }
+
+    if "有点拉稀" in request_text or "拉稀" in request_text:
+        facts.append(_semantic_fact("stool", "有排便相关异常", "confirmed", "拉稀", "intake_output"))
+    if "缩成一团" in request_text:
+        facts.extend(
+            [
+                _semantic_fact(
+                    "pain_or_mobility",
+                    "缩成一团趴着，看起来不太舒服",
+                    "confirmed",
+                    "缩成一团趴着",
+                    "domain_specific",
+                ),
+            ]
+        )
+    if "主餐都会清空" in request_text:
+        facts.extend(
+            [
+                _semantic_fact("appetite", "主餐会清空，也会主动拿奖励", "confirmed", "主餐都会清空", "intake_output"),
+                _semantic_fact("mental_status", "叫名字会抬头并玩玩具", "confirmed", "叫名字会抬头", "systemic_status"),
+                _semantic_fact("onset", "前天第一次看到", "confirmed", "前天第一次看到", "time_course"),
+                _semantic_fact(
+                    "pain_or_mobility",
+                    "轻碰腹部会把身体绷紧但不会躲开",
+                    "confirmed",
+                    "轻碰腹部会把身体绷紧",
+                    "domain_specific",
+                ),
+            ]
+        )
+    if "饭量没减少" in request_text:
+        facts.extend(
+            [
+                _semantic_fact("appetite", "食欲/饮水基本正常", "confirmed", "饭量没减少", "intake_output"),
+                _semantic_fact("mental_status", "精神基本正常", "confirmed", "叫它有反应", "systemic_status"),
+                _semantic_fact("vomiting", "无呕吐", "negative", "没有吐", "intake_output"),
+                _semantic_fact("stool", "未见排便相关异常", "negative", "没有拉肚子", "intake_output"),
+            ]
+        )
+    if "今天早上开始" in request_text or "今天早上拉稀" in request_text:
+        facts.extend(
+            [
+                _semantic_fact("species", "dog", "confirmed", "是狗", "patient_identity"),
+                _semantic_fact("life_stage_or_age", "3岁", "confirmed", "3岁", "patient_identity"),
+                _semantic_fact("weight", "12公斤", "confirmed", "12公斤", "patient_identity"),
+                _semantic_fact("onset", "今天早上开始", "confirmed", "今天早上开始", "time_course"),
+                _semantic_fact("mental_status", "精神正常", "confirmed", "精神食欲正常", "systemic_status"),
+                _semantic_fact("appetite", "食欲正常", "confirmed", "精神食欲正常", "intake_output"),
+                _semantic_fact("vomiting", "无呕吐", "negative", "没有呕吐", "intake_output"),
+                _semantic_fact("stool", "大便拉稀但没有血", "confirmed", "大便拉稀但没有血", "intake_output"),
+            ]
+        )
+    if "别再追问" in request_text or "直接说" in request_text:
+        intent.update(
+            {
+                "answer_now": True,
+                "wants_triage": True,
+                "raw_intent": "用户要求根据目前信息先回答。",
+            }
+        )
+        facts.extend(
+            [
+                _semantic_fact("onset", "前天开始", "confirmed", "前天开始这样", "time_course"),
+                _semantic_fact("appetite", "饭量和平常一样", "confirmed", "饭量和平常一样", "intake_output"),
+                _semantic_fact("mental_status", "精神还行", "confirmed", "精神也还行", "systemic_status"),
+                _semantic_fact("vomiting", "无呕吐", "negative", "没吐", "intake_output"),
+            ]
+        )
+    if "没以前积极" in request_text:
+        intent.update(
+            {
+                "answer_now": True,
+                "wants_triage": True,
+                "raw_intent": "用户希望根据现有材料先判断。",
+            }
+        )
+        facts.extend(
+            [
+                _semantic_fact(
+                    "appetite",
+                    "仍会进食但主动性下降",
+                    "confirmed",
+                    "饭还是吃的，就是没以前积极",
+                    "intake_output",
+                    confidence=0.91,
+                ),
+                _semantic_fact(
+                    "mental_status",
+                    "整体活跃度较平时轻度下降",
+                    "confirmed",
+                    "没以前积极",
+                    "systemic_status",
+                    confidence=0.88,
+                ),
+                _semantic_fact(
+                    "vomiting",
+                    "没有把东西吐出来",
+                    "negative",
+                    "没有把东西吐出来，只是像反胃",
+                    "intake_output",
+                ),
+            ]
+        )
+    if "猫砂盆" in request_text or "尿量很少" in request_text:
+        intent.update(
+            {
+                "answer_now": True,
+                "wants_triage": True,
+                "raw_intent": "用户希望先了解排尿异常的风险范围。",
+            }
+        )
+        observations.append(
+            _semantic_observation(
+                "urinary",
+                "排尿异常",
+                "频繁去猫砂盆且尿量很少",
+                "confirmed",
+                "一直去猫砂盆但尿量很少",
+                "今天",
+            )
+        )
+    return {
+        "facts": _dedupe_semantic_facts(facts),
+        "observations": _dedupe_semantic_observations(observations),
+        "intent": intent,
+        "confidence": 0.92,
+        "rationale": "测试替身返回可信问诊语义。",
+    }
+
+
+def _semantic_fact(
+    key: str,
+    value: str,
+    status: str,
+    source_text: str,
+    category: str,
+    *,
+    confidence: float = 0.9,
+) -> dict[str, Any]:
+    """构造单条测试用问诊语义事实。
+
+    :param key: 问诊事实键名。
+    :param value: 归一后的事实值。
+    :param status: 事实状态。
+    :param source_text: 用户原文来源片段。
+    :param category: 事实证据维度。
+    :param confidence: 事实置信度。
+    :return: 返回符合结构化契约的事实字典。
+    """
+    return {
+        "key": key,
+        "value": value,
+        "status": status,
+        "confidence": confidence,
+        "source_text": source_text,
+        "category": category,
+    }
+
+
+def _semantic_observation(
+    category: str,
+    label: str,
+    value: str,
+    status: str,
+    source_text: str,
+    temporal_text: str,
+    *,
+    confidence: float = 0.9,
+) -> dict[str, Any]:
+    """构造单条测试用开放式结构化观察。
+
+    :param category: 开放观察类别。
+    :param label: 开放观察中文标签。
+    :param value: 归一后的观察值。
+    :param status: 观察状态。
+    :param source_text: 用户原文来源片段。
+    :param temporal_text: 时间范围原文。
+    :param confidence: 观察置信度。
+    :return: 返回符合结构化契约的开放观察字典。
+    """
+    return {
+        "category": category,
+        "label": label,
+        "value": value,
+        "status": status,
+        "confidence": confidence,
+        "source_text": source_text,
+        "temporal_text": temporal_text,
+    }
+
+
+def _dedupe_semantic_facts(facts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """对测试用问诊事实执行稳定去重。
+
+    :param facts: 候选事实列表。
+    :return: 返回去重后的事实列表。
+    """
+    deduped: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for fact in facts:
+        key = (str(fact["key"]), str(fact["status"]), str(fact["value"]))
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(fact)
+    return deduped
+
+
+def _dedupe_semantic_observations(observations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """对测试用开放观察执行稳定去重。
+
+    :param observations: 候选开放观察列表。
+    :return: 返回去重后的开放观察列表。
+    """
+    deduped: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for observation in observations:
+        key = (
+            str(observation["category"]),
+            str(observation["status"]),
+            str(observation["value"]),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(observation)
+    return deduped
 
 
 def _message_text(messages: list[dict[str, Any]]) -> str:
@@ -1803,6 +2012,33 @@ def test_task_state_replacement_preserves_default_state_without_migration(tmp_pa
     assert session_memory["task_consultation_states"]["behavior"] == behavior_state
 
 
+def test_delete_pet_memory_clears_json_consultation_state_scope(tmp_path: Path) -> None:
+    """验证删除宠物记忆时同步清理 JSON 问诊状态仓储范围。
+
+    :param tmp_path: 临时数据目录。
+    :return: 无返回值；断言通过表示测试存储不会残留已删除宠物的活跃问诊状态。
+    """
+    import asyncio
+
+    service = MemoryService(JsonDocumentStore(tmp_path / "memory.json"))
+    identity = TrustedIdentity(user_id="u_delete_scope", pet_id="p_delete_scope", session_id="s_delete_scope")
+
+    asyncio.run(service.save_consultation_state(identity, {"chief_complaint": "默认问诊"}))
+    asyncio.run(
+        service.save_task_consultation_states(
+            identity,
+            {"gastrointestinal": {"chief_complaint": "多任务问诊"}},
+        )
+    )
+    asyncio.run(service.delete_pet_memory(identity.pet_id, user_id=identity.user_id))
+
+    stored_memory = JsonDocumentStore(tmp_path / "memory.json").load()
+    session_memory = stored_memory["sessions"]["s_delete_scope"]
+    assert "consultation_state" not in session_memory
+    assert "task_consultation_states" not in session_memory
+    assert identity.pet_id not in stored_memory.get("pets", {})
+
+
 def test_structured_task_router_can_drive_task_splitting() -> None:
     """验证结构化任务路由可以生成多任务执行计划。
 
@@ -2102,7 +2338,10 @@ def test_semantic_answers_reduce_missing_slots_without_exact_templates(tmp_path:
     assert data["metadata"]["answerability"]["mode"] in {"slot_complete", "sufficient_semantic_evidence"}
 
 
-def test_llm_semantic_extractor_is_primary_fact_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_structured_consultation_semantic_extractor_is_primary_fact_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """验证 LLM 语义抽取结果会作为主路径合并到问诊状态。
 
     :param tmp_path: 参数 tmp_path。
@@ -2135,7 +2374,7 @@ def test_llm_semantic_extractor_is_primary_fact_path(tmp_path: Path, monkeypatch
     assert data["status"] == "completed"
     assert "ConsultationSemanticExtractorAgent" in data["metadata"]["multi_agent_path"]
     semantic = data["metadata"]["semantic_extraction"]
-    assert semantic["strategy"] == "llm_semantic_extractor"
+    assert semantic["strategy"] == "litellm_response_format"
     assert semantic["used_as_primary_semantic_path"] is True
     assert {"appetite", "mental_status", "vomiting"}.issubset(set(semantic["applied_fact_keys"]))
     slots = data["metadata"]["consultation_state"]["slots"]
@@ -2143,6 +2382,51 @@ def test_llm_semantic_extractor_is_primary_fact_path(tmp_path: Path, monkeypatch
     assert slots["mental_status"] == "整体活跃度较平时轻度下降"
     assert slots["vomiting"] == "没有把东西吐出来"
     assert data["metadata"]["answerability"]["mode"] == "user_requested_answer_now"
+
+
+def test_open_consultation_observations_are_kept_outside_core_slots(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证枚举外问诊观察进入工作记忆，而不是被硬塞入核心槽位。
+
+    :param tmp_path: 参数 tmp_path。
+    :param monkeypatch: 参数 monkeypatch。
+    :return: 无返回值；断言通过表示开放观察通道符合预期。
+    """
+    client = _client(tmp_path, monkeypatch)
+    vet_context = {
+        "user_id": "u_open_observation",
+        "session_id": "s_open_observation",
+        "pet_id": "p_open_observation",
+        "pet_info": {
+            "species": "猫",
+            "breed": "中华田园猫",
+            "age": "5岁",
+            "weight_kg": 4.2,
+        },
+    }
+
+    response = client.post(
+        "/agent/turns",
+        json=_payload(
+            "我家猫今天一直去猫砂盆但尿量很少，先根据这些告诉我需要注意什么。",
+            vet_context=vet_context,
+        ),
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "completed"
+    state = data["metadata"]["consultation_state"]
+    assert "urinary" not in state["slots"]
+    assert state["observations"][0]["category"] == "urinary"
+    assert state["observations"][0]["label"] == "排尿异常"
+    assert state["evidence_profile"]["open_observations"]["status"] == "known"
+    semantic = data["metadata"]["semantic_extraction"]
+    assert semantic["used_as_primary_semantic_path"] is True
+    assert semantic["applied_fact_keys"] == []
+    assert semantic["applied_observation_count"] == 1
 
 
 def test_consultation_second_turn_completes_after_context_is_built(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

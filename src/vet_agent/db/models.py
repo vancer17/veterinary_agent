@@ -90,13 +90,45 @@ class InputSafetyCandidateDefinitionModel(Base):
 
 class ConsultationDomainModel(Base):
     __tablename__ = "consultation_domains"
+    __table_args__ = (
+        {
+            "comment": "问诊领域目录表，用于回答充分性策略读取领域所需关注槽位，不保存关键词分类规则。",
+        },
+    )
 
-    domain: Mapped[str] = mapped_column(Text, primary_key=True)
-    required_slots: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False)
-    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
-    priority: Mapped[int] = mapped_column(Integer, nullable=False, default=100, server_default="100")
-    version: Mapped[str] = mapped_column(Text, nullable=False, default="v1", server_default="v1")
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    domain: Mapped[str] = mapped_column(Text, primary_key=True, comment="问诊领域稳定技术标识。")
+    required_slots: Mapped[list[str]] = mapped_column(
+        ARRAY(Text),
+        nullable=False,
+        comment="当前领域建议关注的问诊事实槽位集合；不承载自然语言抽取规则。",
+    )
+    enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default="true",
+        comment="问诊领域是否允许运行时使用。",
+    )
+    priority: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=100,
+        server_default="100",
+        comment="问诊领域排序优先级，数值越小越优先。",
+    )
+    version: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        default="v1",
+        server_default="v1",
+        comment="问诊领域目录版本。",
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        comment="问诊领域目录最近更新时间。",
+    )
 
 
 class TaskRoutingDomainModel(Base):
@@ -156,15 +188,42 @@ class TaskRoutingDomainModel(Base):
 
 class ConsultationSlotModel(Base):
     __tablename__ = "consultation_slots"
+    __table_args__ = (
+        {
+            "comment": "问诊槽位展示和追问文案目录表；不保存关键词、正则或文本抽取规则。",
+        },
+    )
 
-    slot_name: Mapped[str] = mapped_column(Text, primary_key=True)
-    question: Mapped[str] = mapped_column(Text, nullable=False)
-    label: Mapped[str] = mapped_column(Text, nullable=False)
-    extraction_rules: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False, default=list, server_default="[]")
-    priority: Mapped[int] = mapped_column(Integer, nullable=False, default=100, server_default="100")
-    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
-    version: Mapped[str] = mapped_column(Text, nullable=False, default="v1", server_default="v1")
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    slot_name: Mapped[str] = mapped_column(Text, primary_key=True, comment="问诊槽位稳定技术标识。")
+    question: Mapped[str] = mapped_column(Text, nullable=False, comment="该槽位默认追问文案。")
+    label: Mapped[str] = mapped_column(Text, nullable=False, comment="该槽位面向用户展示的中文标签。")
+    priority: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=100,
+        server_default="100",
+        comment="问诊槽位排序优先级，数值越小越优先。",
+    )
+    enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default="true",
+        comment="问诊槽位是否允许运行时使用。",
+    )
+    version: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        default="v1",
+        server_default="v1",
+        comment="问诊槽位目录版本。",
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        comment="问诊槽位目录最近更新时间。",
+    )
 
 
 class KnowledgeChunkModel(Base):
