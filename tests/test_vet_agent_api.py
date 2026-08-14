@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterator, Sequence
 from datetime import UTC, datetime
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -65,6 +66,15 @@ from vet_agent.task_routing import (
     TaskRoutingRequestContext,
     TaskRoutingService,
 )
+
+
+class StaticFollowupRagStrategy(StrEnum):
+    """表示 API 测试中的静态追问替身策略。
+
+    :return: 无返回值；仅用于测试替身和 metadata 断言，不进入生产对外枚举。
+    """
+
+    STATIC_TEST = "static_followup_rag_test"
 
 
 app = create_app()
@@ -678,7 +688,7 @@ class StaticFollowupRagService(FollowupRagServiceProtocol):
         )
         return FollowupRagPlan(
             questions=self._questions(request),
-            strategy=FollowupRagStrategy.STATIC_TEST,
+            strategy=StaticFollowupRagStrategy.STATIC_TEST,
             retrieval=retrieval,
             rationale="API 测试替身返回已通过契约校验的追问计划。",
         )
@@ -2309,7 +2319,7 @@ def test_rag_guided_followup_uses_knowledge_to_plan_questions(tmp_path: Path, mo
     assert AgentPathNode.FOLLOWUP_RAG_PLANNER.value in data["metadata"]["multi_agent_path"]
     assert "QwenResponseAgent" not in data["metadata"]["multi_agent_path"]
     plan = data["metadata"]["followup_question_plan"]
-    assert plan["strategy"] == FollowupRagStrategy.STATIC_TEST.value
+    assert plan["strategy"] == StaticFollowupRagStrategy.STATIC_TEST.value
     assert plan["questions"][0]["evidence_titles"] == ["消化道症状"]
     assert {item["slot"] for item in plan["questions"]}.issubset(set(data["metadata"]["missing_slots"]))
     for question in plan["questions"]:
