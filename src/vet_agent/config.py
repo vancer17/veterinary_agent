@@ -48,6 +48,8 @@ class Settings:
     data_dir: Path = Path(".data")
     seed_dir: Path = Path("assets/seeds")
     clinical_safety_vector_min_score: float = 0.35
+    followup_rag_top_k: int = 4
+    followup_rag_vector_min_score: float = 0.35
     database_url: str | None = None
     enable_rag_embeddings: bool = False
     task_routing_max_task_count: int = 5
@@ -120,6 +122,8 @@ class Settings:
             data_dir=Path(os.getenv("VET_AGENT_DATA_DIR", ".data")),
             seed_dir=Path(os.getenv("VET_AGENT_SEED_DIR", "assets/seeds")),
             clinical_safety_vector_min_score=float(os.getenv("CLINICAL_SAFETY_VECTOR_MIN_SCORE", "0.35")),
+            followup_rag_top_k=int(os.getenv("FOLLOWUP_RAG_TOP_K", "4")),
+            followup_rag_vector_min_score=float(os.getenv("FOLLOWUP_RAG_VECTOR_MIN_SCORE", "0.35")),
             database_url=os.getenv("DATABASE_URL"),
             enable_rag_embeddings=_bool_env("ENABLE_RAG_EMBEDDINGS", False),
             task_routing_max_task_count=int(os.getenv("TASK_ROUTING_MAX_TASK_COUNT", "5")),

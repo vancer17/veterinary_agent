@@ -28,6 +28,7 @@ from .orchestrator import Orchestrator, get_orchestrator
 from vet_agent import AuthorizedScopeContext as CoreAuthorizedScopeContext
 from vet_agent import ScopeAssertion as CoreScopeAssertion
 from vet_agent import get_container
+from vet_agent.followup_rag import FollowupRagError
 from vet_agent.services import TurnExecutionConflictError, TurnExecutionDependencyError
 from vet_agent.task_routing import TaskRoutingError
 
@@ -169,6 +170,13 @@ async def _dispatch_turn(
             trace_id=turn_request.request_context.trace_id,
             details=exc.details,
         ) from exc
+    except FollowupRagError as exc:
+        raise OrchestratorUnavailableError(
+            str(exc),
+            request_id=turn_request.request_context.request_id,
+            trace_id=turn_request.request_context.trace_id,
+            details=exc.details,
+        ) from exc
     except TimeoutError as exc:
         raise OrchestratorTimeoutError(
             request_id=turn_request.request_context.request_id,
@@ -220,6 +228,18 @@ async def _stream_events(
         )
         return
     except TaskRoutingError as exc:
+        yield _to_sse(
+            _turn_failed_event(
+                OrchestratorUnavailableError(
+                    str(exc),
+                    request_id=turn_request.request_context.request_id,
+                    trace_id=turn_request.request_context.trace_id,
+                    details=exc.details,
+                )
+            )
+        )
+        return
+    except FollowupRagError as exc:
         yield _to_sse(
             _turn_failed_event(
                 OrchestratorUnavailableError(

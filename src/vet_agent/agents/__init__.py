@@ -22,8 +22,6 @@ from .consultation import (
     ConsultationStateService,
 )
 from .memory_extraction import MemoryExtractionAgent, MemoryFactCandidate
-from .question_planner import QuestionPlanner
-from .rag_question_planner import RagFollowupPlan, RagFollowupQuestion, RagQuestionPlannerAgent
 from .safety import SafetyAgent, SafetyAssessment
 from .safety_review import SafetyReviewAgent, SafetyReviewResult
 from .semantic_extractor import (
@@ -54,10 +52,6 @@ __all__ = [
     "ConsultationStateService",
     "MemoryExtractionAgent",
     "MemoryFactCandidate",
-    "QuestionPlanner",
-    "RagFollowupPlan",
-    "RagFollowupQuestion",
-    "RagQuestionPlannerAgent",
     "ResponseComposer",
     "SafetyAgent",
     "SafetyAssessment",

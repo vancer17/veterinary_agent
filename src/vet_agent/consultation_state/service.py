@@ -1,7 +1,7 @@
 """
 =============================================================================
 文件：src/vet_agent/consultation_state/service.py
-作用：编排问诊状态合并、证据画像构建、回答充分性裁决与追问文案生成。
+作用：编排问诊状态合并、证据画像构建、回答充分性裁决与追问响应格式化。
 范围：位于问诊语义抽取、临床安全与 RAG 追问规划之间；本层只消费已结构化
       的状态、语义和宠物上下文，不扫描用户原始文本，不实现关键词状态机。
 说明：回答与追问的最终准入由 OPA 策略客户端决定；本服务仅负责状态合并、
@@ -124,27 +124,13 @@ class ConsultationStateService:
                     "reason": answerability.reason,
                 },
             )
-        questions = [] if ready else self._questions_for_missing(missing_slots, state, max_questions)
-        if not ready and not questions:
-            raise ConsultationStateContractError(
-                "consultation answerability policy returned ask decision without generated questions",
-                details={
-                    "missing_slots": missing_slots,
-                    "policy_backend": answerability.policy_backend,
-                    "policy_path": answerability.policy_path,
-                },
-            )
-
         state.phase = "ready_to_answer" if ready else "collecting_info"
-        if questions:
-            state.followup_rounds += 1
-            state.asked_questions.extend(questions)
 
         return ConsultationDecision(
             state=state,
             ready=ready,
             missing_slots=[] if ready else missing_slots,
-            questions=questions,
+            questions=[],
             answerability=state.answerability,
         )
 
@@ -620,30 +606,6 @@ class ConsultationStateService:
         known = [slot for slot in slots if state.slots.get(slot)]
         return {"status": "known" if known else "unknown", "slots": known}
 
-    def _questions_for_missing(
-        self,
-        missing: list[str],
-        state: ConsultationState,
-        max_questions: int,
-    ) -> list[str]:
-        """为仍建议追问的高价值证据生成追问。
-
-        :param missing: 本轮仍需追问的槽位。
-        :param state: 问诊状态。
-        :param max_questions: 最多追问数量。
-        :return: 返回追问文案列表。
-        """
-        questions: list[str] = []
-        asked = set(state.asked_questions)
-        rules = self.rule_repository.consultation_rules()
-        for slot in missing:
-            question = self._question_for(rules, slot)
-            if question not in asked:
-                questions.append(question)
-            if len(questions) >= max_questions:
-                break
-        return questions
-
     def _known_lines(self, state: ConsultationState) -> str:
         """格式化用户已经补充过的事实。
 
@@ -668,15 +630,6 @@ class ConsultationStateService:
         if domain in rules.domains:
             return rules.domains[domain].required_slots
         return rules.domains.get("general").required_slots if "general" in rules.domains else []
-
-    def _question_for(self, rules: ConsultationRuleSet, slot: str) -> str:
-        """读取槽位对应的追问文案。
-
-        :param rules: 规则集合。
-        :param slot: 槽位名称。
-        :return: 返回该槽位的默认追问。
-        """
-        return rules.slots[slot].question if slot in rules.slots else slot
 
     def _label_for(self, rules: ConsultationRuleSet, slot: str) -> str:
         """返回槽位对应的用户可见标签。
