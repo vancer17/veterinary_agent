@@ -36,7 +36,9 @@ class AgentPathNode(StrEnum):
     FOLLOWUP_RAG_PLANNER = "FollowupRagPlanner"
     RESPONSE_GENERATION_CONTEXT_BUILDER = "ResponseGenerationContextBuilder"
     QWEN_RESPONSE_AGENT = "QwenResponseAgent"
-    SAFETY_REVIEW_AGENT = "SafetyReviewAgent"
+    OUTPUT_SAFETY_SERVICE = "OutputSafetyService"
+    OUTPUT_SAFETY_POLICY_OPA = "OutputSafetyPolicyOPA"
+    OUTPUT_SAFETY_POLICY_LOCAL = "OutputSafetyPolicyLocal"
 
 
 def build_agent_path(*nodes: AgentPathNode) -> list[str]:

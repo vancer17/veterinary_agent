@@ -51,6 +51,7 @@ ANSWER_RAG_BASELINE_VERSION = "consultation_state_external_api_test"
 SUPPORTED_ALEMBIC_VERSIONS = {
     "0014_task_routing_domain_catalog",
     "0015_consultation_semantic_extraction_contract",
+    "0016_output_safety_candidate_definitions",
 }
 
 # 外部集成测试写入的问诊目录基线仅包含结构化领域与槽位展示信息；
@@ -657,7 +658,7 @@ def test_response_generation_context_compilation_api_uses_real_services(
     assert AgentPathNode.ANSWER_RAG_RETRIEVER.value in path
     assert AgentPathNode.RESPONSE_GENERATION_CONTEXT_BUILDER.value in path
     assert AgentPathNode.QWEN_RESPONSE_AGENT.value in path
-    assert AgentPathNode.SAFETY_REVIEW_AGENT.value in path
+    assert AgentPathNode.OUTPUT_SAFETY_SERVICE.value in path
     assert path.index(AgentPathNode.ANSWER_RAG_RETRIEVER.value) < path.index(
         AgentPathNode.RESPONSE_GENERATION_CONTEXT_BUILDER.value
     )
@@ -665,7 +666,7 @@ def test_response_generation_context_compilation_api_uses_real_services(
         AgentPathNode.QWEN_RESPONSE_AGENT.value
     )
     assert path.index(AgentPathNode.QWEN_RESPONSE_AGENT.value) < path.index(
-        AgentPathNode.SAFETY_REVIEW_AGENT.value
+        AgentPathNode.OUTPUT_SAFETY_SERVICE.value
     )
 
 

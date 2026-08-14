@@ -88,6 +88,79 @@ class InputSafetyCandidateDefinitionModel(Base):
     )
 
 
+class OutputSafetyCandidateDefinitionModel(Base):
+    """表示输出安全结构化候选定义表。
+
+    :return: 无返回值；该模型仅供仓储层访问，业务层不得直接操作。
+    """
+
+    __tablename__ = "output_safety_candidate_definitions"
+    __table_args__ = (
+        UniqueConstraint("code", name="uq_output_safety_candidate_definitions_code"),
+        CheckConstraint(
+            "default_severity IN ('info', 'caution', 'urgent', 'blocked')",
+            name="ck_output_safety_candidate_definitions_severity",
+        ),
+        {
+            "comment": "输出安全候选定义表，用于描述 Guardrails 等结构化检测器输出的策略语义，不保存文本替换规则或回退响应模板。"
+        },
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True, comment="候选定义内部主键。")
+    code: Mapped[str] = mapped_column(Text, nullable=False, comment="候选编码，用于 OPA 策略、审计和安全信号关联。")
+    category: Mapped[str] = mapped_column(Text, nullable=False, comment="候选类别，例如系统提示泄露、PII、密钥、剂量、药物、主题边界或格式候选。")
+    default_severity: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        default="caution",
+        server_default="caution",
+        comment="候选默认严重级别；最终动作和信号级别由 OPA 裁决覆盖。",
+    )
+    message: Mapped[str] = mapped_column(Text, nullable=False, comment="候选默认说明，用于审计和默认策略原因。")
+    detector: Mapped[str] = mapped_column(Text, nullable=False, comment="候选来源检测器标识。")
+    priority: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=100,
+        server_default="100",
+        comment="候选定义排序优先级，数值越小越优先。",
+    )
+    enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default="true",
+        comment="候选定义是否允许运行时使用。",
+    )
+    version: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        default="v1",
+        server_default="v1",
+        comment="候选定义版本。",
+    )
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(
+        "metadata",
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+        comment="候选定义附加审计信息。",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        comment="候选定义创建时间。",
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        comment="候选定义最近更新时间。",
+    )
+
+
 class ConsultationDomainModel(Base):
     __tablename__ = "consultation_domains"
     __table_args__ = (
