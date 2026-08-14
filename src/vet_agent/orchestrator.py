@@ -17,7 +17,8 @@ from uuid import uuid4
 from vet_agent.agents import (
     ConsultationDecision,
     ConsultationSemanticExtractorAgent,
-    ConsultationStateAgent,
+    ConsultationStatePolicyContext,
+    ConsultationStateService,
     MemoryExtractionAgent,
     MemoryFactCandidate,
     QuestionPlanner,
@@ -80,6 +81,7 @@ class VetOrchestrator:
         knowledge_service: KnowledgeService,
         qwen_client: QwenClient,
         rule_repository: RuleRepository,
+        consultation_state_service: ConsultationStateService,
         clinical_safety_evaluator: ClinicalSafetyEvaluator,
         clinical_safety_semantic_extractor: ClinicalSafetySemanticExtractorAgent,
         turn_execution_gate: TurnExecutionGateProtocol,
@@ -97,6 +99,7 @@ class VetOrchestrator:
         :param knowledge_service: 参数 knowledge_service。
         :param qwen_client: 参数 qwen_client。
         :param rule_repository: 参数 rule_repository。
+        :param consultation_state_service: 问诊状态与回答充分性服务。
         :param clinical_safety_evaluator: 结构化临床安全评估器。
         :param clinical_safety_semantic_extractor: 临床安全结构化语义抽取器。
         :param turn_execution_gate: 单回合执行门禁，负责 turn lock 与幂等基础设施控制。
@@ -118,10 +121,7 @@ class VetOrchestrator:
         self.clinical_safety_semantic_extractor = clinical_safety_semantic_extractor
         self.safety_review = SafetyReviewAgent(self.safety)
         self.semantic_extractor = ConsultationSemanticExtractorAgent(qwen_client, settings)
-        self.consultation = ConsultationStateAgent(
-            rule_repository,
-            max_followup_rounds=settings.consultation_max_followup_rounds,
-        )
+        self.consultation = consultation_state_service
         self.task_router = task_router
         self.rag_question_planner = RagQuestionPlannerAgent(qwen_client)
         self.memory_extractor = MemoryExtractionAgent(qwen_client, settings)
@@ -263,10 +263,18 @@ class VetOrchestrator:
             previous_state=active_previous_state,
             model=model,
         )
-        consultation_decision = self.consultation.update(
+        consultation_policy_context = ConsultationStatePolicyContext.from_identity(
+            request_id=request.request_context.request_id,
+            trace_id=request.request_context.trace_id,
+            user_id=request.trusted_identity.user_id,
+            pet_id=request.trusted_identity.pet_id,
+            session_id=request.trusted_identity.session_id,
+        )
+        consultation_decision = await self.consultation.update(
             active_previous_state,
             task.text,
             pet_context,
+            policy_context=consultation_policy_context,
             task_domain=task.domain,
             semantic_result=semantic_result,
             clinical_safety_semantic=clinical_semantic,
@@ -338,8 +346,8 @@ class VetOrchestrator:
                         AgentPathNode.MEMORY_AGENT,
                         AgentPathNode.TASK_ROUTER_AGENT,
                         AgentPathNode.CONSULTATION_SEMANTIC_EXTRACTOR_AGENT,
-                        AgentPathNode.CONSULTATION_STATE_AGENT,
-                        AgentPathNode.ANSWERABILITY_EVALUATOR,
+                        AgentPathNode.CONSULTATION_STATE_SERVICE,
+                        AgentPathNode.CONSULTATION_ANSWERABILITY_POLICY_OPA,
                         AgentPathNode.KNOWLEDGE_AGENT,
                         AgentPathNode.RAG_QUESTION_PLANNER_AGENT,
                     ),
@@ -420,8 +428,8 @@ class VetOrchestrator:
                     AgentPathNode.MEMORY_AGENT,
                     AgentPathNode.TASK_ROUTER_AGENT,
                     AgentPathNode.CONSULTATION_SEMANTIC_EXTRACTOR_AGENT,
-                    AgentPathNode.CONSULTATION_STATE_AGENT,
-                    AgentPathNode.ANSWERABILITY_EVALUATOR,
+                    AgentPathNode.CONSULTATION_STATE_SERVICE,
+                    AgentPathNode.CONSULTATION_ANSWERABILITY_POLICY_OPA,
                     AgentPathNode.KNOWLEDGE_AGENT,
                     AgentPathNode.QUESTION_PLANNER_AGENT,
                     AgentPathNode.QWEN_RESPONSE_AGENT,
@@ -672,10 +680,18 @@ class VetOrchestrator:
                 previous_state=task_previous_state,
                 model=model,
             )
-            consultation_decision = self.consultation.update(
+            consultation_policy_context = ConsultationStatePolicyContext.from_identity(
+                request_id=request.request_context.request_id,
+                trace_id=request.request_context.trace_id,
+                user_id=request.trusted_identity.user_id,
+                pet_id=request.trusted_identity.pet_id,
+                session_id=request.trusted_identity.session_id,
+            )
+            consultation_decision = await self.consultation.update(
                 task_previous_state,
                 task.text,
                 pet_context,
+                policy_context=consultation_policy_context,
                 task_domain=task.domain,
                 semantic_result=semantic_result,
                 clinical_safety_semantic=clinical_safety_semantic,
@@ -801,8 +817,8 @@ class VetOrchestrator:
                         AgentPathNode.MEMORY_AGENT,
                         AgentPathNode.TASK_ROUTER_AGENT,
                         AgentPathNode.CONSULTATION_SEMANTIC_EXTRACTOR_AGENT,
-                        AgentPathNode.CONSULTATION_STATE_AGENT,
-                        AgentPathNode.ANSWERABILITY_EVALUATOR,
+                        AgentPathNode.CONSULTATION_STATE_SERVICE,
+                        AgentPathNode.CONSULTATION_ANSWERABILITY_POLICY_OPA,
                         AgentPathNode.KNOWLEDGE_AGENT,
                     ),
                     *(

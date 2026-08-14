@@ -39,6 +39,7 @@ from vet_agent.clinical_safety import (
     ClinicalSafetyChunkHit,
     ClinicalSafetyChunkType,
 )
+from vet_agent.consultation_state import LocalConsultationAnswerabilityPolicyClient
 from vet_agent.input_safety import (
     InputSafetyService,
     LocalInputSafetyPolicyClient,
@@ -675,6 +676,7 @@ def _client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
         turn_execution_gate=InMemoryTurnExecutionGate(),
         clinical_safety_repository=StaticClinicalSafetyRepository(),
         clinical_safety_policy_client=StaticClinicalSafetyPolicyClient(),
+        consultation_answerability_policy_client=LocalConsultationAnswerabilityPolicyClient(),
         embedding_client=StaticEmbeddingClient(),
         input_safety_service=InputSafetyService(
             settings,
@@ -2183,12 +2185,13 @@ def test_rag_guided_followup_uses_knowledge_to_plan_questions(tmp_path: Path, mo
     assert data["vet_result"]["route"] == "rag_guided_followup"
     assert "RagQuestionPlannerAgent" in data["metadata"]["multi_agent_path"]
     assert "QwenResponseAgent" not in data["metadata"]["multi_agent_path"]
-    assert "腹部有没有明显紧绷" in data["output_text"]
-    assert "饭后多久出现" in data["output_text"]
-    assert "为什么先问这些" in data["output_text"]
     plan = data["metadata"]["followup_question_plan"]
     assert plan["strategy"] == "rag_llm_question_planner"
     assert plan["questions"][0]["evidence_titles"] == ["消化道症状"]
+    assert {item["slot"] for item in plan["questions"]}.issubset(set(data["metadata"]["missing_slots"]))
+    for question in plan["questions"]:
+        assert question["question"] in data["output_text"]
+    assert "为什么先问这些" in data["output_text"]
     assert data["evidence"]
 
 
@@ -2240,7 +2243,8 @@ def test_unfinished_consultation_state_is_routed_as_an_existing_task(
     assert data["vet_result"]["route"] == "standard_consultation"
     assert data["metadata"]["task_router"]["tasks"][0]["existing_task_key"] == "__default__"
     assert "TaskRouterAgent" in data["metadata"]["multi_agent_path"]
-    assert "AnswerabilityEvaluator" in data["metadata"]["multi_agent_path"]
+    assert "ConsultationStateService" in data["metadata"]["multi_agent_path"]
+    assert "ConsultationAnswerabilityPolicyOPA" in data["metadata"]["multi_agent_path"]
     assert data["metadata"]["answerability"]["mode"] in {"slot_complete", "sufficient_semantic_evidence"}
     assert "任务 1" not in data["output_text"]
 

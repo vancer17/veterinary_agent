@@ -27,6 +27,8 @@ class AgentPathNode(StrEnum):
     CONSULTATION_SEMANTIC_EXTRACTOR_AGENT = "ConsultationSemanticExtractorAgent"
     CONSULTATION_STATE_AGENT = "ConsultationStateAgent"
     ANSWERABILITY_EVALUATOR = "AnswerabilityEvaluator"
+    CONSULTATION_STATE_SERVICE = "ConsultationStateService"
+    CONSULTATION_ANSWERABILITY_POLICY_OPA = "ConsultationAnswerabilityPolicyOPA"
     KNOWLEDGE_AGENT = "KnowledgeAgent"
     QUESTION_PLANNER_AGENT = "QuestionPlannerAgent"
     RAG_QUESTION_PLANNER_AGENT = "RagQuestionPlannerAgent"
