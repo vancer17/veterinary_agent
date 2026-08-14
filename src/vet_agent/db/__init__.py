@@ -16,6 +16,7 @@ from .models import (
     ConsultationStateModel,
     ConversationTurnModel,
     IdempotencyRecordModel,
+    InputSafetyCandidateDefinitionModel,
     KnowledgeIngestionBatchModel,
     KnowledgeChunkModel,
     LogicTraceModel,
@@ -26,7 +27,7 @@ from .models import (
     PetReportModel,
     PetSessionBindingModel,
     RagAuditEventModel,
-    SafetyRuleModel,
+    TaskRoutingDomainModel,
 )
 from .session import make_engine, make_session_factory, session_scope, sqlalchemy_url
 
@@ -40,6 +41,7 @@ __all__ = [
     "ConsultationStateModel",
     "ConversationTurnModel",
     "IdempotencyRecordModel",
+    "InputSafetyCandidateDefinitionModel",
     "KnowledgeChunkModel",
     "KnowledgeIngestionBatchModel",
     "LogicTraceModel",
@@ -50,7 +52,7 @@ __all__ = [
     "PetReportModel",
     "PetSessionBindingModel",
     "RagAuditEventModel",
-    "SafetyRuleModel",
+    "TaskRoutingDomainModel",
     "make_engine",
     "make_session_factory",
     "session_scope",

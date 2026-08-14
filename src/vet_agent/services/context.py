@@ -1,7 +1,8 @@
 """
 文件：src/vet_agent/services/context.py
-作用：组装当前回合可见的宠物上下文，并区分已验证资料与自报资料。
-说明：本文件遵循项目标准文件树编排；跨包引用应通过对应包的 __init__.py 暴露能力。
+作用：组装当前回合可进入 Agent 主链路的宠物上下文，并隔离已验证资料与请求侧自报资料。
+范围：位于范围授权之后、临床安全与问诊链路之前，只消费 ScopeContextService 暴露的已验证宠物资料。
+说明：本文件不直接访问数据库模型，不从 pet_info 推断权威画像；缺少已验证资料时按 Fail Fast 处理。
 """
 
 
@@ -10,7 +11,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from vet_agent import Evidence, VetContext
+from ingress import ForbiddenError
+from vet_agent import AuthorizedScopeContext, Evidence, ScopeAssertion, TrustedIdentity, VetContext
+
+from .scope import ScopeContextService
 
 
 @dataclass
@@ -79,16 +83,63 @@ class PetContextProvider:
     说明：当前仅暴露服务端已验证资料；请求侧自报信息只保留为审计提示，不进入临床硬判断。
     """
 
-    async def load(self, vet_context: VetContext, metadata: dict[str, Any]) -> PetContext:
+    def __init__(self, scope_service: ScopeContextService) -> None:
+        """初始化宠物上下文提供器。
+
+        :param scope_service: 身份、宠物资料与会话范围上下文服务。
+        :return: 无返回值。
+        """
+        self.scope_service = scope_service
+
+    async def load(
+        self,
+        identity: TrustedIdentity,
+        scope_assertion: ScopeAssertion,
+        vet_context: VetContext,
+        metadata: dict[str, Any],
+        *,
+        authorized_scope_context: AuthorizedScopeContext | None = None,
+    ) -> PetContext:
         """加载当前回合可见的宠物上下文。
 
+        :param identity: 本轮可信身份范围。
+        :param scope_assertion: BFF 对本轮 Agent 调用范围的服务端声明。
         :param vet_context: 兽医业务上下文。
         :param metadata: 附加元数据。
+        :param authorized_scope_context: 入口授权后生成的内部范围上下文快照。
         :return: 返回仅包含已验证资料的宠物上下文。
         """
-        reported_profile = self._reported_profile(vet_context.pet_info)
-        verified_profile = self._load_verified_profile(vet_context, metadata)
-        evidence = self._build_evidence(vet_context, reported_profile, verified_profile)
+        del metadata
+        if authorized_scope_context is None:
+            scope_context = await self.scope_service.authorize(
+                scope_assertion,
+                pet_info=vet_context.pet_info,
+            )
+            verified_profile = scope_context.verified_profile
+            reported_pet_info = scope_context.reported_pet_info
+        else:
+            if authorized_scope_context.identity != identity:
+                raise ForbiddenError(
+                    "authorized scope context does not match request identity",
+                    details={
+                        "user_id": identity.user_id,
+                        "pet_id": identity.pet_id,
+                        "session_id": identity.session_id,
+                    },
+                )
+            verified_profile = dict(authorized_scope_context.verified_profile)
+            reported_pet_info = dict(authorized_scope_context.reported_pet_info)
+        if not verified_profile:
+            raise ForbiddenError(
+                "verified pet profile is required",
+                details={
+                    "user_id": identity.user_id,
+                    "pet_id": identity.pet_id,
+                    "session_id": identity.session_id,
+                },
+            )
+        reported_profile = self._reported_profile(reported_pet_info)
+        evidence = self._build_evidence(identity, reported_profile, verified_profile)
         return PetContext(
             verified_profile=verified_profile,
             reported_profile=reported_profile,
@@ -98,17 +149,6 @@ class PetContextProvider:
             device={},
             evidence=evidence,
         )
-
-    def _load_verified_profile(self, vet_context: VetContext, metadata: dict[str, Any]) -> dict[str, Any]:
-        """加载服务端已验证的宠物画像。
-
-        :param vet_context: 兽医业务上下文。
-        :param metadata: 附加元数据。
-        :return: 当前未接入可信资料源时返回空字典。
-        """
-        # TODO: 接入宠物画像领域后，仅从该领域读取并验证服务端资料。
-        del vet_context, metadata
-        return {}
 
     def _reported_profile(self, pet_info: dict[str, Any]) -> dict[str, Any]:
         """整理请求侧自报的宠物画像。
@@ -130,13 +170,13 @@ class PetContextProvider:
 
     def _build_evidence(
         self,
-        vet_context: VetContext,
+        identity: TrustedIdentity,
         reported_profile: dict[str, Any],
         verified_profile: dict[str, Any],
     ) -> list[Evidence]:
         """构造宠物上下文证据。
 
-        :param vet_context: 兽医业务上下文。
+        :param identity: 本轮可信身份范围。
         :param reported_profile: 请求侧自报的宠物画像。
         :param verified_profile: 服务端已验证的宠物画像。
         :return: 返回上下文证据列表。
@@ -145,7 +185,7 @@ class PetContextProvider:
             Evidence(
                 source="可信宠物画像",
                 detail=(
-                    f"pet_id={vet_context.pet_id} 的服务端已验证资料已加载。"
+                    f"pet_id={identity.pet_id} 的服务端已验证资料已加载。"
                     if verified_profile
                     else "当前未接入服务端已验证宠物画像，相关字段已按未知处理。"
                 ),

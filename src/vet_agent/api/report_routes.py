@@ -61,7 +61,7 @@ async def parse_report(payload: ReportParseRequest, request: Request):
     container = get_container()
     identity = TrustedIdentity(user_id=payload.user_id, session_id=payload.session_id, pet_id=payload.pet_id)
     principal = container.access_control.authenticate(request.headers)
-    await container.access_control.authorize(identity, pet_info={}, principal=principal)
+    await container.access_control.authorize_identity(identity, pet_info={}, principal=principal)
     if not payload.oss_image_url:
         raise InvalidRequestError("oss_image_url is required")
     try:
@@ -93,7 +93,7 @@ async def list_reports(
     container = get_container()
     identity = TrustedIdentity(user_id=user_id, session_id=session_id, pet_id=pet_id)
     principal = container.access_control.authenticate(request.headers)
-    await container.access_control.authorize(identity, pet_info={}, principal=principal)
+    await container.access_control.authorize_identity(identity, pet_info={}, principal=principal)
     return {"items": await container.report_service.list_reports(identity)}
 
 
@@ -117,7 +117,7 @@ async def get_report(
     container = get_container()
     identity = TrustedIdentity(user_id=user_id, session_id=session_id, pet_id=pet_id)
     principal = container.access_control.authenticate(request.headers)
-    await container.access_control.authorize(identity, pet_info={}, principal=principal)
+    await container.access_control.authorize_identity(identity, pet_info={}, principal=principal)
     report = await container.report_service.get_report(identity, report_id)
     if not report:
         raise InvalidRequestError("report not found")

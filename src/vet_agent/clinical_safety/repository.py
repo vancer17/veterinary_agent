@@ -1,13 +1,14 @@
 """
 文件：src/vet_agent/clinical_safety/repository.py
-作用：定义临床安全资产仓储契约，并提供标准 JSON 文件仓储与文本降级召回。
-说明：文件仓储仅服务于离线导入、测试和数据库不可用时的保守降级；生产向量检索由 PostgreSQL 仓储实现。
+作用：定义临床安全资产读取、离线导入与线上向量召回的数据仓储契约。
+范围：位于临床安全候选召回数据链的数据库访问边界；业务层只能依赖本文件暴露的仓储协议。
+说明：运行时候选召回只允许通过向量仓储完成；文件仓储仅服务离线导入、转换校验和测试读取，不承担线上回退召回。
 """
 
 from __future__ import annotations
 
 import json
-import re
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Protocol, Sequence, cast
 
@@ -25,11 +26,14 @@ from .models import (
 PUBLISHED_REVIEW_STATUS = "approved"
 
 
-class ClinicalSafetyRepository(Protocol):
-    """定义临床安全资产、chunk 与召回结果的数据访问契约。"""
+class ClinicalSafetyAssetRepository(Protocol):
+    """定义临床安全资产与 chunk 的只读数据访问契约。
+
+    :return: 无返回值；该协议用于隔离数据资产读取与运行时召回职责。
+    """
 
     def assets(self, *, published_only: bool = True) -> list[ClinicalSafetyAsset]:
-        """读取可用于临床安全裁决的资产。
+        """读取可用于临床安全裁决或离线导入的资产。
 
         :param published_only: 是否仅返回已审核发布的资产。
         :return: 返回临床安全资产列表。
@@ -42,7 +46,7 @@ class ClinicalSafetyRepository(Protocol):
         chunk_type: ClinicalSafetyChunkType | None = None,
         published_only: bool = True,
     ) -> list[ClinicalSafetyChunk]:
-        """读取可用于候选召回的临床安全 chunk。
+        """读取可用于临床安全召回或离线导入的 chunk。
 
         :param chunk_type: 限定读取的 chunk 类型；None 表示全部类型。
         :param published_only: 是否仅返回已审核发布的 chunk。
@@ -77,6 +81,20 @@ class ClinicalSafetyRepository(Protocol):
         :return: 返回指定资产的安全 chunk 列表。
         """
         ...
+
+    def is_ready(self) -> bool:
+        """检查当前临床安全资产仓储是否具备读取条件。
+
+        :return: 数据可用时返回 True，否则返回 False。
+        """
+        ...
+
+
+class ClinicalSafetyVectorRepository(ClinicalSafetyAssetRepository, Protocol):
+    """定义线上临床安全向量召回仓储契约。
+
+    :return: 无返回值；该协议是候选召回链路唯一允许依赖的运行时数据入口。
+    """
 
     def retrieve_vector_chunk_hits(
         self,
@@ -96,32 +114,15 @@ class ClinicalSafetyRepository(Protocol):
         """
         ...
 
-    def retrieve_text_chunk_hits(
-        self,
-        query: str,
-        *,
-        chunk_types: tuple[ClinicalSafetyChunkType, ...],
-        limit: int,
-    ) -> list[ClinicalSafetyChunkHit]:
-        """在无法使用 embedding 时执行保守文本召回。
 
-        :param query: 用户输入与可信上下文组成的查询文本。
-        :param chunk_types: 允许参与召回的 chunk 类型。
-        :param limit: 返回 chunk 命中数量上限。
-        :return: 返回按文本相关度排序的 chunk 命中列表。
-        """
-        ...
-
-    def is_ready(self) -> bool:
-        """检查当前临床安全仓储是否具备运行条件。
-
-        :return: 数据可用时返回 True，否则返回 False。
-        """
-        ...
+ClinicalSafetyRepository = ClinicalSafetyVectorRepository
 
 
-class FileClinicalSafetyRepository:
-    """从标准 JSON 文件读取临床安全资产，并提供非生产文本降级召回。"""
+class FileClinicalSafetyRepository(ClinicalSafetyAssetRepository):
+    """从标准 JSON 文件读取临床安全资产，服务离线导入与测试数据准备。
+
+    :return: 无返回值；运行时召回链路不得依赖本仓储生成候选。
+    """
 
     def __init__(self, asset_dir: Path) -> None:
         """初始化文件型临床安全仓储。
@@ -134,8 +135,8 @@ class FileClinicalSafetyRepository:
         self._chunks: list[ClinicalSafetyChunk] | None = None
         self._asset_index: dict[str, ClinicalSafetyAsset] | None = None
 
-    def assets(self, *, published_only: bool = False) -> list[ClinicalSafetyAsset]:
-        """读取临床安全资产。
+    def assets(self, *, published_only: bool = True) -> list[ClinicalSafetyAsset]:
+        """读取临床安全资产文件内容。
 
         :param published_only: 是否仅返回已审核发布的资产。
         :return: 返回临床安全资产列表。
@@ -149,9 +150,9 @@ class FileClinicalSafetyRepository:
         self,
         *,
         chunk_type: ClinicalSafetyChunkType | None = None,
-        published_only: bool = False,
+        published_only: bool = True,
     ) -> list[ClinicalSafetyChunk]:
-        """读取临床安全 chunk。
+        """读取临床安全 chunk 文件内容。
 
         :param chunk_type: 限定读取的 chunk 类型；None 表示全部类型。
         :param published_only: 是否仅返回已审核发布的 chunk。
@@ -169,9 +170,9 @@ class FileClinicalSafetyRepository:
         self,
         asset_id: str,
         *,
-        published_only: bool = False,
+        published_only: bool = True,
     ) -> ClinicalSafetyAsset | None:
-        """按资产标识读取临床安全资产。
+        """按资产标识读取文件中的临床安全资产。
 
         :param asset_id: 临床安全资产标识。
         :param published_only: 是否仅允许读取已审核发布的资产。
@@ -182,7 +183,9 @@ class FileClinicalSafetyRepository:
         asset = self._asset_index.get(asset_id)
         if asset is None:
             return None
-        if published_only and asset.review_status != PUBLISHED_REVIEW_STATUS:
+        if published_only and not (
+            asset.enabled and asset.review_status == PUBLISHED_REVIEW_STATUS and asset.published_at is not None
+        ):
             return None
         return asset
 
@@ -190,9 +193,9 @@ class FileClinicalSafetyRepository:
         self,
         asset_id: str,
         *,
-        published_only: bool = False,
+        published_only: bool = True,
     ) -> list[ClinicalSafetyChunk]:
-        """读取指定资产关联的全部安全 chunk。
+        """读取指定资产关联的文件 chunk。
 
         :param asset_id: 临床安全资产标识。
         :param published_only: 是否仅返回已审核发布的 chunk。
@@ -203,61 +206,6 @@ class FileClinicalSafetyRepository:
             for chunk in self.chunks(published_only=published_only)
             if chunk.asset_id == asset_id
         ]
-
-    def retrieve_vector_chunk_hits(
-        self,
-        query_embedding: Sequence[float],
-        *,
-        chunk_types: tuple[ClinicalSafetyChunkType, ...],
-        limit: int,
-        min_score: float,
-    ) -> list[ClinicalSafetyChunkHit]:
-        """返回空结果，表示文件仓储不承载生产向量检索。
-
-        :param query_embedding: 已生成的查询 embedding。
-        :param chunk_types: 允许参与召回的 chunk 类型。
-        :param limit: 返回 chunk 命中数量上限。
-        :param min_score: 候选最低相似度分数。
-        :return: 始终返回空列表。
-        """
-        del query_embedding, chunk_types, limit, min_score
-        return []
-
-    def retrieve_text_chunk_hits(
-        self,
-        query: str,
-        *,
-        chunk_types: tuple[ClinicalSafetyChunkType, ...],
-        limit: int,
-    ) -> list[ClinicalSafetyChunkHit]:
-        """根据规范化短语重叠执行文件仓储文本降级召回。
-
-        :param query: 用户输入与可信上下文组成的查询文本。
-        :param chunk_types: 允许参与召回的 chunk 类型。
-        :param limit: 返回 chunk 命中数量上限。
-        :return: 返回按文本相关度排序的 chunk 命中列表。
-        """
-        normalized_query = self._normalize_text(query)
-        if not normalized_query:
-            return []
-        hits: list[ClinicalSafetyChunkHit] = []
-        for chunk in self.chunks(published_only=False):
-            if chunk.chunk_type not in chunk_types:
-                continue
-            terms = self._overlap_terms(normalized_query, chunk)
-            if not terms:
-                continue
-            score = min(1.0, 0.2 + 0.2 * len(terms))
-            hits.append(
-                ClinicalSafetyChunkHit(
-                    chunk=chunk,
-                    score=score,
-                    score_type="lexical_overlap",
-                    retrieval_source="clinical_safety_file_fallback",
-                    matched_terms=terms,
-                )
-            )
-        return sorted(hits, key=lambda item: item.score, reverse=True)[:limit]
 
     def is_ready(self) -> bool:
         """检查标准资产和 chunk JSON 文件是否存在。
@@ -297,14 +245,14 @@ class FileClinicalSafetyRepository:
         """
         return ClinicalSafetyAsset(
             asset_id=str(item.get("asset_id", "")),
-            asset_type=self._asset_type(item.get("asset_type", "danger_pattern")),
+            asset_type=self._asset_type(item.get("asset_type")),
             canonical_name=str(item.get("canonical_name", "")),
             category=str(item.get("category", "")),
             species_scope=self._tuple_of_text(item.get("species_scope", [])),
             sex_scope=self._tuple_of_text(item.get("sex_scope", [])),
             age_scope=self._tuple_of_text(item.get("age_scope", [])),
-            severity=self._severity(item.get("severity", "caution")),
-            action_class=self._action_class(item.get("action_class", "safety_warning")),
+            severity=self._severity(item.get("severity")),
+            action_class=self._action_class(item.get("action_class")),
             code=str(item.get("code", "")).strip(),
             aliases=self._tuple_of_text(item.get("aliases", [])),
             carriers=self._tuple_of_text(item.get("carriers", [])),
@@ -318,6 +266,8 @@ class FileClinicalSafetyRepository:
             source=self._dict_of_text(item.get("source", {})),
             review_status=str(item.get("review_status", "pending")),
             version=str(item.get("version", "v1")),
+            enabled=bool(item.get("enabled", False)),
+            published_at=self._optional_datetime(item.get("published_at")),
             raw_text=self._dict_of_text(item.get("raw_text", {})),
             metadata=dict(item.get("metadata", {})) if isinstance(item.get("metadata", {}), dict) else {},
         )
@@ -331,13 +281,13 @@ class FileClinicalSafetyRepository:
         return ClinicalSafetyChunk(
             chunk_id=str(item.get("chunk_id", "")),
             asset_id=str(item.get("asset_id", "")),
-            chunk_type=self._chunk_type(item.get("chunk_type", "recognition")),
+            chunk_type=self._chunk_type(item.get("chunk_type")),
             title=str(item.get("title", "")),
             embedding_text=str(item.get("embedding_text", "")),
             metadata=dict(item.get("metadata", {})) if isinstance(item.get("metadata", {}), dict) else {},
             review_status=str(item.get("review_status", "pending")),
             version=str(item.get("version", "v1")),
-            enabled=bool(item.get("enabled", True)),
+            enabled=bool(item.get("enabled", False)),
             embedding_model=self._optional_text(item.get("embedding_model")),
             embedding_dimension=self._optional_int(item.get("embedding_dimension")),
             content_hash=str(item.get("content_hash", "")),
@@ -357,7 +307,11 @@ class FileClinicalSafetyRepository:
         """
         if not published_only:
             return list(assets)
-        return [asset for asset in assets if asset.review_status == PUBLISHED_REVIEW_STATUS]
+        return [
+            asset
+            for asset in assets
+            if asset.enabled and asset.review_status == PUBLISHED_REVIEW_STATUS and asset.published_at is not None
+        ]
 
     def _filter_chunks(
         self,
@@ -376,35 +330,14 @@ class FileClinicalSafetyRepository:
         return [
             chunk
             for chunk in chunks
-            if chunk.enabled and chunk.review_status == PUBLISHED_REVIEW_STATUS
+            if (
+                chunk.enabled
+                and chunk.review_status == PUBLISHED_REVIEW_STATUS
+                and chunk.embedding_model is not None
+                and chunk.embedding_dimension is not None
+                and bool(chunk.content_hash.strip())
+            )
         ]
-
-    def _overlap_terms(self, normalized_query: str, chunk: ClinicalSafetyChunk) -> tuple[str, ...]:
-        """提取查询文本与文件 chunk 之间的精确短语交集。
-
-        :param normalized_query: 已规范化的查询文本。
-        :param chunk: 待比较的临床安全 chunk。
-        :return: 返回去重后的命中短语。
-        """
-        terms = [
-            term.strip()
-            for term in re.split(r"[；;、，,。|/]+", chunk.embedding_text)
-            if term.strip()
-        ]
-        matches: list[str] = []
-        for term in terms:
-            normalized_term = self._normalize_text(term)
-            if len(normalized_term) >= 2 and normalized_term in normalized_query:
-                matches.append(term)
-        return tuple(dict.fromkeys(matches[:8]))
-
-    def _normalize_text(self, text: str) -> str:
-        """规范化参与文件文本召回的输入。
-
-        :param text: 原始文本。
-        :return: 返回小写且移除空白后的文本。
-        """
-        return re.sub(r"\s+", "", text.lower())
 
     def _tuple_of_text(self, value: Any) -> tuple[str, ...]:
         """将 JSON 字段转换为字符串元组。
@@ -455,7 +388,7 @@ class FileClinicalSafetyRepository:
         }
         if normalized in allowed:
             return cast(ClinicalSafetyAssetType, normalized)
-        return "danger_pattern"
+        raise ValueError(f"invalid clinical safety asset_type: {value}")
 
     def _action_class(self, value: Any) -> ClinicalSafetyActionClass:
         """校验并返回标准安全处置动作分类。
@@ -467,7 +400,7 @@ class FileClinicalSafetyRepository:
         allowed = {"emergency", "same_day_visit", "urgent_visit", "safety_warning"}
         if normalized in allowed:
             return cast(ClinicalSafetyActionClass, normalized)
-        return "safety_warning"
+        raise ValueError(f"invalid clinical safety action_class: {value}")
 
     def _chunk_type(self, value: Any) -> ClinicalSafetyChunkType:
         """校验并返回标准临床安全 chunk 类型。
@@ -478,7 +411,7 @@ class FileClinicalSafetyRepository:
         normalized = str(value).strip()
         if normalized in {"recognition", "clinical_risk", "triage_action"}:
             return cast(ClinicalSafetyChunkType, normalized)
-        return "recognition"
+        raise ValueError(f"invalid clinical safety chunk_type: {value}")
 
     def _severity(self, value: Any) -> SafetySeverity:
         """校验并返回安全规则严重级别。
@@ -489,7 +422,7 @@ class FileClinicalSafetyRepository:
         normalized = str(value).strip().lower()
         if normalized in {"info", "caution", "urgent", "blocked"}:
             return cast(SafetySeverity, normalized)
-        return "caution"
+        raise ValueError(f"invalid clinical safety severity: {value}")
 
     def _optional_text(self, value: Any) -> str | None:
         """转换可选文本字段。
@@ -513,168 +446,17 @@ class FileClinicalSafetyRepository:
         except (TypeError, ValueError):
             return None
 
+    def _optional_datetime(self, value: Any) -> datetime | None:
+        """转换可选发布时间字段。
 
-class FallbackClinicalSafetyRepository:
-    """组合数据库仓储与文件仓储，提供数据库优先的安全数据访问。"""
-
-    def __init__(
-        self,
-        primary: ClinicalSafetyRepository,
-        fallback: ClinicalSafetyRepository,
-    ) -> None:
-        """初始化数据库优先的组合仓储。
-
-        :param primary: 优先使用的生产仓储。
-        :param fallback: 主仓储不可用时使用的文件仓储。
-        :return: 无返回值。
+        :param value: 原始 JSON 值。
+        :return: 有效 ISO 时间字符串时返回 datetime，否则返回 None。
         """
-        self.primary = primary
-        self.fallback = fallback
-
-    def assets(self, *, published_only: bool = True) -> list[ClinicalSafetyAsset]:
-        """读取临床安全资产，并在主仓储无数据时回退。
-
-        :param published_only: 是否仅返回已审核发布的资产。
-        :return: 返回临床安全资产列表。
-        """
-        try:
-            primary_assets = self.primary.assets(published_only=published_only)
-            if primary_assets:
-                return primary_assets
-        except Exception:
-            pass
-        return self.fallback.assets(published_only=published_only)
-
-    def chunks(
-        self,
-        *,
-        chunk_type: ClinicalSafetyChunkType | None = None,
-        published_only: bool = True,
-    ) -> list[ClinicalSafetyChunk]:
-        """读取临床安全 chunk，并在主仓储无数据时回退。
-
-        :param chunk_type: 限定读取的 chunk 类型；None 表示全部类型。
-        :param published_only: 是否仅返回已审核发布的 chunk。
-        :return: 返回临床安全 chunk 列表。
-        """
-        try:
-            primary_chunks = self.primary.chunks(
-                chunk_type=chunk_type,
-                published_only=published_only,
-            )
-            if primary_chunks:
-                return primary_chunks
-        except Exception:
-            pass
-        return self.fallback.chunks(chunk_type=chunk_type, published_only=published_only)
-
-    def asset_by_id(
-        self,
-        asset_id: str,
-        *,
-        published_only: bool = True,
-    ) -> ClinicalSafetyAsset | None:
-        """按资产标识读取临床安全资产，并在主仓储无结果时回退。
-
-        :param asset_id: 临床安全资产标识。
-        :param published_only: 是否仅允许读取已审核发布的资产。
-        :return: 找到时返回资产，否则返回 None。
-        """
-        try:
-            primary_asset = self.primary.asset_by_id(asset_id, published_only=published_only)
-            if primary_asset is not None:
-                return primary_asset
-        except Exception:
-            pass
-        return self.fallback.asset_by_id(asset_id, published_only=published_only)
-
-    def chunks_by_asset_id(
-        self,
-        asset_id: str,
-        *,
-        published_only: bool = True,
-    ) -> list[ClinicalSafetyChunk]:
-        """读取指定资产的 chunk，并在主仓储无结果时回退。
-
-        :param asset_id: 临床安全资产标识。
-        :param published_only: 是否仅返回已审核发布的 chunk。
-        :return: 返回指定资产的安全 chunk 列表。
-        """
-        try:
-            primary_chunks = self.primary.chunks_by_asset_id(
-                asset_id,
-                published_only=published_only,
-            )
-            if primary_chunks:
-                return primary_chunks
-        except Exception:
-            pass
-        return self.fallback.chunks_by_asset_id(asset_id, published_only=published_only)
-
-    def retrieve_vector_chunk_hits(
-        self,
-        query_embedding: Sequence[float],
-        *,
-        chunk_types: tuple[ClinicalSafetyChunkType, ...],
-        limit: int,
-        min_score: float,
-    ) -> list[ClinicalSafetyChunkHit]:
-        """从主仓储执行向量召回，不将文件数据伪装成向量结果。
-
-        :param query_embedding: 已生成的查询 embedding。
-        :param chunk_types: 允许参与召回的 chunk 类型。
-        :param limit: 返回 chunk 命中数量上限。
-        :param min_score: 候选最低相似度分数。
-        :return: 返回主仓储向量召回命中。
-        """
-        try:
-            return self.primary.retrieve_vector_chunk_hits(
-                query_embedding,
-                chunk_types=chunk_types,
-                limit=limit,
-                min_score=min_score,
-            )
-        except Exception:
-            return []
-
-    def retrieve_text_chunk_hits(
-        self,
-        query: str,
-        *,
-        chunk_types: tuple[ClinicalSafetyChunkType, ...],
-        limit: int,
-    ) -> list[ClinicalSafetyChunkHit]:
-        """执行数据库文本召回，失败或无命中时回退到标准文件。
-
-        :param query: 用户输入与可信上下文组成的查询文本。
-        :param chunk_types: 允许参与召回的 chunk 类型。
-        :param limit: 返回 chunk 命中数量上限。
-        :return: 返回文本召回命中。
-        """
-        try:
-            primary_hits = self.primary.retrieve_text_chunk_hits(
-                query,
-                chunk_types=chunk_types,
-                limit=limit,
-            )
-            if primary_hits:
-                return primary_hits
-        except Exception:
-            pass
-        return self.fallback.retrieve_text_chunk_hits(
-            query,
-            chunk_types=chunk_types,
-            limit=limit,
-        )
-
-    def is_ready(self) -> bool:
-        """检查主仓储或文件回退仓储是否可用。
-
-        :return: 任一仓储具备安全数据时返回 True。
-        """
-        try:
-            if self.primary.is_ready():
-                return True
-        except Exception:
-            pass
-        return self.fallback.is_ready()
+        if isinstance(value, datetime):
+            return value
+        if value is None:
+            return None
+        text = str(value).strip()
+        if not text:
+            return None
+        return datetime.fromisoformat(text.replace("Z", "+00:00"))

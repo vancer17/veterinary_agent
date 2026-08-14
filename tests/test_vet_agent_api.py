@@ -8,22 +8,864 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator, Sequence
+from datetime import UTC, datetime
+from enum import StrEnum
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import BaseModel
 
 from ingress import create_app, set_orchestrator
-from vet_agent import Settings, VetAgentIngressOrchestrator, get_container
-from vet_agent.agents import TaskSplitterAgent
-from vet_agent.repositories import FileRuleRepository
+from vet_agent import (
+    AgentTurnRequest,
+    AgentTurnResponse,
+    Container,
+    SafetySignal,
+    Settings,
+    TrustedIdentity,
+    VetAgentIngressOrchestrator,
+    set_container,
+)
+from vet_agent.clinical_safety import (
+    ClinicalSafetyAsset,
+    ClinicalSafetyCandidate,
+    ClinicalSafetyPolicyAction,
+    ClinicalSafetyPolicyClient,
+    ClinicalSafetyPolicyDecision,
+    ClinicalSafetyPolicyInput,
+    ClinicalSafetyChunk,
+    ClinicalSafetyChunkHit,
+    ClinicalSafetyChunkType,
+)
+from vet_agent.consultation_state import LocalConsultationAnswerabilityPolicyClient
+from vet_agent.followup_rag import (
+    FollowupRagPlan,
+    FollowupRagQuestion,
+    FollowupRagRequest,
+    FollowupRagRetrievalResult,
+    FollowupRagServiceProtocol,
+)
+from vet_agent.answer_rag import (
+    AnswerRagRequest,
+    AnswerRagResult,
+    AnswerRagRetrievalResult,
+    AnswerRagServiceProtocol,
+    AnswerRagStrategy,
+)
+from vet_agent.input_safety import (
+    InputSafetyService,
+    LocalInputSafetyPolicyClient,
+    StaticInputSafetyRepository,
+)
+from vet_agent.observability import AgentPathNode
+from vet_agent.repositories import FileRuleRepository, KnowledgeHit, ScopeRepository, SessionBinding, VerifiedPetProfile
 from vet_agent.runtime import QwenClient
+from vet_agent.services import MemoryService, TurnExecutionGateProtocol, TurnExecutor
+from vet_agent.stores import JsonDocumentStore
+from vet_agent.task_routing import (
+    DEFAULT_TASK_KEY,
+    LocalTaskRoutingPolicyClient,
+    StaticTaskRoutingDomainRepository,
+    TaskRoutingRequestContext,
+    TaskRoutingService,
+)
+
+
+class StaticFollowupRagStrategy(StrEnum):
+    """表示 API 测试中的静态追问替身策略。
+
+    :return: 无返回值；仅用于测试替身和 metadata 断言，不进入生产对外枚举。
+    """
+
+    STATIC_TEST = "static_followup_rag_test"
 
 
 app = create_app()
 
 
-def _client(tmp_path, monkeypatch) -> TestClient:
+def _assert_policy_path_is_named(
+    agent_path: Sequence[str],
+    *,
+    input_safety_expected: bool = True,
+    clinical_safety_expected: bool = False,
+) -> None:
+    """验证 Agent 审计路径使用具备领域语义的策略节点。
+
+    :param agent_path: API metadata.multi_agent_path 返回的审计路径。
+    :param input_safety_expected: 是否期望输入安全策略节点已经参与链路。
+    :param clinical_safety_expected: 是否期望临床安全策略节点已经参与链路。
+    :return: 无返回值；断言通过表示审计链路未退化为裸 OPA 命名。
+    """
+    assert "OPA" not in agent_path
+    if input_safety_expected:
+        assert AgentPathNode.INPUT_SAFETY_POLICY_OPA.value in agent_path
+    if clinical_safety_expected:
+        assert AgentPathNode.CLINICAL_SAFETY_POLICY_OPA.value in agent_path
+
+
+class StaticClinicalSafetyPolicyClient(ClinicalSafetyPolicyClient):
+    """为 API 测试提供显式注入的临床安全策略客户端。
+
+    说明：该替身只消费已召回候选和可信结构化语义，不扫描用户原始文本。
+    """
+
+    async def decide(self, policy_input: ClinicalSafetyPolicyInput) -> ClinicalSafetyPolicyDecision:
+        """根据结构化临床安全候选返回 API 测试决策。
+
+        :param policy_input: evaluator 已组装的临床安全策略输入。
+        :return: 返回用于 API 主链路断言的测试策略决策。
+        """
+        signals = tuple(
+            SafetySignal(
+                code=candidate.asset.code,
+                severity=(
+                    "urgent"
+                    if candidate.asset.severity == "urgent"
+                    or candidate.asset.action_class in {"emergency", "same_day_visit", "urgent_visit"}
+                    or candidate.score >= policy_input.thresholds.urgent_min_score
+                    else candidate.asset.severity
+                ),
+                message=candidate.asset.triage_message
+                or candidate.asset.clinical_risk_summary
+                or f"命中临床安全风险：{candidate.asset.canonical_name}",
+                matched_terms=list(candidate.matched_terms()),
+            )
+            for candidate in policy_input.candidates
+            if candidate.score >= policy_input.thresholds.signal_min_score
+            and not self._context_mismatch(candidate, policy_input)
+        )
+        action = (
+            ClinicalSafetyPolicyAction.ESCALATE
+            if any(signal.severity in {"urgent", "blocked"} for signal in signals)
+            else ClinicalSafetyPolicyAction.OBSERVE
+            if signals
+            else ClinicalSafetyPolicyAction.ALLOW
+        )
+        return ClinicalSafetyPolicyDecision(
+            action=action,
+            allow=True,
+            message="API 测试临床安全策略完成结构化候选裁决。",
+            reasons=tuple(signal.code for signal in signals),
+            signals=signals,
+            metadata={"policy_backend": "static_api_test"},
+        )
+
+    def is_ready(self) -> bool:
+        """声明 API 测试策略客户端可用。
+
+        :return: 始终返回 True。
+        """
+        return True
+
+    def _context_mismatch(
+        self,
+        candidate: ClinicalSafetyCandidate,
+        policy_input: ClinicalSafetyPolicyInput,
+    ) -> bool:
+        """判断候选资产与可信结构化宠物上下文是否不匹配。
+
+        :param candidate: 已由测试向量仓储召回的临床安全候选。
+        :param policy_input: evaluator 已组装的临床安全策略输入。
+        :return: 可信物种、性别或年龄范围不适用时返回 True。
+        """
+        semantic = policy_input.semantic_result
+        if semantic is None or not semantic.is_trusted():
+            return False
+        asset = candidate.asset
+        if asset.species_scope and semantic.species != "unknown" and semantic.species not in asset.species_scope:
+            return True
+        if asset.sex_scope and semantic.sex != "unknown" and semantic.sex not in asset.sex_scope:
+            return True
+        return bool(
+            "senior" in asset.age_scope
+            and semantic.age_group not in {"senior", "unknown"}
+        )
+
+
+class InMemoryScopeRepository(ScopeRepository):
+    """为 API 测试提供显式注入的范围仓储。
+
+    :return: 无返回值。
+    """
+
+    def __init__(self) -> None:
+        """初始化测试范围仓储。
+
+        :return: 无返回值。
+        """
+        self.profiles: dict[tuple[str, str], VerifiedPetProfile] = {}
+        self.bindings: dict[str, SessionBinding] = {}
+        self.auto_register_profiles: bool = True
+        self.upsert_profile_count: int = 0
+        self.bind_session_count: int = 0
+        self.touch_session_count: int = 0
+
+    def get_pet_profile(self, identity: TrustedIdentity) -> VerifiedPetProfile | None:
+        """读取测试范围内的已验证宠物画像。
+
+        :param identity: 本轮可信身份范围。
+        :return: 返回测试画像投影。
+        """
+        key = (identity.user_id, identity.pet_id)
+        if key not in self.profiles:
+            if not self.auto_register_profiles:
+                for profile in self.profiles.values():
+                    if profile.pet_id == identity.pet_id:
+                        return profile
+                return None
+            self.profiles[key] = VerifiedPetProfile(
+                user_id=identity.user_id,
+                pet_id=identity.pet_id,
+                profile={},
+                source="test_verified_profile_stub",
+                is_active=True,
+            )
+        return self.profiles[key]
+
+    def upsert_pet_profile(
+        self,
+        identity: TrustedIdentity,
+        *,
+        profile: dict[str, Any],
+        source: str,
+        is_active: bool,
+    ) -> VerifiedPetProfile:
+        """写入或刷新测试范围内的上游已验证宠物画像投影。
+
+        :param identity: 本轮可信身份范围。
+        :param profile: 上游已验证宠物画像。
+        :param source: 上游画像来源。
+        :param is_active: 宠物画像是否启用。
+        :return: 返回写入后的画像投影。
+        """
+        self.upsert_profile_count += 1
+        item = VerifiedPetProfile(
+            user_id=identity.user_id,
+            pet_id=identity.pet_id,
+            profile=profile,
+            source=source,
+            is_active=is_active,
+        )
+        self.profiles[(identity.user_id, identity.pet_id)] = item
+        return item
+
+    def get_session_binding(self, session_id: str) -> SessionBinding | None:
+        """读取测试范围内的会话绑定。
+
+        :param session_id: 会话标识。
+        :return: 返回测试会话绑定投影。
+        """
+        return self.bindings.get(session_id)
+
+    def bind_session(self, identity: TrustedIdentity) -> SessionBinding | None:
+        """创建测试范围内的会话绑定。
+
+        :param identity: 本轮可信身份范围。
+        :return: 返回创建后或已存在的会话绑定投影。
+        """
+        self.bind_session_count += 1
+        now = datetime.now(UTC)
+        self.bindings.setdefault(
+            identity.session_id,
+            SessionBinding(
+                session_id=identity.session_id,
+                user_id=identity.user_id,
+                pet_id=identity.pet_id,
+                created_at=now,
+                updated_at=now,
+                last_seen_at=now,
+            ),
+        )
+        return self.bindings.get(identity.session_id)
+
+    def touch_session(self, identity: TrustedIdentity) -> None:
+        """更新测试范围内的会话最近访问时间。
+
+        :param identity: 本轮可信身份范围。
+        :return: 无返回值。
+        """
+        self.touch_session_count += 1
+        existing = self.bindings.get(identity.session_id)
+        if existing is None:
+            self.bind_session(identity)
+            return
+        now = datetime.now(UTC)
+        self.bindings[identity.session_id] = SessionBinding(
+            session_id=existing.session_id,
+            user_id=existing.user_id,
+            pet_id=existing.pet_id,
+            created_at=existing.created_at,
+            updated_at=now,
+            last_seen_at=now,
+        )
+
+    def is_ready(self) -> bool:
+        """检查测试范围仓储是否就绪。
+
+        :return: 始终返回 True。
+        """
+        return True
+
+    def register_profile(
+        self,
+        *,
+        user_id: str,
+        pet_id: str,
+        profile: dict[str, Any] | None = None,
+        is_active: bool = True,
+    ) -> None:
+        """显式登记测试范围内的已验证宠物画像。
+
+        :param user_id: 宠物所属用户标识。
+        :param pet_id: 宠物标识。
+        :param profile: 已验证宠物画像内容。
+        :param is_active: 宠物资料是否启用。
+        :return: 无返回值。
+        """
+        self.profiles[(user_id, pet_id)] = VerifiedPetProfile(
+            user_id=user_id,
+            pet_id=pet_id,
+            profile=profile or {},
+            source="test_registered_profile",
+            is_active=is_active,
+        )
+
+
+class InMemoryTurnExecutionGate(TurnExecutionGateProtocol):
+    """为 API 测试提供显式注入的 turn execution 门禁替身。
+
+    :return: 无返回值。
+    """
+
+    def __init__(self) -> None:
+        """初始化测试 turn execution 门禁替身。
+
+        :return: 无返回值。
+        """
+        self.responses: dict[tuple[str, str, str, str], AgentTurnResponse] = {}
+        self.execution_count: int = 0
+
+    async def run(self, request: AgentTurnRequest, execute: TurnExecutor) -> AgentTurnResponse:
+        """执行测试范围内的 turn lock 与幂等重放逻辑。
+
+        :param request: 当前 Agent 回合请求。
+        :param execute: 测试主链路执行函数。
+        :return: 返回新生成或已保存的测试响应。
+        """
+        idempotency_key = request.turn_options.idempotency_key
+        if not idempotency_key:
+            self.execution_count += 1
+            return await execute()
+
+        key = (
+            request.trusted_identity.user_id,
+            request.trusted_identity.pet_id,
+            request.trusted_identity.session_id,
+            idempotency_key,
+        )
+        existing = self.responses.get(key)
+        if existing is not None:
+            return existing
+
+        self.execution_count += 1
+        response = await execute()
+        self.responses[key] = response
+        return response
+
+    def is_ready(self) -> bool:
+        """检查测试 turn execution 门禁是否就绪。
+
+        :return: 始终返回 True。
+        """
+        return True
+
+
+class StaticEmbeddingClient:
+    """为 API 测试提供固定 embedding 客户端。
+
+    :return: 无返回值。
+    """
+
+    @property
+    def available(self) -> bool:
+        """声明测试 embedding 客户端始终可用。
+
+        :return: 始终返回 True。
+        """
+        return True
+
+    def embed(self, text: str) -> list[float]:
+        """为测试查询返回固定 embedding。
+
+        :param text: 待向量化文本。
+        :return: 返回固定二维向量。
+        """
+        assert text
+        return [0.2, 0.8]
+
+
+class StaticClinicalSafetyRepository:
+    """为 API 测试提供向量召回仓储替身。
+
+    :return: 无返回值。
+    """
+
+    def __init__(self) -> None:
+        """初始化测试临床安全向量仓储。
+
+        :return: 无返回值。
+        """
+        self.assets_by_id = self._assets()
+        self.chunks_by_id = {
+            asset.asset_id: ClinicalSafetyChunk(
+                chunk_id=f"{asset.asset_id}.recognition.v1",
+                asset_id=asset.asset_id,
+                chunk_type="recognition",
+                title=f"{asset.canonical_name} 风险识别",
+                embedding_text="；".join(
+                    [
+                        asset.canonical_name,
+                        *asset.aliases,
+                        *asset.symptoms,
+                        *asset.recognition_phrases,
+                    ]
+                ),
+                metadata={},
+                review_status="approved",
+            )
+            for asset in self.assets_by_id.values()
+        }
+
+    def assets(self, *, published_only: bool = True) -> list[ClinicalSafetyAsset]:
+        """读取测试临床安全资产。
+
+        :param published_only: 是否仅返回发布态资产。
+        :return: 返回测试资产列表。
+        """
+        del published_only
+        return list(self.assets_by_id.values())
+
+    def chunks(
+        self,
+        *,
+        chunk_type: ClinicalSafetyChunkType | None = None,
+        published_only: bool = True,
+    ) -> list[ClinicalSafetyChunk]:
+        """读取测试临床安全 chunk。
+
+        :param chunk_type: 限定读取的 chunk 类型。
+        :param published_only: 是否仅返回发布态 chunk。
+        :return: 返回测试 chunk 列表。
+        """
+        del published_only
+        chunks = list(self.chunks_by_id.values())
+        if chunk_type is None:
+            return chunks
+        return [chunk for chunk in chunks if chunk.chunk_type == chunk_type]
+
+    def asset_by_id(
+        self,
+        asset_id: str,
+        *,
+        published_only: bool = True,
+    ) -> ClinicalSafetyAsset | None:
+        """按资产标识读取测试临床安全资产。
+
+        :param asset_id: 资产标识。
+        :param published_only: 是否仅返回发布态资产。
+        :return: 返回匹配资产或 None。
+        """
+        del published_only
+        return self.assets_by_id.get(asset_id)
+
+    def chunks_by_asset_id(
+        self,
+        asset_id: str,
+        *,
+        published_only: bool = True,
+    ) -> list[ClinicalSafetyChunk]:
+        """读取指定资产关联的测试 chunk。
+
+        :param asset_id: 资产标识。
+        :param published_only: 是否仅返回发布态 chunk。
+        :return: 返回关联 chunk 列表。
+        """
+        del published_only
+        chunk = self.chunks_by_id.get(asset_id)
+        return [chunk] if chunk is not None else []
+
+    def retrieve_vector_chunk_hits(
+        self,
+        query_embedding: Sequence[float],
+        *,
+        chunk_types: tuple[ClinicalSafetyChunkType, ...],
+        limit: int,
+        min_score: float,
+    ) -> list[ClinicalSafetyChunkHit]:
+        """根据本轮查询文本返回对应测试向量命中。
+
+        :param query_embedding: 查询 embedding。
+        :param chunk_types: 允许参与召回的 chunk 类型。
+        :param limit: 返回 chunk 命中数量上限。
+        :param min_score: 候选最低相似度分数。
+        :return: 返回匹配测试场景的向量命中。
+        """
+        del query_embedding, min_score
+        assert limit > 0
+        if "recognition" not in chunk_types:
+            return []
+        hits: list[ClinicalSafetyChunkHit] = []
+        for asset_id in self._matched_asset_ids(_current_test_input_text):
+            chunk = self.chunks_by_id[asset_id]
+            hits.append(
+                ClinicalSafetyChunkHit(
+                    chunk=chunk,
+                    score=0.91,
+                    distance=0.09,
+                    score_type="cosine_similarity",
+                    retrieval_source="clinical_safety_pgvector",
+                    embedding_model="test-embedding",
+                )
+            )
+        return hits[:limit]
+
+    def is_ready(self) -> bool:
+        """检查测试临床安全仓储是否就绪。
+
+        :return: 始终返回 True。
+        """
+        return True
+
+    def _matched_asset_ids(self, text: str) -> list[str]:
+        """根据测试输入选择临床安全资产。
+
+        :param text: 当前测试请求文本。
+        :return: 返回匹配的资产标识列表。
+        """
+        matches: list[str] = []
+        if "xylitol" in text or "无糖口香糖" in text:
+            matches.append("safety_toxin_xylitol")
+        if "巧克力" in text:
+            matches.append("safety_toxin_chocolate")
+        if "呼吸困难" in text or "站不起来" in text:
+            matches.append("safety_emergency_red_flag")
+        if "尿少尿频" in text or "尿频" in text:
+            matches.append("safety_urinary_obstruction")
+        if "多饮多尿" in text and "消瘦" in text:
+            matches.append("safety_senior_cat_polydipsia_weight_loss")
+        if "肚子胀" in text and "干呕" in text:
+            matches.append("safety_gdv")
+        if "牙龈发紫" in text or "呼吸很快" in text:
+            matches.append("safety_cyanosis")
+        return matches
+
+    def _assets(self) -> dict[str, ClinicalSafetyAsset]:
+        """构造 API 测试用临床安全资产。
+
+        :return: 返回按资产标识索引的资产字典。
+        """
+        return {
+            "safety_toxin_xylitol": ClinicalSafetyAsset(
+                asset_id="safety_toxin_xylitol",
+                asset_type="toxin",
+                canonical_name="木糖醇",
+                category="毒物",
+                species_scope=("dog",),
+                sex_scope=(),
+                age_scope=(),
+                severity="urgent",
+                action_class="emergency",
+                code="TOXIC_XYLITOL",
+                aliases=("xylitol", "无糖口香糖"),
+                symptoms=(),
+                recognition_phrases=("xylitol", "无糖口香糖"),
+            ),
+            "safety_toxin_chocolate": ClinicalSafetyAsset(
+                asset_id="safety_toxin_chocolate",
+                asset_type="toxin",
+                canonical_name="巧克力",
+                category="毒物",
+                species_scope=("dog", "cat"),
+                sex_scope=(),
+                age_scope=(),
+                severity="urgent",
+                action_class="emergency",
+                code="TOXIC_SUBSTANCE",
+                aliases=("巧克力",),
+                symptoms=(),
+                recognition_phrases=("巧克力",),
+            ),
+            "safety_emergency_red_flag": ClinicalSafetyAsset(
+                asset_id="safety_emergency_red_flag",
+                asset_type="emergency_red_flag",
+                canonical_name="呼吸困难或无法站立",
+                category="急症红旗",
+                species_scope=("cat", "dog"),
+                sex_scope=(),
+                age_scope=(),
+                severity="urgent",
+                action_class="emergency",
+                code="EMERGENCY_RED_FLAG",
+                symptoms=("呼吸困难", "站不起来"),
+                recognition_phrases=("呼吸困难", "站不起来"),
+            ),
+            "safety_urinary_obstruction": ClinicalSafetyAsset(
+                asset_id="safety_urinary_obstruction",
+                asset_type="danger_pattern",
+                canonical_name="尿频尿少尿道梗阻风险",
+                category="泌尿",
+                species_scope=("cat",),
+                sex_scope=("male",),
+                age_scope=(),
+                severity="urgent",
+                action_class="emergency",
+                code="PARTIAL_URINARY_OBSTRUCTION_RISK",
+                symptoms=("尿少尿频",),
+                recognition_phrases=("尿少尿频", "还能尿一点"),
+            ),
+            "safety_senior_cat_polydipsia_weight_loss": ClinicalSafetyAsset(
+                asset_id="safety_senior_cat_polydipsia_weight_loss",
+                asset_type="danger_pattern",
+                canonical_name="老年猫多饮多尿消瘦",
+                category="内分泌肾脏",
+                species_scope=("cat",),
+                sex_scope=(),
+                age_scope=("senior",),
+                severity="urgent",
+                action_class="same_day_visit",
+                code="SENIOR_CAT_POLYDIPSIA_WEIGHT_LOSS_RISK",
+                symptoms=("多饮多尿", "消瘦"),
+                recognition_phrases=("多饮多尿", "消瘦"),
+            ),
+            "safety_gdv": ClinicalSafetyAsset(
+                asset_id="safety_gdv",
+                asset_type="danger_pattern",
+                canonical_name="胃扩张扭转风险",
+                category="消化急症",
+                species_scope=("dog",),
+                sex_scope=(),
+                age_scope=(),
+                severity="urgent",
+                action_class="emergency",
+                code="GDV_RISK_PATTERN",
+                symptoms=("肚子胀", "干呕吐不出来"),
+                recognition_phrases=("肚子胀", "干呕吐不出来"),
+            ),
+            "safety_cyanosis": ClinicalSafetyAsset(
+                asset_id="safety_cyanosis",
+                asset_type="emergency_red_flag",
+                canonical_name="发绀发紫",
+                category="呼吸循环",
+                species_scope=("cat", "dog"),
+                sex_scope=(),
+                age_scope=(),
+                severity="urgent",
+                action_class="emergency",
+                code="CYANOSIS_RISK_PATTERN",
+                symptoms=("牙龈发紫", "呼吸很快"),
+                recognition_phrases=("牙龈发紫", "呼吸很快"),
+            ),
+        }
+
+
+class StaticFollowupRagService(FollowupRagServiceProtocol):
+    """为 API 主链路测试提供显式注入的追问 RAG 服务替身。
+
+    :return: 无返回值；该替身只模拟已通过生产 FollowupRagService 校验后的结果。
+    """
+
+    async def plan(self, request: FollowupRagRequest) -> FollowupRagPlan:
+        """生成测试范围内的结构化追问计划。
+
+        :param request: 追问 RAG 结构化请求。
+        :return: 返回静态追问计划。
+        """
+        hit = self._knowledge_hit()
+        retrieval = FollowupRagRetrievalResult(
+            query="static_api_followup_rag_query",
+            hits=[hit],
+            node_count=1,
+            backend="static_api_followup_rag",
+            min_score=1.0,
+            top_k=1,
+        )
+        return FollowupRagPlan(
+            questions=self._questions(request),
+            strategy=StaticFollowupRagStrategy.STATIC_TEST,
+            retrieval=retrieval,
+            rationale="API 测试替身返回已通过契约校验的追问计划。",
+        )
+
+    def is_ready(self) -> bool:
+        """检查测试追问 RAG 服务是否就绪。
+
+        :return: 始终返回 True。
+        """
+        return True
+
+    def _knowledge_hit(self) -> KnowledgeHit:
+        """构造测试用追问 RAG 证据命中。
+
+        :return: 返回测试知识命中。
+        """
+        return KnowledgeHit(
+            title="消化道症状",
+            summary="饭后蜷缩、腹部紧绷、呕吐腹泻和精神食欲变化会影响消化道不适的分诊追问优先级。",
+            source="static_followup_rag_test",
+            public_citation=True,
+            score=1.0,
+            metadata={
+                "chunk_id": "knowledge_chunk:test_digestive_followup",
+                "chunk_type": "followup_questions",
+            },
+        )
+
+    def _questions(self, request: FollowupRagRequest) -> list[FollowupRagQuestion]:
+        """按测试缺失槽位构造追问问题。
+
+        :param request: 追问 RAG 结构化请求。
+        :return: 返回不超过本轮上限的问题列表。
+        """
+        missing_slots = set(request.missing_slots)
+        planned: list[FollowupRagQuestion] = []
+        candidates = [
+            (
+                "mental_status",
+                "它缩成一团时，腹部有没有明显紧绷，或被抱起、轻碰肚子时躲开？",
+                "知识库提示姿势改变要优先区分疼痛、腹部不适和普通休息状态。",
+                10,
+            ),
+            (
+                "onset",
+                "这种缩着趴通常是在饭后多久出现，每次会持续多长时间？",
+                "发生时间和进食关系能帮助判断是否更偏向短暂胃肠不适。",
+                20,
+            ),
+            (
+                "vomiting",
+                "有没有呕吐、反酸、干呕，或者想吐但吐不出来的表现？",
+                "呕吐和干呕会影响消化道风险分层与就医紧迫度。",
+                30,
+            ),
+            (
+                "stool",
+                "最近大便次数、软硬和颜色有没有变化，是否见到血或黏液？",
+                "粪便变化可帮助判断胃肠道刺激、炎症或出血风险。",
+                40,
+            ),
+            (
+                "appetite",
+                "这两天主餐、零食和饮水量和平时相比有没有明显减少？",
+                "食欲和饮水变化会影响是否需要更积极线下评估。",
+                50,
+            ),
+        ]
+        for slot, question, reason, priority in candidates:
+            if slot not in missing_slots:
+                continue
+            planned.append(self._question(slot, question, reason, priority))
+            if len(planned) >= request.max_questions:
+                return planned
+
+        for slot in request.missing_slots:
+            if len(planned) >= request.max_questions:
+                break
+            if any(item.slot == slot for item in planned):
+                continue
+            planned.append(
+                self._question(
+                    slot,
+                    f"请补充 {slot} 这一项相关信息，尤其是开始时间、严重程度和是否正在加重。",
+                    "该证据仍会影响本轮能否进入阶段性回答。",
+                    90,
+                )
+            )
+        return planned
+
+    def _question(self, slot: str, question: str, reason: str, priority: int) -> FollowupRagQuestion:
+        """构造测试范围内的追问问题对象。
+
+        :param slot: 问题对应的缺失槽位。
+        :param question: 面向用户的问题文本。
+        :param reason: 问题依据摘要。
+        :param priority: 问题优先级。
+        :return: 返回追问问题对象。
+        """
+        return FollowupRagQuestion(
+            slot=slot,
+            question=question,
+            reason=reason,
+            evidence_chunk_ids=["knowledge_chunk:test_digestive_followup"],
+            evidence_titles=["消化道症状"],
+            priority=priority,
+        )
+
+
+class StaticAnswerRagService(AnswerRagServiceProtocol):
+    """为 API 主链路测试提供显式注入的回答相关 RAG 服务替身。
+
+    :return: 无返回值；该替身只模拟已通过生产 AnswerRagService 校验后的结果。
+    """
+
+    async def retrieve(self, request: AnswerRagRequest) -> AnswerRagResult:
+        """生成测试范围内的结构化回答相关 RAG 结果。
+
+        :param request: 回答 RAG 结构化请求。
+        :return: 返回静态回答相关 RAG 结果。
+        """
+        if str(request.answerability.get("decision") or "").strip() != "answer":
+            raise AssertionError("StaticAnswerRagService 仅允许在 answer 分支被调用。")
+        hit = self._knowledge_hit(request)
+        retrieval = AnswerRagRetrievalResult(
+            query="static_api_answer_rag_query",
+            hits=[hit],
+            node_count=1,
+            backend="static_api_answer_rag",
+            min_score=0.9,
+            top_k=1,
+        )
+        return AnswerRagResult(
+            strategy=AnswerRagStrategy.STATIC_TEST,
+            retrieval=retrieval,
+        )
+
+    def is_ready(self) -> bool:
+        """检查测试回答相关 RAG 服务是否就绪。
+
+        :return: 始终返回 True。
+        """
+        return True
+
+    def _knowledge_hit(self, request: AnswerRagRequest) -> KnowledgeHit:
+        """构造测试用回答相关 RAG 证据命中。
+
+        :param request: 回答 RAG 结构化请求。
+        :return: 返回测试知识命中。
+        """
+        domain = request.task_domain or str(request.consultation_state.get("domain") or "general")
+        return KnowledgeHit(
+            title="回答相关知识",
+            summary="在回答阶段，系统应优先使用已审核知识片段作为证据，再组织临床建议。",
+            source="static_answer_rag_test",
+            public_citation=True,
+            score=0.95,
+            metadata={
+                "chunk_id": "knowledge_chunk:test_answer_rag",
+                "chunk_type": "condition_overview",
+                "domain": domain,
+            },
+        )
+
+
+_test_scope_repository: InMemoryScopeRepository | None = None
+_current_test_input_text = ""
+_last_response_generation_prompt = ""
+
+
+def _client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     """执行 _client 内部辅助逻辑。
 
     :param tmp_path: 参数 tmp_path。
@@ -37,12 +879,85 @@ def _client(tmp_path, monkeypatch) -> TestClient:
     monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.setenv("VET_AGENT_DATA_DIR", str(tmp_path))
     monkeypatch.setattr(QwenClient, "_send_chat", _fake_litellm_send_chat)
-    get_container.cache_clear()
-    set_orchestrator(VetAgentIngressOrchestrator(get_container()))
+    monkeypatch.setattr(QwenClient, "_send_structured_chat", _fake_litellm_send_structured_chat)
+    global _test_scope_repository
+    _test_scope_repository = InMemoryScopeRepository()
+    settings = Settings.from_env()
+    container = Container(
+        settings,
+        scope_repository=_test_scope_repository,
+        turn_execution_gate=InMemoryTurnExecutionGate(),
+        clinical_safety_repository=StaticClinicalSafetyRepository(),
+        clinical_safety_policy_client=StaticClinicalSafetyPolicyClient(),
+        consultation_answerability_policy_client=LocalConsultationAnswerabilityPolicyClient(),
+        embedding_client=StaticEmbeddingClient(),
+        answer_rag_service=StaticAnswerRagService(),
+        followup_rag_service=StaticFollowupRagService(),
+        input_safety_service=InputSafetyService(
+            settings,
+            repository=StaticInputSafetyRepository(),
+            detectors=(),
+            policy_client=LocalInputSafetyPolicyClient(),
+        ),
+        task_routing_domain_repository=StaticTaskRoutingDomainRepository.default(),
+        task_routing_policy_client=LocalTaskRoutingPolicyClient(),
+    )
+    set_container(container)
+    set_orchestrator(VetAgentIngressOrchestrator(container))
     return TestClient(app)
 
 
-async def _fake_litellm_send_chat(self, messages, *, model: str, temperature: float) -> str:
+def _clear_test_container() -> None:
+    """清理测试期间注入的容器覆盖。
+
+    :return: 无返回值。
+    """
+    set_container(None)
+
+
+def _register_verified_profile(
+    *,
+    user_id: str = "u1",
+    pet_id: str = "p1",
+    profile: dict[str, Any] | None = None,
+    is_active: bool = True,
+) -> None:
+    """在测试范围仓储中显式登记服务端已验证宠物画像。
+
+    :param user_id: 宠物所属用户标识。
+    :param pet_id: 宠物标识。
+    :param profile: 已验证宠物画像内容。
+    :param is_active: 宠物画像是否启用。
+    :return: 无返回值。
+    """
+    assert _test_scope_repository is not None
+    _test_scope_repository.register_profile(
+        user_id=user_id,
+        pet_id=pet_id,
+        profile=profile,
+        is_active=is_active,
+    )
+
+
+@pytest.fixture(autouse=True)
+def _reset_container_after_test() -> Iterator[None]:
+    """在每个测试结束后清理注入容器，避免范围仓储与记忆状态串用。
+
+    :return: 返回 pytest fixture 迭代器。
+    """
+    yield
+    global _last_response_generation_prompt
+    _last_response_generation_prompt = ""
+    _clear_test_container()
+
+
+async def _fake_litellm_send_chat(
+    self: object,
+    messages: list[dict[str, Any]],
+    *,
+    model: str,
+    temperature: float,
+) -> str:
     """执行 _fake_litellm_send_chat 内部辅助逻辑。
 
     :param messages: 参数 messages。
@@ -52,74 +967,6 @@ async def _fake_litellm_send_chat(self, messages, *, model: str, temperature: fl
     """
     del self, model, temperature
     user_text = _message_text(messages)
-    if "ConsultationSemanticExtractorAgent" in user_text and "没以前积极" in user_text:
-        return """
-        {
-          "facts": [
-            {
-              "key": "appetite",
-              "value": "仍会进食但主动性下降",
-              "status": "confirmed",
-              "confidence": 0.91,
-              "source_text": "饭还是吃的，就是没以前积极",
-              "category": "intake_output"
-            },
-            {
-              "key": "mental_status",
-              "value": "整体活跃度较平时轻度下降",
-              "status": "confirmed",
-              "confidence": 0.88,
-              "source_text": "没以前积极",
-              "category": "systemic_status"
-            },
-            {
-              "key": "vomiting",
-              "value": "没有把东西吐出来",
-              "status": "negative",
-              "confidence": 0.9,
-              "source_text": "没有把东西吐出来，只是像反胃",
-              "category": "intake_output"
-            }
-          ],
-          "intent": {
-            "answer_now": true,
-            "wants_triage": true,
-            "correction": false,
-            "raw_intent": "用户希望根据现有材料先判断"
-          }
-        }
-        """
-    if "TaskRouterAgent" in user_text and "主餐都会清空" in user_text:
-        return """
-        {
-          "tasks": [
-            {"domain": "general", "title": "一般补充", "text": "主餐都会清空，前天第一次看到", "priority": 10, "reason": "补充问诊信息"},
-            {"domain": "behavior", "title": "互动状态", "text": "叫名字会抬头，结束后会自己拿玩具过来", "priority": 20, "reason": "互动和行为信息"},
-            {"domain": "gastrointestinal", "title": "腹部反应", "text": "轻碰腹部会把身体绷紧", "priority": 30, "reason": "腹部相关线索"}
-          ]
-        }
-        """
-    if "RagQuestionPlannerAgent" in user_text and "缩成一团" in user_text:
-        return """
-        {
-          "questions": [
-            {
-              "slot": "mental_status",
-              "question": "它缩成一团时，腹部有没有明显紧绷，或被抱起、轻碰肚子时躲开？",
-              "reason": "知识库提示姿势改变要优先区分疼痛、腹部不适和普通休息状态。",
-              "evidence_titles": ["消化道症状"],
-              "priority": 10
-            },
-            {
-              "slot": "onset",
-              "question": "这种缩着趴通常是在饭后多久出现，每次会持续多长时间？",
-              "reason": "发生时间和进食关系能帮助判断是否更偏向短暂胃肠不适。",
-              "evidence_titles": ["消化道症状"],
-              "priority": 20
-            }
-          ]
-        }
-        """
     if "image_url" in user_text:
         return """
         {
@@ -132,7 +979,9 @@ async def _fake_litellm_send_chat(self, messages, *, model: str, temperature: fl
           ]
         }
         """
-    if "结构化问诊状态已足够" in user_text:
+    if "上游回答充分性已允许阶段性回答" in user_text:
+        global _last_response_generation_prompt
+        _last_response_generation_prompt = user_text
         return (
             "分诊/紧急度: 目前根据已补充的信息，暂未看到必须立即急诊的红旗，但仍需要继续观察变化。\n"
             "可能方向与依据: 更偏向轻度、短时的消化道不适或饮食刺激。\n"
@@ -146,7 +995,391 @@ async def _fake_litellm_send_chat(self, messages, *, model: str, temperature: fl
     return "我会先做分诊:目前还需要确认症状开始时间、精神食欲、是否呕吐腹泻或咳喘。如果加重或出现红旗症状，请尽快就医。"
 
 
-def _message_text(messages) -> str:
+async def _fake_litellm_send_structured_chat(
+    self: object,
+    messages: list[dict[str, Any]],
+    *,
+    response_model: type[BaseModel],
+    model: str,
+    temperature: float,
+) -> BaseModel:
+    """执行 _fake_litellm_send_structured_chat 内部辅助逻辑。
+
+    :param messages: 参数 messages。
+    :param response_model: 结构化响应模型。
+    :param model: 模型名称。
+    :param temperature: 参数 temperature。
+    :return: 返回函数执行结果。
+    """
+    del self, model, temperature
+    prompt_payload = _structured_message_payload(messages)
+    if prompt_payload.get("task") == "将用户本轮输入归一为任务路由计划。":
+        request_text = str(prompt_payload.get("user_text") or "")
+        active_tasks = list(prompt_payload.get("active_tasks") or [])
+        existing_task_key = (
+            str(active_tasks[0].get("task_key"))
+            if len(active_tasks) == 1
+            else None
+        )
+        if "主餐都会清空" in request_text:
+            payload = {
+                "tasks": [
+                    {
+                        "domain": "gastrointestinal",
+                        "text": request_text,
+                        "existing_task_key": existing_task_key,
+                        "priority": 10,
+                    }
+                ]
+            }
+        elif "夜里乱叫" in request_text and "换粮" in request_text:
+            payload = {
+                "tasks": [
+                    {
+                        "domain": "gastrointestinal",
+                        "text": "今天拉稀，精神正常，食欲正常，没有呕吐",
+                        "existing_task_key": existing_task_key,
+                        "priority": 10,
+                    },
+                    {
+                        "domain": "behavior",
+                        "text": "最近夜里乱叫",
+                        "priority": 20,
+                    },
+                    {
+                        "domain": "feeding",
+                        "text": "能不能换粮",
+                        "priority": 30,
+                    },
+                ]
+            }
+        elif "咳嗽" in request_text or "卡住" in request_text:
+            payload = {
+                "tasks": [
+                    {
+                        "domain": "respiratory",
+                        "text": request_text,
+                        "existing_task_key": existing_task_key,
+                        "priority": 10,
+                    }
+                ]
+            }
+        else:
+            payload = {
+                "tasks": [
+                    {
+                        "domain": "gastrointestinal",
+                        "text": request_text,
+                        "existing_task_key": existing_task_key,
+                        "priority": 10,
+                    }
+                ]
+            }
+        return response_model.model_validate(payload)
+    if prompt_payload.get("task") == "将用户本轮输入归一为结构化问诊事实、开放观察与意图信号。":
+        request_text = str(prompt_payload.get("user_text") or "")
+        return response_model.model_validate(_consultation_semantic_payload(request_text))
+    if prompt_payload.get("task") != "将用户输入归一为临床安全结构化语义。":
+        return response_model.model_validate_json("{}")
+    request_text = str(prompt_payload.get("user_text") or "")
+    pet_context_text = str(prompt_payload.get("pet_context_summary") or "")
+    payload = {
+        "species": "unknown",
+        "sex": "unknown",
+        "age_group": "adult",
+        "age_text": "",
+        "exposure_state": "unknown",
+        "symptom_state": "present",
+        "temporal_state": "current",
+        "temporal_scope": "ongoing",
+        "resolution_state": "ongoing",
+        "temporal_text": "现在",
+        "intent_type": "symptom",
+        "high_risk_terms": [],
+        "negated_terms": [],
+        "confidence": 0.92,
+        "rationale": "测试替身返回可信临床安全语义。",
+    }
+    if "狗" in request_text or "canine" in pet_context_text:
+        payload["species"] = "dog"
+    if "猫" in request_text or "feline" in pet_context_text:
+        payload["species"] = "cat"
+    if "male" in pet_context_text or "公" in pet_context_text or "雄" in pet_context_text:
+        payload["sex"] = "male"
+    if "female" in pet_context_text or "母" in pet_context_text or "雌" in pet_context_text:
+        payload["sex"] = "female"
+    if "12 years" in pet_context_text or "12 岁" in request_text or "老猫" in request_text:
+        payload["age_group"] = "senior"
+        payload["age_text"] = "12 years"
+    if "3 years" in pet_context_text or "3岁" in pet_context_text:
+        payload["age_text"] = "3 years"
+    if "巧克力" in request_text or "xylitol" in request_text or "无糖口香糖" in request_text:
+        payload.update(
+            {
+                "exposure_state": "confirmed",
+                "symptom_state": "unknown",
+                "intent_type": "toxicity",
+                "high_risk_terms": ["毒物暴露"],
+            }
+        )
+    if "没有误食" in request_text or "没给" in request_text or "未给" in request_text:
+        payload.update(
+            {
+                "exposure_state": "denied",
+                "symptom_state": "unknown",
+                "intent_type": "knowledge",
+                "high_risk_terms": [],
+                "negated_terms": ["暴露"],
+                "rationale": "测试替身返回明确否认暴露语义。",
+            }
+        )
+    return response_model.model_validate(payload)
+
+
+def _consultation_semantic_payload(request_text: str) -> dict[str, Any]:
+    """构造测试用结构化问诊语义抽取结果。
+
+    :param request_text: 用户本轮输入文本。
+    :return: 返回符合问诊语义抽取 Pydantic 契约的测试结果。
+    """
+    facts: list[dict[str, Any]] = []
+    observations: list[dict[str, Any]] = []
+    intent = {
+        "answer_now": False,
+        "wants_triage": False,
+        "correction": False,
+        "raw_intent": "",
+    }
+
+    if "有点拉稀" in request_text or "拉稀" in request_text:
+        facts.append(_semantic_fact("stool", "有排便相关异常", "confirmed", "拉稀", "intake_output"))
+    if "缩成一团" in request_text:
+        facts.extend(
+            [
+                _semantic_fact(
+                    "pain_or_mobility",
+                    "缩成一团趴着，看起来不太舒服",
+                    "confirmed",
+                    "缩成一团趴着",
+                    "domain_specific",
+                ),
+            ]
+        )
+    if "主餐都会清空" in request_text:
+        facts.extend(
+            [
+                _semantic_fact("appetite", "主餐会清空，也会主动拿奖励", "confirmed", "主餐都会清空", "intake_output"),
+                _semantic_fact("mental_status", "叫名字会抬头并玩玩具", "confirmed", "叫名字会抬头", "systemic_status"),
+                _semantic_fact("onset", "前天第一次看到", "confirmed", "前天第一次看到", "time_course"),
+                _semantic_fact(
+                    "pain_or_mobility",
+                    "轻碰腹部会把身体绷紧但不会躲开",
+                    "confirmed",
+                    "轻碰腹部会把身体绷紧",
+                    "domain_specific",
+                ),
+            ]
+        )
+    if "饭量没减少" in request_text:
+        facts.extend(
+            [
+                _semantic_fact("appetite", "食欲/饮水基本正常", "confirmed", "饭量没减少", "intake_output"),
+                _semantic_fact("mental_status", "精神基本正常", "confirmed", "叫它有反应", "systemic_status"),
+                _semantic_fact("vomiting", "无呕吐", "negative", "没有吐", "intake_output"),
+                _semantic_fact("stool", "未见排便相关异常", "negative", "没有拉肚子", "intake_output"),
+            ]
+        )
+    if "今天早上开始" in request_text or "今天早上拉稀" in request_text:
+        facts.extend(
+            [
+                _semantic_fact("species", "dog", "confirmed", "是狗", "patient_identity"),
+                _semantic_fact("life_stage_or_age", "3岁", "confirmed", "3岁", "patient_identity"),
+                _semantic_fact("weight", "12公斤", "confirmed", "12公斤", "patient_identity"),
+                _semantic_fact("onset", "今天早上开始", "confirmed", "今天早上开始", "time_course"),
+                _semantic_fact("mental_status", "精神正常", "confirmed", "精神食欲正常", "systemic_status"),
+                _semantic_fact("appetite", "食欲正常", "confirmed", "精神食欲正常", "intake_output"),
+                _semantic_fact("vomiting", "无呕吐", "negative", "没有呕吐", "intake_output"),
+                _semantic_fact("stool", "大便拉稀但没有血", "confirmed", "大便拉稀但没有血", "intake_output"),
+            ]
+        )
+    if "别再追问" in request_text or "直接说" in request_text:
+        intent.update(
+            {
+                "answer_now": True,
+                "wants_triage": True,
+                "raw_intent": "用户要求根据目前信息先回答。",
+            }
+        )
+        facts.extend(
+            [
+                _semantic_fact("onset", "前天开始", "confirmed", "前天开始这样", "time_course"),
+                _semantic_fact("appetite", "饭量和平常一样", "confirmed", "饭量和平常一样", "intake_output"),
+                _semantic_fact("mental_status", "精神还行", "confirmed", "精神也还行", "systemic_status"),
+                _semantic_fact("vomiting", "无呕吐", "negative", "没吐", "intake_output"),
+            ]
+        )
+    if "没以前积极" in request_text:
+        intent.update(
+            {
+                "answer_now": True,
+                "wants_triage": True,
+                "raw_intent": "用户希望根据现有材料先判断。",
+            }
+        )
+        facts.extend(
+            [
+                _semantic_fact(
+                    "appetite",
+                    "仍会进食但主动性下降",
+                    "confirmed",
+                    "饭还是吃的，就是没以前积极",
+                    "intake_output",
+                    confidence=0.91,
+                ),
+                _semantic_fact(
+                    "mental_status",
+                    "整体活跃度较平时轻度下降",
+                    "confirmed",
+                    "没以前积极",
+                    "systemic_status",
+                    confidence=0.88,
+                ),
+                _semantic_fact(
+                    "vomiting",
+                    "没有把东西吐出来",
+                    "negative",
+                    "没有把东西吐出来，只是像反胃",
+                    "intake_output",
+                ),
+            ]
+        )
+    if "猫砂盆" in request_text or "尿量很少" in request_text:
+        intent.update(
+            {
+                "answer_now": True,
+                "wants_triage": True,
+                "raw_intent": "用户希望先了解排尿异常的风险范围。",
+            }
+        )
+        observations.append(
+            _semantic_observation(
+                "urinary",
+                "排尿异常",
+                "频繁去猫砂盆且尿量很少",
+                "confirmed",
+                "一直去猫砂盆但尿量很少",
+                "今天",
+            )
+        )
+    return {
+        "facts": _dedupe_semantic_facts(facts),
+        "observations": _dedupe_semantic_observations(observations),
+        "intent": intent,
+        "confidence": 0.92,
+        "rationale": "测试替身返回可信问诊语义。",
+    }
+
+
+def _semantic_fact(
+    key: str,
+    value: str,
+    status: str,
+    source_text: str,
+    category: str,
+    *,
+    confidence: float = 0.9,
+) -> dict[str, Any]:
+    """构造单条测试用问诊语义事实。
+
+    :param key: 问诊事实键名。
+    :param value: 归一后的事实值。
+    :param status: 事实状态。
+    :param source_text: 用户原文来源片段。
+    :param category: 事实证据维度。
+    :param confidence: 事实置信度。
+    :return: 返回符合结构化契约的事实字典。
+    """
+    return {
+        "key": key,
+        "value": value,
+        "status": status,
+        "confidence": confidence,
+        "source_text": source_text,
+        "category": category,
+    }
+
+
+def _semantic_observation(
+    category: str,
+    label: str,
+    value: str,
+    status: str,
+    source_text: str,
+    temporal_text: str,
+    *,
+    confidence: float = 0.9,
+) -> dict[str, Any]:
+    """构造单条测试用开放式结构化观察。
+
+    :param category: 开放观察类别。
+    :param label: 开放观察中文标签。
+    :param value: 归一后的观察值。
+    :param status: 观察状态。
+    :param source_text: 用户原文来源片段。
+    :param temporal_text: 时间范围原文。
+    :param confidence: 观察置信度。
+    :return: 返回符合结构化契约的开放观察字典。
+    """
+    return {
+        "category": category,
+        "label": label,
+        "value": value,
+        "status": status,
+        "confidence": confidence,
+        "source_text": source_text,
+        "temporal_text": temporal_text,
+    }
+
+
+def _dedupe_semantic_facts(facts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """对测试用问诊事实执行稳定去重。
+
+    :param facts: 候选事实列表。
+    :return: 返回去重后的事实列表。
+    """
+    deduped: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for fact in facts:
+        key = (str(fact["key"]), str(fact["status"]), str(fact["value"]))
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(fact)
+    return deduped
+
+
+def _dedupe_semantic_observations(observations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """对测试用开放观察执行稳定去重。
+
+    :param observations: 候选开放观察列表。
+    :return: 返回去重后的开放观察列表。
+    """
+    deduped: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for observation in observations:
+        key = (
+            str(observation["category"]),
+            str(observation["status"]),
+            str(observation["value"]),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(observation)
+    return deduped
+
+
+def _message_text(messages: list[dict[str, Any]]) -> str:
     """执行 _message_text 内部辅助逻辑。
 
     :param messages: 参数 messages。
@@ -164,33 +1397,130 @@ def _message_text(messages) -> str:
     return "\n".join(parts)
 
 
-def _payload(text: str, **extra):
+def _structured_message_payload(messages: list[dict[str, Any]]) -> dict[str, Any]:
+    """从结构化抽取测试消息中读取 JSON 负载。
+
+    :param messages: 结构化抽取请求消息。
+    :return: 解析成功时返回 JSON 对象，否则返回空字典。
+    """
+    for message in reversed(messages):
+        if message.get("role") != "user":
+            continue
+        content = message.get("content")
+        if not isinstance(content, str):
+            continue
+        try:
+            data = json.loads(content)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(data, dict):
+            return data
+    return {}
+
+
+def _scope_assertion(
+    *,
+    user_id: str = "u1",
+    pet_id: str = "p1",
+    session_id: str = "s1",
+    profile: dict[str, Any] | None = None,
+    ownership_verified: bool = True,
+    pet_active: bool = True,
+    pet_deleted: bool = False,
+    expires_at: str | None = None,
+) -> dict[str, Any]:
+    """构造测试用 BFF 范围声明。
+
+    :param user_id: BFF 已认证用户标识。
+    :param pet_id: BFF 已校验归属的宠物标识。
+    :param session_id: BFF 发放或复用的会话标识。
+    :param profile: 服务端已验证宠物基础画像。
+    :param ownership_verified: 是否声明已完成宠物归属校验。
+    :param pet_active: 是否声明宠物可用。
+    :param pet_deleted: 是否声明宠物已删除。
+    :param expires_at: 声明过期时间。
+    :return: 返回测试请求可直接使用的范围声明。
+    """
+    now = datetime.now(UTC).isoformat()
+    verified_profile = profile or {
+        "species": "犬",
+        "breed": "柯基",
+        "age": "3岁",
+        "weight_kg": 12,
+    }
+    assertion: dict[str, Any] = {
+        "schema_version": "v1",
+        "issuer": "test-bff",
+        "issued_at": now,
+        "user_id": user_id,
+        "pet_id": pet_id,
+        "session_id": session_id,
+        "authorization": {
+            "ownership_verified": ownership_verified,
+            "pet_active": pet_active,
+            "pet_status": "active" if pet_active else "inactive",
+            "pet_deleted": pet_deleted,
+        },
+        "profile": verified_profile,
+        "source": {
+            "system": "test-main-service",
+            "database": "app_dev",
+            "table": "master_pet_info",
+            "record_id": pet_id,
+            "record_updated_at": now,
+            "data_source": "test",
+        },
+        "session_policy": {"binding_mode": "single_user_pet_per_session"},
+    }
+    if expires_at is not None:
+        assertion["expires_at"] = expires_at
+    return assertion
+
+
+def _payload(text: str, **extra: Any) -> dict[str, Any]:
     """执行 _payload 内部辅助逻辑。
 
     :param text: 待处理文本。
     :param extra: 参数 extra。
     :return: 返回函数执行结果。
     """
+    global _current_test_input_text
+    _current_test_input_text = text
+    vet_context = dict(
+        extra.pop(
+            "vet_context",
+            {
+                "user_id": "u1",
+                "session_id": "s1",
+                "pet_id": "p1",
+                "pet_info": {
+                    "species": "犬",
+                    "breed": "柯基",
+                    "age": "3岁",
+                    "weight_kg": 12,
+                },
+            },
+        )
+    )
+    user_id = str(vet_context.pop("user_id", "u1"))
+    session_id = str(vet_context.pop("session_id", "s1"))
+    pet_id = str(vet_context.pop("pet_id", "p1"))
+    pet_info = dict(vet_context.get("pet_info") or {})
+    scope_assertion = extra.pop(
+        "scope_assertion",
+        _scope_assertion(user_id=user_id, pet_id=pet_id, session_id=session_id, profile=pet_info or None),
+    )
     payload = {
         "input": text,
         "stream": False,
-        "vet_context": {
-            "user_id": "u1",
-            "session_id": "s1",
-            "pet_id": "p1",
-            "pet_info": {
-                "species": "犬",
-                "breed": "柯基",
-                "age": "3岁",
-                "weight_kg": 12,
-            },
-        },
+        "scope_assertion": scope_assertion,
+        "vet_context": {"pet_info": pet_info},
     }
     payload.update(extra)
     return payload
 
 
-def _payload_without_pet_info(text: str, session_id: str = "s_ctx"):
+def _payload_without_pet_info(text: str, session_id: str = "s_ctx") -> dict[str, Any]:
     """执行 _payload_without_pet_info 内部辅助逻辑。
 
     :param text: 待处理文本。
@@ -200,15 +1530,17 @@ def _payload_without_pet_info(text: str, session_id: str = "s_ctx"):
     return {
         "input": text,
         "stream": False,
-        "vet_context": {
-            "user_id": "u_ctx",
-            "session_id": session_id,
-            "pet_id": "p_ctx",
-        },
+        "scope_assertion": _scope_assertion(
+            user_id="u_ctx",
+            session_id=session_id,
+            pet_id="p_ctx",
+            profile={"species": "dog"},
+        ),
+        "vet_context": {"pet_info": {}},
     }
 
 
-def test_health_and_ready(tmp_path, monkeypatch):
+def test_health_and_ready(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证对应业务场景是否符合预期。
 
     :param tmp_path: 参数 tmp_path。
@@ -223,7 +1555,7 @@ def test_health_and_ready(tmp_path, monkeypatch):
     assert ready.json()["checks"]["orchestrator"] is True
 
 
-def test_sync_turn_uses_litellm_gateway_and_evidence(tmp_path, monkeypatch):
+def test_sync_turn_uses_litellm_gateway_and_evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证对应业务场景是否符合预期。
 
     :param tmp_path: 参数 tmp_path。
@@ -240,10 +1572,14 @@ def test_sync_turn_uses_litellm_gateway_and_evidence(tmp_path, monkeypatch):
     assert data["trace_id"]
     assert "线下兽医" in data["output_text"]
     assert data["evidence"]
-    assert "SafetyAgent" in data["metadata"]["multi_agent_path"]
+    assert "InputSafetyService" in data["metadata"]["multi_agent_path"]
+    _assert_policy_path_is_named(
+        data["metadata"]["multi_agent_path"],
+        clinical_safety_expected=True,
+    )
 
 
-def test_toxic_substance_is_escalated(tmp_path, monkeypatch):
+def test_toxic_substance_is_escalated(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证对应业务场景是否符合预期。
 
     :param tmp_path: 参数 tmp_path。
@@ -257,11 +1593,12 @@ def test_toxic_substance_is_escalated(tmp_path, monkeypatch):
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "safety_escalated"
-    assert "立即联系线下兽医" in data["output_text"]
+    assert "请尽快联系线下兽医医院" in data["output_text"]
     assert any(signal["code"] == "TOXIC_SUBSTANCE" for signal in data["safety_signals"])
+    assert data["metadata"]["input_safety_decision"]["allow"] is True
 
 
-def test_emergency_red_flag_skips_followup(tmp_path, monkeypatch):
+def test_emergency_red_flag_skips_followup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证对应业务场景是否符合预期。
 
     :param tmp_path: 参数 tmp_path。
@@ -275,11 +1612,12 @@ def test_emergency_red_flag_skips_followup(tmp_path, monkeypatch):
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "safety_escalated"
-    assert "不建议先在线上反复追问" in data["output_text"]
+    assert "请尽快联系线下兽医医院" in data["output_text"]
     assert any(signal["code"] == "EMERGENCY_RED_FLAG" for signal in data["safety_signals"])
+    assert data["metadata"]["input_safety_decision"]["allow"] is True
 
 
-def test_radiology_attachment_is_blocked(tmp_path, monkeypatch):
+def test_radiology_attachment_is_blocked(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证对应业务场景是否符合预期。
 
     :param tmp_path: 参数 tmp_path。
@@ -306,8 +1644,13 @@ def test_radiology_attachment_is_blocked(tmp_path, monkeypatch):
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "blocked"
-    assert "不能做影像判读" in data["output_text"]
+    assert "未开放影像判读能力" in data["output_text"]
     assert any(signal["code"] == "RADIOLOGY_GATE" for signal in data["safety_signals"])
+    assert data["metadata"]["memory_extraction"]["skipped_reason"] == "input_safety_policy_stopped_main_chain"
+    _assert_policy_path_is_named(
+        data["metadata"]["multi_agent_path"],
+        clinical_safety_expected=False,
+    )
 
 
 @pytest.mark.parametrize(
@@ -359,6 +1702,10 @@ def test_contextual_clinical_safety_escalates_hidden_risk_patterns(
     client = _client(tmp_path, monkeypatch)
     payload = _payload(text)
     payload["vet_context"]["pet_info"] = pet_info
+    if pet_info:
+        payload["scope_assertion"] = _scope_assertion(profile=dict(pet_info))
+    else:
+        payload["scope_assertion"] = _scope_assertion(profile={"species": "cat", "age": "12 years"})
 
     response = client.post("/agent/turns", json=payload)
 
@@ -366,6 +1713,11 @@ def test_contextual_clinical_safety_escalates_hidden_risk_patterns(
     data = response.json()
     assert data["status"] == "safety_escalated"
     assert "ClinicalSafetyEvaluator" in data["metadata"]["multi_agent_path"]
+    _assert_policy_path_is_named(
+        data["metadata"]["multi_agent_path"],
+        clinical_safety_expected=True,
+    )
+    assert data["metadata"]["input_safety_decision"]["allow"] is True
     assert any(signal["code"] == expected_code for signal in data["safety_signals"])
 
 
@@ -398,21 +1750,200 @@ def test_unverified_pet_info_does_not_independently_trigger_clinical_risk(
     )
 
 
-def test_negated_emergency_keyword_does_not_trigger_hard_rule() -> None:
-    """验证否定表达不会仅因包含急症子串而触发硬规则升级。
+def test_scope_policy_requires_scope_assertion(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证缺少 BFF 范围声明时入口请求会被拒绝。
 
-    :return: 无返回值；断言通过表示否定表达过滤逻辑符合预期。
+    :param tmp_path: 临时数据目录。
+    :param monkeypatch: pytest 环境变量和方法替换工具。
+    :return: 无返回值；断言通过表示旧版 vet_context 身份路径已移除。
     """
-    from vet_agent.agents import SafetyAgent
+    client = _client(tmp_path, monkeypatch)
+    payload = _payload("它今天有点拉稀。")
+    payload.pop("scope_assertion")
 
-    agent = SafetyAgent(FileRuleRepository(Settings().seed_dir))
-    assessment = agent.analyze("没有呼吸困难，也不是完全尿不出。", [])
+    response = client.post("/agent/turns", json=payload)
 
-    assert assessment.highest_status == "ok"
-    assert assessment.signals == []
+    assert response.status_code == 422
+    data = response.json()
+    assert data["code"] == "MISSING_REQUIRED_CONTEXT"
 
 
-def test_memory_read_correct_delete(tmp_path, monkeypatch):
+def test_scope_policy_rejects_legacy_vet_context_identity_fields(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证旧版 vet_context 身份字段不会被入口模型继续接收。
+
+    :param tmp_path: 临时数据目录。
+    :param monkeypatch: pytest 环境变量和方法替换工具。
+    :return: 无返回值；断言通过表示旧版身份字段已从请求契约中移除。
+    """
+    client = _client(tmp_path, monkeypatch)
+    payload = _payload("它今天有点拉稀。")
+    payload["vet_context"]["user_id"] = "legacy_user"
+    payload["vet_context"]["session_id"] = "legacy_session"
+    payload["vet_context"]["pet_id"] = "legacy_pet"
+
+    response = client.post("/agent/turns", json=payload)
+
+    assert response.status_code == 400
+    data = response.json()
+    assert data["code"] == "INVALID_REQUEST"
+
+
+def test_scope_assertion_rejects_source_record_mismatch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证范围声明来源记录与宠物标识不一致时会被入口模型拒绝。
+
+    :param tmp_path: 临时数据目录。
+    :param monkeypatch: pytest 环境变量和方法替换工具。
+    :return: 无返回值；断言通过表示来源审计字段具备一致性校验。
+    """
+    client = _client(tmp_path, monkeypatch)
+    assertion = _scope_assertion(pet_id="p_scope")
+    assertion["source"]["record_id"] = "p_other"
+    payload = _payload("它今天有点拉稀。", scope_assertion=assertion)
+
+    response = client.post("/agent/turns", json=payload)
+
+    assert response.status_code == 400
+    data = response.json()
+    assert data["code"] == "INVALID_REQUEST"
+
+
+def test_scope_policy_rejects_inactive_pet_profile(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证停用的服务端宠物画像会被范围策略拒绝。
+
+    :param tmp_path: 临时数据目录。
+    :param monkeypatch: pytest 环境变量和方法替换工具。
+    :return: 无返回值；断言通过表示停用资料不会进入 Agent 主链路。
+    """
+    client = _client(tmp_path, monkeypatch)
+    payload = _payload(
+        "它今天有点拉稀。",
+        scope_assertion=_scope_assertion(pet_active=False),
+    )
+    response = client.post("/agent/turns", json=payload)
+
+    assert response.status_code == 403
+    data = response.json()
+    assert data["code"] == "FORBIDDEN"
+    assert data["details"]["scope_decision"]["action"] == "deny_inactive_pet"
+
+
+def test_scope_policy_rejects_unverified_ownership_assertion(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证 BFF 未声明已完成宠物归属校验时范围策略会拒绝请求。
+
+    :param tmp_path: 临时数据目录。
+    :param monkeypatch: pytest 环境变量和方法替换工具。
+    :return: 无返回值；断言通过表示 Agent 不接受未验证归属声明。
+    """
+    client = _client(tmp_path, monkeypatch)
+    payload = _payload(
+        "它今天有点拉稀。",
+        scope_assertion=_scope_assertion(ownership_verified=False),
+    )
+    response = client.post("/agent/turns", json=payload)
+
+    assert response.status_code == 403
+    data = response.json()
+    assert data["code"] == "FORBIDDEN"
+    assert data["details"]["scope_decision"]["action"] == "deny_scope_assertion_invalid"
+
+
+def test_scope_assertion_bootstraps_verified_pet_profile_projection(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证冷启动时 BFF 范围声明会写入 Agent 本地画像投影。
+
+    :param tmp_path: 临时数据目录。
+    :param monkeypatch: pytest 环境变量和方法替换工具。
+    :return: 无返回值；断言通过表示冷启动不再依赖 pet_info 自动注册。
+    """
+    client = _client(tmp_path, monkeypatch)
+    assert _test_scope_repository is not None
+    _test_scope_repository.auto_register_profiles = False
+    payload = _payload(
+        "它今天有点拉稀。",
+        vet_context={
+            "user_id": "u_bootstrap",
+            "session_id": "s_bootstrap",
+            "pet_id": "p_bootstrap",
+            "pet_info": {},
+        },
+        scope_assertion=_scope_assertion(
+            user_id="u_bootstrap",
+            session_id="s_bootstrap",
+            pet_id="p_bootstrap",
+            profile={"species": "dog", "breed": "corgi", "age": "3 years", "weight_kg": 12},
+        ),
+    )
+
+    response = client.post("/agent/turns", json=payload)
+
+    assert response.status_code == 200
+    profile = _test_scope_repository.profiles[("u_bootstrap", "p_bootstrap")]
+    assert profile.profile["species"] == "dog"
+    assert profile.profile["breed"] == "corgi"
+    assert profile.source.startswith("test-bff:test-main-service:master_pet_info:p_bootstrap")
+
+
+def test_scope_authorization_side_effect_runs_once_per_turn(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证单次主接口请求不会重复执行范围授权副作用。
+
+    :param tmp_path: 临时数据目录。
+    :param monkeypatch: pytest 环境变量和方法替换工具。
+    :return: 无返回值；断言通过表示入口授权快照已被主链路复用。
+    """
+    client = _client(tmp_path, monkeypatch)
+    assert _test_scope_repository is not None
+
+    response = client.post("/agent/turns", json=_payload("它今天有点拉稀。"))
+
+    assert response.status_code == 200
+    assert _test_scope_repository.upsert_profile_count == 1
+    assert _test_scope_repository.bind_session_count == 1
+    assert _test_scope_repository.touch_session_count == 0
+
+
+def test_scope_policy_rejects_expired_scope_assertion(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证过期 BFF 范围声明会被范围策略拒绝。
+
+    :param tmp_path: 临时数据目录。
+    :param monkeypatch: pytest 环境变量和方法替换工具。
+    :return: 无返回值；断言通过表示 Agent 不接受过期范围声明。
+    """
+    client = _client(tmp_path, monkeypatch)
+    payload = _payload(
+        "它今天有点拉稀。",
+        scope_assertion=_scope_assertion(expires_at="2000-01-01T00:00:00+00:00"),
+    )
+
+    response = client.post("/agent/turns", json=payload)
+
+    assert response.status_code == 403
+    assert response.json()["details"]["scope_decision"]["action"] == "deny_scope_assertion_invalid"
+
+
+def test_memory_read_correct_delete(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证对应业务场景是否符合预期。
 
     :param tmp_path: 参数 tmp_path。
@@ -432,12 +1963,12 @@ def test_memory_read_correct_delete(tmp_path, monkeypatch):
     memory = client.get("/memories?user_id=u1&session_id=s1&pet_id=p1").json()
     assert memory["pet"]["last_summary"] == correction["summary"]
 
-    assert client.delete("/memories/pets/p1").status_code == 200
+    assert client.delete("/memories/pets/p1?user_id=u1&session_id=s1").status_code == 200
     memory_after_delete = client.get("/memories?user_id=u1&session_id=s1&pet_id=p1").json()
     assert memory_after_delete["pet"] == {}
 
 
-def test_pet_fact_memory_can_be_persisted_and_read(tmp_path, monkeypatch):
+def test_pet_fact_memory_can_be_persisted_and_read(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证对应业务场景是否符合预期。
 
     :param tmp_path: 参数 tmp_path。
@@ -462,7 +1993,7 @@ def test_pet_fact_memory_can_be_persisted_and_read(tmp_path, monkeypatch):
     assert facts[0]["fact_value"] == "疑似鸡肉过敏"
 
 
-def test_idempotency_key_reuses_first_response(tmp_path, monkeypatch):
+def test_idempotency_key_reuses_first_response(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证对应业务场景是否符合预期。
 
     :param tmp_path: 参数 tmp_path。
@@ -483,7 +2014,7 @@ def test_idempotency_key_reuses_first_response(tmp_path, monkeypatch):
     assert second.json()["id"] == first.json()["id"]
 
 
-def test_openai_compatible_response_shape(tmp_path, monkeypatch):
+def test_openai_compatible_response_shape(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证对应业务场景是否符合预期。
 
     :param tmp_path: 参数 tmp_path。
@@ -505,7 +2036,7 @@ def test_openai_compatible_response_shape(tmp_path, monkeypatch):
     assert data["metadata"]["request_id"]
 
 
-def test_agent_turn_external_contract_includes_reasoning_display(tmp_path, monkeypatch):
+def test_agent_turn_external_contract_includes_reasoning_display(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证对应业务场景是否符合预期。
 
     :param tmp_path: 参数 tmp_path。
@@ -529,7 +2060,7 @@ def test_agent_turn_external_contract_includes_reasoning_display(tmp_path, monke
     assert data["vet_result"]["route"]
 
 
-def test_stream_turn_emits_reasoning_display_events(tmp_path, monkeypatch):
+def test_stream_turn_emits_reasoning_display_events(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证对应业务场景是否符合预期。
 
     :param tmp_path: 参数 tmp_path。
@@ -551,7 +2082,7 @@ def test_stream_turn_emits_reasoning_display_events(tmp_path, monkeypatch):
     assert "event: segment.delta" in body
 
 
-def test_multi_task_turn_splits_into_independent_segments(tmp_path, monkeypatch):
+def test_multi_task_turn_splits_into_independent_segments(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证对应业务场景是否符合预期。
 
     :param tmp_path: 参数 tmp_path。
@@ -591,47 +2122,190 @@ def test_multi_task_turn_splits_into_independent_segments(tmp_path, monkeypatch)
     assert all(segment["reasoning_display"]["text"] for segment in data["segments"])
 
 
-def test_llm_task_router_can_drive_task_splitting():
-    """验证对应业务场景是否符合预期。
+def test_default_consultation_state_is_migrated_during_multi_task_plan(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证默认问诊状态参与多任务计划时会迁移到具体任务键。
+
+    :param tmp_path: 参数 tmp_path。
+    :param monkeypatch: 参数 monkeypatch。
+    :return: 无返回值；断言通过表示默认状态迁移边界符合预期。
+    """
+    client = _client(tmp_path, monkeypatch)
+    vet_context = {
+        "user_id": "u_multi_migrate",
+        "session_id": "s_multi_migrate",
+        "pet_id": "p_multi_migrate",
+        "pet_info": {
+            "species": "犬",
+            "breed": "柯基",
+            "age": "3岁",
+            "weight_kg": 12,
+        },
+    }
+
+    first = client.post(
+        "/agent/turns",
+        json=_payload("我家狗今天拉稀，怎么办？", vet_context=vet_context),
+    )
+    assert first.status_code == 200
+    assert first.json()["status"] == "requires_followup"
+
+    second = client.post(
+        "/agent/turns",
+        json=_payload(
+            "我家狗今天拉稀，精神正常，食欲正常，没有呕吐。还有最近夜里乱叫。顺便问下能不能换粮？",
+            vet_context=vet_context,
+        ),
+    )
+
+    assert second.status_code == 200
+    data = second.json()
+    task_router = data["metadata"]["task_router"]
+    assert task_router["tasks"][0]["existing_task_key"] == DEFAULT_TASK_KEY
+    assert task_router["tasks"][0]["task_key"] == "gastrointestinal"
+    stored_memory = JsonDocumentStore(tmp_path / "memory.json").load()
+    session_memory = stored_memory["sessions"]["s_multi_migrate"]
+    pet_memory = stored_memory["pets"]["p_multi_migrate"]
+    assert "consultation_state" not in session_memory
+    assert "consultation_state" not in pet_memory
+    assert DEFAULT_TASK_KEY not in session_memory.get("task_consultation_states", {})
+
+
+def test_task_state_replacement_preserves_default_state_without_migration(tmp_path: Path) -> None:
+    """验证普通多任务状态替换不会误删默认问诊状态。
+
+    :param tmp_path: 参数 tmp_path。
+    :return: 无返回值；断言通过表示持久化服务仅在显式迁移时清理默认状态。
+    """
+    import asyncio
+
+    service = MemoryService(JsonDocumentStore(tmp_path / "memory.json"))
+    identity = TrustedIdentity(user_id="u_state_boundary", pet_id="p_state_boundary", session_id="s_state_boundary")
+    default_state = {"phase": "collecting_info", "chief_complaint": "默认消化道问诊"}
+    behavior_state = {"phase": "collecting_info", "chief_complaint": "夜里乱叫"}
+
+    asyncio.run(service.save_consultation_state(identity, default_state))
+    asyncio.run(service.save_task_consultation_states(identity, {"behavior": behavior_state}))
+
+    stored_memory = JsonDocumentStore(tmp_path / "memory.json").load()
+    session_memory = stored_memory["sessions"]["s_state_boundary"]
+    assert session_memory["consultation_state"] == default_state
+    assert session_memory["task_consultation_states"]["behavior"] == behavior_state
+
+    asyncio.run(
+        service.save_task_consultation_states(
+            identity,
+            {"behavior": behavior_state},
+            clear_default_state=True,
+        )
+    )
+
+    stored_memory = JsonDocumentStore(tmp_path / "memory.json").load()
+    session_memory = stored_memory["sessions"]["s_state_boundary"]
+    assert "consultation_state" not in session_memory
+    assert session_memory["task_consultation_states"]["behavior"] == behavior_state
+
+
+def test_delete_pet_memory_clears_json_consultation_state_scope(tmp_path: Path) -> None:
+    """验证删除宠物记忆时同步清理 JSON 问诊状态仓储范围。
+
+    :param tmp_path: 临时数据目录。
+    :return: 无返回值；断言通过表示测试存储不会残留已删除宠物的活跃问诊状态。
+    """
+    import asyncio
+
+    service = MemoryService(JsonDocumentStore(tmp_path / "memory.json"))
+    identity = TrustedIdentity(user_id="u_delete_scope", pet_id="p_delete_scope", session_id="s_delete_scope")
+
+    asyncio.run(service.save_consultation_state(identity, {"chief_complaint": "默认问诊"}))
+    asyncio.run(
+        service.save_task_consultation_states(
+            identity,
+            {"gastrointestinal": {"chief_complaint": "多任务问诊"}},
+        )
+    )
+    asyncio.run(service.delete_pet_memory(identity.pet_id, user_id=identity.user_id))
+
+    stored_memory = JsonDocumentStore(tmp_path / "memory.json").load()
+    session_memory = stored_memory["sessions"]["s_delete_scope"]
+    assert "consultation_state" not in session_memory
+    assert "task_consultation_states" not in session_memory
+    assert identity.pet_id not in stored_memory.get("pets", {})
+
+
+def test_structured_task_router_can_drive_task_splitting() -> None:
+    """验证结构化任务路由可以生成多任务执行计划。
 
     :return: 无返回值；断言通过表示场景符合预期。
     """
-    class FakeQwen:
+    class FakeStructuredClient:
         available = True
 
-        async def chat(self, messages, *, model=None, temperature=0.2):
-            """执行 chat 业务逻辑。
+        async def chat_structured(
+            self,
+            messages: list[dict[str, str]],
+            *,
+            response_model: type[BaseModel],
+            model: str | None = None,
+            temperature: float = 0.0,
+        ) -> BaseModel:
+            """返回测试使用的结构化任务路由候选。
 
-            :param messages: 参数 messages。
+            :param messages: 结构化模型消息。
+            :param response_model: 结构化响应模型。
             :param model: 模型名称。
-            :param temperature: 参数 temperature。
-            :return: 返回异步执行结果。
+            :param temperature: 采样温度。
+            :return: 返回通过 Pydantic 校验的任务路由候选。
             """
-            return """
-            {
-              "tasks": [
-                {"domain": "behavior", "title": "夜里乱叫", "text": "最近夜里乱叫", "priority": 20, "reason": "行为场景"},
-                {"domain": "gastrointestinal", "title": "拉稀", "text": "今天拉稀，精神正常", "priority": 10, "reason": "消化道症状"}
-              ]
-            }
-            """
+            del messages, model, temperature
+            return response_model.model_validate(
+                {
+                    "tasks": [
+                        {
+                            "domain": "behavior",
+                            "text": "最近夜里乱叫",
+                            "priority": 20,
+                        },
+                        {
+                            "domain": "gastrointestinal",
+                            "text": "今天拉稀，精神正常",
+                            "priority": 10,
+                        },
+                    ]
+                }
+            )
 
-    splitter = TaskSplitterAgent(
-        FileRuleRepository(Settings().seed_dir),
-        FakeQwen(),
-        Settings(enable_llm_task_splitter=True, litellm_api_key="test"),
+    service = TaskRoutingService(
+        Settings(litellm_api_key="test"),
+        domain_repository=StaticTaskRoutingDomainRepository.default(),
+        policy_client=LocalTaskRoutingPolicyClient(),
+        structured_client=FakeStructuredClient(),
     )
 
     import asyncio
 
-    decision = asyncio.run(splitter.split("我家狗今天拉稀，精神正常。还有最近夜里乱叫。"))
+    decision = asyncio.run(
+        service.route(
+            context=TaskRoutingRequestContext(
+                request_id="req_task_router",
+                trace_id="trace_task_router",
+                user_id="u_task_router",
+                pet_id="p_task_router",
+                session_id="s_task_router",
+            ),
+            user_text="我家狗今天拉稀，精神正常。还有最近夜里乱叫。",
+            pet_context_summary="犬，3岁",
+            active_tasks=(),
+        )
+    )
 
-    assert decision.strategy == "llm_task_router"
+    assert decision.strategy == "litellm_response_format_task_router"
     assert [task.domain for task in decision.tasks] == ["gastrointestinal", "behavior"]
-    assert decision.tasks[0].reason == "消化道症状"
 
 
-def test_header_body_id_conflict_returns_invalid_request(tmp_path, monkeypatch):
+def test_header_body_id_conflict_returns_invalid_request(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证对应业务场景是否符合预期。
 
     :param tmp_path: 参数 tmp_path。
@@ -650,7 +2324,7 @@ def test_header_body_id_conflict_returns_invalid_request(tmp_path, monkeypatch):
     assert data["request_id"] == "req_body"
 
 
-def test_consultation_first_turn_collects_slots_without_final_advice(tmp_path, monkeypatch):
+def test_consultation_first_turn_collects_slots_without_final_advice(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证对应业务场景是否符合预期。
 
     :param tmp_path: 参数 tmp_path。
@@ -666,12 +2340,13 @@ def test_consultation_first_turn_collects_slots_without_final_advice(tmp_path, m
     assert data["status"] == "requires_followup"
     assert data["metadata"]["consultation_phase"] == "collecting_info"
     assert "我先不武断下结论" in data["output_text"]
-    assert "它是猫还是狗" in data["output_text"]
+    assert "物种: dog" in data["output_text"]
+    assert "它是猫还是狗" not in data["output_text"]
     assert "请先回答" in data["output_text"]
     assert "QwenResponseAgent" not in data["metadata"]["multi_agent_path"]
 
 
-def test_rag_guided_followup_uses_knowledge_to_plan_questions(tmp_path, monkeypatch):
+def test_rag_guided_followup_uses_knowledge_to_plan_questions(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证知识库命中结果可反推动态追问。
 
     :param tmp_path: 参数 tmp_path。
@@ -702,30 +2377,36 @@ def test_rag_guided_followup_uses_knowledge_to_plan_questions(tmp_path, monkeypa
     data = response.json()
     assert data["status"] == "requires_followup"
     assert data["vet_result"]["route"] == "rag_guided_followup"
-    assert "RagQuestionPlannerAgent" in data["metadata"]["multi_agent_path"]
+    assert AgentPathNode.FOLLOWUP_RAG_SERVICE.value in data["metadata"]["multi_agent_path"]
+    assert AgentPathNode.FOLLOWUP_RAG_RETRIEVER.value in data["metadata"]["multi_agent_path"]
+    assert AgentPathNode.FOLLOWUP_RAG_PLANNER.value in data["metadata"]["multi_agent_path"]
     assert "QwenResponseAgent" not in data["metadata"]["multi_agent_path"]
-    assert "腹部有没有明显紧绷" in data["output_text"]
-    assert "饭后多久出现" in data["output_text"]
-    assert "为什么先问这些" in data["output_text"]
     plan = data["metadata"]["followup_question_plan"]
-    assert plan["strategy"] == "rag_llm_question_planner"
+    assert plan["strategy"] == StaticFollowupRagStrategy.STATIC_TEST.value
     assert plan["questions"][0]["evidence_titles"] == ["消化道症状"]
+    assert {item["slot"] for item in plan["questions"]}.issubset(set(data["metadata"]["missing_slots"]))
+    for question in plan["questions"]:
+        assert question["question"] in data["output_text"]
+    assert "为什么先问这些" in data["output_text"]
     assert data["evidence"]
 
 
-def test_unfinished_consultation_state_skips_task_splitting(tmp_path, monkeypatch):
-    """验证未完成问诊状态会优先吸收下一轮回答。
+def test_unfinished_consultation_state_is_routed_as_an_existing_task(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证未完成问诊状态由结构化路由器引用已有任务。
 
     :param tmp_path: 参数 tmp_path。
     :param monkeypatch: 参数 monkeypatch。
     :return: 无返回值；断言通过表示场景符合预期。
     """
     client = _client(tmp_path, monkeypatch)
-    session_id = "s_skip_task_router"
+    session_id = "s_existing_task_router"
     vet_context = {
-        "user_id": "u_skip_task_router",
+        "user_id": "u_existing_task_router",
         "session_id": session_id,
-        "pet_id": "p_skip_task_router",
+        "pet_id": "p_existing_task_router",
         "pet_info": {
             "species": "犬",
             "breed": "柯基",
@@ -756,15 +2437,15 @@ def test_unfinished_consultation_state_skips_task_splitting(tmp_path, monkeypatc
     data = second.json()
     assert data["status"] == "completed"
     assert data["vet_result"]["route"] == "standard_consultation"
-    assert data["metadata"]["task_router_skipped"] is True
-    assert data["metadata"]["task_router_strategy"] == "skipped_unfinished_consultation_state"
-    assert "TaskRouterAgent" not in data["metadata"]["multi_agent_path"]
-    assert "AnswerabilityEvaluator" in data["metadata"]["multi_agent_path"]
+    assert data["metadata"]["task_router"]["tasks"][0]["existing_task_key"] == "__default__"
+    assert "TaskRouterAgent" in data["metadata"]["multi_agent_path"]
+    assert "ConsultationStateService" in data["metadata"]["multi_agent_path"]
+    assert "ConsultationAnswerabilityPolicyOPA" in data["metadata"]["multi_agent_path"]
     assert data["metadata"]["answerability"]["mode"] in {"slot_complete", "sufficient_semantic_evidence"}
     assert "任务 1" not in data["output_text"]
 
 
-def test_answer_now_intent_stops_followup_funnel(tmp_path, monkeypatch):
+def test_answer_now_intent_stops_followup_funnel(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证用户明确要求先答时，系统会进入带边界的阶段性回答。
 
     :param tmp_path: 参数 tmp_path。
@@ -808,11 +2489,12 @@ def test_answer_now_intent_stops_followup_funnel(tmp_path, monkeypatch):
     assert data["metadata"]["consultation_phase"] == "ready_to_answer"
     assert data["metadata"]["missing_slots"] == []
     assert data["metadata"]["answerability"]["mode"] == "user_requested_answer_now"
+    assert AgentPathNode.RESPONSE_GENERATION_CONTEXT_BUILDER.value in data["metadata"]["multi_agent_path"]
     assert "QwenResponseAgent" in data["metadata"]["multi_agent_path"]
     assert "请先回答" not in data["output_text"]
 
 
-def test_semantic_answers_reduce_missing_slots_without_exact_templates(tmp_path, monkeypatch):
+def test_semantic_answers_reduce_missing_slots_without_exact_templates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证宽泛语义表达可以补全上下文，避免固定槽位追问漏斗。
 
     :param tmp_path: 参数 tmp_path。
@@ -857,7 +2539,10 @@ def test_semantic_answers_reduce_missing_slots_without_exact_templates(tmp_path,
     assert data["metadata"]["answerability"]["mode"] in {"slot_complete", "sufficient_semantic_evidence"}
 
 
-def test_llm_semantic_extractor_is_primary_fact_path(tmp_path, monkeypatch):
+def test_structured_consultation_semantic_extractor_is_primary_fact_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """验证 LLM 语义抽取结果会作为主路径合并到问诊状态。
 
     :param tmp_path: 参数 tmp_path。
@@ -890,7 +2575,7 @@ def test_llm_semantic_extractor_is_primary_fact_path(tmp_path, monkeypatch):
     assert data["status"] == "completed"
     assert "ConsultationSemanticExtractorAgent" in data["metadata"]["multi_agent_path"]
     semantic = data["metadata"]["semantic_extraction"]
-    assert semantic["strategy"] == "llm_semantic_extractor"
+    assert semantic["strategy"] == "litellm_response_format"
     assert semantic["used_as_primary_semantic_path"] is True
     assert {"appetite", "mental_status", "vomiting"}.issubset(set(semantic["applied_fact_keys"]))
     slots = data["metadata"]["consultation_state"]["slots"]
@@ -900,7 +2585,52 @@ def test_llm_semantic_extractor_is_primary_fact_path(tmp_path, monkeypatch):
     assert data["metadata"]["answerability"]["mode"] == "user_requested_answer_now"
 
 
-def test_consultation_second_turn_completes_after_context_is_built(tmp_path, monkeypatch):
+def test_open_consultation_observations_are_kept_outside_core_slots(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证枚举外问诊观察进入工作记忆，而不是被硬塞入核心槽位。
+
+    :param tmp_path: 参数 tmp_path。
+    :param monkeypatch: 参数 monkeypatch。
+    :return: 无返回值；断言通过表示开放观察通道符合预期。
+    """
+    client = _client(tmp_path, monkeypatch)
+    vet_context = {
+        "user_id": "u_open_observation",
+        "session_id": "s_open_observation",
+        "pet_id": "p_open_observation",
+        "pet_info": {
+            "species": "猫",
+            "breed": "中华田园猫",
+            "age": "5岁",
+            "weight_kg": 4.2,
+        },
+    }
+
+    response = client.post(
+        "/agent/turns",
+        json=_payload(
+            "我家猫今天一直去猫砂盆但尿量很少，先根据这些告诉我需要注意什么。",
+            vet_context=vet_context,
+        ),
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "completed"
+    state = data["metadata"]["consultation_state"]
+    assert "urinary" not in state["slots"]
+    assert state["observations"][0]["category"] == "urinary"
+    assert state["observations"][0]["label"] == "排尿异常"
+    assert state["evidence_profile"]["open_observations"]["status"] == "known"
+    semantic = data["metadata"]["semantic_extraction"]
+    assert semantic["used_as_primary_semantic_path"] is True
+    assert semantic["applied_fact_keys"] == []
+    assert semantic["applied_observation_count"] == 1
+
+
+def test_consultation_second_turn_completes_after_context_is_built(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证对应业务场景是否符合预期。
 
     :param tmp_path: 参数 tmp_path。
@@ -927,6 +2657,15 @@ def test_consultation_second_turn_completes_after_context_is_built(tmp_path, mon
     assert data["metadata"]["consultation_phase"] == "ready_to_answer"
     assert data["metadata"]["missing_slots"] == []
     assert "QwenResponseAgent" in data["metadata"]["multi_agent_path"]
+    memory_read = data["metadata"]["memory_read"]["audit"]
+    assert memory_read["session_turns_count"] == 1
+    assert memory_read["semantic_status"] == "disabled"
+    response_generation = data["metadata"]["response_generation"]
+    assert response_generation["strategy"] == "qwen_response_generation"
+    assert response_generation["context"]["consultation_ready"] is True
+    assert "当前会话上下文" in _last_response_generation_prompt
+    assert "助手摘要" in _last_response_generation_prompt
+    assert "用户：它有点拉稀，怎么办？" not in _last_response_generation_prompt
     assert "阶段性最终建议" not in data["output_text"]
     assert "请先回答" not in data["output_text"]
     assert "线下兽医" in data["output_text"]
@@ -985,7 +2724,7 @@ def test_completed_consultation_does_not_pollute_next_chief_complaint(
     assert "onset" not in state["slots"]
 
 
-def test_api_key_auth_can_be_required(tmp_path, monkeypatch):
+def test_api_key_auth_can_be_required(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证对应业务场景是否符合预期。
 
     :param tmp_path: 参数 tmp_path。
@@ -1006,7 +2745,7 @@ def test_api_key_auth_can_be_required(tmp_path, monkeypatch):
     assert ok.status_code == 200
 
 
-def test_session_policy_blocks_switching_pet_in_same_session(tmp_path, monkeypatch):
+def test_session_policy_blocks_switching_pet_in_same_session(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证对应业务场景是否符合预期。
 
     :param tmp_path: 参数 tmp_path。
@@ -1016,7 +2755,12 @@ def test_session_policy_blocks_switching_pet_in_same_session(tmp_path, monkeypat
     client = _client(tmp_path, monkeypatch)
     first = _payload_without_pet_info("My dog has mild diarrhea.", session_id="s_one_pet")
     second = _payload_without_pet_info("My cat has mild diarrhea.", session_id="s_one_pet")
-    second["vet_context"]["pet_id"] = "another_pet"
+    second["scope_assertion"] = _scope_assertion(
+        user_id="u_ctx",
+        session_id="s_one_pet",
+        pet_id="another_pet",
+        profile={"species": "cat"},
+    )
 
     assert client.post("/agent/turns", json=first).status_code == 200
     response = client.post("/agent/turns", json=second)
@@ -1039,10 +2783,13 @@ def test_memory_extraction_does_not_persist_pet_info_facts(
     payload = {
         "input": "Please remember this profile.",
         "stream": False,
+        "scope_assertion": _scope_assertion(
+            user_id="u_extract",
+            session_id="s_extract",
+            pet_id="p_extract",
+            profile={"species": "dog"},
+        ),
         "vet_context": {
-            "user_id": "u_extract",
-            "session_id": "s_extract",
-            "pet_id": "p_extract",
             "pet_info": {
                 "species": "dog",
                 "breed": "corgi",
@@ -1055,29 +2802,29 @@ def test_memory_extraction_does_not_persist_pet_info_facts(
     assert client.post("/agent/turns", json=payload).status_code == 200
     memory = client.get("/memories?user_id=u_extract&session_id=s_extract&pet_id=p_extract").json()
     fact_keys = {item["fact_key"] for item in memory["pet"].get("facts", [])}
-    access_control = json.loads((tmp_path / "access_control.json").read_text(encoding="utf-8"))
-    profile = access_control["pet_profiles"]["p_extract"]
+    assert _test_scope_repository is not None
+    profile = _test_scope_repository.profiles[("u_extract", "p_extract")]
 
     assert not {"species", "breed", "age", "weight_kg"}.intersection(fact_keys)
-    assert profile["profile"] == {}
-    assert profile["source"] == "first_seen"
+    assert profile.profile == {"species": "dog"}
+    assert profile.source.startswith("test-bff:test-main-service:master_pet_info:p_extract")
 
 
-def test_safety_review_removes_dosage_expression():
+def test_safety_review_removes_dosage_expression() -> None:
     """验证对应业务场景是否符合预期。
 
     :return: 无返回值；断言通过表示场景符合预期。
     """
     from vet_agent.agents import SafetyAgent, SafetyReviewAgent
 
-    reviewer = SafetyReviewAgent(SafetyAgent(FileRuleRepository(Settings().seed_dir)))
+    reviewer = SafetyReviewAgent(SafetyAgent())
     result = reviewer.review_text("You can give 5 mg/kg twice daily.")
 
     assert "5 mg/kg" not in result.text
     assert any(signal.code == "DOSAGE_REMOVED" for signal in result.signals)
 
 
-def test_report_parse_extracts_structured_lab_items(tmp_path, monkeypatch):
+def test_report_parse_extracts_structured_lab_items(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证对应业务场景是否符合预期。
 
     :param tmp_path: 参数 tmp_path。
@@ -1107,7 +2854,7 @@ def test_report_parse_extracts_structured_lab_items(tmp_path, monkeypatch):
     assert any(item["item_name"] == "ALT" and item["abnormal_flag"] == "high" for item in data["items"])
 
 
-def test_radiology_report_is_blocked_from_online_interpretation(tmp_path, monkeypatch):
+def test_radiology_report_is_blocked_from_online_interpretation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证对应业务场景是否符合预期。
 
     :param tmp_path: 参数 tmp_path。
@@ -1134,7 +2881,7 @@ def test_radiology_report_is_blocked_from_online_interpretation(tmp_path, monkey
     assert data["safety_flags"][0]["code"] == "RADIOLOGY_REPORT_GATE"
 
 
-def test_report_parse_rejects_non_oss_image_url(tmp_path, monkeypatch):
+def test_report_parse_rejects_non_oss_image_url(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证对应业务场景是否符合预期。
 
     :param tmp_path: 参数 tmp_path。
@@ -1158,7 +2905,7 @@ def test_report_parse_rejects_non_oss_image_url(tmp_path, monkeypatch):
     assert response.json()["code"] == "INVALID_REQUEST"
 
 
-def test_rag_governance_admin_can_list_and_update_seed_chunks(tmp_path, monkeypatch):
+def test_rag_governance_admin_can_list_and_update_seed_chunks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证对应业务场景是否符合预期。
 
     :param tmp_path: 参数 tmp_path。
@@ -1183,7 +2930,7 @@ def test_rag_governance_admin_can_list_and_update_seed_chunks(tmp_path, monkeypa
     assert update.json()["enabled"] is False
 
 
-def test_admin_can_preview_import_publish_clinical_conditions(tmp_path, monkeypatch):
+def test_admin_can_preview_import_publish_clinical_conditions(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """验证结构化临床病症卡可通过 Admin API 预览、导入、发布与查询。
 
     :param tmp_path: 参数 tmp_path。

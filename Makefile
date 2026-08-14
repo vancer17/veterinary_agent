@@ -23,7 +23,7 @@ CI_TRY_RUN_SCOPE ?= full
 CD_SCRIPT_DIR ?= scripts/cd
 CD_RELEASE_TAG ?=
 
-.PHONY: ci ci-common ci-repository ci-static ci-python ci-compose ci-secret-boundary ci-cd-layout ci-db ci-image ci-dry-run ci-try-run cd-verify-release cd-resolve-images cd-build-images cd-deploy-production cd-sync-production cd-health-check dev-build dev-up dev-up-no-wait dev-down dev-clean dev-restart dev-ps dev-logs dev-app-logs dev-db-logs dev-litellm-logs dev-mem0-logs dev-mem0-dashboard-logs dev-opa-logs dev-mem0-db-logs dev-shell db-shell dev-db-extensions dev-migrate dev-seed dev-test dev-ready dev-url prod-config prod-pull prod-db-extensions prod-deps prod-migrate prod-seed prod-up prod-mem0-dashboard-up prod-opa-up prod-restart prod-down prod-clean prod-ps prod-logs prod-app-logs prod-litellm-logs prod-mem0-logs prod-mem0-dashboard-logs prod-opa-logs prod-mem0-db-logs prod-ready prod-shell prod-db-shell request-all request-curl request-health request-ready request-followup-first request-followup-second request-multitask request-safety-toxic request-idempotency request-profile-memory request-memory-read request-report-parse request-rag-stats request-rag-chunks request-business-all request-business-followup-first request-business-followup-second request-business-multitask request-business-memory request-business-safety-semantic request-business-stream
+.PHONY: ci ci-common ci-repository ci-static ci-python ci-compose ci-secret-boundary ci-cd-layout ci-db ci-image ci-dry-run ci-try-run ci-response-generation-api cd-verify-release cd-resolve-images cd-build-images cd-deploy-production cd-sync-production cd-health-check dev-build dev-up dev-up-no-wait dev-down dev-clean dev-restart dev-ps dev-logs dev-app-logs dev-db-logs dev-litellm-logs dev-mem0-logs dev-mem0-dashboard-logs dev-opa-logs dev-mem0-db-logs dev-shell db-shell dev-db-extensions dev-migrate dev-seed dev-test dev-ready dev-url prod-config prod-pull prod-db-extensions prod-deps prod-migrate prod-seed prod-up prod-mem0-dashboard-up prod-opa-up prod-restart prod-down prod-clean prod-ps prod-logs prod-app-logs prod-litellm-logs prod-mem0-logs prod-mem0-dashboard-logs prod-opa-logs prod-mem0-db-logs prod-ready prod-shell prod-db-shell request-all request-curl request-health request-ready request-followup-first request-followup-second request-multitask request-safety-toxic request-idempotency request-profile-memory request-memory-read request-report-parse request-rag-stats request-rag-chunks request-business-all request-business-followup-first request-business-followup-second request-business-multitask request-business-memory request-business-safety-semantic request-business-stream
 
 ci:
 	bash $(CI_SCRIPT_DIR)/run-all.sh
@@ -60,6 +60,9 @@ ci-dry-run:
 
 ci-try-run:
 	CI_TRY_RUN_SCOPE="$(CI_TRY_RUN_SCOPE)" bash $(CI_SCRIPT_DIR)/try-run.sh
+
+ci-response-generation-api:
+	bash scripts/integration/run-response-generation-api-smoke.sh
 
 cd-verify-release:
 	CD_RELEASE_TAG="$(CD_RELEASE_TAG)" bash $(CD_SCRIPT_DIR)/common/verify-release-input.sh

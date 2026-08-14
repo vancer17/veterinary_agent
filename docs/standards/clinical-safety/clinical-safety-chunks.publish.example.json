@@ -1,0 +1,76 @@
+{
+  "_meta": {
+    "schema": "clinical_safety_chunks",
+    "schema_version": "1.0.0",
+    "version": "template-v1",
+    "source_file": "docs/standards/clinical-safety/clinical-safety-assets.publish.example.json",
+    "asset_count": 1,
+    "chunk_count": 3,
+    "generated_at": "2026-08-13T08:00:00+00:00"
+  },
+  "chunks": [
+    {
+      "chunk_id": "clinical_safety_template_example_001.recognition.template-v1",
+      "asset_id": "clinical_safety_template_example_001",
+      "chunk_type": "recognition",
+      "title": "示例临床风险 风险识别",
+      "embedding_text": "示例临床风险；示例症状；模板示例；示例风险",
+      "metadata": {
+        "asset_id": "clinical_safety_template_example_001",
+        "code": "TEMPLATE_CLINICAL_RISK_SAMPLE",
+        "asset_type": "danger_pattern",
+        "canonical_name": "示例临床风险",
+        "severity": "urgent",
+        "action_class": "same_day_visit"
+      },
+      "review_status": "approved",
+      "version": "template-v1",
+      "enabled": true,
+      "embedding_model": "text-embedding-v4",
+      "embedding_dimension": 1024,
+      "content_hash": "c53a0267f875c240152dadb6df9b533d17e987683ab199782b3c108de837652c"
+    },
+    {
+      "chunk_id": "clinical_safety_template_example_001.clinical_risk.template-v1",
+      "asset_id": "clinical_safety_template_example_001",
+      "chunk_type": "clinical_risk",
+      "title": "示例临床风险 临床风险",
+      "embedding_text": "这是一个仅用于说明结构的示例临床风险摘要。",
+      "metadata": {
+        "asset_id": "clinical_safety_template_example_001",
+        "code": "TEMPLATE_CLINICAL_RISK_SAMPLE",
+        "asset_type": "danger_pattern",
+        "canonical_name": "示例临床风险",
+        "severity": "urgent",
+        "action_class": "same_day_visit"
+      },
+      "review_status": "approved",
+      "version": "template-v1",
+      "enabled": true,
+      "embedding_model": "text-embedding-v4",
+      "embedding_dimension": 1024,
+      "content_hash": "0824b24fdefe27f176e44f046183c0a11309da02d1d20b865231091e9b6f2b75"
+    },
+    {
+      "chunk_id": "clinical_safety_template_example_001.triage_action.template-v1",
+      "asset_id": "clinical_safety_template_example_001",
+      "chunk_type": "triage_action",
+      "title": "示例临床风险 分诊处置",
+      "embedding_text": "这是一个仅用于说明结构的示例分诊口径。",
+      "metadata": {
+        "asset_id": "clinical_safety_template_example_001",
+        "code": "TEMPLATE_CLINICAL_RISK_SAMPLE",
+        "asset_type": "danger_pattern",
+        "canonical_name": "示例临床风险",
+        "severity": "urgent",
+        "action_class": "same_day_visit"
+      },
+      "review_status": "approved",
+      "version": "template-v1",
+      "enabled": true,
+      "embedding_model": "text-embedding-v4",
+      "embedding_dimension": 1024,
+      "content_hash": "4128d563f0ee206cd26f21ad0ab1e4488925f08489ed6209762d8bda45387c4a"
+    }
+  ]
+}

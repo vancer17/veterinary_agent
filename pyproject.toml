@@ -10,11 +10,15 @@ name = "agent"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.13"
 dependencies = [
     "alembic>=1.17.2",
     "fastapi>=0.139.0",
+    "guardrails-ai>=0.10.2",
+    "guardrails-ai-prompt-injection-detector>=0.0.2",
     "httpx>=0.28.1",
+    "llama-index-core>=0.14.23",
+    "llama-index-vector-stores-postgres>=0.8.1",
     "pgvector>=0.4.2",
     "psycopg[binary]>=3.3.2",
     "pytest>=9.0.2",
@@ -25,6 +29,9 @@ dependencies = [
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
+
+[[tool.uv.index]]
+url = "https://pypi.org/simple"
 
 [[tool.uv.index]]
 # 将 uv 依赖解析与锁文件生成固定到清华 PyPI 镜像，匹配当前国内服务器网络环境。
@@ -40,3 +47,6 @@ where = ["src"]
 pythonpath = ["src", "."]
 testpaths = ["tests"]
 norecursedirs = [".git", ".venv", "vendor"]
+markers = [
+    "integration: 需要真实 OPA、真实模型网关或其他外部服务的集成测试。",
+]

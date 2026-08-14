@@ -6,14 +6,19 @@
 
 
 
-from .knowledge import (
-    FallbackKnowledgeRepository,
-    FileKnowledgeRepository,
-    KnowledgeHit,
-    KnowledgeRepository,
-    PostgresKnowledgeRepository,
-    evidence_from_hits,
+from .knowledge import KnowledgeHit
+from .consultation_state import (
+    DEFAULT_TASK_KEY as CONSULTATION_DEFAULT_TASK_KEY,
+    ConsultationStateRepository,
+    JsonConsultationStateRepository,
+    PostgresConsultationStateRepository,
 )
+from .memory_read import (
+    JsonMemoryReadRepository,
+    MemoryReadRepositoryError,
+    PostgresMemoryReadRepository,
+)
+from .memory_write import MemoryWriteRepository, PostgresMemoryWriteRepository
 from .rules import (
     ConsultationDomainRule,
     ConsultationRuleSet,
@@ -22,24 +27,46 @@ from .rules import (
     FileRuleRepository,
     PostgresRuleRepository,
     RuleRepository,
-    SafetyRule,
-    compile_regex,
+)
+from .scope import (
+    PostgresScopeRepository,
+    ScopeRepository,
+    SessionBinding,
+    VerifiedPetProfile,
+)
+from .turn_execution import (
+    PostgresTurnExecutionRepository,
+    TurnExecutionRepository,
+    TurnExecutionRepositoryError,
+    TurnIdempotencyClaim,
+    TurnIdempotencyClaimStatus,
 )
 
 __all__ = [
+    "CONSULTATION_DEFAULT_TASK_KEY",
     "ConsultationDomainRule",
     "ConsultationRuleSet",
     "ConsultationSlotRule",
-    "FallbackKnowledgeRepository",
+    "ConsultationStateRepository",
     "FallbackRuleRepository",
-    "FileKnowledgeRepository",
     "FileRuleRepository",
     "KnowledgeHit",
-    "KnowledgeRepository",
-    "PostgresKnowledgeRepository",
+    "JsonMemoryReadRepository",
+    "JsonConsultationStateRepository",
+    "MemoryReadRepositoryError",
+    "MemoryWriteRepository",
+    "PostgresMemoryReadRepository",
+    "PostgresMemoryWriteRepository",
+    "PostgresConsultationStateRepository",
     "PostgresRuleRepository",
+    "PostgresScopeRepository",
+    "PostgresTurnExecutionRepository",
     "RuleRepository",
-    "SafetyRule",
-    "compile_regex",
-    "evidence_from_hits",
+    "ScopeRepository",
+    "SessionBinding",
+    "TurnExecutionRepository",
+    "TurnExecutionRepositoryError",
+    "TurnIdempotencyClaim",
+    "TurnIdempotencyClaimStatus",
+    "VerifiedPetProfile",
 ]

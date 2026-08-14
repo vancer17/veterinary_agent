@@ -1,0 +1,217 @@
+{
+  "$defs": {
+    "ClinicalSafetyChunkPublishContract": {
+      "additionalProperties": false,
+      "description": "表示单条发布态临床安全向量 chunk 的严格契约。\n\n:param chunk_id: 临床安全向量 chunk 稳定标识。\n:param asset_id: 关联的临床安全资产标识。\n:param chunk_type: chunk 用途类型。\n:param title: chunk 标题。\n:param embedding_text: 生成向量使用的标准文本。\n:param metadata: chunk 附加审计元数据。\n:param review_status: 审核状态；发布态严格契约只接受 approved。\n:param version: chunk 版本。\n:param enabled: 是否允许运行时召回；发布态严格契约只接受 True。\n:param embedding_model: 生成 embedding 使用的模型名称。\n:param embedding_dimension: embedding 向量维度。\n:param content_hash: embedding_text 的内容哈希。\n:return: 无返回值。",
+      "properties": {
+        "chunk_id": {
+          "description": "临床安全向量 chunk 稳定标识。",
+          "minLength": 1,
+          "title": "Chunk Id",
+          "type": "string"
+        },
+        "asset_id": {
+          "description": "关联的临床安全资产标识。",
+          "minLength": 1,
+          "title": "Asset Id",
+          "type": "string"
+        },
+        "chunk_type": {
+          "$ref": "#/$defs/ClinicalSafetyChunkTypeContract",
+          "description": "chunk 用途类型。"
+        },
+        "title": {
+          "description": "chunk 标题。",
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "embedding_text": {
+          "description": "生成向量使用的标准文本。",
+          "minLength": 1,
+          "title": "Embedding Text",
+          "type": "string"
+        },
+        "metadata": {
+          "additionalProperties": true,
+          "description": "chunk 附加审计元数据。",
+          "title": "Metadata",
+          "type": "object"
+        },
+        "review_status": {
+          "const": "approved",
+          "description": "审核状态；发布态严格契约只接受 approved。",
+          "title": "Review Status",
+          "type": "string"
+        },
+        "version": {
+          "description": "chunk 版本。",
+          "minLength": 1,
+          "title": "Version",
+          "type": "string"
+        },
+        "enabled": {
+          "const": true,
+          "description": "是否允许运行时召回；发布态严格契约只接受 True。",
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "embedding_model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "生成 embedding 使用的模型名称。",
+          "title": "Embedding Model"
+        },
+        "embedding_dimension": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "embedding 向量维度。",
+          "title": "Embedding Dimension"
+        },
+        "content_hash": {
+          "description": "embedding_text 的内容哈希。",
+          "minLength": 16,
+          "title": "Content Hash",
+          "type": "string"
+        }
+      },
+      "required": [
+        "chunk_id",
+        "asset_id",
+        "chunk_type",
+        "title",
+        "embedding_text",
+        "review_status",
+        "version",
+        "enabled",
+        "content_hash"
+      ],
+      "title": "ClinicalSafetyChunkPublishContract",
+      "type": "object"
+    },
+    "ClinicalSafetyChunkTypeContract": {
+      "description": "表示发布态临床安全向量 chunk 允许使用的片段类型。\n\n:return: 无返回值；chunk 类型用于区分召回识别文本、风险解释文本和处置口径文本。",
+      "enum": [
+        "recognition",
+        "clinical_risk",
+        "triage_action"
+      ],
+      "title": "ClinicalSafetyChunkTypeContract",
+      "type": "string"
+    },
+    "ClinicalSafetyDocumentMetaContract": {
+      "additionalProperties": true,
+      "description": "表示临床安全发布态资产文档的元信息。\n\n:param document_schema: 静态资产文档类型，对应 JSON 中的 schema 字段。\n:param schema_version: 静态资产契约版本。\n:param version: 本批资产或 chunk 的业务版本。\n:param source_file: 原始来源文件路径。\n:param asset_count: 资产数量。\n:param chunk_count: chunk 数量；资产文档可为空。\n:param generated_at: 文档生成时间。\n:param source_meta: 原始来源元信息。\n:return: 无返回值。",
+      "properties": {
+        "schema": {
+          "description": "静态资产文档类型。",
+          "enum": [
+            "clinical_safety_assets",
+            "clinical_safety_chunks"
+          ],
+          "title": "Schema",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.0.0",
+          "description": "静态资产契约版本。",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "version": {
+          "description": "本批资产或 chunk 的业务版本。",
+          "minLength": 1,
+          "title": "Version",
+          "type": "string"
+        },
+        "source_file": {
+          "description": "原始来源文件路径。",
+          "minLength": 1,
+          "title": "Source File",
+          "type": "string"
+        },
+        "asset_count": {
+          "description": "文档声明的资产数量。",
+          "minimum": 0,
+          "title": "Asset Count",
+          "type": "integer"
+        },
+        "chunk_count": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "文档声明的 chunk 数量；资产文档可为空。",
+          "title": "Chunk Count"
+        },
+        "generated_at": {
+          "description": "文档生成时间。",
+          "format": "date-time",
+          "title": "Generated At",
+          "type": "string"
+        },
+        "source_meta": {
+          "additionalProperties": true,
+          "description": "原始来源元信息。",
+          "title": "Source Meta",
+          "type": "object"
+        }
+      },
+      "required": [
+        "schema",
+        "schema_version",
+        "version",
+        "source_file",
+        "asset_count",
+        "generated_at"
+      ],
+      "title": "ClinicalSafetyDocumentMetaContract",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "表示发布态临床安全 chunk 文档的严格契约。\n\n:param meta: 文档元信息，对应 JSON 中的 _meta 字段。\n:param chunks: 发布态临床安全向量 chunk 列表。\n:return: 无返回值。",
+  "properties": {
+    "_meta": {
+      "$ref": "#/$defs/ClinicalSafetyDocumentMetaContract",
+      "description": "文档元信息。"
+    },
+    "chunks": {
+      "description": "发布态临床安全向量 chunk 列表。",
+      "items": {
+        "$ref": "#/$defs/ClinicalSafetyChunkPublishContract"
+      },
+      "minItems": 1,
+      "title": "Chunks",
+      "type": "array"
+    }
+  },
+  "required": [
+    "_meta",
+    "chunks"
+  ],
+  "title": "ClinicalSafetyChunkDocumentPublishContract",
+  "type": "object"
+}
