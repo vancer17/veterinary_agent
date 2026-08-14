@@ -26,7 +26,6 @@ class FollowupRagStrategy(StrEnum):
     """
 
     LLAMA_INDEX_PGVECTOR_STRUCTURED = "llamaindex_pgvector_structured_followup"
-    STATIC_TEST = "static_followup_rag_test"
 
 
 @dataclass(frozen=True)
