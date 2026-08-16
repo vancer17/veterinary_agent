@@ -46,7 +46,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--with-embeddings", action="store_true")
     parser.add_argument(
         "--clinical-safety-review-status",
-        default="pending",
+        default=os.getenv("CLINICAL_SAFETY_REVIEW_STATUS", "pending"),
         choices=("approved", "pending"),
     )
     parser.add_argument(
