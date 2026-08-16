@@ -97,8 +97,6 @@ class Settings:
     qwen_circuit_breaker_cooldown_seconds: float = 30.0
     qwen_fallback_models: tuple[str, ...] = ()
     enable_memory_extraction: bool = True
-    enable_llm_memory_extraction: bool = True
-    memory_extraction_min_confidence: float = 0.72
     max_attachments: int = 8
     max_input_chars: int = 12_000
     enable_input_safety: bool = True
@@ -206,8 +204,6 @@ class Settings:
             qwen_circuit_breaker_cooldown_seconds=float(os.getenv("QWEN_CIRCUIT_BREAKER_COOLDOWN_SECONDS", "30")),
             qwen_fallback_models=_csv_env("QWEN_FALLBACK_MODELS"),
             enable_memory_extraction=_bool_env("ENABLE_MEMORY_EXTRACTION", True),
-            enable_llm_memory_extraction=_bool_env("ENABLE_LLM_MEMORY_EXTRACTION", True),
-            memory_extraction_min_confidence=float(os.getenv("MEMORY_EXTRACTION_MIN_CONFIDENCE", "0.72")),
             max_attachments=int(os.getenv("MAX_ATTACHMENTS", "8")),
             max_input_chars=int(os.getenv("MAX_INPUT_CHARS", "12000")),
             enable_input_safety=_bool_env("ENABLE_INPUT_SAFETY", True),
