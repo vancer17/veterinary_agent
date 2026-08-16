@@ -232,6 +232,22 @@ services:
       timeout: 5s
       retries: 30
 
+  worker:
+    <<: *app-common
+    restart: unless-stopped
+    init: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # 后台 worker 复用正式应用镜像，只覆盖启动命令；生产环境不得现场构建第二套 worker 镜像。
+    command: ["python", "-m", "vet_agent.background_tasks.worker"]
+    healthcheck:
+      # worker 不暴露 HTTP 端口，健康状态以 PostgreSQL 后台任务表可访问性为准。
+      test: ["CMD-SHELL", "python -m vet_agent.background_tasks.healthcheck"]
+      interval: 15s
+      timeout: 5s
+      retries: 30
+
 networks:
   backend:
 

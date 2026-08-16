@@ -34,6 +34,10 @@ from vet_agent.answer_rag import (
     LlamaIndexAnswerKnowledgeRetriever,
     PostgresAnswerRagKnowledgeRepository,
 )
+from vet_agent.background_tasks import (
+    BackgroundTaskService,
+    DisabledBackgroundTaskService,
+)
 from vet_agent.followup_rag import (
     FollowupRagQueryBuilder,
     FollowupRagService,
@@ -76,6 +80,7 @@ from vet_agent.repositories import (
     JsonMemoryReadRepository,
     PostgresConsultationStateRepository,
     PostgresMemoryReadRepository,
+    PostgresBackgroundTaskRepository,
     PostgresMemoryWriteRepository,
     PostgresRuleRepository,
     PostgresScopeRepository,
@@ -194,6 +199,16 @@ class Container:
                 memory_store,
                 consultation_state_repository=self.consultation_state_repository,
             )
+        )
+        self.background_task_repository = (
+            PostgresBackgroundTaskRepository(settings.database_url)
+            if settings.database_url
+            else None
+        )
+        self.background_task_service = (
+            BackgroundTaskService(settings, self.background_task_repository)
+            if self.background_task_repository is not None
+            else DisabledBackgroundTaskService(settings)
         )
         self.access_control = AccessControlService(settings, self.scope_service)
         self.input_safety_service = self._input_safety_service(settings, input_safety_service)
@@ -320,6 +335,7 @@ class Container:
             output_safety_service=self.output_safety_service,
             task_router=self.task_router,
             followup_rag_service=self.followup_rag_service,
+            background_task_service=self.background_task_service,
         )
 
     @property
@@ -342,6 +358,7 @@ class Container:
             and self.consultation_state_service.is_ready()
             and self.turn_execution_gate.is_ready()
             and self.memory_read_service.is_ready()
+            and self.background_task_service.is_ready()
             and self.consultation_state_repository.is_ready()
             and (
                 self.memory_write_repository.is_ready()
