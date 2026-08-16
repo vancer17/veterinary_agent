@@ -189,10 +189,11 @@ services:
       litellm:
         condition: service_healthy
     command: >
-      sh -c 'if [ "$${SEED_WITH_EMBEDDINGS:-false}" = "true" ]; then
-      python scripts/seed_database.py --with-embeddings;
+      sh -c 'review_status="$${CLINICAL_SAFETY_REVIEW_STATUS:-approved}";
+      if [ "$${SEED_WITH_EMBEDDINGS:-false}" = "true" ]; then
+      python scripts/seed_database.py --with-embeddings --clinical-safety-review-status "$${review_status}";
       else
-      python scripts/seed_database.py;
+      python scripts/seed_database.py --clinical-safety-review-status "$${review_status}";
       fi'
     profiles: ["ops"]
 
