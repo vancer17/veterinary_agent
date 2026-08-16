@@ -138,6 +138,8 @@ class MemoryExtractionStrategy(StrEnum):
     MEMORY_EXTRACTION_INVALID_SCHEMA = "memory_extraction_invalid_schema"
     MEMORY_EXTRACTION_FAILED = "memory_extraction_failed"
     MEMORY_EXTRACTION_EMPTY_SOURCE = "memory_extraction_empty_source"
+    BACKGROUND_TASK_QUEUED = "background_task_queued"
+    BACKGROUND_TASK_DISABLED = "background_task_disabled"
 
 
 @dataclass(frozen=True)

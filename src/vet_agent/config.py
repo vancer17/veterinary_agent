@@ -97,6 +97,10 @@ class Settings:
     qwen_circuit_breaker_cooldown_seconds: float = 30.0
     qwen_fallback_models: tuple[str, ...] = ()
     enable_memory_extraction: bool = True
+    background_tasks_max_attempts: int = 5
+    background_tasks_worker_batch_size: int = 4
+    background_tasks_worker_lease_seconds: float = 300.0
+    background_tasks_worker_poll_interval_seconds: float = 2.0
     max_attachments: int = 8
     max_input_chars: int = 12_000
     enable_input_safety: bool = True
@@ -204,6 +208,12 @@ class Settings:
             qwen_circuit_breaker_cooldown_seconds=float(os.getenv("QWEN_CIRCUIT_BREAKER_COOLDOWN_SECONDS", "30")),
             qwen_fallback_models=_csv_env("QWEN_FALLBACK_MODELS"),
             enable_memory_extraction=_bool_env("ENABLE_MEMORY_EXTRACTION", True),
+            background_tasks_max_attempts=int(os.getenv("BACKGROUND_TASKS_MAX_ATTEMPTS", "5")),
+            background_tasks_worker_batch_size=int(os.getenv("BACKGROUND_TASKS_WORKER_BATCH_SIZE", "4")),
+            background_tasks_worker_lease_seconds=float(os.getenv("BACKGROUND_TASKS_WORKER_LEASE_SECONDS", "300")),
+            background_tasks_worker_poll_interval_seconds=float(
+                os.getenv("BACKGROUND_TASKS_WORKER_POLL_INTERVAL_SECONDS", "2")
+            ),
             max_attachments=int(os.getenv("MAX_ATTACHMENTS", "8")),
             max_input_chars=int(os.getenv("MAX_INPUT_CHARS", "12000")),
             enable_input_safety=_bool_env("ENABLE_INPUT_SAFETY", True),

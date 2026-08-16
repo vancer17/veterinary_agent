@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Any
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import ARRAY, BigInteger, Boolean, CheckConstraint, DateTime, Float, ForeignKey, Integer, Text, UniqueConstraint, func
+from sqlalchemy import ARRAY, BigInteger, Boolean, CheckConstraint, DateTime, Float, ForeignKey, Index, Integer, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -837,6 +837,98 @@ class LogicTraceModel(Base):
     medical: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class BackgroundTaskModel(Base):
+    __tablename__ = "background_tasks"
+    __table_args__ = (
+        UniqueConstraint("task_id", name="uq_background_tasks_task_id"),
+        UniqueConstraint("task_type", "business_key", name="uq_background_tasks_type_business_key"),
+        CheckConstraint(
+            "status IN ('pending', 'running', 'retrying', 'succeeded', 'dead_letter', 'cancelled')",
+            name="ck_background_tasks_status",
+        ),
+        Index("idx_background_tasks_status_run_after_priority", "status", "run_after", "priority"),
+        Index("idx_background_tasks_locked_until", "locked_until"),
+        Index("idx_background_tasks_scope", "user_id", "pet_id", "session_id"),
+        Index("idx_background_tasks_ordering_key", "ordering_key"),
+        {
+            "comment": "持久化后台任务表，用于保存可重试的异步后置处理任务、业务幂等键与执行审计信息。",
+        },
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True, comment="后台任务内部主键。")
+    task_id: Mapped[str] = mapped_column(Text, nullable=False, comment="后台任务稳定标识，用于响应 metadata、worker 审计和外部排障。")
+    task_type: Mapped[str] = mapped_column(Text, nullable=False, comment="后台任务类型，例如 memory_candidate_extraction。")
+    business_key: Mapped[str] = mapped_column(Text, nullable=False, comment="后台任务业务幂等键，同一任务类型下必须唯一。")
+    ordering_key: Mapped[str] = mapped_column(Text, nullable=False, comment="后台任务顺序约束键，例如 user_id:pet_id:session_id。")
+    user_id: Mapped[str] = mapped_column(Text, nullable=False, comment="任务来源用户标识。")
+    pet_id: Mapped[str] = mapped_column(Text, nullable=False, comment="任务来源宠物标识。")
+    session_id: Mapped[str] = mapped_column(Text, nullable=False, comment="任务来源会话标识。")
+    source_turn_id: Mapped[str | None] = mapped_column(Text, comment="任务来源回合标识。")
+    source_request_id: Mapped[str | None] = mapped_column(Text, comment="任务来源请求标识。")
+    source_trace_id: Mapped[str | None] = mapped_column(Text, comment="任务来源链路追踪标识。")
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="pending", server_default="pending", comment="后台任务状态。")
+    priority: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=100,
+        server_default="100",
+        comment="后台任务优先级，数值越小越优先。",
+    )
+    run_after: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        comment="任务最早可执行时间。",
+    )
+    attempt_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+        comment="任务已执行尝试次数。",
+    )
+    max_attempts: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=5,
+        server_default="5",
+        comment="任务最大执行尝试次数。",
+    )
+    locked_by: Mapped[str | None] = mapped_column(Text, comment="当前持有任务租约的 worker 标识。")
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), comment="当前任务租约过期时间。")
+    payload: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+        comment="任务执行载荷。",
+    )
+    result: Mapped[dict[str, Any] | None] = mapped_column(JSONB, comment="任务执行结果或失败摘要。")
+    last_error: Mapped[dict[str, Any] | None] = mapped_column(JSONB, comment="最近一次失败的结构化错误信息。")
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(
+        "metadata",
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+        comment="任务附加审计元数据。",
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), comment="任务首次或最近一次开始执行时间。")
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), comment="任务最终完成时间。")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        comment="任务创建时间。",
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        comment="任务最近更新时间。",
+    )
 
 
 class IdempotencyRecordModel(Base):

@@ -224,6 +224,27 @@ services:
       timeout: 5s
       retries: 20
 
+  worker:
+    image: ${VET_AGENT_IMAGE:-vet-agent:dev}
+    build: *app-build
+    container_name: vet-agent-dev-worker
+    restart: unless-stopped
+    init: true
+    depends_on:
+      app:
+        condition: service_healthy
+    env_file: *app-env-files
+    volumes:
+      - ..:/app
+    # 开发环境 worker 复用同一套源码挂载与应用镜像，仅切换为后台任务入口。
+    command: ["python", "-m", "vet_agent.background_tasks.worker"]
+    healthcheck:
+      # worker 不提供 HTTP 接口，健康检查直接校验后台任务仓储可访问性。
+      test: ["CMD-SHELL", "python -m vet_agent.background_tasks.healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
 volumes:
   vet_agent_dev_pgdata:
   vet_agent_dev_mem0_history:

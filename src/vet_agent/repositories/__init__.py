@@ -6,6 +6,7 @@
 
 
 
+from .background_tasks import BackgroundTaskRepository, BackgroundTaskRepositoryError, PostgresBackgroundTaskRepository
 from .knowledge import KnowledgeHit
 from .consultation_state import (
     DEFAULT_TASK_KEY as CONSULTATION_DEFAULT_TASK_KEY,
@@ -43,6 +44,8 @@ from .turn_execution import (
 )
 
 __all__ = [
+    "BackgroundTaskRepository",
+    "BackgroundTaskRepositoryError",
     "CONSULTATION_DEFAULT_TASK_KEY",
     "ConsultationDomainRule",
     "ConsultationRuleSet",
@@ -57,6 +60,7 @@ __all__ = [
     "MemoryWriteRepository",
     "PostgresMemoryReadRepository",
     "PostgresMemoryWriteRepository",
+    "PostgresBackgroundTaskRepository",
     "PostgresConsultationStateRepository",
     "PostgresRuleRepository",
     "PostgresScopeRepository",
