@@ -1,13 +1,12 @@
 """
-文件：src/vet_agent/agents/memory_extraction.py
-作用：为历史调用路径提供长期记忆候选抽取能力的兼容入口。
-说明：新实现已迁移至 vet_agent.memory_extraction 包；本文件仅保留向后兼容的
-      顶层导出，不承载业务逻辑、规则回退或写入裁决。
+文件：src/vet_agent/memory_extraction/__init__.py
+作用：作为长期记忆候选抽取包入口，集中暴露结构化契约与抽取服务。
+说明：上游编排层、测试替身与兼容入口应仅通过本包顶层导出的对象访问能力，
+      不得直接引用内部实现文件。
 """
 
-from vet_agent.memory_extraction import (
+from .models import (
     MemoryCandidateProposal,
-    MemoryExtractionAgent,
     MemoryExtractionAssertionStatus,
     MemoryExtractionDurability,
     MemoryExtractionEntryKind,
@@ -22,6 +21,7 @@ from vet_agent.memory_extraction import (
     MemoryExtractionTemporalScope,
     MemoryFactCandidate,
 )
+from .service import MemoryExtractionAgent
 
 __all__ = [
     "MemoryCandidateProposal",

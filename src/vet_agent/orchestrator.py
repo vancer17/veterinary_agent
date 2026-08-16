@@ -19,8 +19,14 @@ from vet_agent.agents import (
     ConsultationSemanticExtractorAgent,
     ConsultationStatePolicyContext,
     ConsultationStateService,
+    MemoryCandidateProposal,
+    MemoryExtractionAssertionStatus,
     MemoryExtractionAgent,
-    MemoryFactCandidate,
+    MemoryExtractionDurability,
+    MemoryExtractionEvidenceKind,
+    MemoryExtractionFactType,
+    MemoryExtractionResult,
+    MemoryExtractionStrategy,
     SafetyAssessment,
     TaskRouterAgent,
 )
@@ -811,11 +817,15 @@ class VetOrchestrator:
             task_summaries.append(
                 {
                     "task_id": task.task_id,
+                    "task_key": task.task_key,
+                    "state_key": task.state_key,
                     "title": task.title,
                     "domain": task.domain,
+                    "text": task.text,
                     "status": segment_status,
                     "missing_slots": consultation_decision.missing_slots,
                     "consultation_phase": consultation_decision.state.phase,
+                    "consultation_state": consultation_decision.state.to_dict(),
                     "answerability": consultation_decision.answerability,
                     "semantic_extraction": consultation_decision.state.semantic_extraction,
                     "followup_question_plan": followup_plan.to_metadata() if followup_plan else None,
@@ -1237,14 +1247,32 @@ class VetOrchestrator:
         :return: 返回函数执行结果。
         """
         response = await self.output_safety_service.review_response(response)
-        extracted_facts = await self._extract_and_store_facts(request, response) if medical else []
-        response.metadata["memory_extraction"] = {
-            "agent": "MemoryExtractionAgent",
-            "stored_fact_count": len(extracted_facts),
-            "fact_keys": [f"{item.fact_type}:{item.fact_key}" for item in extracted_facts],
-        }
+        if medical:
+            response.metadata["memory_extraction_sources"] = list(self._memory_extraction_sources(request, response))
+            extraction_result, stored_facts = await self._extract_and_store_facts(request, response)
+            extraction_metadata = extraction_result.to_metadata()
+            extraction_metadata["stored_fact_count"] = len(stored_facts)
+            extraction_metadata["stored_fact_keys"] = [
+                f"{item.fact_type.value}:{item.fact_key}" for item in stored_facts
+            ]
+            response.metadata["memory_extraction"] = extraction_metadata
+        else:
+            response.metadata["memory_extraction"] = {
+                "agent": "MemoryExtractionAgent",
+                "strategy": MemoryExtractionStrategy.MEMORY_EXTRACTION_SKIPPED.value,
+                "fallback_reason": "non_medical_turn",
+                "confidence": 0.0,
+                "source_text": response.output_text[:500],
+                "trusted": False,
+                "proposal_count": 0,
+                "proposal_keys": [],
+                "proposals": [],
+                "stored_fact_count": 0,
+                "stored_fact_keys": [],
+            }
         path = response.metadata.get("multi_agent_path")
-        if isinstance(path, list) and extracted_facts and "MemoryExtractionAgent" not in path:
+        stored_count = response.metadata.get("memory_extraction", {}).get("stored_fact_count", 0)
+        if isinstance(path, list) and stored_count and "MemoryExtractionAgent" not in path:
             path.append("MemoryExtractionAgent")
         await self._persist(request, response, medical=medical)
         return response
@@ -1253,7 +1281,7 @@ class VetOrchestrator:
         self,
         request: AgentTurnRequest,
         response: AgentTurnResponse,
-    ) -> list[MemoryFactCandidate]:
+    ) -> tuple[MemoryExtractionResult, tuple[MemoryCandidateProposal, ...]]:
         """执行内部抽取逻辑。
 
         :param request: 请求对象。
@@ -1261,31 +1289,152 @@ class VetOrchestrator:
         :return: 返回异步执行结果。
         """
         try:
-            facts = await self.memory_extractor.extract(
+            result = await self.memory_extractor.extract(
                 identity=request.trusted_identity,
                 user_text=request.joined_text(),
                 response=response,
                 model=response.model,
             )
-        except Exception:
-            return []
-        stored: list[MemoryFactCandidate] = []
-        for fact in facts:
+        except Exception as exc:
+            result = MemoryExtractionResult(
+                proposals=(),
+                strategy=MemoryExtractionStrategy.MEMORY_EXTRACTION_FAILED,
+                fallback_reason=f"{type(exc).__name__}: {exc}",
+                source_text=response.output_text[:500],
+            )
+        stored: list[MemoryCandidateProposal] = []
+        for fact in result.proposals:
+            if not self._should_store_memory_candidate(fact):
+                continue
             try:
                 await self.memory_service.upsert_pet_fact(
                     request.trusted_identity,
-                    fact_type=fact.fact_type,
+                    fact_type=fact.fact_type.value,
                     fact_key=fact.fact_key,
                     fact_value=fact.fact_value,
                     confidence=fact.confidence,
                     source_turn_id=response.id,
                     source_text=fact.source_text,
-                    metadata=fact.metadata or {"source": "MemoryExtractionAgent"},
+                    metadata={
+                        "source": "MemoryExtractionAgent",
+                        "memory_extraction": fact.to_metadata(),
+                    },
                 )
                 stored.append(fact)
             except Exception:
                 continue
-        return stored
+        return result, tuple(stored)
+
+    def _memory_extraction_sources(
+        self,
+        request: AgentTurnRequest,
+        response: AgentTurnResponse,
+    ) -> tuple[dict[str, Any], ...]:
+        """构造长期记忆候选抽取使用的显式来源片段。
+
+        :param request: 请求对象。
+        :param response: 响应对象。
+        :return: 返回长期记忆候选抽取可见的来源片段字典元组。
+        """
+        raw_sources = response.metadata.get("memory_extraction_sources")
+        if isinstance(raw_sources, list) and raw_sources:
+            normalized = tuple(item for item in raw_sources if isinstance(item, dict))
+            if normalized:
+                return normalized
+
+        task_summaries = response.metadata.get("tasks")
+        if isinstance(task_summaries, list) and len(task_summaries) == len(response.segments) and len(task_summaries) > 1:
+            sources: list[dict[str, Any]] = []
+            for index, segment in enumerate(response.segments):
+                task_summary = task_summaries[index] if isinstance(task_summaries[index], dict) else {}
+                sources.append(
+                    self._memory_extraction_task_source(
+                        request,
+                        segment,
+                        task_summary,
+                        index=index,
+                    )
+                )
+            return tuple(sources)
+
+        return (self._memory_extraction_turn_source(request, response),)
+
+    def _memory_extraction_task_source(
+        self,
+        request: AgentTurnRequest,
+        segment: VetSegment,
+        task_summary: dict[str, Any],
+        *,
+        index: int,
+    ) -> dict[str, Any]:
+        """构造单个多任务长期记忆候选来源片段。
+
+        :param request: 请求对象。
+        :param segment: 当前任务执行结果段。
+        :param task_summary: 当前任务的结构化摘要。
+        :param index: 任务在当前回合中的顺序编号。
+        :return: 返回长期记忆候选来源字典。
+        """
+        source_id = str(task_summary.get("task_id") or task_summary.get("task_key") or segment.segment_id)
+        user_text = str(task_summary.get("text") or "").strip() or request.joined_text()
+        return {
+            "source_id": source_id,
+            "entry_kind": "task",
+            "user_text": user_text,
+            "assistant_text": segment.output_text or segment.content,
+            "task_id": task_summary.get("task_id"),
+            "task_key": task_summary.get("task_key"),
+            "task_title": task_summary.get("title") or segment.title,
+            "task_domain": task_summary.get("domain") or "",
+            "consultation_state": dict(task_summary.get("consultation_state") or {}),
+            "metadata": {
+                "index": index,
+                "segment_id": segment.segment_id,
+                "status": task_summary.get("status"),
+                "consultation_phase": task_summary.get("consultation_phase"),
+            },
+        }
+
+    def _memory_extraction_turn_source(
+        self,
+        request: AgentTurnRequest,
+        response: AgentTurnResponse,
+    ) -> dict[str, Any]:
+        """构造单回合长期记忆候选来源片段。
+
+        :param request: 请求对象。
+        :param response: 响应对象。
+        :return: 返回长期记忆候选来源字典。
+        """
+        return {
+            "source_id": response.id,
+            "entry_kind": "turn",
+            "user_text": request.joined_text(),
+            "assistant_text": response.output_text,
+            "task_title": "当前回合",
+            "task_domain": "",
+            "consultation_state": dict(response.metadata.get("consultation_state") or {}),
+            "metadata": {
+                "segment_count": len(response.segments),
+                "response_status": response.status,
+            },
+        }
+
+    def _should_store_memory_candidate(self, proposal: MemoryCandidateProposal) -> bool:
+        """判断长期记忆候选是否满足当前阶段的保守写入条件。
+
+        :param proposal: 长期记忆候选提议。
+        :return: 满足保守写入条件时返回 True。
+        """
+        if proposal.fact_type is MemoryExtractionFactType.TODO:
+            return False
+        if proposal.assertion_status is not MemoryExtractionAssertionStatus.CONFIRMED:
+            return False
+        if proposal.durability is not MemoryExtractionDurability.DURABLE:
+            return False
+        if proposal.source_kind is MemoryExtractionEvidenceKind.ASSISTANT_OUTPUT:
+            return False
+        return True
 
     async def _persist(self, request: AgentTurnRequest, response: AgentTurnResponse, *, medical: bool) -> None:
         """执行 _persist 内部辅助逻辑。
