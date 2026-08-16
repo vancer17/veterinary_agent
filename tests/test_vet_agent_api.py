@@ -1076,6 +1076,36 @@ async def _fake_litellm_send_structured_chat(
                 ]
             }
         return response_model.model_validate(payload)
+    if prompt_payload.get("task") == "将显式来源归一为长期记忆候选提议。":
+        payload = {
+            "proposals": [],
+            "confidence": 0.18,
+            "rationale": "测试替身返回空的长期记忆候选集合。",
+        }
+        sources = list((prompt_payload.get("payload") or {}).get("sources") or [])
+        for source in sources:
+            if not isinstance(source, dict):
+                continue
+            user_text = str(source.get("user_text") or "")
+            source_id = str(source.get("source_id") or "")
+            if "过敏" in user_text or "allergy" in user_text.lower():
+                payload["proposals"].append(
+                    {
+                        "source_id": source_id,
+                        "subject_scope": "pet",
+                        "fact_type": "medical",
+                        "fact_key": "allergy",
+                        "fact_value": "用户明确提到过敏",
+                        "assertion_status": "confirmed",
+                        "durability": "durable",
+                        "temporal_scope": "historical",
+                        "confidence": 0.9,
+                        "source_kind": "user_text",
+                        "source_text": user_text[:120],
+                        "rationale": "测试替身返回稳定医疗长期候选。",
+                    }
+                )
+        return response_model.model_validate(payload)
     if prompt_payload.get("task") == "将用户本轮输入归一为结构化问诊事实、开放观察与意图信号。":
         request_text = str(prompt_payload.get("user_text") or "")
         return response_model.model_validate(_consultation_semantic_payload(request_text))
