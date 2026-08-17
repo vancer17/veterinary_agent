@@ -89,18 +89,29 @@ class FollowupRagService(FollowupRagServiceProtocol):
         """
         self._validate_request(request)
         query = self.query_builder.build(request)
-        retrieval = self.retriever.retrieve(
-            query,
-            limit=self.top_k,
-            min_score=self.min_score,
-            allowed_chunk_types=self.allowed_chunk_types,
-        )
-        if not retrieval.hits:
-            raise FollowupRagDependencyError(
-                "followup RAG retrieval returned no hits",
-                details={"query": query, "top_k": self.top_k, "min_score": self.min_score},
+        retrieval: FollowupRagRetrievalResult | None = None
+        output: FollowupQuestionPlannerOutput | None = None
+        try:
+            retrieval = self.retriever.retrieve(
+                query,
+                limit=self.top_k,
+                min_score=self.min_score,
+                allowed_chunk_types=self.allowed_chunk_types,
             )
-        output = await self.planner.generate(request=request, retrieval=retrieval)
+            if not retrieval.hits:
+                raise FollowupRagDependencyError(
+                    "followup RAG retrieval returned no approved vector hits",
+                    details={"reason": "no_approved_vector_hits"},
+                )
+            output = await self.planner.generate(request=request, retrieval=retrieval)
+        except FollowupRagDependencyError as exc:
+            self._enrich_dependency_error(
+                exc,
+                query=query,
+            )
+            raise
+        assert retrieval is not None
+        assert output is not None
         return self._validated_plan(request, retrieval, output)
 
     def is_ready(self) -> bool:
@@ -137,6 +148,24 @@ class FollowupRagService(FollowupRagServiceProtocol):
                 "followup RAG can only run after ask decision",
                 details={"decision": request.answerability.get("decision")},
             )
+
+    def _enrich_dependency_error(
+        self,
+        error: FollowupRagDependencyError,
+        *,
+        query: str,
+    ) -> None:
+        """补齐追问 RAG 依赖故障的治理排障上下文。
+
+        :param error: 追问 RAG 依赖异常。
+        :param query: 本轮结构化检索查询。
+        :return: 无返回值。
+        """
+        details = error.details
+        details.setdefault("query", query)
+        details.setdefault("top_k", self.top_k)
+        details.setdefault("min_score", self.min_score)
+        details.setdefault("allowed_chunk_types", list(self.allowed_chunk_types))
 
     def _validated_plan(
         self,

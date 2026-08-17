@@ -44,6 +44,8 @@ from vet_agent.consultation_state import LocalConsultationAnswerabilityPolicyCli
 from vet_agent.followup_rag import (
     FollowupRagPlan,
     FollowupRagQuestion,
+    FollowupRagDependencyError,
+    FollowupRagQueryBuilder,
     FollowupRagRequest,
     FollowupRagRetrievalResult,
     FollowupRagServiceProtocol,
@@ -806,6 +808,41 @@ class StaticFollowupRagService(FollowupRagServiceProtocol):
         )
 
 
+class FailingFollowupRagService(FollowupRagServiceProtocol):
+    """为 API 测试模拟追问 RAG 无命中 Fail Fast。
+
+    :return: 无返回值；该替身不提供默认问题或空结果回退。
+    """
+
+    async def plan(self, request: FollowupRagRequest) -> FollowupRagPlan:
+        """抛出追问 RAG 无已审核向量命中异常。
+
+        :param request: 追问 RAG 结构化请求。
+        :return: 不返回；该方法始终抛出 FollowupRagDependencyError。
+        :raises FollowupRagDependencyError: 始终抛出以模拟无命中。
+        """
+        if str(request.answerability.get("decision") or "").strip() != "ask":
+            raise AssertionError("FailingFollowupRagService 仅允许在 ask 分支被调用。")
+        query = FollowupRagQueryBuilder().build(request)
+        raise FollowupRagDependencyError(
+            "followup RAG retrieval returned no approved vector hits",
+            details={
+                "reason": "no_approved_vector_hits",
+                "query": query,
+                "allowed_chunk_types": ["followup_questions"],
+                "top_k": 4,
+                "min_score": 0.35,
+            },
+        )
+
+    def is_ready(self) -> bool:
+        """检查测试追问 RAG 失败替身是否就绪。
+
+        :return: 始终返回 True。
+        """
+        return True
+
+
 class StaticAnswerRagService(AnswerRagServiceProtocol):
     """为 API 主链路测试提供显式注入的回答相关 RAG 服务替身。
 
@@ -992,6 +1029,7 @@ class RecordingRagMissRecorder(RagMissGovernanceProtocol):
                 "top_k": request.top_k,
                 "min_score": request.min_score,
                 "domain_filter": request.domain_filter,
+                "missing_slots": list(json.loads(request.structured_query or "{}").get("missing_slots") or []),
             },
             "failure_reason": request.failure_reason,
             "error_type": request.error_type,
@@ -1045,6 +1083,7 @@ def _client(
     *,
     answer_rag_service: AnswerRagServiceProtocol | None = None,
     rag_miss_recorder: RagMissGovernanceProtocol | None = None,
+    followup_rag_service: FollowupRagServiceProtocol | None = None,
 ) -> TestClient:
     """执行 _client 内部辅助逻辑。
 
@@ -1075,7 +1114,7 @@ def _client(
         embedding_client=StaticEmbeddingClient(),
         answer_rag_service=answer_rag_service or StaticAnswerRagService(),
         rag_miss_recorder=rag_miss_recorder,
-        followup_rag_service=StaticFollowupRagService(),
+        followup_rag_service=followup_rag_service or StaticFollowupRagService(),
         input_safety_service=InputSafetyService(
             settings,
             repository=StaticInputSafetyRepository(),
@@ -2805,6 +2844,107 @@ def test_rag_miss_admin_can_list_recorded_governance_requests(
     assert data["items"][0]["rag_scope"] == "answer_rag"
     assert data["items"][0]["task_domain"] == "gastrointestinal"
     assert data["items"][0]["failure_reason"] == "no_approved_vector_hits"
+
+
+def test_followup_rag_miss_is_recorded_without_runtime_fallback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证追问 RAG 无命中时写入治理请求并保持 Fail Fast。
+
+    :param tmp_path: 参数 tmp_path。
+    :param monkeypatch: 参数 monkeypatch。
+    :return: 无返回值；断言通过表示追问无命中不会退化为默认追问。
+    """
+    recorder = RecordingRagMissRecorder()
+    client = _client(
+        tmp_path,
+        monkeypatch,
+        followup_rag_service=FailingFollowupRagService(),
+        rag_miss_recorder=recorder,
+    )
+    vet_context = {
+        "user_id": "u_followup_rag_miss",
+        "session_id": "s_followup_rag_miss",
+        "pet_id": "p_followup_rag_miss",
+        "pet_info": {
+            "species": "犬",
+            "breed": "柯基",
+            "age": "3岁",
+            "weight_kg": 12,
+        },
+    }
+
+    response = client.post(
+        "/agent/turns",
+        json=_payload(
+            "我家 3 岁、12 公斤的柯基犬饭后总是缩成一团趴着，看起来不太舒服。",
+            vet_context=vet_context,
+        ),
+    )
+
+    assert response.status_code == 503
+    data = response.json()
+    assert data["code"] == "SERVICE_UNAVAILABLE"
+    assert data["details"]["reason"] == "no_approved_vector_hits"
+    structured_query = json.loads(data["details"]["query"])
+    assert structured_query["missing_slots"]
+    assert len(recorder.requests) == 1
+    miss_request = recorder.requests[0]
+    assert miss_request.rag_scope.value == "followup_rag"
+    assert miss_request.failure_reason == "no_approved_vector_hits"
+    assert miss_request.task_domain == "gastrointestinal"
+    assert miss_request.allowed_chunk_types == ("followup_questions",)
+    assert miss_request.metadata["missing_slots"] == structured_query["missing_slots"]
+
+
+def test_followup_rag_miss_admin_can_list_recorded_governance_requests(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证 Admin API 可读取追问 RAG 无命中治理记录。
+
+    :param tmp_path: 参数 tmp_path。
+    :param monkeypatch: 参数 monkeypatch。
+    :return: 无返回值；断言通过表示管理端可治理入口符合预期。
+    """
+    recorder = RecordingRagMissRecorder()
+    client = _client(
+        tmp_path,
+        monkeypatch,
+        followup_rag_service=FailingFollowupRagService(),
+        rag_miss_recorder=recorder,
+    )
+    vet_context = {
+        "user_id": "u_followup_admin_rag_miss",
+        "session_id": "s_followup_admin_rag_miss",
+        "pet_id": "p_followup_admin_rag_miss",
+        "pet_info": {
+            "species": "犬",
+            "breed": "柯基",
+            "age": "3岁",
+            "weight_kg": 12,
+        },
+    }
+
+    failed_turn = client.post(
+        "/agent/turns",
+        json=_payload(
+            "我家 3 岁、12 公斤的柯基犬饭后总是缩成一团趴着，看起来不太舒服。",
+            vet_context=vet_context,
+        ),
+    )
+    response = client.get("/admin/rag/misses?rag_scope=followup_rag&status=open&task_domain=gastrointestinal")
+
+    assert failed_turn.status_code == 503
+    assert response.status_code == 200
+    data = response.json()
+    assert data["backend"] == "recording_test"
+    assert data["total"] == 1
+    assert data["items"][0]["rag_scope"] == "followup_rag"
+    assert data["items"][0]["task_domain"] == "gastrointestinal"
+    assert data["items"][0]["failure_reason"] == "no_approved_vector_hits"
+    assert data["items"][0]["retrieval_parameters"]["missing_slots"] == data["items"][0]["structured_query"]["missing_slots"]
 
 
 def test_semantic_answers_reduce_missing_slots_without_exact_templates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

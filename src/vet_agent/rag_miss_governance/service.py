@@ -135,6 +135,7 @@ class RagMissGovernanceService(RagMissGovernanceProtocol):
         """
         normalized_scope = self._scope(request.rag_scope)
         structured_query = self._structured_query(request.structured_query)
+        missing_slots = self._string_list(structured_query.get("missing_slots"))
         user_text_excerpt = self._truncate(request.user_text, self._max_excerpt_chars)
         user_text_digest = self._digest(request.user_text.strip())
         retrieval_parameters = {
@@ -142,6 +143,7 @@ class RagMissGovernanceService(RagMissGovernanceProtocol):
             "top_k": request.top_k,
             "min_score": request.min_score,
             "domain_filter": request.domain_filter,
+            "missing_slots": missing_slots,
         }
         dedupe_key = self._dedupe_key(
             rag_scope=normalized_scope,
@@ -149,6 +151,7 @@ class RagMissGovernanceService(RagMissGovernanceProtocol):
             structured_query=structured_query,
             failure_reason=request.failure_reason,
             allowed_chunk_types=request.allowed_chunk_types,
+            missing_slots=missing_slots,
         )
         return RagMissRecordDraft(
             miss_id=f"rag_miss_{uuid4().hex}",
@@ -178,13 +181,14 @@ class RagMissGovernanceService(RagMissGovernanceProtocol):
                 **dict(request.metadata or {}),
                 "governance_role": "knowledge_gap_record",
                 "runtime_effect": "none",
+                **({"missing_slots": missing_slots} if missing_slots else {}),
             },
         )
 
     def _structured_query(self, value: str | None) -> dict[str, Any]:
-        """将回答 RAG query 转换为 JSON 对象以便后续治理聚合。
+        """将 RAG query 转换为 JSON 对象以便后续治理聚合。
 
-        :param value: 回答 RAG 实际使用的 query 文本。
+        :param value: 当前 RAG 实际使用的 query 文本。
         :return: 返回 query 的 JSON 对象；无法解析时保留裁剪后的原文。
         """
         if value is None or not value.strip():
@@ -205,6 +209,7 @@ class RagMissGovernanceService(RagMissGovernanceProtocol):
         structured_query: dict[str, Any],
         failure_reason: str,
         allowed_chunk_types: tuple[str, ...],
+        missing_slots: list[str],
     ) -> str:
         """计算治理后台聚合同类 RAG 缺口使用的稳定键。
 
@@ -213,12 +218,15 @@ class RagMissGovernanceService(RagMissGovernanceProtocol):
         :param structured_query: 结构化检索 query。
         :param failure_reason: 无命中失败原因。
         :param allowed_chunk_types: 允许参与召回的 chunk 类型集合。
+        :param missing_slots: 本轮 ask 分支要求补充的槽位集合。
         :return: 返回 SHA-256 十六进制聚合键。
         """
+        normalized_missing_slots = sorted({slot for slot in missing_slots if slot})
         query_basis = {
             "answerability": self._limited_dict(structured_query.get("answerability")),
             "domain": structured_query.get("domain") or task_domain,
             "known_slots": self._limited_dict(structured_query.get("known_slots")),
+            "missing_slots": normalized_missing_slots,
             "semantic_extraction": self._limited_dict(structured_query.get("semantic_extraction")),
         }
         payload = {
@@ -237,6 +245,22 @@ class RagMissGovernanceService(RagMissGovernanceProtocol):
         :return: 返回字典；非字典值返回空字典。
         """
         return dict(value) if isinstance(value, dict) else {}
+
+    def _string_list(self, value: Any) -> list[str]:
+        """归一化进入治理记录的字符串列表。
+
+        :param value: 候选列表或其他结构化值。
+        :return: 返回去重后保留顺序的字符串列表。
+        """
+        if not isinstance(value, list):
+            return []
+        items: list[str] = []
+        for item in value:
+            text = str(item or "").strip()
+            if not text or text in items:
+                continue
+            items.append(text)
+        return items
 
     def _json_object(self, value: Any) -> dict[str, Any]:
         """归一化可写入 JSONB 对象字段的值。
