@@ -853,7 +853,7 @@ class RagRetrievalMissModel(Base):
     __tablename__ = "rag_retrieval_misses"
     __table_args__ = (
         UniqueConstraint("miss_id", name="uq_rag_retrieval_misses_miss_id"),
-        CheckConstraint("rag_scope IN ('answer_rag')", name="ck_rag_retrieval_misses_scope"),
+        CheckConstraint("rag_scope IN ('answer_rag', 'followup_rag')", name="ck_rag_retrieval_misses_scope"),
         CheckConstraint(
             "status IN ('open', 'triaged', 'asset_drafted', 'published', 'dismissed')",
             name="ck_rag_retrieval_misses_status",
@@ -875,7 +875,7 @@ class RagRetrievalMissModel(Base):
     user_id: Mapped[str] = mapped_column(Text, nullable=False, comment="当前可信用户标识。")
     pet_id: Mapped[str] = mapped_column(Text, nullable=False, comment="当前可信宠物标识。")
     session_id: Mapped[str] = mapped_column(Text, nullable=False, comment="当前可信会话标识。")
-    rag_scope: Mapped[str] = mapped_column(Text, nullable=False, comment="RAG 无命中所属数据链范围，当前仅允许 answer_rag。")
+    rag_scope: Mapped[str] = mapped_column(Text, nullable=False, comment="RAG 无命中所属数据链范围，当前允许 answer_rag、followup_rag。")
     task_id: Mapped[str] = mapped_column(Text, nullable=False, comment="触发无命中的当前任务展示标识。")
     task_key: Mapped[str] = mapped_column(Text, nullable=False, comment="触发无命中的当前任务状态键。")
     task_domain: Mapped[str] = mapped_column(Text, nullable=False, comment="触发无命中的当前任务域。")
@@ -887,7 +887,7 @@ class RagRetrievalMissModel(Base):
         nullable=False,
         default=dict,
         server_default="{}",
-        comment="回答 RAG 实际使用的结构化检索 query，不作为运行时规则来源。",
+        comment="当前 RAG 实际使用的结构化检索 query，不作为运行时规则来源。",
     )
     consultation_state: Mapped[dict[str, Any]] = mapped_column(
         JSONB,
@@ -915,7 +915,7 @@ class RagRetrievalMissModel(Base):
         nullable=False,
         default=dict,
         server_default="{}",
-        comment="回答 RAG 本轮召回参数摘要，例如 top_k、min_score、chunk 类型和领域过滤。",
+        comment="当前 RAG 本轮召回参数摘要，例如 top_k、min_score、chunk 类型、领域过滤和 missing_slots。",
     )
     failure_reason: Mapped[str] = mapped_column(Text, nullable=False, comment="无命中失败原因，例如 no_approved_vector_hits。")
     error_type: Mapped[str] = mapped_column(Text, nullable=False, comment="触发治理记录的原始异常类型。")

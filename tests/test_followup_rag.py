@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 
 import pytest
 
@@ -19,6 +20,7 @@ from vet_agent.followup_rag import (
     FollowupQuestionPlanner,
     FollowupQuestionPlannerOutput,
     FollowupRagContractError,
+    FollowupRagDependencyError,
     FollowupRagQueryBuilder,
     FollowupRagRequest,
     FollowupRagRetrievalResult,
@@ -81,6 +83,43 @@ class StaticRetriever(FollowupRagRetriever):
 
     def is_ready(self) -> bool:
         """检查静态检索器是否就绪。
+
+        :return: 始终返回 True。
+        """
+        return True
+
+
+class FailingRetriever(FollowupRagRetriever):
+    """为追问 RAG 服务测试提供显式失败检索器。
+
+    :return: 无返回值；该替身用于验证治理上下文补齐。
+    """
+
+    def retrieve(
+        self,
+        query: str,
+        *,
+        limit: int,
+        min_score: float,
+        allowed_chunk_types: tuple[str, ...],
+    ) -> FollowupRagRetrievalResult:
+        """始终抛出追问 RAG 检索无命中异常。
+
+        :param query: 结构化检索查询。
+        :param limit: 返回数量上限。
+        :param min_score: 最低相似度阈值。
+        :param allowed_chunk_types: 允许参与追问召回的知识 chunk 类型。
+        :return: 不返回；该方法始终抛出依赖异常。
+        :raises FollowupRagDependencyError: 始终抛出以模拟无命中。
+        """
+        del query, limit, min_score, allowed_chunk_types
+        raise FollowupRagDependencyError(
+            "followup RAG retrieval returned no approved vector hits",
+            details={"reason": "no_approved_vector_hits"},
+        )
+
+    def is_ready(self) -> bool:
+        """检查失败检索器是否就绪。
 
         :return: 始终返回 True。
         """
@@ -184,6 +223,32 @@ def test_followup_rag_service_rejects_unknown_slot() -> None:
 
     with pytest.raises(FollowupRagContractError):
         asyncio.run(service.plan(_request()))
+
+
+def test_followup_rag_service_enriches_dependency_error_with_query_context() -> None:
+    """验证追问 RAG 依赖异常会补齐治理所需的 query 上下文。
+
+    :return: 无返回值；断言通过表示无命中会留下可治理细节。
+    """
+    service = FollowupRagService(
+        retriever=FailingRetriever(),
+        planner=StaticPlanner([]),
+        query_builder=FollowupRagQueryBuilder(),
+        top_k=3,
+        min_score=0.4,
+    )
+
+    with pytest.raises(FollowupRagDependencyError) as exc_info:
+        asyncio.run(service.plan(_request()))
+
+    details = exc_info.value.details
+    structured_query = json.loads(str(details["query"]))
+    assert details["reason"] == "no_approved_vector_hits"
+    assert details["query"]
+    assert structured_query["missing_slots"] == ["onset", "mental_status"]
+    assert details["top_k"] == 3
+    assert details["min_score"] == 0.4
+    assert details["allowed_chunk_types"] == ["followup_questions"]
 
 
 def _request() -> FollowupRagRequest:

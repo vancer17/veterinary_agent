@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import UTC, datetime
 
 from vet_agent.rag_miss_governance import (
@@ -218,6 +219,59 @@ def _request(user_text: str = "我家猫一直去猫砂盆但尿量少，需要�
     )
 
 
+def _followup_request(
+    user_text: str = "饭后总是缩成一团。",
+    *,
+    missing_slots: tuple[str, ...] = ("onset", "mental_status"),
+) -> RagMissRecordRequest:
+    """构造追问相关 RAG 无命中治理测试请求。
+
+    :param user_text: 当前任务消费的用户文本。
+    :param missing_slots: 本轮追问需要补充的槽位。
+    :return: 返回治理测试请求。
+    """
+    missing_slots_list = list(missing_slots)
+    structured_query = json.dumps(
+        {
+            "domain": "gastrointestinal",
+            "known_slots": {"species": "dog", "life_stage_or_age": "3岁"},
+            "missing_slots": missing_slots_list,
+            "semantic_extraction": {"chief_complaint": "饭后蜷缩"},
+            "answerability": {"decision": "ask"},
+        },
+        ensure_ascii=False,
+    )
+    return RagMissRecordRequest(
+        request_id="req_followup_rag_miss",
+        trace_id="tr_followup_rag_miss",
+        user_id="u1",
+        pet_id="p1",
+        session_id="s1",
+        rag_scope=RagMissScope.FOLLOWUP_RAG,
+        task_id="task_1",
+        task_key="task_key_1",
+        task_domain="gastrointestinal",
+        task_title="追问补充问诊",
+        user_text=user_text,
+        structured_query=structured_query,
+        consultation_state={
+            "domain": "gastrointestinal",
+            "slots": {"species": "dog", "life_stage_or_age": "3岁"},
+            "semantic_extraction": {"chief_complaint": "饭后蜷缩"},
+        },
+        answerability={"decision": "ask"},
+        semantic_extraction={"chief_complaint": "饭后蜷缩"},
+        allowed_chunk_types=("followup_questions",),
+        top_k=4,
+        min_score=0.35,
+        domain_filter=None,
+        failure_reason="no_approved_vector_hits",
+        error_type="FollowupRagDependencyError",
+        error_message="followup RAG retrieval returned no approved vector hits",
+        error_details={"reason": "no_approved_vector_hits"},
+    )
+
+
 def test_rag_miss_governance_records_structured_gap_without_runtime_fallback() -> None:
     """验证 RAG 无命中治理服务只记录知识缺口，不生成可回答知识。
 
@@ -241,6 +295,40 @@ def test_rag_miss_governance_records_structured_gap_without_runtime_fallback() -
         "home_advice",
     ]
     assert draft.metadata["runtime_effect"] == "none"
+
+
+def test_rag_miss_governance_records_followup_scope_and_missing_slots() -> None:
+    """验证追问相关 RAG 无命中会进入同一治理链路并保留 missing slots。
+
+    :return: 无返回值；断言通过表示追问 miss 可被统一治理。
+    """
+    repository = InMemoryRagMissRepository()
+    service = RagMissGovernanceService(repository)
+
+    record = asyncio.run(service.record_miss(_followup_request()))
+
+    assert record.rag_scope is RagMissScope.FOLLOWUP_RAG
+    assert record.failure_reason == "no_approved_vector_hits"
+    assert len(repository.drafts) == 1
+    draft = repository.drafts[0]
+    assert draft.retrieval_parameters["missing_slots"] == ["onset", "mental_status"]
+    assert draft.metadata["missing_slots"] == ["onset", "mental_status"]
+
+
+def test_rag_miss_governance_uses_missing_slots_in_followup_dedupe_key() -> None:
+    """验证追问相关 RAG 的聚合键会区分不同 missing slots 组合。
+
+    :return: 无返回值；断言通过表示治理聚合不会混淆不同问诊缺口。
+    """
+    first_repository = InMemoryRagMissRepository()
+    second_repository = InMemoryRagMissRepository()
+    first_service = RagMissGovernanceService(first_repository)
+    second_service = RagMissGovernanceService(second_repository)
+
+    first = asyncio.run(first_service.record_miss(_followup_request(missing_slots=("onset", "mental_status"))))
+    second = asyncio.run(second_service.record_miss(_followup_request(missing_slots=("onset", "appetite"))))
+
+    assert first.dedupe_key != second.dedupe_key
 
 
 def test_rag_miss_governance_uses_stable_dedupe_key_for_same_structured_gap() -> None:

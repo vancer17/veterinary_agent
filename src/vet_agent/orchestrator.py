@@ -39,7 +39,12 @@ from vet_agent.clinical_safety import (
     ClinicalSafetySemanticExtractorAgent,
     ClinicalSafetySemanticResult,
 )
-from vet_agent.followup_rag import FollowupRagPlan, FollowupRagRequest, FollowupRagServiceProtocol
+from vet_agent.followup_rag import (
+    FollowupRagDependencyError,
+    FollowupRagPlan,
+    FollowupRagRequest,
+    FollowupRagServiceProtocol,
+)
 from vet_agent.input_safety import InputSafetyDecision, InputSafetyRequestContext, InputSafetyService
 from vet_agent.memory import MemoryContextBuilder, MemoryPromptContext, MemoryReadBundle, MemoryReadService
 from vet_agent.memory_extraction import MemoryExtractionStrategy
@@ -291,6 +296,8 @@ class VetOrchestrator:
 
         if not consultation_decision.ready:
             followup_plan, knowledge_evidence, consultation_decision = await self._create_followup_rag_plan(
+                request=request,
+                task=task,
                 user_text=user_text,
                 pet_context=pet_context,
                 consultation_decision=consultation_decision,
@@ -776,6 +783,8 @@ class VetOrchestrator:
                 ]
             else:
                 followup_plan, knowledge_evidence, consultation_decision = await self._create_followup_rag_plan(
+                    request=request,
+                    task=task,
                     user_text=task.text,
                     pet_context=pet_context,
                     consultation_decision=consultation_decision,
@@ -1180,6 +1189,8 @@ class VetOrchestrator:
     async def _create_followup_rag_plan(
         self,
         *,
+        request: AgentTurnRequest,
+        task: RoutedTask,
         user_text: str,
         pet_context: PetContext,
         consultation_decision: ConsultationDecision,
@@ -1188,6 +1199,8 @@ class VetOrchestrator:
     ) -> tuple[FollowupRagPlan, list[Evidence], ConsultationDecision]:
         """基于追问相关 RAG 生成下一轮追问计划并写回问诊状态。
 
+        :param request: 当前 Agent 回合请求。
+        :param task: 当前已通过任务路由和回答充分性裁决的任务。
         :param user_text: 用户本轮输入文本。
         :param pet_context: 宠物上下文。
         :param consultation_decision: 当前问诊决策。
@@ -1195,17 +1208,31 @@ class VetOrchestrator:
         :param max_questions: 最多追问数量。
         :return: 返回追问规划、知识库证据列表与更新后的问诊决策。
         """
-        plan = await self.followup_rag_service.plan(
-            FollowupRagRequest(
-                user_text=user_text,
-                pet_context_summary=pet_context.summary(),
-                consultation_state=consultation_decision.state.to_dict(),
-                missing_slots=consultation_decision.missing_slots,
-                answerability=consultation_decision.answerability,
-                model=model,
-                max_questions=max_questions,
-            )
+        followup_request = FollowupRagRequest(
+            user_text=user_text,
+            pet_context_summary=pet_context.summary(),
+            consultation_state=consultation_decision.state.to_dict(),
+            missing_slots=consultation_decision.missing_slots,
+            answerability=consultation_decision.answerability,
+            model=model,
+            max_questions=max_questions,
         )
+        try:
+            plan = await self.followup_rag_service.plan(followup_request)
+        except FollowupRagDependencyError as exc:
+            if self._should_record_followup_rag_miss(exc):
+                try:
+                    await self._record_followup_rag_miss(
+                        request=request,
+                        task=task,
+                        followup_request=followup_request,
+                        error=exc,
+                    )
+                except Exception as record_exc:
+                    exc.details["rag_miss_recording_failed"] = {
+                        "error_type": type(record_exc).__name__,
+                    }
+            raise
         planned_questions = plan.question_texts()
         consultation_decision.state.asked_questions.extend(planned_questions)
         consultation_decision.state.followup_rounds += 1
@@ -1217,6 +1244,69 @@ class VetOrchestrator:
             answerability=consultation_decision.answerability,
         )
         return plan, plan.to_evidence(), updated_decision
+
+    async def _record_followup_rag_miss(
+        self,
+        *,
+        request: AgentTurnRequest,
+        task: RoutedTask,
+        followup_request: FollowupRagRequest,
+        error: FollowupRagDependencyError,
+    ) -> None:
+        """记录追问相关 RAG 无命中治理事件。
+
+        :param request: 当前 Agent 回合请求。
+        :param task: 当前已通过任务路由和回答充分性裁决的任务。
+        :param followup_request: 追问 RAG 结构化请求。
+        :param error: 追问 RAG 依赖异常。
+        :return: 无返回值；记录完成后由调用方继续抛出原异常。
+        """
+        details = dict(getattr(error, "details", {}) or {})
+        failure_reason = str(details.get("reason") or "followup_rag_failed")
+        consultation_state = dict(followup_request.consultation_state or {})
+        await self.rag_miss_recorder.record_miss(
+            RagMissRecordRequest(
+                request_id=request.request_context.request_id,
+                trace_id=request.request_context.trace_id,
+                user_id=request.trusted_identity.user_id,
+                pet_id=request.trusted_identity.pet_id,
+                session_id=request.trusted_identity.session_id,
+                rag_scope=RagMissScope.FOLLOWUP_RAG,
+                task_id=task.task_id,
+                task_key=task.task_key,
+                task_domain=task.domain,
+                task_title=task.title,
+                user_text=task.text,
+                structured_query=str(details.get("query") or ""),
+                consultation_state=consultation_state,
+                answerability=dict(followup_request.answerability),
+                semantic_extraction=dict(consultation_state.get("semantic_extraction") or {}),
+                allowed_chunk_types=tuple(str(item) for item in details.get("allowed_chunk_types") or ()),
+                top_k=int(details.get("top_k") or 0),
+                min_score=float(details.get("min_score") or 0.0),
+                domain_filter=str(details.get("domain") or consultation_state.get("domain") or "") or None,
+                failure_reason=failure_reason,
+                error_type=type(error).__name__,
+                error_message=str(error),
+                error_details=details,
+                metadata={
+                    "agent_path_node": AgentPathNode.FOLLOWUP_RAG_SERVICE.value,
+                    "task_state_key": task.state_key,
+                    "missing_slots": list(followup_request.missing_slots),
+                    "planner_called": False,
+                    "runtime_action": "fail_fast",
+                },
+            )
+        )
+
+    def _should_record_followup_rag_miss(self, error: FollowupRagDependencyError) -> bool:
+        """判断追问相关 RAG 依赖异常是否应进入治理留痕。
+
+        :param error: 追问 RAG 依赖异常。
+        :return: 仅当异常原因表示追问知识无合格命中时返回 True。
+        """
+        details = dict(getattr(error, "details", {}) or {})
+        return str(details.get("reason") or "") == "no_approved_vector_hits"
 
     async def stream_turn(self, request: AgentTurnRequest) -> AsyncIterator[str]:
         """以流式事件形式执行一个 Agent 对话回合。

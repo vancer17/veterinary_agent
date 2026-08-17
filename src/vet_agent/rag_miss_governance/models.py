@@ -20,10 +20,11 @@ from typing import Any
 class RagMissScope(StrEnum):
     """表示 RAG 无命中事件所属的数据链范围。
 
-    :return: 无返回值；枚举值用于治理表、审计 metadata 和后续管理端聚合。
+    :return: 无返回值；枚举值用于治理表、审计 metadata 和后续管理端聚合，覆盖回答与追问两条 RAG 链路。
     """
 
     ANSWER_RAG = "answer_rag"
+    FOLLOWUP_RAG = "followup_rag"
 
 
 class RagMissStatus(StrEnum):
@@ -54,7 +55,7 @@ class RagMissRecordRequest:
     :param task_domain: 当前任务域。
     :param task_title: 当前任务标题。
     :param user_text: 当前任务消费的用户文本。
-    :param structured_query: 回答 RAG 实际使用的结构化检索 query。
+    :param structured_query: 当前 RAG 实际使用的结构化检索 query。
     :param consultation_state: 当前问诊状态快照。
     :param answerability: 当前回答充分性裁决快照。
     :param semantic_extraction: 当前问诊语义抽取快照。
@@ -216,7 +217,7 @@ class RagMissRecordView:
     :param task_title: 当前任务标题。
     :param user_text_excerpt: 经裁剪后的用户任务文本片段。
     :param user_text_digest: 用户任务文本摘要哈希。
-    :param structured_query: 回答 RAG 实际使用的结构化检索 query。
+    :param structured_query: 当前 RAG 实际使用的结构化检索 query。
     :param consultation_state: 触发无命中时的问诊状态快照。
     :param answerability: 触发无命中时的回答充分性裁决快照。
     :param semantic_extraction: 触发无命中时的问诊语义抽取快照。
