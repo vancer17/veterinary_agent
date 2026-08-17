@@ -41,6 +41,7 @@ SUPPORTED_ALEMBIC_VERSIONS = {
     "0011_clinical_safety_vector_comments",
     "0012_clinical_safety_publish_contract",
     "0013_memory_read_comments",
+    "0018_rag_retrieval_misses",
 }
 
 _T = TypeVar("_T")

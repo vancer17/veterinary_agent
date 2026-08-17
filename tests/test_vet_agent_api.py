@@ -49,6 +49,7 @@ from vet_agent.followup_rag import (
     FollowupRagServiceProtocol,
 )
 from vet_agent.answer_rag import (
+    AnswerRagDependencyError,
     AnswerRagRequest,
     AnswerRagResult,
     AnswerRagRetrievalResult,
@@ -61,6 +62,7 @@ from vet_agent.input_safety import (
     StaticInputSafetyRepository,
 )
 from vet_agent.observability import AgentPathNode
+from vet_agent.rag_miss_governance import RagMissGovernanceProtocol, RagMissRecord, RagMissRecordRequest
 from vet_agent.repositories import FileRuleRepository, KnowledgeHit, ScopeRepository, SessionBinding, VerifiedPetProfile
 from vet_agent.runtime import QwenClient
 from vet_agent.services import MemoryService, TurnExecutionGateProtocol, TurnExecutor
@@ -860,16 +862,196 @@ class StaticAnswerRagService(AnswerRagServiceProtocol):
         )
 
 
+class FailingAnswerRagService(AnswerRagServiceProtocol):
+    """为 API 测试模拟回答 RAG 无命中 Fail Fast。
+
+    :return: 无返回值；该替身不提供默认知识或空结果回退。
+    """
+
+    async def retrieve(self, request: AnswerRagRequest) -> AnswerRagResult:
+        """抛出回答 RAG 无已审核向量命中异常。
+
+        :param request: 回答 RAG 结构化请求。
+        :return: 不返回；该方法始终抛出 AnswerRagDependencyError。
+        :raises AnswerRagDependencyError: 始终抛出以模拟无命中。
+        """
+        if str(request.answerability.get("decision") or "").strip() != "answer":
+            raise AssertionError("FailingAnswerRagService 仅允许在 answer 分支被调用。")
+        raise AnswerRagDependencyError(
+            "answer RAG retrieval returned no approved vector hits",
+            details={
+                "reason": "no_approved_vector_hits",
+                "query": (
+                    '{"domain":"gastrointestinal","known_slots":{"appetite":"正常"},'
+                    '"answerability":{"decision":"answer"}}'
+                ),
+                "top_k": 5,
+                "min_score": 0.35,
+                "allowed_chunk_types": ["condition_overview", "triage", "home_advice"],
+                "domain": None,
+            },
+        )
+
+    def is_ready(self) -> bool:
+        """检查测试回答 RAG 失败替身是否就绪。
+
+        :return: 始终返回 True。
+        """
+        return True
+
+
+class RecordingRagMissRecorder(RagMissGovernanceProtocol):
+    """为 API 测试记录编排器提交的 RAG 无命中治理请求。
+
+    :return: 无返回值；该替身只保存治理请求，不写入数据库。
+    """
+
+    def __init__(self) -> None:
+        """初始化测试 RAG 无命中记录器。
+
+        :return: 无返回值。
+        """
+        self.requests: list[RagMissRecordRequest] = []
+
+    async def record_miss(self, request: RagMissRecordRequest) -> RagMissRecord | None:
+        """记录测试 RAG 无命中治理请求。
+
+        :param request: RAG 无命中治理请求。
+        :return: 返回 None；测试仅断言请求内容。
+        """
+        self.requests.append(request)
+        return None
+
+    def is_ready(self) -> bool:
+        """检查测试记录器是否就绪。
+
+        :return: 始终返回 True。
+        """
+        return True
+
+    async def list_misses(
+        self,
+        *,
+        rag_scope: str | None = None,
+        status: str | None = None,
+        task_domain: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        """读取测试记录器保存的 RAG 无命中治理请求摘要。
+
+        :param rag_scope: 可选 RAG 数据链范围过滤条件。
+        :param status: 可选治理状态过滤条件。
+        :param task_domain: 可选任务域过滤条件。
+        :param limit: 返回数量上限。
+        :param offset: 分页偏移量。
+        :return: 返回测试分页结果。
+        """
+        rows = [
+            self._request_to_miss_item(index=index, request=request)
+            for index, request in enumerate(self.requests, start=1)
+            if (rag_scope is None or request.rag_scope.value == rag_scope)
+            and (status is None or status == "open")
+            and (task_domain is None or request.task_domain == task_domain)
+        ]
+        return {
+            "items": rows[offset : offset + limit],
+            "total": len(rows),
+            "limit": limit,
+            "offset": offset,
+            "backend": "recording_test",
+        }
+
+    def _request_to_miss_item(self, *, index: int, request: RagMissRecordRequest) -> dict[str, Any]:
+        """将测试记录器中的原始治理请求转换为 Admin API 可序列化条目。
+
+        :param index: 测试记录序号。
+        :param request: RAG 无命中治理请求。
+        :return: 返回 Admin API 可序列化治理条目。
+        """
+        return {
+            "miss_id": f"test_rag_miss_{index}",
+            "request_id": request.request_id,
+            "trace_id": request.trace_id,
+            "user_id": request.user_id,
+            "pet_id": request.pet_id,
+            "session_id": request.session_id,
+            "rag_scope": request.rag_scope.value,
+            "task_id": request.task_id,
+            "task_key": request.task_key,
+            "task_domain": request.task_domain,
+            "task_title": request.task_title,
+            "user_text_excerpt": request.user_text[:500],
+            "user_text_digest": "",
+            "structured_query": json.loads(request.structured_query or "{}"),
+            "consultation_state": request.consultation_state,
+            "answerability": request.answerability,
+            "semantic_extraction": request.semantic_extraction,
+            "retrieval_parameters": {
+                "allowed_chunk_types": list(request.allowed_chunk_types),
+                "top_k": request.top_k,
+                "min_score": request.min_score,
+                "domain_filter": request.domain_filter,
+            },
+            "failure_reason": request.failure_reason,
+            "error_type": request.error_type,
+            "error_message": request.error_message,
+            "error_details": request.error_details,
+            "dedupe_key": "",
+            "status": "open",
+            "review_notes": None,
+            "linked_ingestion_batch": None,
+            "linked_chunk_ids": [],
+            "metadata": request.metadata,
+            "created_at": None,
+            "updated_at": None,
+        }
+
+    async def update_miss(
+        self,
+        miss_id: str,
+        *,
+        status: str | None = None,
+        review_notes: str | None = None,
+        linked_ingestion_batch: str | None = None,
+        linked_chunk_ids: tuple[int, ...] | None = None,
+        actor_id: str | None = None,
+        reason: str | None = None,
+    ) -> dict[str, Any]:
+        """拒绝更新测试记录器中的 RAG 无命中请求。
+
+        :param miss_id: 治理记录稳定标识。
+        :param status: 新治理状态。
+        :param review_notes: 治理备注。
+        :param linked_ingestion_batch: 关联知识导入批次标识。
+        :param linked_chunk_ids: 关联正式知识 chunk 内部主键集合。
+        :param actor_id: 操作人标识。
+        :param reason: 操作原因。
+        :return: 不返回；该方法始终抛出 KeyError。
+        :raises KeyError: 始终抛出以说明测试记录器不保存持久化记录。
+        """
+        del miss_id, status, review_notes, linked_ingestion_batch, linked_chunk_ids, actor_id, reason
+        raise KeyError("test RAG miss record not found")
+
+
 _test_scope_repository: InMemoryScopeRepository | None = None
 _current_test_input_text = ""
 _last_response_generation_prompt = ""
 
 
-def _client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
+def _client(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    answer_rag_service: AnswerRagServiceProtocol | None = None,
+    rag_miss_recorder: RagMissGovernanceProtocol | None = None,
+) -> TestClient:
     """执行 _client 内部辅助逻辑。
 
     :param tmp_path: 参数 tmp_path。
     :param monkeypatch: 参数 monkeypatch。
+    :param answer_rag_service: 可选回答 RAG 测试替身。
+    :param rag_miss_recorder: 可选 RAG 无命中治理记录器测试替身。
     :return: 返回函数执行结果。
     """
     monkeypatch.setenv("LITELLM_API_KEY", "sk-test-litellm")
@@ -891,7 +1073,8 @@ def _client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
         clinical_safety_policy_client=StaticClinicalSafetyPolicyClient(),
         consultation_answerability_policy_client=LocalConsultationAnswerabilityPolicyClient(),
         embedding_client=StaticEmbeddingClient(),
-        answer_rag_service=StaticAnswerRagService(),
+        answer_rag_service=answer_rag_service or StaticAnswerRagService(),
+        rag_miss_recorder=rag_miss_recorder,
         followup_rag_service=StaticFollowupRagService(),
         input_safety_service=InputSafetyService(
             settings,
@@ -2522,6 +2705,106 @@ def test_answer_now_intent_stops_followup_funnel(tmp_path: Path, monkeypatch: py
     assert AgentPathNode.RESPONSE_GENERATION_CONTEXT_BUILDER.value in data["metadata"]["multi_agent_path"]
     assert "QwenResponseAgent" in data["metadata"]["multi_agent_path"]
     assert "请先回答" not in data["output_text"]
+
+
+def test_answer_rag_miss_is_recorded_without_response_generation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证回答 RAG 无命中时写入治理请求并保持 Fail Fast。
+
+    :param tmp_path: 参数 tmp_path。
+    :param monkeypatch: 参数 monkeypatch。
+    :return: 无返回值；断言通过表示无命中不会退化为默认回答。
+    """
+    recorder = RecordingRagMissRecorder()
+    client = _client(
+        tmp_path,
+        monkeypatch,
+        answer_rag_service=FailingAnswerRagService(),
+        rag_miss_recorder=recorder,
+    )
+    vet_context = {
+        "user_id": "u_answer_rag_miss",
+        "session_id": "s_answer_rag_miss",
+        "pet_id": "p_answer_rag_miss",
+        "pet_info": {
+            "species": "犬",
+            "breed": "柯基",
+            "age": "3岁",
+            "weight_kg": 12,
+        },
+    }
+    global _last_response_generation_prompt
+    _last_response_generation_prompt = ""
+
+    response = client.post(
+        "/agent/turns",
+        json=_payload(
+            "别再追问了，直接说目前怎么看。它前天开始这样，饭量和平常一样，精神也还行，没吐。",
+            vet_context=vet_context,
+        ),
+    )
+
+    assert response.status_code == 503
+    data = response.json()
+    assert data["code"] == "SERVICE_UNAVAILABLE"
+    assert data["details"]["reason"] == "no_approved_vector_hits"
+    assert len(recorder.requests) == 1
+    miss_request = recorder.requests[0]
+    assert miss_request.rag_scope.value == "answer_rag"
+    assert miss_request.failure_reason == "no_approved_vector_hits"
+    assert miss_request.task_domain == "gastrointestinal"
+    assert miss_request.allowed_chunk_types == ("condition_overview", "triage", "home_advice")
+    assert _last_response_generation_prompt == ""
+
+
+def test_rag_miss_admin_can_list_recorded_governance_requests(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证 Admin API 可读取回答 RAG 无命中治理记录。
+
+    :param tmp_path: 参数 tmp_path。
+    :param monkeypatch: 参数 monkeypatch。
+    :return: 无返回值；断言通过表示管理端可治理入口符合预期。
+    """
+    recorder = RecordingRagMissRecorder()
+    client = _client(
+        tmp_path,
+        monkeypatch,
+        answer_rag_service=FailingAnswerRagService(),
+        rag_miss_recorder=recorder,
+    )
+    vet_context = {
+        "user_id": "u_admin_rag_miss",
+        "session_id": "s_admin_rag_miss",
+        "pet_id": "p_admin_rag_miss",
+        "pet_info": {
+            "species": "犬",
+            "breed": "柯基",
+            "age": "3岁",
+            "weight_kg": 12,
+        },
+    }
+
+    failed_turn = client.post(
+        "/agent/turns",
+        json=_payload(
+            "别再追问了，直接说目前怎么看。它前天开始这样，饭量和平常一样，精神也还行，没吐。",
+            vet_context=vet_context,
+        ),
+    )
+    response = client.get("/admin/rag/misses?rag_scope=answer_rag&status=open&task_domain=gastrointestinal")
+
+    assert failed_turn.status_code == 503
+    assert response.status_code == 200
+    data = response.json()
+    assert data["backend"] == "recording_test"
+    assert data["total"] == 1
+    assert data["items"][0]["rag_scope"] == "answer_rag"
+    assert data["items"][0]["task_domain"] == "gastrointestinal"
+    assert data["items"][0]["failure_reason"] == "no_approved_vector_hits"
 
 
 def test_semantic_answers_reduce_missing_slots_without_exact_templates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

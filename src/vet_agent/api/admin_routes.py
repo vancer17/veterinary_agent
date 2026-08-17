@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
@@ -21,11 +21,29 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 
 class RagChunkUpdate(BaseModel):
+    """定义 RAG chunk 治理更新请求。
+
+    :return: 无返回值；该 DTO 只服务管理端资产治理。
+    """
+
     enabled: bool | None = None
     review_status: str | None = None
     quality_score: float | None = Field(default=None, ge=0, le=1)
     disabled_reason: str | None = None
     reason: str | None = None
+
+
+class RagMissUpdate(BaseModel):
+    """定义 RAG 无命中治理记录更新请求。
+
+    :return: 无返回值；该 DTO 只更新治理状态，不触发知识发布或回答回退。
+    """
+
+    status: str | None = Field(default=None, description="治理状态，例如 triaged、asset_drafted、published 或 dismissed。")
+    review_notes: str | None = Field(default=None, description="治理人员处理备注。")
+    linked_ingestion_batch: str | None = Field(default=None, description="关联的知识导入批次标识。")
+    linked_chunk_ids: list[int] | None = Field(default=None, description="关联的正式知识 chunk 内部主键集合。")
+    reason: str | None = Field(default=None, description="本次治理操作原因。")
 
 
 class ClinicalKnowledgeImport(BaseModel):
@@ -54,7 +72,7 @@ class ClinicalKnowledgePublish(BaseModel):
 
 
 @router.get("/rag/stats")
-async def rag_stats(request: Request):
+async def rag_stats(request: Request) -> dict[str, Any]:
     """执行 rag_stats 业务逻辑。
 
     :param request: 请求对象。
@@ -63,6 +81,68 @@ async def rag_stats(request: Request):
     container = get_container()
     container.access_control.authenticate(request.headers)
     return await container.rag_governance_service.stats()
+
+
+@router.get("/rag/misses")
+async def list_rag_misses(
+    request: Request,
+    rag_scope: str | None = None,
+    status: str | None = None,
+    task_domain: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> dict[str, Any]:
+    """分页查询 RAG 无命中知识缺口治理记录。
+
+    :param request: 请求对象。
+    :param rag_scope: 可选 RAG 数据链范围过滤条件。
+    :param status: 可选治理状态过滤条件。
+    :param task_domain: 可选任务域过滤条件。
+    :param limit: 返回数量上限。
+    :param offset: 分页偏移量。
+    :return: 返回 RAG 无命中治理记录分页结果。
+    """
+    container = get_container()
+    container.access_control.authenticate(request.headers)
+    try:
+        return await container.rag_miss_governance_service.list_misses(
+            rag_scope=rag_scope,
+            status=status,
+            task_domain=task_domain,
+            limit=limit,
+            offset=offset,
+        )
+    except ValueError as exc:
+        raise InvalidRequestError(str(exc)) from exc
+
+
+@router.patch("/rag/misses/{miss_id}")
+async def update_rag_miss(
+    miss_id: str,
+    payload: RagMissUpdate,
+    request: Request,
+) -> dict[str, Any]:
+    """更新 RAG 无命中知识缺口治理记录。
+
+    :param miss_id: RAG 无命中治理记录稳定标识。
+    :param payload: 请求载荷。
+    :param request: 请求对象。
+    :return: 返回更新后的 RAG 无命中治理记录。
+    """
+    container = get_container()
+    principal = container.access_control.authenticate(request.headers)
+    try:
+        return await container.rag_miss_governance_service.update_miss(
+            miss_id,
+            status=payload.status,
+            review_notes=payload.review_notes,
+            linked_ingestion_batch=payload.linked_ingestion_batch,
+            linked_chunk_ids=tuple(payload.linked_chunk_ids) if payload.linked_chunk_ids is not None else None,
+            actor_id=principal.user_id or principal.api_key_id,
+            reason=payload.reason,
+        )
+    except (ValueError, KeyError) as exc:
+        raise InvalidRequestError(str(exc)) from exc
 
 
 @router.post("/clinical-knowledge/conditions/preview")
