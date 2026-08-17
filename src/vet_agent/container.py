@@ -70,6 +70,12 @@ from vet_agent.memory import (
     MemoryReadService,
     make_memory_projection_client,
 )
+from vet_agent.rag_miss_governance import (
+    DisabledRagMissRecorder,
+    PostgresRagMissRepository,
+    RagMissGovernanceService,
+    RagMissGovernanceProtocol,
+)
 from vet_agent.response_generation import (
     ResponseGenerationContextBuilder,
     ResponseGenerationService,
@@ -137,6 +143,7 @@ class Container:
         consultation_answerability_policy_client: ConsultationAnswerabilityPolicyClient | None = None,
         embedding_client: EmbeddingClient | None = None,
         answer_rag_service: AnswerRagServiceProtocol | None = None,
+        rag_miss_recorder: RagMissGovernanceProtocol | None = None,
         followup_rag_service: FollowupRagServiceProtocol | None = None,
         task_routing_domain_repository: TaskRoutingDomainRepository | None = None,
         task_routing_policy_client: TaskRoutingPolicyClient | None = None,
@@ -153,6 +160,7 @@ class Container:
         :param consultation_answerability_policy_client: 问诊回答充分性策略客户端；仅测试或特殊嵌入场景可显式注入。
         :param embedding_client: 向量化客户端；仅测试或特殊嵌入场景可显式注入。
         :param answer_rag_service: 回答相关 RAG 服务；仅测试或特殊嵌入场景可显式注入。
+        :param rag_miss_recorder: RAG 无命中治理记录器；仅测试或特殊嵌入场景可显式注入。
         :param followup_rag_service: 追问相关 RAG 服务；仅测试或特殊嵌入场景可显式注入。
         :param task_routing_domain_repository: 任务路由任务域目录仓储；仅测试或特殊嵌入场景可显式注入。
         :param task_routing_policy_client: 任务路由策略客户端；仅测试或特殊嵌入场景可显式注入。
@@ -298,6 +306,8 @@ class Container:
             max_followup_rounds=settings.consultation_max_followup_rounds,
         )
         self.answer_rag_service = self._answer_rag_service(settings, answer_rag_service)
+        self.rag_miss_governance_service = self._rag_miss_governance_service(settings, rag_miss_recorder)
+        self.rag_miss_recorder = self.rag_miss_governance_service
         self.followup_rag_service = self._followup_rag_service(settings, followup_rag_service)
         self.report_service = ReportIngestionService(
             PostgresReportStore(settings.database_url)
@@ -325,6 +335,7 @@ class Container:
             memory_context_builder=self.memory_context_builder,
             trace_store=self.trace_store,
             answer_rag_service=self.answer_rag_service,
+            rag_miss_recorder=self.rag_miss_recorder,
             response_generation_service=self.response_generation_service,
             qwen_client=self.qwen_client,
             consultation_state_service=self.consultation_state_service,
@@ -351,6 +362,7 @@ class Container:
             and self.output_safety_service.is_ready()
             and self.rule_repository.is_ready()
             and self.answer_rag_service.is_ready()
+            and self.rag_miss_recorder.is_ready()
             and self.followup_rag_service.is_ready()
             and self.response_generation_service.is_ready()
             and self.clinical_safety_repository.is_ready()
@@ -406,6 +418,23 @@ class Container:
             allowed_chunk_types=settings.answer_rag_allowed_chunk_types,
             filter_by_domain=settings.answer_rag_filter_by_domain,
         )
+
+    def _rag_miss_governance_service(
+        self,
+        settings: Settings,
+        recorder: RagMissGovernanceProtocol | None,
+    ) -> RagMissGovernanceProtocol:
+        """构造 RAG 无命中治理服务。
+
+        :param settings: 当前运行环境配置。
+        :param recorder: 外部显式注入的 RAG 无命中治理服务。
+        :return: 返回 RAG 无命中治理服务。
+        """
+        if recorder is not None:
+            return recorder
+        if not settings.database_url:
+            return DisabledRagMissRecorder()
+        return RagMissGovernanceService(PostgresRagMissRepository(settings.database_url))
 
     def _followup_rag_service(
         self,

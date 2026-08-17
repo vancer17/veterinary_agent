@@ -826,6 +826,11 @@ class RagAuditEventModel(Base):
 
 
 class LogicTraceModel(Base):
+    """表示 Agent 主链路成功响应或显式错误的审计记录表。
+
+    :return: 无返回值；该模型仅供 trace 仓储访问。
+    """
+
     __tablename__ = "logic_traces"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
@@ -837,6 +842,118 @@ class LogicTraceModel(Base):
     medical: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class RagRetrievalMissModel(Base):
+    """表示 RAG 无命中知识缺口治理记录表。
+
+    :return: 无返回值；该模型仅供 RAG miss 治理仓储访问，业务层不得直接操作。
+    """
+
+    __tablename__ = "rag_retrieval_misses"
+    __table_args__ = (
+        UniqueConstraint("miss_id", name="uq_rag_retrieval_misses_miss_id"),
+        CheckConstraint("rag_scope IN ('answer_rag')", name="ck_rag_retrieval_misses_scope"),
+        CheckConstraint(
+            "status IN ('open', 'triaged', 'asset_drafted', 'published', 'dismissed')",
+            name="ck_rag_retrieval_misses_status",
+        ),
+        Index("idx_rag_retrieval_misses_trace_id", "trace_id"),
+        Index("idx_rag_retrieval_misses_scope_status", "rag_scope", "status"),
+        Index("idx_rag_retrieval_misses_dedupe_key", "dedupe_key"),
+        Index("idx_rag_retrieval_misses_domain_created_at", "task_domain", "created_at"),
+        Index("idx_rag_retrieval_misses_identity", "user_id", "pet_id", "session_id"),
+        {
+            "comment": "RAG 无命中知识缺口治理记录表，用于记录 Fail Fast 后的可治理资产缺口，不参与运行时回答回退。"
+        },
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True, comment="RAG 无命中治理记录内部主键。")
+    miss_id: Mapped[str] = mapped_column(Text, nullable=False, comment="RAG 无命中治理记录稳定标识。")
+    request_id: Mapped[str] = mapped_column(Text, nullable=False, comment="触发无命中的 Agent 请求标识。")
+    trace_id: Mapped[str] = mapped_column(Text, nullable=False, comment="触发无命中的链路追踪标识。")
+    user_id: Mapped[str] = mapped_column(Text, nullable=False, comment="当前可信用户标识。")
+    pet_id: Mapped[str] = mapped_column(Text, nullable=False, comment="当前可信宠物标识。")
+    session_id: Mapped[str] = mapped_column(Text, nullable=False, comment="当前可信会话标识。")
+    rag_scope: Mapped[str] = mapped_column(Text, nullable=False, comment="RAG 无命中所属数据链范围，当前仅允许 answer_rag。")
+    task_id: Mapped[str] = mapped_column(Text, nullable=False, comment="触发无命中的当前任务展示标识。")
+    task_key: Mapped[str] = mapped_column(Text, nullable=False, comment="触发无命中的当前任务状态键。")
+    task_domain: Mapped[str] = mapped_column(Text, nullable=False, comment="触发无命中的当前任务域。")
+    task_title: Mapped[str] = mapped_column(Text, nullable=False, comment="触发无命中的当前任务标题。")
+    user_text_excerpt: Mapped[str] = mapped_column(Text, nullable=False, comment="经裁剪后的用户任务文本片段，用于人工治理排障。")
+    user_text_digest: Mapped[str] = mapped_column(Text, nullable=False, comment="用户任务文本 SHA-256 摘要，用于去重和隐私友好的聚合。")
+    structured_query: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+        comment="回答 RAG 实际使用的结构化检索 query，不作为运行时规则来源。",
+    )
+    consultation_state: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+        comment="触发无命中时的问诊状态快照。",
+    )
+    answerability: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+        comment="触发无命中时的回答充分性裁决快照。",
+    )
+    semantic_extraction: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+        comment="触发无命中时的问诊语义抽取快照。",
+    )
+    retrieval_parameters: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+        comment="回答 RAG 本轮召回参数摘要，例如 top_k、min_score、chunk 类型和领域过滤。",
+    )
+    failure_reason: Mapped[str] = mapped_column(Text, nullable=False, comment="无命中失败原因，例如 no_approved_vector_hits。")
+    error_type: Mapped[str] = mapped_column(Text, nullable=False, comment="触发治理记录的原始异常类型。")
+    error_message: Mapped[str] = mapped_column(Text, nullable=False, comment="触发治理记录的原始异常消息。")
+    error_details: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+        comment="原始异常结构化细节，用于排查过滤条件和依赖状态。",
+    )
+    dedupe_key: Mapped[str] = mapped_column(Text, nullable=False, comment="用于后台聚合同类知识缺口的稳定哈希键。")
+    status: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        default="open",
+        server_default="open",
+        comment="知识缺口治理状态，仅用于后台治理，不参与 Agent 运行时裁决。",
+    )
+    review_notes: Mapped[str | None] = mapped_column(Text, comment="治理人员处理备注。")
+    linked_ingestion_batch: Mapped[str | None] = mapped_column(Text, comment="关联的知识导入批次标识。")
+    linked_chunk_ids: Mapped[list[int]] = mapped_column(
+        ARRAY(BigInteger),
+        nullable=False,
+        default=list,
+        server_default="{}",
+        comment="关联的正式知识 chunk 内部主键集合。",
+    )
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(
+        "metadata",
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+        comment="RAG 无命中治理记录附加审计信息。",
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), comment="治理记录创建时间。")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now(), comment="治理记录最近更新时间。")
 
 
 class BackgroundTaskModel(Base):

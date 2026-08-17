@@ -31,7 +31,7 @@ from vet_agent import (
     TrustedIdentity,
     VetSegment,
 )
-from vet_agent.answer_rag import AnswerRagRequest, AnswerRagResult, AnswerRagServiceProtocol
+from vet_agent.answer_rag import AnswerRagError, AnswerRagRequest, AnswerRagResult, AnswerRagServiceProtocol
 from vet_agent.background_tasks import BackgroundTaskServiceProtocol, make_memory_extraction_task_metadata
 from vet_agent.clinical_safety import (
     ClinicalSafetyEvaluator,
@@ -45,6 +45,7 @@ from vet_agent.memory import MemoryContextBuilder, MemoryPromptContext, MemoryRe
 from vet_agent.memory_extraction import MemoryExtractionStrategy
 from vet_agent.observability import AgentPathNode, build_agent_path
 from vet_agent.output_safety import OutputSafetyService
+from vet_agent.rag_miss_governance import RagMissRecordRequest, RagMissRecorderProtocol, RagMissScope
 from vet_agent.response_generation import (
     ResponseGenerationRequest,
     ResponseGenerationServiceProtocol,
@@ -78,6 +79,7 @@ class VetOrchestrator:
         memory_context_builder: MemoryContextBuilder,
         trace_store: LogicTraceStore,
         answer_rag_service: AnswerRagServiceProtocol,
+        rag_miss_recorder: RagMissRecorderProtocol,
         response_generation_service: ResponseGenerationServiceProtocol,
         qwen_client: QwenClient,
         consultation_state_service: ConsultationStateService,
@@ -99,6 +101,7 @@ class VetOrchestrator:
         :param memory_context_builder: 记忆提示词上下文编译器。
         :param trace_store: 参数 trace_store。
         :param answer_rag_service: 回答相关 RAG 服务，仅在 OPA answer 分支生成结构化回答证据。
+        :param rag_miss_recorder: RAG 无命中治理记录器，仅负责缺口留痕，不改变 Fail Fast 结果。
         :param response_generation_service: 回复生成上下文编译与模型调用服务。
         :param qwen_client: 参数 qwen_client。
         :param consultation_state_service: 问诊状态与回答充分性服务。
@@ -122,6 +125,7 @@ class VetOrchestrator:
         self.input_safety_service = input_safety_service
         self.output_safety_service = output_safety_service
         self.answer_rag_service = answer_rag_service
+        self.rag_miss_recorder = rag_miss_recorder
         self.response_generation_service = response_generation_service
         self.clinical_safety = clinical_safety_evaluator
         self.clinical_safety_semantic_extractor = clinical_safety_semantic_extractor
@@ -374,10 +378,10 @@ class VetOrchestrator:
             return await self._finalize_and_persist(request, response, medical=True)
 
         answer_rag_result, answer_rag_evidence = await self._create_answer_rag_context(
-            user_text=task.text,
+            request=request,
+            task=task,
             pet_context=pet_context,
             consultation_decision=consultation_decision,
-            task_domain=task.domain,
             model=model,
         )
 
@@ -741,10 +745,10 @@ class VetOrchestrator:
 
             if consultation_decision.ready:
                 answer_rag_result, answer_rag_evidence = await self._create_answer_rag_context(
-                    user_text=task.text,
+                    request=request,
+                    task=task,
                     pet_context=pet_context,
                     consultation_decision=consultation_decision,
-                    task_domain=task.domain,
                     model=model,
                 )
                 response_generation_result = await self.response_generation_service.generate(
@@ -1082,33 +1086,96 @@ class VetOrchestrator:
     async def _create_answer_rag_context(
         self,
         *,
-        user_text: str,
+        request: AgentTurnRequest,
+        task: RoutedTask,
         pet_context: PetContext,
         consultation_decision: ConsultationDecision,
-        task_domain: str,
         model: str,
     ) -> tuple[AnswerRagResult, list[Evidence]]:
         """基于回答相关 RAG 生成回答证据上下文。
 
-        :param user_text: 用户本轮输入文本。
+        :param request: 当前 Agent 回合请求。
+        :param task: 当前已通过任务路由和回答充分性裁决的任务。
         :param pet_context: 宠物上下文。
         :param consultation_decision: 当前问诊决策。
-        :param task_domain: 当前任务所属任务域。
         :param model: 模型名称；保留于调用链审计边界。
         :return: 返回回答 RAG 结果与可进入响应的证据列表。
         """
         del model
-        result = await self.answer_rag_service.retrieve(
-            AnswerRagRequest(
-                user_text=user_text,
-                pet_context_summary=pet_context.summary(),
-                consultation_state=consultation_decision.state.to_dict(),
-                answerability=consultation_decision.answerability,
-                semantic_extraction=consultation_decision.state.semantic_extraction,
-                task_domain=task_domain,
+        answer_request = AnswerRagRequest(
+            user_text=task.text,
+            pet_context_summary=pet_context.summary(),
+            consultation_state=consultation_decision.state.to_dict(),
+            answerability=consultation_decision.answerability,
+            semantic_extraction=consultation_decision.state.semantic_extraction,
+            task_domain=task.domain,
+        )
+        try:
+            result = await self.answer_rag_service.retrieve(answer_request)
+        except AnswerRagError as exc:
+            try:
+                await self._record_answer_rag_miss(
+                    request=request,
+                    task=task,
+                    answer_request=answer_request,
+                    error=exc,
+                )
+            except Exception as record_exc:
+                exc.details["rag_miss_recording_failed"] = {
+                    "error_type": type(record_exc).__name__,
+                }
+            raise
+        return result, result.to_evidence()
+
+    async def _record_answer_rag_miss(
+        self,
+        *,
+        request: AgentTurnRequest,
+        task: RoutedTask,
+        answer_request: AnswerRagRequest,
+        error: AnswerRagError,
+    ) -> None:
+        """记录回答 RAG 无命中或依赖失败产生的知识缺口治理事件。
+
+        :param request: 当前 Agent 回合请求。
+        :param task: 当前已通过任务路由和回答充分性裁决的任务。
+        :param answer_request: 回答 RAG 结构化请求。
+        :param error: 回答 RAG 原始异常。
+        :return: 无返回值；记录完成后由调用方继续抛出原异常。
+        """
+        details = dict(getattr(error, "details", {}) or {})
+        failure_reason = str(details.get("reason") or "answer_rag_failed")
+        await self.rag_miss_recorder.record_miss(
+            RagMissRecordRequest(
+                request_id=request.request_context.request_id,
+                trace_id=request.request_context.trace_id,
+                user_id=request.trusted_identity.user_id,
+                pet_id=request.trusted_identity.pet_id,
+                session_id=request.trusted_identity.session_id,
+                rag_scope=RagMissScope.ANSWER_RAG,
+                task_id=task.task_id,
+                task_key=task.task_key,
+                task_domain=task.domain,
+                task_title=task.title,
+                user_text=task.text,
+                structured_query=str(details.get("query") or ""),
+                consultation_state=dict(answer_request.consultation_state),
+                answerability=dict(answer_request.answerability),
+                semantic_extraction=dict(answer_request.semantic_extraction),
+                allowed_chunk_types=tuple(str(item) for item in details.get("allowed_chunk_types") or ()),
+                top_k=int(details.get("top_k") or 0),
+                min_score=float(details.get("min_score") or 0.0),
+                domain_filter=str(details.get("domain") or "") or None,
+                failure_reason=failure_reason,
+                error_type=type(error).__name__,
+                error_message=str(error),
+                error_details=details,
+                metadata={
+                    "agent_path_node": AgentPathNode.ANSWER_RAG_SERVICE.value,
+                    "task_state_key": task.state_key,
+                },
             )
         )
-        return result, result.to_evidence()
 
     async def _create_followup_rag_plan(
         self,

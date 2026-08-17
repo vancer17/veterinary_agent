@@ -82,17 +82,38 @@ class AnswerRagService(AnswerRagServiceProtocol):
         """
         self._validate_request(request)
         query = self.query_builder.build(request)
-        retrieval = self.retriever.retrieve(
-            query,
-            limit=self.top_k,
-            min_score=self.min_score,
-            allowed_chunk_types=self.allowed_chunk_types,
-            domain=self._domain_filter(request),
-        )
+        domain_filter = self._domain_filter(request)
+        try:
+            retrieval = self.retriever.retrieve(
+                query,
+                limit=self.top_k,
+                min_score=self.min_score,
+                allowed_chunk_types=self.allowed_chunk_types,
+                domain=domain_filter,
+            )
+        except AnswerRagDependencyError as exc:
+            raise AnswerRagDependencyError(
+                str(exc),
+                details={
+                    **dict(exc.details or {}),
+                    "query": query,
+                    "top_k": self.top_k,
+                    "min_score": self.min_score,
+                    "allowed_chunk_types": list(self.allowed_chunk_types),
+                    "domain": domain_filter,
+                },
+            ) from exc
         if not retrieval.hits:
             raise AnswerRagDependencyError(
                 "answer RAG retrieval returned no hits",
-                details={"query": query, "top_k": self.top_k, "min_score": self.min_score},
+                details={
+                    "reason": "no_approved_vector_hits",
+                    "query": query,
+                    "top_k": self.top_k,
+                    "min_score": self.min_score,
+                    "allowed_chunk_types": list(self.allowed_chunk_types),
+                    "domain": domain_filter,
+                },
             )
         self._validate_retrieval_hits(retrieval.hits)
         return AnswerRagResult(

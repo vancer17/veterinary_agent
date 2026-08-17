@@ -1,9 +1,9 @@
 <!--
 =============================================================================
 文件: docs/api/external_api.md
-作用: 定义兽医 Agent HTTP 入口的外部契约、请求字段、错误码和联调语义。
-范围: 面向 BFF、内部服务调用方、测试与运维排障；当前以 scope_assertion 作为唯一可信范围声明入口。
-维护: 当入口 DTO、范围声明字段、错误码或 BFF 调用约定变化时，应同步更新本文档。
+作用: 定义兽医 Agent HTTP 入口的外部契约、请求字段、错误码、治理接口和联调语义。
+范围: 面向 BFF、内部服务调用方、治理后台、测试与运维排障；当前以 scope_assertion 作为主业务入口的唯一可信范围声明入口。
+维护: 当入口 DTO、范围声明字段、错误码、治理接口或 BFF 调用约定变化时，应同步更新本文档。
 =============================================================================
 -->
 
@@ -30,6 +30,8 @@ Agent 请求必须通过 `scope_assertion` 显式携带本轮服务端范围声�
 | --- | --- | --- |
 | `POST` | `/agent/turns` | 创建一轮兽医 Agent 对话，生产主业务入口 |
 | `POST` | `/openai/v1/responses` | OpenAI Responses 风格兼容入口，用于 SDK 适配、内部调试或迁移 |
+| `GET` | `/admin/rag/misses` | 内部治理接口，分页查询 RAG 无命中知识缺口记录 |
+| `PATCH` | `/admin/rag/misses/{miss_id}` | 内部治理接口，更新 RAG 无命中知识缺口治理状态 |
 | `GET` | `/health` | 存活检查 |
 | `GET` | `/ready` | 就绪检查 |
 
@@ -38,6 +40,7 @@ Agent 请求必须通过 `scope_assertion` 显式携带本轮服务端范围声�
 - 文档中的路径为服务逻辑路径；部署网关可增加环境前缀、服务名前缀或版本前缀。
 - `/agent/turns` 是正式业务入口。
 - `/openai/v1/responses` 是兼容入口，不作为兽医业务主契约。
+- `/admin/*` 是内部治理接口，只允许治理后台、运维或授权内部服务通过受控网络访问，不面向 App、Web 或小程序直接开放。
 - 同步响应与流式响应共用同一个对话接口，通过 `stream` 字段区分。
 
 ## 3. 通用协议约定
@@ -49,10 +52,19 @@ Agent 请求必须通过 `scope_assertion` 显式携带本轮服务端范围声�
 | `Content-Type: application/json` | 是，POST 接口 | 请求体格式 |
 | `Accept: application/json` | 否 | 同步响应建议值 |
 | `Accept: text/event-stream` | 否 | 流式响应建议值；最终是否流式以 `stream=true` 为准 |
+| `Authorization: Bearer <token>` | 条件必填 | 当启用 API 鉴权或配置 `VET_AGENT_API_KEYS` 时必填 |
+| `X-API-Key` | 条件必填 | 当启用 API 鉴权或配置 `VET_AGENT_API_KEYS` 时可替代 Bearer Token |
+| `X-User-ID` | 否 | 内部治理接口可用于记录治理操作人；不得替代 `scope_assertion.user_id` |
 | `X-Request-ID` | 否 | 上游请求 ID；不传时由服务生成 |
 | `X-Trace-ID` | 否 | 上游链路 ID；不传时由服务生成 |
 
 `request_id` 与 `trace_id` 也可在请求体中透传。若请求头和请求体同时传入同名 ID，二者必须一致；否则按 `400 INVALID_REQUEST` 处理。
+
+鉴权说明：
+
+- 生产环境建议配置 `VET_AGENT_API_KEYS` 并由网关或调用方注入 `Authorization` 或 `X-API-Key`。
+- `scope_assertion` 仍是主业务入口的身份、宠物、会话和画像范围声明；API Key 只表示调用方服务凭据，不替代宠物归属校验。
+- 内部治理接口不携带 `scope_assertion`，但仍必须通过访问控制认证，并应由网关限制来源网络和调用主体。
 
 ### 3.2 通用字段语义
 
@@ -98,10 +110,13 @@ HTTP 状态码大于等于 `400` 时，响应体统一使用以下结构：
 | HTTP 状态 | 错误码 | 场景 |
 | --- | --- | --- |
 | `400` | `INVALID_REQUEST` | 请求体结构错误、字段类型错误、请求头与请求体 ID 冲突 |
+| `401` | `UNAUTHORIZED` | 缺少或提供了非法 API 凭据 |
+| `403` | `FORBIDDEN` | 身份、宠物、会话范围不满足授权策略 |
+| `409` | `CONFLICT` | 幂等、turn lock 或会话执行冲突 |
 | `422` | `MISSING_REQUIRED_CONTEXT` | 缺少 `scope_assertion.user_id`、`scope_assertion.session_id`、`scope_assertion.pet_id` 或其他必需范围声明字段 |
 | `413` | `PAYLOAD_TOO_LARGE` | 请求体或附件元信息超过入口限制 |
 | `429` | `RATE_LIMITED` | 触发入口限流 |
-| `503` | `SERVICE_UNAVAILABLE` | 编排层不可用 |
+| `503` | `SERVICE_UNAVAILABLE` | 编排层或关键依赖不可用，例如模型网关、数据库、RAG 召回、回答 RAG 无有效知识命中或治理留痕依赖未就绪 |
 | `504` | `ORCHESTRATOR_TIMEOUT` | 编排层处理超时 |
 
 客户端中断 SSE 连接时，服务端访问日志记录 `CLIENT_CANCELLED`；若连接已经断开，通常不再向客户端发送错误响应体。
@@ -448,6 +463,54 @@ Agent 范围服务必须执行以下一致性保护：
 | `vet_result` | 面向客户端的兽医业务结构化摘要 |
 | `metadata` | 普通元信息 |
 
+回答相关 RAG 响应语义：
+
+- 当本轮进入回答充分性 `answer` 分支并成功召回合格知识证据时，响应 `metadata` 可包含 `answer_rag`。
+- `metadata.answer_rag` 用于审计和排障，表示本轮回答证据召回策略、召回后端、命中数量、召回阈值和证据摘要。
+- `evidence` 或内部证据列表中的回答 RAG 证据只应包含可进入回复生成与审计的摘要，不应暴露完整 RAG chunk、prompt、模型草稿或隐藏推理链。
+- 客户端不得依赖 `metadata.answer_rag` 强制驱动前端诊疗流程；正式展示仍以 `output`、`segments`、`vet_result` 和已允许展示的 `reasoning_display` 为准。
+
+`metadata.answer_rag` 的稳定语义包括：
+
+| 字段 | 说明 |
+| --- | --- |
+| `strategy` | 回答相关 RAG 策略标识 |
+| `retrieval.backend` | 检索后端标识 |
+| `retrieval.hit_count` | 归一化后的命中数量 |
+| `retrieval.top_k` | 本轮召回数量上限 |
+| `retrieval.min_score` | 本轮最低召回分数阈值 |
+| `retrieval.hits` | 命中摘要列表；仅用于审计和排障，不作为完整知识原文 |
+
+回答 RAG Fail Fast 语义：
+
+- 当回答分支无法召回已启用、已审核、具备向量且达到阈值的知识资产时，服务返回 `503 SERVICE_UNAVAILABLE`。
+- 服务不会返回空证据回答，不会构造默认回答模板，也不会继续进入自然语言回复生成。
+- 若 RAG 无命中治理记录器可用，服务会在后台记录治理事件；该记录不改变当前 HTTP 响应结果。
+- 调用方可根据错误 `details.reason` 判断排障方向，但不应把该错误转换为客户端侧的医学默认回答。
+
+示例：
+
+```json
+{
+  "code": "SERVICE_UNAVAILABLE",
+  "message": "answer RAG retrieval returned no approved vector hits",
+  "request_id": "req_01HZYK8JQ7M3V9QF8Y5W0A2B3C",
+  "trace_id": "trace_01HZYK8JQ7M3V9QF8Y5W0A2B3C",
+  "details": {
+    "reason": "no_approved_vector_hits",
+    "top_k": 5,
+    "min_score": 0.35,
+    "allowed_chunk_types": [
+      "condition_overview",
+      "triage",
+      "red_flags",
+      "home_advice"
+    ],
+    "domain": null
+  }
+}
+```
+
 `segments[]` 是客户端展示分段的推荐来源。急症段优先、医疗段优先于非医疗段、独立 OCR 段位置等顺序由 `VetResponseComposer` 与编排层保证，`ApiIngress` 只负责承载。
 
 `segments[].reasoning_display` 是与单个业务分段关联的可展示推理摘要，优先用于多任务和多分段展示。`AgentTurnResponse.reasoning_display` 是整轮汇总摘要，适用于单任务或顶部折叠展示。
@@ -525,6 +588,7 @@ data: {"id":"turn_01HZYK9G4DX8S7RC7J2MTNQ9V1","status":"completed"}
 - `ApiIngress` 不伪造业务 segment。
 - `ApiIngress` 不判断 `reasoning_display` 是进度、结论、审查说明或证据摘要；事件生成、排序、审查和发布时间由下游编排与业务组件负责。
 - `ApiIngress` 收到下游已经允许展示的 `reasoning_display.*` 事件后，应按事件顺序忠实转发，不改写、不总结、不裁剪。
+- 当回答 RAG 无有效知识命中或关键依赖不可用时，流式响应以 `turn.failed` 表达失败，错误结构与同步响应保持一致。
 - 心跳事件仅用于维持连接，不得承载医疗建议。
 - 客户端断开时，入口层通知下游并记录取消事件；已发布内容不由入口层回滚。
 
@@ -605,15 +669,194 @@ data: {"id":"turn_01HZYK9G4DX8S7RC7J2MTNQ9V1","status":"completed"}
 
 为了兼容 SDK，响应可保留 OpenAI Responses 风格的 `output` 与流式事件结构；但 `segments`、`vet_result` 仍是本系统业务扩展字段。
 
-## 6. `GET /health`
+## 6. 内部 Admin RAG 治理接口
 
 ### 6.1 定位
+
+Admin RAG 治理接口用于内部治理后台、运维和授权研发排查知识资产状态。该类接口不面向 App、Web、小程序或普通 BFF 用户流程开放。
+
+RAG 无命中治理接口只记录和更新知识缺口治理状态，不触发以下动作：
+
+- 不重新执行当前 Agent 回合。
+- 不生成默认回答。
+- 不生成知识 chunk。
+- 不生成 embedding。
+- 不审核或发布知识资产。
+- 不改变已完成或已失败回合的 HTTP 响应结果。
+
+### 6.2 鉴权与访问边界
+
+Admin 接口使用与主入口相同的 API 凭据认证机制：
+
+| Header | 必填 | 说明 |
+| --- | --- | --- |
+| `Authorization: Bearer <token>` | 条件必填 | 当启用 API 鉴权或配置 `VET_AGENT_API_KEYS` 时必填 |
+| `X-API-Key` | 条件必填 | 可替代 Bearer Token |
+| `X-User-ID` | 否 | 治理后台可传入操作人标识，用于治理记录审计 |
+
+生产环境应通过网关限制 `/admin/*` 访问来源。API Key 认证只证明调用方服务身份，不代表普通用户授权。
+
+### 6.3 `GET /admin/rag/misses`
+
+分页查询 RAG 无命中知识缺口治理记录。
+
+查询参数：
+
+| 参数 | 类型 | 必填 | 默认值 | 说明 |
+| --- | --- | --- | --- | --- |
+| `rag_scope` | string | 否 | 无 | RAG 数据链范围；当前支持 `answer_rag` |
+| `status` | string | 否 | 无 | 治理状态，可选 `open`、`triaged`、`asset_drafted`、`published`、`dismissed` |
+| `task_domain` | string | 否 | 无 | 任务域过滤，例如 `gastrointestinal`、`urinary` |
+| `limit` | integer | 否 | `50` | 返回数量上限，取值范围 `1..200` |
+| `offset` | integer | 否 | `0` | 分页偏移量，必须大于等于 `0` |
+
+成功响应：
+
+```json
+{
+  "items": [
+    {
+      "miss_id": "rag_miss_01HZYK8JQ7M3V9QF8Y5W0A2B3C",
+      "request_id": "req_01HZYK8JQ7M3V9QF8Y5W0A2B3C",
+      "trace_id": "trace_01HZYK8JQ7M3V9QF8Y5W0A2B3C",
+      "user_id": "user_123",
+      "pet_id": "pet_789",
+      "session_id": "sess_456",
+      "rag_scope": "answer_rag",
+      "task_id": "task_1",
+      "task_key": "task_key_1",
+      "task_domain": "gastrointestinal",
+      "task_title": "消化道咨询",
+      "user_text_excerpt": "别再追问了，直接说目前怎么看。",
+      "user_text_digest": "sha256_hex_digest",
+      "structured_query": {},
+      "consultation_state": {},
+      "answerability": {},
+      "semantic_extraction": {},
+      "retrieval_parameters": {
+        "allowed_chunk_types": [
+          "condition_overview",
+          "triage",
+          "home_advice"
+        ],
+        "top_k": 5,
+        "min_score": 0.35,
+        "domain_filter": null
+      },
+      "failure_reason": "no_approved_vector_hits",
+      "error_type": "AnswerRagDependencyError",
+      "error_message": "answer RAG retrieval returned no approved vector hits",
+      "error_details": {
+        "reason": "no_approved_vector_hits"
+      },
+      "dedupe_key": "stable_sha256_group_key",
+      "status": "open",
+      "review_notes": null,
+      "linked_ingestion_batch": null,
+      "linked_chunk_ids": [],
+      "metadata": {
+        "governance_role": "knowledge_gap_record",
+        "runtime_effect": "none"
+      },
+      "created_at": "2026-08-17T10:00:00Z",
+      "updated_at": "2026-08-17T10:00:00Z"
+    }
+  ],
+  "total": 1,
+  "limit": 50,
+  "offset": 0,
+  "backend": "rag_miss_governance"
+}
+```
+
+字段说明：
+
+| 字段 | 说明 |
+| --- | --- |
+| `miss_id` | RAG 无命中治理记录稳定标识 |
+| `request_id` / `trace_id` | 触发无命中的入口请求与链路标识 |
+| `user_id` / `pet_id` / `session_id` | 触发无命中的可信范围标识 |
+| `rag_scope` | RAG 数据链范围，当前为 `answer_rag` |
+| `task_domain` | 触发无命中的任务域 |
+| `user_text_excerpt` | 经裁剪后的用户任务文本片段，用于人工排障 |
+| `user_text_digest` | 用户任务文本摘要，用于隐私友好的去重与追踪 |
+| `structured_query` | 回答 RAG 实际使用的结构化 query |
+| `retrieval_parameters` | 本轮召回参数摘要 |
+| `failure_reason` | 无命中或依赖失败原因 |
+| `dedupe_key` | 用于后台聚合同类知识缺口的稳定键 |
+| `status` | 当前治理状态 |
+| `linked_ingestion_batch` | 关联的知识导入批次标识 |
+| `linked_chunk_ids` | 关联的正式知识 chunk 内部主键集合 |
+| `metadata.runtime_effect` | 当前记录对运行时的影响；应为 `none` |
+
+隐私约束：
+
+- `user_text_excerpt` 仅用于治理排障，不应直接展示给无权限人员。
+- `user_text_digest` 可用于聚合与去重，但不能反推出原始用户文本。
+- `structured_query`、`consultation_state`、`answerability`、`semantic_extraction` 属于治理材料，不应作为运行时规则来源。
+
+### 6.4 `PATCH /admin/rag/misses/{miss_id}`
+
+更新单条 RAG 无命中治理记录的人工治理字段。
+
+路径参数：
+
+| 参数 | 类型 | 说明 |
+| --- | --- | --- |
+| `miss_id` | string | RAG 无命中治理记录稳定标识 |
+
+请求体：
+
+```json
+{
+  "status": "triaged",
+  "review_notes": "确认需要补充消化道阶段性建议知识资产。",
+  "linked_ingestion_batch": "batch_digestive_20260817",
+  "linked_chunk_ids": [
+    101,
+    102
+  ],
+  "reason": "knowledge_gap_triage"
+}
+```
+
+请求字段：
+
+| 字段 | 类型 | 必填 | 说明 |
+| --- | --- | --- | --- |
+| `status` | string | 否 | 新治理状态，可选 `open`、`triaged`、`asset_drafted`、`published`、`dismissed` |
+| `review_notes` | string | 否 | 治理人员处理备注 |
+| `linked_ingestion_batch` | string | 否 | 关联知识导入批次标识 |
+| `linked_chunk_ids` | array[integer] | 否 | 关联正式知识 chunk 内部主键集合 |
+| `reason` | string | 否 | 本次治理操作原因 |
+
+成功响应为更新后的治理记录详情，字段结构与 `GET /admin/rag/misses` 中的 `items[]` 一致。
+
+治理状态语义：
+
+| 状态 | 含义 |
+| --- | --- |
+| `open` | 新记录，尚未处理 |
+| `triaged` | 已确认并完成初步分流 |
+| `asset_drafted` | 已准备或导入候选知识资产 |
+| `published` | 已有关联知识资产通过审核并可进入正式召回 |
+| `dismissed` | 经确认不是知识缺口或无需处理 |
+
+约束：
+
+- 更新治理状态不会让当前或历史失败回合重新生成回答。
+- `published` 只表示治理记录已关联发布结果；正式召回仍要求知识资产本身满足启用、审核通过和 embedding 非空等条件。
+- 如果 `miss_id` 不存在或状态值非法，返回 `400 INVALID_REQUEST`。
+
+## 7. `GET /health`
+
+### 7.1 定位
 
 进程存活检查。
 
 该接口只判断 HTTP 进程是否存活，不检查编排层、模型、存储或外部依赖。
 
-### 6.2 响应
+### 7.2 响应
 
 成功：
 
@@ -629,15 +872,15 @@ data: {"id":"turn_01HZYK9G4DX8S7RC7J2MTNQ9V1","status":"completed"}
 - `/health` 失败通常意味着实例应被重启。
 - 下游依赖异常不应导致 `/health` 失败。
 
-## 7. `GET /ready`
+## 8. `GET /ready`
 
-### 7.1 定位
+### 8.1 定位
 
 服务就绪检查。
 
 该接口判断 `ApiIngress` 是否具备接收正式流量的条件。
 
-### 7.2 检查项
+### 8.2 检查项
 
 `/ready` 至少检查：
 
@@ -645,9 +888,11 @@ data: {"id":"turn_01HZYK9G4DX8S7RC7J2MTNQ9V1","status":"completed"}
 - `RuntimeConfig` 可用。
 - 编排入口 `VetOrchestrator / GraphRuntime` 可用。
 - 入口限制、超时、流式心跳等必要参数有效。
+- 回答相关 RAG 服务就绪，包括数据库、embedding 和已审核向量知识召回条件。
+- RAG 无命中治理记录器就绪；生产环境配置数据库时，应能访问治理记录表。
 - 服务处于可接收请求状态。
 
-### 7.3 响应
+### 8.3 响应
 
 就绪：
 
@@ -679,8 +924,9 @@ data: {"id":"turn_01HZYK9G4DX8S7RC7J2MTNQ9V1","status":"completed"}
 - 返回 `200 OK` 表示实例可接收正式流量。
 - 返回 `503 SERVICE_UNAVAILABLE` 表示实例不应接收正式流量。
 - 当编排入口不可用时，`/ready` 应返回不可就绪；`/agent/turns` 应返回 `503 SERVICE_UNAVAILABLE`。
+- 当回答相关 RAG 或 RAG 无命中治理记录器未就绪时，生产实例不应接收正式医疗问诊流量。
 
-## 8. 不属于本对外 API 的能力
+## 9. 不属于本对外 API 的能力
 
 以下能力不由 `ApiIngress` 直接对外暴露：
 
@@ -692,11 +938,13 @@ data: {"id":"turn_01HZYK9G4DX8S7RC7J2MTNQ9V1","status":"completed"}
 | 文件二进制上传 | 文件服务或上游 BFF |
 | 化验 OCR 独立调用 | `LabOcrService` |
 | RAG 检索独立调用 | `RagPlatform` |
+| RAG 无命中自动聚合任务 | 治理后台或离线知识生产流程 |
+| 知识 chunk 自动生成、embedding 和发布 | 知识治理链路 |
 | 安全审查独立调用 | `GuardrailFramework` / `VetOutputSafetyReviewer` |
 | 逻辑链查询 | `LogicTraceStore` 或治理后台 |
 | 验收集运行 | `VetEvaluationSuites` |
 
-## 9. 日志与隐私约束
+## 10. 日志与隐私约束
 
 入口访问日志可记录：
 
@@ -713,6 +961,8 @@ data: {"id":"turn_01HZYK9G4DX8S7RC7J2MTNQ9V1","status":"completed"}
 - `error_code`
 - `duration_ms`
 - `attachment_count`
+- `rag_miss_id`
+- `rag_miss_dedupe_key`
 
 普通访问日志不得记录：
 
@@ -721,11 +971,13 @@ data: {"id":"turn_01HZYK9G4DX8S7RC7J2MTNQ9V1","status":"completed"}
 - OCR 原文。
 - 安全审查三联稿。
 - 完整 RAG 片段。
+- 完整 RAG 无命中结构化 query。
+- 完整 RAG 无命中用户原文。
 - 完整业务逻辑链。
 
 业务内容与逻辑链由 `LogicTraceStore` 与业务留痕分级策略管理。
 
-## 10. 版本与兼容性
+## 11. 版本与兼容性
 
 - 当前文档为第一阶段外部 API 契约草案。
 - 已发布字段不得做破坏性变更。

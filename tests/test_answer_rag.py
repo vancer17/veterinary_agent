@@ -26,6 +26,7 @@ from vet_agent.answer_rag import (
     AnswerRagRetriever,
     AnswerRagService,
     AnswerRagStrategy,
+    DEFAULT_ANSWER_RAG_CHUNK_TYPES,
 )
 from vet_agent.repositories import KnowledgeHit
 
@@ -286,8 +287,12 @@ def test_answer_rag_service_fails_fast_when_retrieval_has_no_hits() -> None:
         min_score=0.35,
     )
 
-    with pytest.raises(AnswerRagDependencyError):
+    with pytest.raises(AnswerRagDependencyError) as exc_info:
         asyncio.run(service.retrieve(_request()))
+    assert exc_info.value.details["reason"] == "no_approved_vector_hits"
+    assert "query" in exc_info.value.details
+    assert exc_info.value.details["top_k"] == 3
+    assert exc_info.value.details["allowed_chunk_types"] == list(DEFAULT_ANSWER_RAG_CHUNK_TYPES)
 
 
 def test_answer_rag_service_rejects_incomplete_retrieval_hit() -> None:
