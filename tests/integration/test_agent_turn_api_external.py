@@ -65,6 +65,7 @@ SUPPORTED_ALEMBIC_VERSIONS = {
     "0015_consultation_semantic_extraction_contract",
     "0016_output_safety_candidate_definitions",
     "0017_persistent_background_tasks",
+    "0018_rag_retrieval_misses",
 }
 
 CONSULTATION_DOMAIN_BASELINE: tuple[dict[str, Any], ...] = (

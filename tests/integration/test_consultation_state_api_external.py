@@ -52,6 +52,7 @@ SUPPORTED_ALEMBIC_VERSIONS = {
     "0014_task_routing_domain_catalog",
     "0015_consultation_semantic_extraction_contract",
     "0016_output_safety_candidate_definitions",
+    "0018_rag_retrieval_misses",
 }
 
 # 外部集成测试写入的问诊目录基线仅包含结构化领域与槽位展示信息；
