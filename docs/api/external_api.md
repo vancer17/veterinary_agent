@@ -116,7 +116,7 @@ HTTP 状态码大于等于 `400` 时，响应体统一使用以下结构：
 | `422` | `MISSING_REQUIRED_CONTEXT` | 缺少 `scope_assertion.user_id`、`scope_assertion.session_id`、`scope_assertion.pet_id` 或其他必需范围声明字段 |
 | `413` | `PAYLOAD_TOO_LARGE` | 请求体或附件元信息超过入口限制 |
 | `429` | `RATE_LIMITED` | 触发入口限流 |
-| `503` | `SERVICE_UNAVAILABLE` | 编排层或关键依赖不可用，例如模型网关、数据库、RAG 召回、回答 RAG 无有效知识命中或治理留痕依赖未就绪 |
+| `503` | `SERVICE_UNAVAILABLE` | 编排层或关键依赖不可用，例如模型网关、数据库、RAG 召回、回答相关 RAG 或追问相关 RAG 无有效知识命中、治理留痕依赖未就绪 |
 | `504` | `ORCHESTRATOR_TIMEOUT` | 编排层处理超时 |
 
 客户端中断 SSE 连接时，服务端访问日志记录 `CLIENT_CANCELLED`；若连接已经断开，通常不再向客户端发送错误响应体。
@@ -456,7 +456,7 @@ Agent 范围服务必须执行以下一致性保护：
 | `created_at` | 服务端创建时间，ISO 8601 格式 |
 | `request_id` | 请求 ID |
 | `trace_id` | 链路 ID |
-| `status` | `completed`、`failed` 等 |
+| `status` | `completed`、`requires_followup`、`safety_escalated`、`blocked` 等业务状态 |
 | `output` | OpenAI Responses 风格输出内容 |
 | `segments` | 兽医业务分段结果，由下游回复合成组件产生 |
 | `reasoning_display` | 整轮可展示推理摘要；由下游产出并确认可展示，`ApiIngress` 仅透传 |
@@ -507,6 +507,60 @@ Agent 范围服务必须执行以下一致性保护：
       "home_advice"
     ],
     "domain": null
+  }
+}
+```
+
+追问相关 RAG 响应语义：
+
+- 当本轮进入回答充分性 `ask` 分支并成功生成追问计划时，响应 `status` 为 `requires_followup`。
+- 追问场景下 `segments[].type` 通常为 `followup_consultation`，客户端应优先展示 `segments[].output_text`。
+- `metadata.followup_question_plan` 用于审计和前端展示对齐，表示本轮追问策略、召回摘要和实际生成的问题集合。
+- `metadata.missing_slots` 表示本轮 OPA 认可的完整缺失槽位集合；受单轮最大追问数、问题优先级和知识命中约束，`followup_question_plan.questions` 可以是其子集。
+- 客户端不得基于 `missing_slots` 自行生成追问问题，不得在 `followup_question_plan` 缺失时使用本地模板补齐追问。
+
+`metadata.followup_question_plan` 的稳定语义包括：
+
+| 字段 | 说明 |
+| --- | --- |
+| `strategy` | 追问相关 RAG 策略标识 |
+| `rationale` | 结构化追问计划摘要；只用于展示辅助和审计，不作为隐藏推理链 |
+| `retrieval.backend` | 检索后端标识 |
+| `retrieval.hit_count` | 归一化后的命中数量 |
+| `retrieval.top_k` | 本轮召回数量上限 |
+| `retrieval.min_score` | 本轮最低召回分数阈值 |
+| `retrieval.hits` | 命中摘要列表；仅用于审计和排障，不作为完整知识原文 |
+| `questions[].slot` | 本问题对应的缺失槽位 |
+| `questions[].question` | 面向用户展示的追问文本 |
+| `questions[].reason` | 为什么该追问影响分诊或下一步建议 |
+| `questions[].evidence_chunk_ids` | 本轮追问引用的证据 chunk 标识 |
+| `questions[].evidence_titles` | 本轮追问引用的证据标题 |
+| `questions[].priority` | 问题优先级，数值越小优先级越高 |
+
+追问 RAG Fail Fast 语义：
+
+- 当追问分支无法召回已启用、已审核、具备向量且达到阈值的追问知识资产时，服务返回 `503 SERVICE_UNAVAILABLE`。
+- 服务不会生成默认追问，不会恢复关键词、正则、模板或 seed 回退，也不会把空追问计划返回给客户端。
+- 若 RAG 无命中治理记录器可用，服务会记录 `rag_scope=followup_rag` 的治理事件；该记录不改变当前 HTTP 响应结果。
+- 调用方可根据错误 `details.reason` 判断排障方向，但不应把该错误转换为客户端侧的医学默认追问。
+- `details.query` 属于内部排障材料，可能包含结构化用户输入、问诊状态和宠物摘要，不应直接展示给普通用户。
+
+示例：
+
+```json
+{
+  "code": "SERVICE_UNAVAILABLE",
+  "message": "followup RAG retrieval returned no approved vector hits",
+  "request_id": "req_01HZYK8JQ7M3V9QF8Y5W0A2B3C",
+  "trace_id": "trace_01HZYK8JQ7M3V9QF8Y5W0A2B3C",
+  "details": {
+    "reason": "no_approved_vector_hits",
+    "query": "{\"domain\":\"gastrointestinal\",\"missing_slots\":[\"mental_status\",\"appetite\",\"vomiting\"]}",
+    "top_k": 4,
+    "min_score": 0.35,
+    "allowed_chunk_types": [
+      "followup_questions"
+    ]
   }
 }
 ```
@@ -588,7 +642,7 @@ data: {"id":"turn_01HZYK9G4DX8S7RC7J2MTNQ9V1","status":"completed"}
 - `ApiIngress` 不伪造业务 segment。
 - `ApiIngress` 不判断 `reasoning_display` 是进度、结论、审查说明或证据摘要；事件生成、排序、审查和发布时间由下游编排与业务组件负责。
 - `ApiIngress` 收到下游已经允许展示的 `reasoning_display.*` 事件后，应按事件顺序忠实转发，不改写、不总结、不裁剪。
-- 当回答 RAG 无有效知识命中或关键依赖不可用时，流式响应以 `turn.failed` 表达失败，错误结构与同步响应保持一致。
+- 当回答相关 RAG 或追问相关 RAG 无有效知识命中，或关键依赖不可用时，流式响应以 `turn.failed` 表达失败，错误结构与同步响应保持一致。
 - 心跳事件仅用于维持连接，不得承载医疗建议。
 - 客户端断开时，入口层通知下游并记录取消事件；已发布内容不由入口层回滚。
 
@@ -679,6 +733,7 @@ RAG 无命中治理接口只记录和更新知识缺口治理状态，不触发�
 
 - 不重新执行当前 Agent 回合。
 - 不生成默认回答。
+- 不生成默认追问。
 - 不生成知识 chunk。
 - 不生成 embedding。
 - 不审核或发布知识资产。
@@ -704,7 +759,7 @@ Admin 接口使用与主入口相同的 API 凭据认证机制：
 
 | 参数 | 类型 | 必填 | 默认值 | 说明 |
 | --- | --- | --- | --- | --- |
-| `rag_scope` | string | 否 | 无 | RAG 数据链范围；当前支持 `answer_rag` |
+| `rag_scope` | string | 否 | 无 | RAG 数据链范围；当前支持 `answer_rag`、`followup_rag` |
 | `status` | string | 否 | 无 | 治理状态，可选 `open`、`triaged`、`asset_drafted`、`published`、`dismissed` |
 | `task_domain` | string | 否 | 无 | 任务域过滤，例如 `gastrointestinal`、`urinary` |
 | `limit` | integer | 否 | `50` | 返回数量上限，取值范围 `1..200` |
@@ -722,30 +777,46 @@ Admin 接口使用与主入口相同的 API 凭据认证机制：
       "user_id": "user_123",
       "pet_id": "pet_789",
       "session_id": "sess_456",
-      "rag_scope": "answer_rag",
+      "rag_scope": "followup_rag",
       "task_id": "task_1",
       "task_key": "task_key_1",
       "task_domain": "gastrointestinal",
       "task_title": "消化道咨询",
-      "user_text_excerpt": "别再追问了，直接说目前怎么看。",
+      "user_text_excerpt": "我家 3 岁、12 公斤的柯基犬饭后总是缩成一团趴着，看起来不太舒服。",
       "user_text_digest": "sha256_hex_digest",
-      "structured_query": {},
+      "structured_query": {
+        "domain": "gastrointestinal",
+        "missing_slots": [
+          "mental_status",
+          "appetite",
+          "vomiting"
+        ],
+        "answerability": {
+          "decision": "ask",
+          "reason": "仍缺少会明显影响分诊建议的高价值信息。"
+        }
+      },
       "consultation_state": {},
-      "answerability": {},
+      "answerability": {
+        "decision": "ask"
+      },
       "semantic_extraction": {},
       "retrieval_parameters": {
         "allowed_chunk_types": [
-          "condition_overview",
-          "triage",
-          "home_advice"
+          "followup_questions"
         ],
-        "top_k": 5,
+        "top_k": 4,
         "min_score": 0.35,
-        "domain_filter": null
+        "domain_filter": "gastrointestinal",
+        "missing_slots": [
+          "mental_status",
+          "appetite",
+          "vomiting"
+        ]
       },
       "failure_reason": "no_approved_vector_hits",
-      "error_type": "AnswerRagDependencyError",
-      "error_message": "answer RAG retrieval returned no approved vector hits",
+      "error_type": "FollowupRagDependencyError",
+      "error_message": "followup RAG retrieval returned no approved vector hits",
       "error_details": {
         "reason": "no_approved_vector_hits"
       },
@@ -756,7 +827,16 @@ Admin 接口使用与主入口相同的 API 凭据认证机制：
       "linked_chunk_ids": [],
       "metadata": {
         "governance_role": "knowledge_gap_record",
-        "runtime_effect": "none"
+        "runtime_effect": "none",
+        "agent_path_node": "FollowupRagService",
+        "task_state_key": "task_key_1",
+        "missing_slots": [
+          "mental_status",
+          "appetite",
+          "vomiting"
+        ],
+        "planner_called": false,
+        "runtime_action": "fail_fast"
       },
       "created_at": "2026-08-17T10:00:00Z",
       "updated_at": "2026-08-17T10:00:00Z"
@@ -776,24 +856,29 @@ Admin 接口使用与主入口相同的 API 凭据认证机制：
 | `miss_id` | RAG 无命中治理记录稳定标识 |
 | `request_id` / `trace_id` | 触发无命中的入口请求与链路标识 |
 | `user_id` / `pet_id` / `session_id` | 触发无命中的可信范围标识 |
-| `rag_scope` | RAG 数据链范围，当前为 `answer_rag` |
+| `rag_scope` | RAG 数据链范围，当前支持 `answer_rag`、`followup_rag` |
 | `task_domain` | 触发无命中的任务域 |
 | `user_text_excerpt` | 经裁剪后的用户任务文本片段，用于人工排障 |
 | `user_text_digest` | 用户任务文本摘要，用于隐私友好的去重与追踪 |
-| `structured_query` | 回答 RAG 实际使用的结构化 query |
-| `retrieval_parameters` | 本轮召回参数摘要 |
+| `structured_query` | 当前 RAG 实际使用的结构化 query |
+| `retrieval_parameters` | 本轮召回参数摘要；追问场景可包含 `missing_slots` |
 | `failure_reason` | 无命中或依赖失败原因 |
+| `error_type` | 原始异常类型，例如 `AnswerRagDependencyError`、`FollowupRagDependencyError` |
 | `dedupe_key` | 用于后台聚合同类知识缺口的稳定键 |
 | `status` | 当前治理状态 |
 | `linked_ingestion_batch` | 关联的知识导入批次标识 |
 | `linked_chunk_ids` | 关联的正式知识 chunk 内部主键集合 |
 | `metadata.runtime_effect` | 当前记录对运行时的影响；应为 `none` |
+| `metadata.missing_slots` | 追问场景下触发无命中的缺失槽位集合 |
+| `metadata.planner_called` | 追问场景下结构化追问规划器是否已被调用；无命中通常为 `false` |
+| `metadata.runtime_action` | 当前回合运行时动作；无命中治理场景应为 `fail_fast` |
 
 隐私约束：
 
 - `user_text_excerpt` 仅用于治理排障，不应直接展示给无权限人员。
 - `user_text_digest` 可用于聚合与去重，但不能反推出原始用户文本。
 - `structured_query`、`consultation_state`、`answerability`、`semantic_extraction` 属于治理材料，不应作为运行时规则来源。
+- `structured_query.missing_slots` 与 `metadata.missing_slots` 只表示本轮追问知识缺口排障上下文，不应由治理后台或 BFF 转换为客户端侧默认追问。
 
 ### 6.4 `PATCH /admin/rag/misses/{miss_id}`
 
@@ -844,7 +929,7 @@ Admin 接口使用与主入口相同的 API 凭据认证机制：
 
 约束：
 
-- 更新治理状态不会让当前或历史失败回合重新生成回答。
+- 更新治理状态不会让当前或历史失败回合重新生成回答或追问。
 - `published` 只表示治理记录已关联发布结果；正式召回仍要求知识资产本身满足启用、审核通过和 embedding 非空等条件。
 - 如果 `miss_id` 不存在或状态值非法，返回 `400 INVALID_REQUEST`。
 
@@ -889,6 +974,7 @@ Admin 接口使用与主入口相同的 API 凭据认证机制：
 - 编排入口 `VetOrchestrator / GraphRuntime` 可用。
 - 入口限制、超时、流式心跳等必要参数有效。
 - 回答相关 RAG 服务就绪，包括数据库、embedding 和已审核向量知识召回条件。
+- 追问相关 RAG 服务就绪，包括数据库、embedding、已审核向量知识召回条件和结构化追问规划依赖。
 - RAG 无命中治理记录器就绪；生产环境配置数据库时，应能访问治理记录表。
 - 服务处于可接收请求状态。
 
@@ -924,7 +1010,7 @@ Admin 接口使用与主入口相同的 API 凭据认证机制：
 - 返回 `200 OK` 表示实例可接收正式流量。
 - 返回 `503 SERVICE_UNAVAILABLE` 表示实例不应接收正式流量。
 - 当编排入口不可用时，`/ready` 应返回不可就绪；`/agent/turns` 应返回 `503 SERVICE_UNAVAILABLE`。
-- 当回答相关 RAG 或 RAG 无命中治理记录器未就绪时，生产实例不应接收正式医疗问诊流量。
+- 当回答相关 RAG、追问相关 RAG 或 RAG 无命中治理记录器未就绪时，生产实例不应接收正式医疗问诊流量。
 
 ## 9. 不属于本对外 API 的能力
 
