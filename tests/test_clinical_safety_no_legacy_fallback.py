@@ -12,6 +12,7 @@ import re
 from pathlib import Path
 
 from vet_agent.clinical_safety import (
+    ClinicalSafetyEvaluator,
     ClinicalSafetyPolicyInput,
     ClinicalSafetyPolicyRequestContext,
     ClinicalSafetyRetrievalState,
@@ -64,6 +65,7 @@ def test_clinical_safety_policy_payload_excludes_raw_user_text() -> None:
         exposure_state="confirmed",
         symptom_state="present",
         intent_type="toxicity",
+        risk_evidence_state="sufficient",
         high_risk_terms=("误食药物",),
         confidence=0.95,
         strategy="litellm_response_format",
@@ -81,6 +83,7 @@ def test_clinical_safety_policy_payload_excludes_raw_user_text() -> None:
     payload_text = json.dumps(payload, ensure_ascii=False)
 
     assert "source_text" not in payload["semantic"]
+    assert payload["semantic"]["risk_evidence_state"] == "sufficient"
     assert "用户原始输入不应进入 OPA 负载" not in payload_text
 
 
@@ -90,6 +93,14 @@ def test_clinical_safety_semantic_result_remains_fact_container_only() -> None:
     :return: 无返回值；断言通过表示语义对象不再增长临床裁决职责。
     """
     assert not hasattr(ClinicalSafetySemanticResult, "has_positive_risk_evidence")
+
+
+def test_clinical_safety_evaluator_removes_field_combination_recall_gate() -> None:
+    """验证 evaluator 不再保留旧版字段组合强召回门槛。
+
+    :return: 无返回值；断言通过表示强召回只消费显式证据充分性边界。
+    """
+    assert not hasattr(ClinicalSafetyEvaluator, "_should_request_strong_recall")
 
 
 def _runtime_source_texts() -> list[str]:

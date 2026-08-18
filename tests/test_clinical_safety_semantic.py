@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from vet_agent import Settings
 from vet_agent.clinical_safety import (
     ClinicalSafetySemanticExtractorAgent,
+    ClinicalSafetySemanticResult,
 )
 
 
@@ -93,6 +94,7 @@ def test_clinical_safety_semantic_extractor_parses_llm_json() -> None:
               "resolution_state": "ongoing",
               "temporal_text": "现在",
               "intent_type": "toxicity",
+              "risk_evidence_state": "sufficient",
               "high_risk_terms": ["泰诺", "呕吐"],
               "negated_terms": [],
               "confidence": 0.92,
@@ -118,6 +120,7 @@ def test_clinical_safety_semantic_extractor_parses_llm_json() -> None:
     assert result.age_group == "senior"
     assert result.exposure_state == "confirmed"
     assert result.intent_type == "toxicity"
+    assert result.risk_evidence_state == "sufficient"
     assert "泰诺" in result.high_risk_terms
 
 
@@ -142,6 +145,7 @@ def test_clinical_safety_semantic_low_confidence_returns_explicit_degraded_resul
               "resolution_state": "ongoing",
               "temporal_text": "现在",
               "intent_type": "toxicity",
+              "risk_evidence_state": "sufficient",
               "high_risk_terms": ["泰诺", "呕吐"],
               "negated_terms": [],
               "confidence": 0.31,
@@ -167,6 +171,7 @@ def test_clinical_safety_semantic_low_confidence_returns_explicit_degraded_resul
     assert result.sex == "unknown"
     assert result.exposure_state == "unknown"
     assert result.intent_type == "other"
+    assert result.risk_evidence_state == "unknown"
     assert result.to_query_hints() == ""
 
 
@@ -193,8 +198,73 @@ def test_clinical_safety_semantic_disabled_does_not_create_rule_based_facts() ->
     assert result.species == "unknown"
     assert result.exposure_state == "unknown"
     assert result.symptom_state == "unknown"
+    assert result.risk_evidence_state == "unknown"
     assert result.high_risk_terms == ()
     assert result.to_fallback_state().stage == "disabled"
+
+
+def test_clinical_safety_semantic_insufficient_evidence_does_not_emit_query_hints() -> None:
+    """验证证据不足时审计短语不会被转化为强召回提示。
+
+    :return: 无返回值；断言通过表示 high_risk_terms 不再承担风险证据门槛职责。
+    """
+    result = ClinicalSafetySemanticResult(
+        species="dog",
+        exposure_state="unknown",
+        symptom_state="unknown",
+        intent_type="triage",
+        risk_evidence_state="insufficient",
+        high_risk_terms=("呼吸困难",),
+        confidence=0.96,
+        strategy="litellm_response_format",
+        source_text="如果狗呼吸困难，需要急诊吗？",
+    )
+
+    assert result.is_trusted()
+    assert result.to_query_hints() == ""
+
+
+def test_clinical_safety_semantic_missing_evidence_state_fails_fast() -> None:
+    """验证缺少证据充分性字段时不会从旧语义字段推导兼容值。
+
+    :return: 无返回值；断言通过表示结构化语义契约缺失新字段时直接进入 schema 降级。
+    """
+    extractor = ClinicalSafetySemanticExtractorAgent(
+        FakeQwenClient(
+            """
+            {
+              "species": "cat",
+              "sex": "female",
+              "age_group": "adult",
+              "age_text": "3岁",
+              "exposure_state": "confirmed",
+              "symptom_state": "present",
+              "temporal_state": "current",
+              "temporal_scope": "ongoing",
+              "resolution_state": "ongoing",
+              "temporal_text": "现在",
+              "intent_type": "toxicity",
+              "high_risk_terms": ["泰诺"],
+              "negated_terms": [],
+              "confidence": 0.95,
+              "rationale": "测试结构化响应故意缺少证据充分性字段。"
+            }
+            """
+        ),
+        Settings(),
+    )
+
+    result = asyncio.run(
+        extractor.extract(
+            user_text="我家猫误食泰诺后正在呕吐。",
+            pet_context_summary="宠物画像: 物种=猫, 年龄=3岁, 性别=母。",
+            model="qwen-plus",
+        )
+    )
+
+    assert not result.is_trusted()
+    assert result.strategy == "semantic_extraction_invalid_schema"
+    assert result.risk_evidence_state == "unknown"
 
 
 def test_clinical_safety_semantic_invalid_schema_does_not_create_rule_based_facts() -> None:
@@ -226,5 +296,6 @@ def test_clinical_safety_semantic_invalid_schema_does_not_create_rule_based_fact
     assert result.strategy == "semantic_extraction_invalid_schema"
     assert result.species == "unknown"
     assert result.exposure_state == "unknown"
+    assert result.risk_evidence_state == "unknown"
     assert result.high_risk_terms == ()
     assert result.to_fallback_state().stage == "invalid_schema"

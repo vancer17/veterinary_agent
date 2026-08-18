@@ -1347,6 +1347,7 @@ async def _fake_litellm_send_structured_chat(
         "resolution_state": "ongoing",
         "temporal_text": "现在",
         "intent_type": "symptom",
+        "risk_evidence_state": "sufficient",
         "high_risk_terms": [],
         "negated_terms": [],
         "confidence": 0.92,
@@ -1371,6 +1372,7 @@ async def _fake_litellm_send_structured_chat(
                 "exposure_state": "confirmed",
                 "symptom_state": "unknown",
                 "intent_type": "toxicity",
+                "risk_evidence_state": "sufficient",
                 "high_risk_terms": ["毒物暴露"],
             }
         )
@@ -1380,6 +1382,7 @@ async def _fake_litellm_send_structured_chat(
                 "exposure_state": "denied",
                 "symptom_state": "unknown",
                 "intent_type": "knowledge",
+                "risk_evidence_state": "insufficient",
                 "high_risk_terms": [],
                 "negated_terms": ["暴露"],
                 "rationale": "测试替身返回明确否认暴露语义。",

@@ -203,6 +203,7 @@ def _response_generation_request(
             temporal_scope="ongoing",
             resolution_state="ongoing",
             intent_type="triage",
+            risk_evidence_state="sufficient",
             confidence=0.91,
             strategy="litellm_response_format",
         ),
