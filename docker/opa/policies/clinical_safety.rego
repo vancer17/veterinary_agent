@@ -51,26 +51,34 @@ context_mismatch(candidate) if {
 	not input.semantic.age_group in {"senior", "unknown"}
 }
 
-# 正向风险证据只来自结构化语义字段；triage 意图本身不构成急诊事实。
-positive_risk_evidence if {
+# 证据充分性边界由语义抽取层统一输出；OPA 不再重新拼装症状、暴露和意图字段。
+semantic_evidence_sufficient if {
 	semantic_trusted
-	input.semantic.exposure_state in {"confirmed", "possible"}
+	object.get(input.semantic, "risk_evidence_state", "unknown") == "sufficient"
 }
 
-positive_risk_evidence if {
+semantic_evidence_insufficient if {
 	semantic_trusted
-	input.semantic.symptom_state == "present"
+	object.get(input.semantic, "risk_evidence_state", "unknown") == "insufficient"
 }
 
-positive_risk_evidence if {
+semantic_evidence_unavailable if {
+	not semantic_trusted
+}
+
+semantic_evidence_unavailable if {
 	semantic_trusted
-	count(object.get(input.semantic, "high_risk_terms", [])) > 0
+	object.get(input.semantic, "risk_evidence_state", "unknown") == "unknown"
 }
 
 insufficient_evidence_candidate(candidate) if {
 	candidate.code != ""
-	semantic_trusted
-	not positive_risk_evidence
+	semantic_evidence_insufficient
+}
+
+unavailable_evidence_candidate(candidate) if {
+	candidate.code != ""
+	semantic_evidence_unavailable
 }
 
 # required_context 表示资产进入裁决的前置结构化事实；缺失事实不能被高分召回补足。
@@ -141,10 +149,12 @@ required_symptom_context_satisfied(values) if {
 applicable_candidate(candidate) if {
 	some item in input.candidates
 	candidate = item
+	semantic_evidence_sufficient
 	not suppressed_candidate(candidate)
 	not temporally_resolved_candidate(candidate)
 	not context_mismatch(candidate)
 	not insufficient_evidence_candidate(candidate)
+	not unavailable_evidence_candidate(candidate)
 	not required_context_mismatch(candidate)
 }
 
@@ -265,6 +275,10 @@ candidate_reason(candidate) := sprintf("clinical_safety_candidate_context_mismat
 
 candidate_reason(candidate) := sprintf("clinical_safety_candidate_insufficient_evidence:%s", [candidate.code]) if {
 	insufficient_evidence_candidate(candidate)
+}
+
+candidate_reason(candidate) := sprintf("clinical_safety_candidate_evidence_unavailable:%s", [candidate.code]) if {
+	unavailable_evidence_candidate(candidate)
 }
 
 candidate_reason(candidate) := sprintf("clinical_safety_candidate_required_context_mismatch:%s", [candidate.code]) if {

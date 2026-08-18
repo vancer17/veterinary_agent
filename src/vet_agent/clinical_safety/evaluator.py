@@ -1,10 +1,12 @@
 """
+=============================================================================
 文件：src/vet_agent/clinical_safety/evaluator.py
 作用：编排临床安全候选召回与 OPA 策略裁决。
 范围：位于临床安全语义抽取之后、主 Agent 安全分诊之前；本层只负责召回查询构造、
       策略输入组装、策略结果转换和显式审计状态透出。
 说明：候选来源必须来自 ClinicalSafetyRetriever 的向量召回结果；本层不扫描用户原始文本、
       不生成候选、不根据关键词或 Python 分支执行最终动作裁决。
+=============================================================================
 """
 
 from __future__ import annotations
@@ -106,7 +108,11 @@ class ClinicalSafetyEvaluator:
         semantic_fallback = (
             semantic_result.to_fallback_state()
             if semantic_result is not None
-            else ClinicalSafetySemanticFallbackState()
+            else ClinicalSafetySemanticFallbackState(
+                degraded=True,
+                reasons=("clinical_safety_semantic_result_missing",),
+                strategy="not_requested",
+            )
         )
         fallback_state = ClinicalSafetyFallbackState(
             retrieval=retrieval_result.state,
@@ -149,26 +155,14 @@ class ClinicalSafetyEvaluator:
         """
         del context_text, age_text
         base_query = text.strip()
-        if semantic_result is None:
-            return base_query
-        if not self._should_request_strong_recall(semantic_result):
+        if semantic_result is None or not semantic_result.is_trusted():
             return ""
         semantic_hints = semantic_result.to_query_hints()
+        if not semantic_hints:
+            return ""
+        if not base_query:
+            return ""
         return "\n".join(part for part in (base_query, semantic_hints) if part)
-
-    def _should_request_strong_recall(self, semantic_result: ClinicalSafetySemanticResult) -> bool:
-        """判断当前结构化语义是否应参与强召回查询。
-
-        :param semantic_result: 结构化临床安全语义结果。
-        :return: 存在明确暴露、明确症状或正向高风险线索时返回 True。
-        """
-        if not semantic_result.is_trusted():
-            return False
-        return bool(
-            semantic_result.exposure_state in {"confirmed", "possible"}
-            or semantic_result.symptom_state == "present"
-            or semantic_result.high_risk_terms
-        )
 
     def _trusted_semantic_result(
         self,
