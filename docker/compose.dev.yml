@@ -46,6 +46,8 @@ x-app-build: &app-build
   context: ..
   dockerfile: docker/app/Dockerfile.dev
   args:
+    # 开发环境默认构建 core 镜像；如需专项验证 Guardrails 变体，可显式切换该参数。
+    VET_AGENT_IMAGE_VARIANT: ${VET_AGENT_IMAGE_VARIANT:-core}
     PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-ghcr.io/astral-sh/uv:python3.12-bookworm}
 
 x-mem0-build: &mem0-build
@@ -207,7 +209,8 @@ services:
     volumes:
       - ..:/app
     command: >
-      sh -c "alembic upgrade head
+      sh -c "python -m vet_agent.runtime.offline_startup
+      && alembic upgrade head
       && review_status=\"$${CLINICAL_SAFETY_REVIEW_STATUS:-approved}\"
       && if [ \"$${SEED_WITH_EMBEDDINGS:-false}\" = \"true\" ]; then
       python scripts/seed_database.py --with-embeddings --clinical-safety-review-status \"$${review_status}\";
@@ -238,7 +241,7 @@ services:
     volumes:
       - ..:/app
     # 开发环境 worker 复用同一套源码挂载与应用镜像，仅切换为后台任务入口。
-    command: ["python", "-m", "vet_agent.background_tasks.worker"]
+    command: ["worker"]
     healthcheck:
       # worker 不提供 HTTP 接口，健康检查直接校验后台任务仓储可访问性。
       test: ["CMD-SHELL", "python -m vet_agent.background_tasks.healthcheck"]

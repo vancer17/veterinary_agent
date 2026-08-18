@@ -14,16 +14,8 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "alembic>=1.17.2",
     "fastapi>=0.139.0",
-    "guardrails-ai>=0.10.2",
-    "guardrails-ai-prompt-injection-detector>=0.0.2",
-    "guardrails-ai-detect-pii>=0.0.6",
-    "guardrails-ai-detect-system-prompt-leakage>=0.1.0",
-    "guardrails-ai-mentions-drugs>=0.1.0",
-    "guardrails-ai-regex-match>=0.1.0",
-    "guardrails-ai-restrict-to-topic>=0.1.0",
-    "guardrails-ai-secrets-present>=0.1.0",
-    "guardrails-ai-valid-length>=0.1.0",
     "httpx>=0.28.1",
+    "litellm==1.96.2",
     "llama-index-core>=0.14.23",
     "llama-index-vector-stores-postgres>=0.8.1",
     "pgvector>=0.4.2",
@@ -31,6 +23,21 @@ dependencies = [
     "pytest>=9.0.2",
     "sqlalchemy>=2.0.45",
     "uvicorn>=0.51.0",
+]
+
+[project.optional-dependencies]
+guardrails = [
+    # Guardrails 仅作为镜像变体 extra 安装；默认 core 镜像不携带该重依赖。
+    "guardrails-ai==0.10.2",
+    "guardrails-ai-prompt-injection-detector==0.0.2",
+    "guardrails-ai-detect-pii==0.0.6",
+    "guardrails-ai-detect-system-prompt-leakage==0.1.0",
+    "guardrails-ai-mentions-drugs==0.1.0",
+    "guardrails-ai-regex-match==0.1.0",
+    "guardrails-ai-restrict-to-topic==0.1.0",
+    "guardrails-ai-secrets-present==0.1.0",
+    "guardrails-ai-valid-length==0.1.0",
+    "nltk==3.10.3",
 ]
 
 [build-system]

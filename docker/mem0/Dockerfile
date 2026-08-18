@@ -56,7 +56,8 @@ LABEL org.opencontainers.image.title="veterinary-agent-mem0" \
 
 # 运行时全局变量：
 # TZ/LANG/LC_ALL 固定容器时区与字符集；PYTHON* 变量确保日志实时输出且不生成 pyc；
-# MEM0_CONFIG_FILE 指向 Compose 挂载的非敏感服务配置文件。
+# MEM0_CONFIG_FILE 指向 Compose 挂载的非敏感服务配置文件；
+# LITELLM_LOCAL_MODEL_COST_MAP 避免上游 mem0ai 可选 LiteLLM 适配导入时访问 GitHub Raw。
 ENV TZ=Asia/Shanghai \
     LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
@@ -67,7 +68,8 @@ ENV TZ=Asia/Shanghai \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     VIRTUAL_ENV=/opt/venv \
     PATH="/opt/venv/bin:${PATH}" \
-    MEM0_CONFIG_FILE=/app/config/application.yml
+    MEM0_CONFIG_FILE=/app/config/application.yml \
+    LITELLM_LOCAL_MODEL_COST_MAP=True
 
 # 安装生产排障所需的最小工具集：
 # curl 用于 HTTP 探活，postgresql-client 用于数据库连通性排查，

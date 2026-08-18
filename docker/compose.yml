@@ -2,7 +2,7 @@
 # 文件: docker/compose.yml
 # 作用: 编排兽医 Agent 正式环境运行拓扑。
 # 范围: 只拉取并运行 GitHub Release 标签对应的预编译镜像，不声明 build。
-# 说明: 生产镜像由 CD 根据 Release tag 注入 VET_AGENT_IMAGE、MEM0_IMAGE、MEM0_DASHBOARD_IMAGE 与 OPA_IMAGE。
+# 说明: 生产镜像由 CD 根据 Release tag 注入 core 版 VET_AGENT_IMAGE、MEM0_IMAGE、MEM0_DASHBOARD_IMAGE 与 OPA_IMAGE。
 # =============================================================================
 
 name: ${COMPOSE_PROJECT_NAME:-vet-agent-prod}
@@ -177,7 +177,7 @@ services:
     depends_on:
       postgres-extensions:
         condition: service_completed_successfully
-    command: ["alembic", "upgrade", "head"]
+    command: ["sh", "-c", "python -m vet_agent.runtime.offline_startup && alembic upgrade head"]
     profiles: ["ops"]
 
   seed:
@@ -189,7 +189,8 @@ services:
       litellm:
         condition: service_healthy
     command: >
-      sh -c 'review_status="$${CLINICAL_SAFETY_REVIEW_STATUS:-approved}";
+      sh -c 'python -m vet_agent.runtime.offline_startup &&
+      review_status="$${CLINICAL_SAFETY_REVIEW_STATUS:-approved}";
       if [ "$${SEED_WITH_EMBEDDINGS:-false}" = "true" ]; then
       python scripts/seed_database.py --with-embeddings --clinical-safety-review-status "$${review_status}";
       else
@@ -212,17 +213,7 @@ services:
         condition: service_healthy
     ports:
       - "${APP_PORT:-8000}:8000"
-    command:
-      [
-        "uvicorn",
-        "vet_agent.main:app",
-        "--host",
-        "0.0.0.0",
-        "--port",
-        "8000",
-        "--workers",
-        "${APP_WORKERS:-2}",
-      ]
+    command: ["app"]
     healthcheck:
       test:
         [
@@ -241,7 +232,7 @@ services:
       postgres:
         condition: service_healthy
     # 后台 worker 复用正式应用镜像，只覆盖启动命令；生产环境不得现场构建第二套 worker 镜像。
-    command: ["python", "-m", "vet_agent.background_tasks.worker"]
+    command: ["worker"]
     healthcheck:
       # worker 不暴露 HTTP 端口，健康状态以 PostgreSQL 后台任务表可访问性为准。
       test: ["CMD-SHELL", "python -m vet_agent.background_tasks.healthcheck"]

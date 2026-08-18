@@ -55,6 +55,8 @@ class Settings:
     litellm_base_url: str = "http://127.0.0.1:4000/v1"
     request_timeout_seconds: float = 30.0
     data_dir: Path = Path(".data")
+    nltk_data_dir: Path = Path("/opt/vet-agent/nltk_data")
+    litellm_local_model_cost_map: bool = True
     seed_dir: Path = Path("assets/seeds")
     clinical_safety_vector_min_score: float = 0.35
     followup_rag_top_k: int = 4
@@ -140,6 +142,8 @@ class Settings:
         """
         enable_output_safety = _bool_env("ENABLE_OUTPUT_SAFETY", False)
         output_safety_mode_default = "observe" if enable_output_safety else "disabled"
+        nltk_data_env = os.getenv("NLTK_DATA", "/opt/vet-agent/nltk_data")
+        nltk_data_dir = Path(nltk_data_env.split(os.pathsep)[0].strip() or "/opt/vet-agent/nltk_data")
         return cls(
             default_model=os.getenv("QWEN_MODEL", "qwen-plus"),
             qwen_embedding_model=os.getenv("QWEN_EMBEDDING_MODEL", "text-embedding-v4"),
@@ -148,6 +152,8 @@ class Settings:
             litellm_base_url=os.getenv("LITELLM_BASE_URL", "http://127.0.0.1:4000/v1").rstrip("/"),
             request_timeout_seconds=float(os.getenv("LITELLM_TIMEOUT_SECONDS", os.getenv("QWEN_TIMEOUT_SECONDS", "30"))),
             data_dir=Path(os.getenv("VET_AGENT_DATA_DIR", ".data")),
+            nltk_data_dir=nltk_data_dir,
+            litellm_local_model_cost_map=_bool_env("LITELLM_LOCAL_MODEL_COST_MAP", True),
             seed_dir=Path(os.getenv("VET_AGENT_SEED_DIR", "assets/seeds")),
             clinical_safety_vector_min_score=float(os.getenv("CLINICAL_SAFETY_VECTOR_MIN_SCORE", "0.35")),
             followup_rag_top_k=int(os.getenv("FOLLOWUP_RAG_TOP_K", "4")),

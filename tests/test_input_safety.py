@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
+
 from vet_agent import (
     AgentTurnRequest,
     AttachmentRef,
@@ -130,16 +132,12 @@ def test_guardrails_detector_treats_hub_fail_result_as_candidate() -> None:
 
     :return: 无返回值；断言通过表示检测器不会因结果类路径差异漏报。
     """
-    from guardrails_ai.types import FailResult
-
     detector = GuardrailsInputSafetyDetector(
         Settings(enable_input_safety_guardrails=True, litellm_api_key="sk-test"),
         StaticInputSafetyRepository(),
         system_prompt="测试系统提示边界。",
     )
-    detector._prompt_injection = _FakeGuardrailsValidator(
-        FailResult(errorMessage="Prompt injection detected with score 1.000")
-    )
+    detector._prompt_injection = _FakeGuardrailsValidator(_FakeGuardrailsFailResult("Prompt injection detected"))
 
     candidates = detector.collect(
         InputSafetyRequestContext(
@@ -153,6 +151,51 @@ def test_guardrails_detector_treats_hub_fail_result_as_candidate() -> None:
     )
 
     assert any(candidate.code == "PROMPT_INJECTION_ATTEMPT" for candidate in candidates)
+
+
+def test_guardrails_detector_constructor_does_not_import_guardrails(monkeypatch: pytest.MonkeyPatch) -> None:
+    """验证 Guardrails 检测器构造阶段不会导入第三方实现。
+
+    :param monkeypatch: pytest 环境变量和对象替换工具。
+    :return: 无返回值；断言通过表示功能未调用前不会触发导入副作用。
+    """
+    import vet_agent.input_safety.detectors as detectors
+
+    def _blocked_import(module_name: str) -> object:
+        """阻断 Guardrails 延迟导入。
+
+        :param module_name: 待导入模块名称。
+        :return: 返回函数执行结果。
+        :raises AssertionError: 构造阶段发生第三方导入时抛出。
+        """
+        raise AssertionError(f"unexpected guardrails import: {module_name}")
+
+    monkeypatch.setattr(detectors, "import_module", _blocked_import)
+
+    detector = GuardrailsInputSafetyDetector(
+        Settings(enable_input_safety_guardrails=True, litellm_api_key="sk-test"),
+        StaticInputSafetyRepository(),
+        system_prompt="测试系统提示边界。",
+    )
+
+    assert detector.is_ready() is True
+
+
+class _FakeGuardrailsFailResult:
+    """测试用 Guardrails 失败结果替身。
+
+    :return: 无返回值。
+    """
+
+    def __init__(self, message: str) -> None:
+        """初始化失败结果替身。
+
+        :param message: 失败说明。
+        :return: 无返回值。
+        """
+        self.outcome = "fail"
+        self.error_message = message
+        self.fix_value = None
 
 
 class _FakeGuardrailsValidator:
