@@ -12,6 +12,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 cd "$repo_root"
 
 registry_image="${CI_REGISTRY_IMAGE:-crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com/vancer-saas/veterinary_agent}"
+guardrails_registry_image="${CI_APP_GUARDRAILS_REGISTRY_IMAGE:-crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com/vancer-saas/veterinary_agent-guardrails}"
 mem0_registry_image="${CI_MEM0_REGISTRY_IMAGE:-crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com/vancer-saas/veterinary_agent-mem0}"
 mem0_dashboard_registry_image="${CI_MEM0_DASHBOARD_REGISTRY_IMAGE:-crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com/vancer-saas/veterinary_agent-mem0-dashboard}"
 opa_registry_image="${CI_OPA_REGISTRY_IMAGE:-crpi-efmmpn9a6t9mspwy.cn-hangzhou.personal.cr.aliyuncs.com/vancer-saas/veterinary_agent-opa}"
@@ -24,6 +25,7 @@ bash scripts/ci/common/secret-boundary-check.sh
 required_paths=(
     docker/app/Dockerfile
     docker/app/Dockerfile.dev
+    docker/app/entrypoint.sh
     docker/app/template/app.dev.env.template
     docker/app/template/app.prod.env.template
     docker/compose.yml
@@ -60,6 +62,7 @@ required_paths=(
     docker/postgres/postgresql.conf
     docker/postgres/template/postgres.dev.env.template
     docker/postgres/template/postgres.prod.env.template
+    scripts/runtime/install_nltk_data.py
 )
 
 for required_path in "${required_paths[@]}"; do
@@ -70,6 +73,7 @@ for required_path in "${required_paths[@]}"; do
 done
 
 echo "dry-run 应用镜像模板: ${registry_image}:${release_tag_example}"
+echo "dry-run Guardrails 增强应用镜像模板: ${guardrails_registry_image}:${release_tag_example}"
 echo "dry-run Mem0 镜像模板: ${mem0_registry_image}:${release_tag_example}"
 echo "dry-run Mem0 Dashboard 镜像模板: ${mem0_dashboard_registry_image}:${release_tag_example}"
 echo "dry-run OPA 镜像模板: ${opa_registry_image}:${release_tag_example}"

@@ -15,6 +15,7 @@ required_files=(
     .github/workflows/cd.yml
     docker/app/Dockerfile
     docker/app/Dockerfile.dev
+    docker/app/entrypoint.sh
     docker/app/template/app.dev.env.template
     docker/app/template/app.prod.env.template
     docker/compose.dev.yml
@@ -51,6 +52,7 @@ required_files=(
     docker/postgres/postgresql.conf
     docker/postgres/template/postgres.dev.env.template
     docker/postgres/template/postgres.prod.env.template
+    scripts/runtime/install_nltk_data.py
 )
 
 for required_file in "${required_files[@]}"; do
@@ -129,11 +131,16 @@ for worker_compose_file in docker/compose.yml docker/compose.dev.yml; do
         echo "Compose 缺少独立后台 worker 服务: ${worker_compose_file}" >&2
         exit 1
     fi
-    if ! grep -q 'vet_agent.background_tasks.worker' "$worker_compose_file"; then
-        echo "后台 worker 服务未指向标准任务入口: ${worker_compose_file}" >&2
+    if ! grep -q 'command: \["worker"\]' "$worker_compose_file"; then
+        echo "后台 worker 服务未通过应用镜像统一入口启动: ${worker_compose_file}" >&2
         exit 1
     fi
 done
+
+if ! grep -q 'vet_agent.background_tasks.worker' docker/app/entrypoint.sh; then
+    echo "应用镜像统一入口未指向标准后台任务入口。" >&2
+    exit 1
+fi
 
 if grep -R -n -E '(^|[[:space:]])--build([[:space:]]|$)' scripts/cd/repository; then
     echo "生产部署脚本不得包含 --build 参数。" >&2
