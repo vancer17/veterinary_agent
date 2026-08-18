@@ -13,6 +13,10 @@ import httpx
 import pytest
 
 from vet_agent.clinical_safety import (
+    ClinicalSafetyAsset,
+    ClinicalSafetyCandidate,
+    ClinicalSafetyChunk,
+    ClinicalSafetyChunkHit,
     ClinicalSafetyPolicyAction,
     ClinicalSafetyPolicyDecision,
     ClinicalSafetyPolicyInput,
@@ -108,6 +112,63 @@ def test_opa_clinical_safety_policy_client_builds_prefixed_data_api_url(monkeypa
         rule_name="decision",
     )
     assert client._decision_url() == "http://example.test/opa/v1/data/vet_agent/clinical_safety/decision"
+
+
+def test_clinical_safety_policy_input_passes_required_context_to_opa() -> None:
+    """验证策略输入会将候选 required_context 传递给 OPA。
+
+    :return: 无返回值；断言通过表示候选前置上下文不会在 Python 到 OPA 边界丢失。
+    """
+    asset = ClinicalSafetyAsset(
+        asset_id="safety_policy_required_context",
+        asset_type="emergency_red_flag",
+        canonical_name="呼吸循环测试风险",
+        category="呼吸循环",
+        species_scope=("cat", "dog"),
+        sex_scope=(),
+        age_scope=(),
+        severity="urgent",
+        action_class="emergency",
+        code="CYANOSIS_RISK_PATTERN",
+        symptoms=("呼吸困难",),
+        recognition_phrases=("呼吸困难",),
+        required_context={"species": ("cat", "dog"), "symptoms": ("呼吸困难",)},
+    )
+    chunk = ClinicalSafetyChunk(
+        chunk_id="safety_policy_required_context.recognition.v1",
+        asset_id=asset.asset_id,
+        chunk_type="recognition",
+        title="呼吸循环测试风险 风险识别",
+        embedding_text="呼吸困难",
+        metadata={},
+        review_status="approved",
+    )
+    policy_input = ClinicalSafetyPolicyInput(
+        context=ClinicalSafetyPolicyRequestContext(),
+        semantic_result=None,
+        retrieval_state=ClinicalSafetyRetrievalState(),
+        candidates=(
+            ClinicalSafetyCandidate(
+                asset=asset,
+                score=0.92,
+                chunk_hits=(
+                    ClinicalSafetyChunkHit(
+                        chunk=chunk,
+                        score=0.92,
+                        matched_terms=("呼吸困难",),
+                    ),
+                ),
+            ),
+        ),
+        thresholds=ClinicalSafetyThresholds(),
+    )
+
+    payload = policy_input.to_payload()
+
+    assert payload["candidates"][0]["required_context"] == {
+        "species": ["cat", "dog"],
+        "symptoms": ["呼吸困难"],
+    }
 
 
 def test_opa_clinical_safety_policy_client_parses_result(monkeypatch: pytest.MonkeyPatch) -> None:

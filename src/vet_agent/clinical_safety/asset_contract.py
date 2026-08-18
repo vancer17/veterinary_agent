@@ -18,7 +18,14 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, ValidationIn
 
 CLINICAL_SAFETY_PUBLISH_SCHEMA_VERSION = "1.0.0"
 DISALLOWED_PUBLISH_CODES: frozenset[str] = frozenset({"CLINICAL_SAFETY_UNKNOWN"})
-DISALLOWED_PUBLISH_CODE_PATTERN = re.compile(r"^CLINICAL_SAFETY_[0-9_]+$")
+DISALLOWED_PUBLISH_CODE_PATTERN = re.compile(
+    r"^(?:"
+    r"CLINICAL_SAFETY_[0-9_]+|"
+    r"TOXIC_SUBSTANCE_[0-9]{3}|"
+    r"EMERGENCY_RED_FLAG_[0-9]{3}|"
+    r"DANGER_PATTERN_[A-Z0-9_]+_[0-9]{3}"
+    r")$"
+)
 
 
 class ClinicalSafetyAssetContractError(ValueError):

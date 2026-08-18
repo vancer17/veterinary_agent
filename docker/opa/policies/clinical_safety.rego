@@ -51,12 +51,101 @@ context_mismatch(candidate) if {
 	not input.semantic.age_group in {"senior", "unknown"}
 }
 
+# 正向风险证据只来自结构化语义字段；triage 意图本身不构成急诊事实。
+positive_risk_evidence if {
+	semantic_trusted
+	input.semantic.exposure_state in {"confirmed", "possible"}
+}
+
+positive_risk_evidence if {
+	semantic_trusted
+	input.semantic.symptom_state == "present"
+}
+
+positive_risk_evidence if {
+	semantic_trusted
+	count(object.get(input.semantic, "high_risk_terms", [])) > 0
+}
+
+insufficient_evidence_candidate(candidate) if {
+	candidate.code != ""
+	semantic_trusted
+	not positive_risk_evidence
+}
+
+# required_context 表示资产进入裁决的前置结构化事实；缺失事实不能被高分召回补足。
+required_context_mismatch(candidate) if {
+	semantic_trusted
+	required := object.get(candidate, "required_context", {})
+	values := object.get(required, "species", [])
+	count(values) > 0
+	input.semantic.species == "unknown"
+}
+
+required_context_mismatch(candidate) if {
+	semantic_trusted
+	required := object.get(candidate, "required_context", {})
+	values := object.get(required, "species", [])
+	count(values) > 0
+	input.semantic.species != "unknown"
+	not input.semantic.species in values
+}
+
+required_context_mismatch(candidate) if {
+	semantic_trusted
+	required := object.get(candidate, "required_context", {})
+	values := object.get(required, "sex", [])
+	count(values) > 0
+	input.semantic.sex == "unknown"
+}
+
+required_context_mismatch(candidate) if {
+	semantic_trusted
+	required := object.get(candidate, "required_context", {})
+	values := object.get(required, "sex", [])
+	count(values) > 0
+	input.semantic.sex != "unknown"
+	not input.semantic.sex in values
+}
+
+required_context_mismatch(candidate) if {
+	semantic_trusted
+	required := object.get(candidate, "required_context", {})
+	values := object.get(required, "age", [])
+	count(values) > 0
+	input.semantic.age_group == "unknown"
+}
+
+required_context_mismatch(candidate) if {
+	semantic_trusted
+	required := object.get(candidate, "required_context", {})
+	values := object.get(required, "age", [])
+	count(values) > 0
+	input.semantic.age_group != "unknown"
+	not input.semantic.age_group in values
+}
+
+required_context_mismatch(candidate) if {
+	semantic_trusted
+	required := object.get(candidate, "required_context", {})
+	values := object.get(required, "symptoms", [])
+	count(values) > 0
+	not required_symptom_context_satisfied(values)
+}
+
+required_symptom_context_satisfied(values) if {
+	some term in object.get(input.semantic, "high_risk_terms", [])
+	term in values
+}
+
 applicable_candidate(candidate) if {
 	some item in input.candidates
 	candidate = item
 	not suppressed_candidate(candidate)
 	not temporally_resolved_candidate(candidate)
 	not context_mismatch(candidate)
+	not insufficient_evidence_candidate(candidate)
+	not required_context_mismatch(candidate)
 }
 
 urgent_candidate(candidate) if {
@@ -172,6 +261,14 @@ candidate_reason(candidate) := sprintf("clinical_safety_candidate_suppressed:%s"
 
 candidate_reason(candidate) := sprintf("clinical_safety_candidate_context_mismatch:%s", [candidate.code]) if {
 	context_mismatch(candidate)
+}
+
+candidate_reason(candidate) := sprintf("clinical_safety_candidate_insufficient_evidence:%s", [candidate.code]) if {
+	insufficient_evidence_candidate(candidate)
+}
+
+candidate_reason(candidate) := sprintf("clinical_safety_candidate_required_context_mismatch:%s", [candidate.code]) if {
+	required_context_mismatch(candidate)
 }
 
 candidate_reason(candidate) := sprintf("clinical_safety_candidate_temporally_resolved:%s", [candidate.code]) if {

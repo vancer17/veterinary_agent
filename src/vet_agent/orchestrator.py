@@ -27,6 +27,7 @@ from vet_agent import (
     AgentTurnRequest,
     AgentTurnResponse,
     Evidence,
+    SafetySignal,
     StreamEvent,
     TrustedIdentity,
     VetSegment,
@@ -561,10 +562,10 @@ class VetOrchestrator:
         :param assessment: 已完成的安全评估结果。
         :return: 返回面向用户的安全分诊文本。
         """
-        urgent_signals = [signal for signal in assessment.signals if signal.severity in {"urgent", "blocked"}]
-        if urgent_signals:
-            reasons = "；".join(signal.message for signal in urgent_signals if signal.message)
-            matched = "、".join(term for signal in urgent_signals for term in signal.matched_terms)
+        primary_signal = self._primary_triage_signal(assessment.signals)
+        if primary_signal is not None:
+            reasons = primary_signal.message
+            matched = "、".join(dict.fromkeys(term for term in primary_signal.matched_terms if term))
             prefix = "你描述里有需要优先线下处理的高风险信号"
             if reasons:
                 prefix = f"{prefix}：{reasons}"
@@ -575,6 +576,18 @@ class VetOrchestrator:
                 "路上尽量保持宠物安静和保暖，不要自行喂人药或给不确定的药物。"
             )
         return "当前信息需要进一步确认。"
+
+    def _primary_triage_signal(self, signals: list[SafetySignal]) -> SafetySignal | None:
+        """选择面向用户展示的主临床安全分诊信号。
+
+        :param signals: 已由安全策略裁决后的全部安全信号。
+        :return: 返回最高优先级的 urgent 或 blocked 信号；没有升级信号时返回 None。
+        """
+        priority = {"blocked": 2, "urgent": 1}
+        triage_signals = [signal for signal in signals if signal.severity in priority]
+        if not triage_signals:
+            return None
+        return sorted(triage_signals, key=lambda item: priority[item.severity], reverse=True)[0]
 
     async def _input_safety_response(
         self,

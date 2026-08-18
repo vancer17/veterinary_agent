@@ -147,11 +147,28 @@ class ClinicalSafetyEvaluator:
         :param semantic_result: 结构化临床安全语义结果。
         :return: 返回合并后的召回查询文本。
         """
-        base_query = "\n".join(part for part in (text, context_text, age_text) if part)
+        del context_text, age_text
+        base_query = text.strip()
         if semantic_result is None:
             return base_query
+        if not self._should_request_strong_recall(semantic_result):
+            return ""
         semantic_hints = semantic_result.to_query_hints()
         return "\n".join(part for part in (base_query, semantic_hints) if part)
+
+    def _should_request_strong_recall(self, semantic_result: ClinicalSafetySemanticResult) -> bool:
+        """判断当前结构化语义是否应参与强召回查询。
+
+        :param semantic_result: 结构化临床安全语义结果。
+        :return: 存在明确暴露、明确症状或正向高风险线索时返回 True。
+        """
+        if not semantic_result.is_trusted():
+            return False
+        return bool(
+            semantic_result.exposure_state in {"confirmed", "possible"}
+            or semantic_result.symptom_state == "present"
+            or semantic_result.high_risk_terms
+        )
 
     def _trusted_semantic_result(
         self,

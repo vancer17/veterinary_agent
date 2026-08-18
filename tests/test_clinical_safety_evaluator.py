@@ -616,6 +616,53 @@ def test_clinical_safety_evaluator_returns_explicit_vector_resolution() -> None:
     assert result.to_metadata()["fallback_state"]["retrieval"]["stage"] == "vector"
 
 
+def test_clinical_safety_evaluator_does_not_strongly_recall_without_positive_evidence() -> None:
+    """验证没有正向风险证据时，evaluator 不会将宠物画像拼入强召回查询。
+
+    :return: 无返回值；断言通过表示模糊分诊不会仅因宠物画像触发急诊候选。
+    """
+    asset = _human_drug_asset()
+    chunk = _recognition_chunk(asset, text="泰诺；对乙酰氨基酚；扑热息痛；呕吐")
+    evaluator = _evaluator_for(asset, chunk)
+    semantic = ClinicalSafetySemanticResult(
+        species="dog",
+        sex="female",
+        age_group="adult",
+        age_text="3岁",
+        exposure_state="unknown",
+        symptom_state="unknown",
+        temporal_state="unknown",
+        temporal_scope="unclear",
+        resolution_state="unknown",
+        intent_type="triage",
+        high_risk_terms=(),
+        negated_terms=(),
+        confidence=0.96,
+        strategy="litellm_response_format",
+        source_text="要不要去医院？",
+    )
+
+    query = evaluator._build_query(
+        text="要不要去医院？",
+        context_text="宠物画像: 物种=狗, 年龄=3岁, 性别=雌性",
+        age_text="3岁",
+        semantic_result=semantic,
+    )
+    result = asyncio.run(
+        evaluator.assess_with_resolution(
+            "要不要去医院？",
+            context_text="宠物画像: 物种=狗, 年龄=3岁, 性别=雌性",
+            age_text="3岁",
+            semantic_result=semantic,
+        )
+    )
+
+    assert query == ""
+    assert result.signals == []
+    assert result.fallback_state.retrieval.stage == "none"
+    assert "empty_query" in result.fallback_state.retrieval.reasons
+
+
 def test_clinical_safety_evaluator_uses_vector_thresholds() -> None:
     """验证 evaluator 过渡层只根据向量候选阈值处理非毒物候选。
 

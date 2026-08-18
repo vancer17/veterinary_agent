@@ -46,6 +46,28 @@ def test_publish_contract_rejects_generated_fallback_code() -> None:
         validate_clinical_safety_publish_contract(asset_document, chunk_document)
 
 
+@pytest.mark.parametrize(
+    "generated_code",
+    [
+        "TOXIC_SUBSTANCE_001",
+        "EMERGENCY_RED_FLAG_001",
+        "DANGER_PATTERN_EMERGENCYREDFLAGS_001",
+    ],
+)
+def test_publish_contract_rejects_numbered_generated_codes(generated_code: str) -> None:
+    """验证发布态严格契约拒绝序号型默认安全编码。
+
+    :param generated_code: 待校验的序号型默认编码。
+    :return: 无返回值；断言通过表示旧版离线兜底编码不能进入发布态资产。
+    """
+    asset_document, chunk_document = _valid_publish_documents()
+    asset_document["assets"][0]["code"] = generated_code
+    chunk_document["chunks"][0]["metadata"]["code"] = generated_code
+
+    with pytest.raises(ClinicalSafetyAssetContractError):
+        validate_clinical_safety_publish_contract(asset_document, chunk_document)
+
+
 def test_publish_contract_rejects_missing_embedding_metadata() -> None:
     """验证发布态严格契约默认要求 chunk 已具备 embedding 元信息。
 
