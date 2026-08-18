@@ -8,10 +8,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Protocol, cast
-
-from guardrails_ai.types.validation_result import ValidationResult
-from guardrails_ai.prompt_injection_detector.main import PromptInjectionDetector
+from importlib import import_module
+from typing import Any, Protocol
 
 from vet_agent import Settings
 from vet_agent.input_safety.models import (
@@ -83,10 +81,7 @@ class GuardrailsInputSafetyDetector(InputSafetyDetector):
         self.settings = settings
         self.repository = repository
         self.system_prompt = system_prompt
-        self._prompt_injection = PromptInjectionDetector(
-            llm_callable=settings.input_safety_guardrails_model,
-            threshold=settings.input_safety_prompt_injection_threshold,
-        )
+        self._prompt_injection: Any | None = None
         if not system_prompt.strip():
             raise ValueError("system_prompt is required for input safety detector audit context")
 
@@ -102,7 +97,7 @@ class GuardrailsInputSafetyDetector(InputSafetyDetector):
         if not text:
             return ()
         candidates: list[InputSafetyCandidate] = []
-        injection = self._validate(self._prompt_injection, text, {"request_id": context.request_id})
+        injection = self._validate(self._prompt_injection_validator(), text, {"request_id": context.request_id})
         if injection.failed:
             candidate = self._candidate(
                 code="PROMPT_INJECTION_ATTEMPT",
@@ -123,6 +118,25 @@ class GuardrailsInputSafetyDetector(InputSafetyDetector):
         if not self.settings.enable_input_safety_guardrails:
             return True
         return bool(self.settings.litellm_configured and self.repository.is_ready())
+
+    def _prompt_injection_validator(self) -> Any:
+        """延迟构造 Guardrails 提示注入检测器。
+
+        :return: 返回 Guardrails 提示注入检测器实例。
+        :raises RuntimeError: Guardrails 检测器导入或构造失败时抛出。
+        """
+        if self._prompt_injection is not None:
+            return self._prompt_injection
+        try:
+            module = import_module("guardrails_ai.prompt_injection_detector.main")
+            validator_cls = getattr(module, "PromptInjectionDetector")
+            self._prompt_injection = validator_cls(
+                llm_callable=self.settings.input_safety_guardrails_model,
+                threshold=self.settings.input_safety_prompt_injection_threshold,
+            )
+        except Exception as exc:
+            raise RuntimeError("input safety guardrails detector unavailable") from exc
+        return self._prompt_injection
 
     def _candidate(
         self,
@@ -169,7 +183,7 @@ class GuardrailsInputSafetyDetector(InputSafetyDetector):
         :raises RuntimeError: 检测器调用失败时抛出，避免静默回退。
         """
         try:
-            result = cast(ValidationResult, validator.validate(text, metadata))
+            result = validator.validate(text, metadata)
         except Exception as exc:
             raise RuntimeError("input safety guardrails detector failed") from exc
         if _is_failed_validation(result):
@@ -184,7 +198,7 @@ class GuardrailsInputSafetyDetector(InputSafetyDetector):
         return _DetectorOutcome(failed=False, error_message="", metadata={})
 
 
-def _is_failed_validation(result: ValidationResult) -> bool:
+def _is_failed_validation(result: Any) -> bool:
     """判断 Guardrails 校验结果是否失败。
 
     :param result: Guardrails 校验结果对象。

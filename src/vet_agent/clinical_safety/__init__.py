@@ -57,6 +57,7 @@ from .policy import (
 from .thresholds import ClinicalSafetyThresholds
 from .semantic_extractor import (
     ClinicalSafetyIntentType,
+    ClinicalSafetyRiskEvidenceState,
     ClinicalSafetyExposureState,
     ClinicalSafetySemanticExtractorAgent,
     ClinicalSafetySemanticResult,
@@ -121,6 +122,7 @@ __all__ = [
     "ClinicalSafetySemanticStage",
     "ClinicalSafetySeverityContract",
     "ClinicalSafetyResolutionState",
+    "ClinicalSafetyRiskEvidenceState",
     "ClinicalSafetySex",
     "ClinicalSafetySpecies",
     "ClinicalSafetySymptomState",

@@ -330,6 +330,7 @@ def _semantic_payload(
             "temporal_scope": "unclear",
             "resolution_state": "unknown",
             "intent_type": "other",
+            "risk_evidence_state": "unknown",
             "high_risk_terms": [],
             "negated_terms": [],
         }
@@ -350,6 +351,7 @@ def _semantic_payload(
         "temporal_scope": semantic_result.temporal_scope if trusted else "unclear",
         "resolution_state": semantic_result.resolution_state if trusted else "unknown",
         "intent_type": semantic_result.intent_type if trusted else "other",
+        "risk_evidence_state": semantic_result.risk_evidence_state if trusted else "unknown",
         "high_risk_terms": list(semantic_result.high_risk_terms) if trusted else [],
         "negated_terms": list(semantic_result.negated_terms) if trusted else [],
     }

@@ -193,6 +193,9 @@ OPA 必须同时消费：
 
 ### 阶段 1：引入证据充分性边界
 
+> **迁移状态**：已完成；实现细节与稳定契约见
+> [clinical-safety-evidence-boundary-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/clinical-safety-evidence-boundary-change-summary.md)。
+
 **目标**
 
 把“用户在问是否需要就医”与“当前已经具备高危证据”分离。
@@ -342,4 +345,3 @@ OPA 必须同时消费：
 3. 临床安全资产 code 治理方案。
 4. 临床安全 OPA 规则收敛方案。
 5. 临床安全用户响应投影规范。
-

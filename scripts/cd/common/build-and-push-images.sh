@@ -2,8 +2,8 @@
 # =============================================================================
 # 文件: scripts/cd/common/build-and-push-images.sh
 # 作用: 在 CD Runner 构建并推送 GitHub Release 对应的预编译镜像。
-# 范围: 构建主应用镜像、自托管 Mem0 镜像、Mem0 运维 Dashboard 镜像和 OPA 策略服务镜像，不连接生产服务器。
-# 说明: 生产环境只拉取本脚本推送的镜像，禁止在生产环境现场编译。
+# 范围: 构建主应用 core 镜像、可选 Guardrails 增强镜像、自托管 Mem0 镜像、Mem0 运维 Dashboard 镜像和 OPA 策略服务镜像，不连接生产服务器。
+# 说明: 生产环境只拉取本脚本推送的镜像，禁止在生产环境现场编译；Guardrails 增强镜像仅用于专项验证。
 # =============================================================================
 
 set -Eeuo pipefail
@@ -22,6 +22,7 @@ eval "$(bash scripts/cd/common/resolve-release-images.sh)"
 release_tag="${CD_RELEASE_TAG}"
 release_sha="${CD_RELEASE_SHA}"
 app_dockerfile="${CD_APP_DOCKERFILE:-docker/app/Dockerfile}"
+app_guardrails_dockerfile="${CD_APP_GUARDRAILS_DOCKERFILE:-docker/app/Dockerfile}"
 mem0_dockerfile="${CD_MEM0_DOCKERFILE:-docker/mem0/Dockerfile}"
 mem0_dashboard_dockerfile="${CD_MEM0_DASHBOARD_DOCKERFILE:-docker/mem0-dashboard/Dockerfile}"
 opa_dockerfile="${CD_OPA_DOCKERFILE:-docker/opa/Dockerfile}"
@@ -31,18 +32,39 @@ opa_version="${CD_OPA_VERSION:-v1.19.0}"
 opa_runtime_base_image="${CD_OPA_RUNTIME_BASE_IMAGE:-debian:bookworm-slim}"
 
 app_release_image="${CD_APP_IMAGE}"
+app_guardrails_release_image="${CD_APP_GUARDRAILS_IMAGE}"
 mem0_release_image="${CD_MEM0_IMAGE}"
 mem0_dashboard_release_image="${CD_MEM0_DASHBOARD_IMAGE}"
 opa_release_image="${CD_OPA_IMAGE}"
 
-# 主应用镜像只使用 GitHub Release tag 作为可部署版本标签。
+# 主应用 core 镜像只使用 GitHub Release tag 作为可部署版本标签。
 docker build \
     -f "$app_dockerfile" \
+    --build-arg "VET_AGENT_IMAGE_VARIANT=core" \
     --label "org.opencontainers.image.version=${release_tag}" \
     --label "org.opencontainers.image.revision=${release_sha}" \
+    --label "io.vancer.vet-agent.image-variant=core" \
     -t "$app_release_image" \
     .
 docker push "$app_release_image"
+
+case "${CD_BUILD_APP_GUARDRAILS_IMAGE:-false}" in
+    1|true|TRUE|yes|YES|on|ON)
+        # Guardrails 增强镜像仅用于专项验证；默认不参与生产部署。
+        docker build \
+            -f "$app_guardrails_dockerfile" \
+            --build-arg "VET_AGENT_IMAGE_VARIANT=guardrails" \
+            --label "org.opencontainers.image.version=${release_tag}" \
+            --label "org.opencontainers.image.revision=${release_sha}" \
+            --label "io.vancer.vet-agent.image-variant=guardrails" \
+            -t "$app_guardrails_release_image" \
+            .
+        docker push "$app_guardrails_release_image"
+        ;;
+    *)
+        echo "跳过 Guardrails 增强应用镜像构建：CD_BUILD_APP_GUARDRAILS_IMAGE 未启用。"
+        ;;
+esac
 
 case "${CD_BUILD_MEM0_IMAGE:-true}" in
     1|true|TRUE|yes|YES|on|ON)

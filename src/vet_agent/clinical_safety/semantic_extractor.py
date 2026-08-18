@@ -1,8 +1,12 @@
 """
+=============================================================================
 文件：src/vet_agent/clinical_safety/semantic_extractor.py
 作用：通过 LiteLLM response_format 将临床安全相关输入抽取为可信结构化语义。
-范围：位于宠物上下文加载之后、临床安全候选召回之前；本层只负责语义结构化，不生成候选、不执行裁决。
-说明：抽取失败或低置信时仅返回显式降级状态，不使用关键词、正则或文件短语补造临床语义事实。
+范围：位于宠物上下文加载之后、临床安全候选召回之前；本层只负责语义结构化、
+      证据充分性边界表达与审计状态透出，不生成候选、不执行最终动作裁决。
+说明：抽取失败、低置信或结构不完整时仅返回显式降级状态，不使用关键词、正则、
+      历史字段组合或文件短语补造临床语义事实，符合 Fail Fast 迁移边界。
+=============================================================================
 """
 
 from __future__ import annotations
@@ -28,6 +32,7 @@ ClinicalSafetyTemporalState = Literal["current", "past", "unclear", "unknown"]
 ClinicalSafetyTemporalScope = Literal["ongoing", "recent_past", "remote_past", "unclear"]
 ClinicalSafetyResolutionState = Literal["ongoing", "resolved", "unknown"]
 ClinicalSafetyIntentType = Literal["toxicity", "symptom", "prevention", "knowledge", "triage", "other"]
+ClinicalSafetyRiskEvidenceState = Literal["sufficient", "insufficient", "unknown"]
 ClinicalSafetySemanticStrategy = Literal[
     "litellm_response_format",
     "litellm_response_format_low_confidence",
@@ -54,6 +59,7 @@ class ClinicalSafetySemanticResult:
     :param resolution_state: 当前事件是否已经明确缓解或结束。
     :param temporal_text: 用户表达时间范围的原文片段。
     :param intent_type: 用户意图类型。
+    :param risk_evidence_state: 当前回合是否具备足以进入临床安全强召回与候选裁决的正向事实边界。
     :param high_risk_terms: LLM 从用户输入中抽取的正向高风险线索。
     :param negated_terms: LLM 从用户输入中抽取的明确否定线索。
     :param confidence: 整体置信度。
@@ -74,6 +80,7 @@ class ClinicalSafetySemanticResult:
     resolution_state: ClinicalSafetyResolutionState = "unknown"
     temporal_text: str = ""
     intent_type: ClinicalSafetyIntentType = "other"
+    risk_evidence_state: ClinicalSafetyRiskEvidenceState = "unknown"
     high_risk_terms: tuple[str, ...] = field(default_factory=tuple)
     negated_terms: tuple[str, ...] = field(default_factory=tuple)
     confidence: float = 0.0
@@ -98,6 +105,7 @@ class ClinicalSafetySemanticResult:
             "resolution_state": self.resolution_state,
             "temporal_text": self.temporal_text,
             "intent_type": self.intent_type,
+            "risk_evidence_state": self.risk_evidence_state,
             "high_risk_terms": list(self.high_risk_terms),
             "negated_terms": list(self.negated_terms),
             "confidence": self.confidence,
@@ -145,9 +153,11 @@ class ClinicalSafetySemanticResult:
     def to_query_hints(self) -> str:
         """转换为用于向量召回增强的查询提示词。
 
-        :return: 返回临床安全语义提示文本；语义不可信时返回空字符串。
+        :return: 返回临床安全语义提示文本；语义不可信或证据不足时返回空字符串。
         """
         if not self.is_trusted():
+            return ""
+        if self.risk_evidence_state != "sufficient":
             return ""
         lines: list[str] = []
         if self.species != "unknown":
@@ -193,6 +203,12 @@ class ClinicalSafetySemanticItem(BaseModel):
     resolution_state: ClinicalSafetyResolutionState = Field(description="本轮事件是否已明确缓解或结束。")
     temporal_text: str = Field(description="时间范围或恢复状态的用户原文片段。", max_length=80)
     intent_type: ClinicalSafetyIntentType = Field(description="本轮临床安全相关意图类型。")
+    risk_evidence_state: ClinicalSafetyRiskEvidenceState = Field(
+        description=(
+            "当前回合是否包含足以进入临床安全强召回与候选裁决的正向事实；"
+            "只表示证据边界，不表示急诊、诊断或最终动作。"
+        )
+    )
     high_risk_terms: list[str] = Field(description="用户明确表达的正向高风险线索。", max_length=12)
     negated_terms: list[str] = Field(description="用户明确否定的高风险线索。", max_length=12)
     confidence: float = Field(description="结构化抽取整体置信度。", ge=0.0, le=1.0)
@@ -301,6 +317,10 @@ class ClinicalSafetySemanticExtractorAgent:
                     "symptom_state 只表示本轮是否明确表达症状存在、否认症状或未知。",
                     "temporal_state 和 temporal_scope 只表示用户明确表达的时间状态。",
                     "resolution_state 只表示用户是否明确表达事件已经缓解或仍在持续。",
+                    "risk_evidence_state 只表示当前输入是否具备正向事实边界，不表示急诊结论。",
+                    "用户只是询问分诊、知识、预防或假设场景且未描述当前宠物事实时，risk_evidence_state 必须为 insufficient。",
+                    "无法可靠区分事实、否定、假设或询问时，risk_evidence_state 必须为 unknown。",
+                    "不得仅因 intent_type=triage、宠物画像、医学常识或风险资产可能相关而返回 sufficient。",
                     "high_risk_terms 和 negated_terms 只保留用户原文中直接出现的短语。",
                     "confidence 必须反映字段整体可信度，不能因医学风险较高而人为提高。",
                 ],
@@ -316,6 +336,7 @@ class ClinicalSafetySemanticExtractorAgent:
                     "resolution_state": "ongoing|resolved|unknown",
                     "temporal_text": "时间范围或恢复状态的用户原文片段",
                     "intent_type": "toxicity|symptom|prevention|knowledge|triage|other",
+                    "risk_evidence_state": "sufficient|insufficient|unknown",
                     "high_risk_terms": ["用户原文中的短语"],
                     "negated_terms": ["用户原文中被明确否定的短语"],
                     "confidence": 0.0,
@@ -359,6 +380,7 @@ class ClinicalSafetySemanticExtractorAgent:
             resolution_state=item.resolution_state,
             temporal_text=self._clip_text(item.temporal_text, limit=80),
             intent_type=item.intent_type,
+            risk_evidence_state=item.risk_evidence_state,
             high_risk_terms=self._normalize_terms(item.high_risk_terms),
             negated_terms=self._normalize_terms(item.negated_terms),
             confidence=confidence,

@@ -706,6 +706,7 @@ def _empty_clinical_safety_policy_input() -> dict[str, Any]:
             "temporal_scope": "unclear",
             "resolution_state": "unknown",
             "intent_type": "other",
+            "risk_evidence_state": "unknown",
             "high_risk_terms": [],
             "negated_terms": [],
         },

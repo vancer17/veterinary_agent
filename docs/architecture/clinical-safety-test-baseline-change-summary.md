@@ -252,16 +252,18 @@ OPA 临床安全输入新增或强化了候选 `required_context` 字段。
 
 ### 6.1 显式 `risk_evidence_state`
 
-当前实现已经具备最小正向证据边界，但尚未将其产品化为独立结构化字段。
+本节原为阶段 0 的后续 TODO，现已由阶段 1 迁移完成。具体契约和运行时行为以
+`docs/architecture/clinical-safety-evidence-boundary-change-summary.md` 为准。
 
-后续建议：
+阶段 1 已完成：
 
 1. 在临床安全语义契约中引入显式 `risk_evidence_state`。
-2. 将取值控制在 `sufficient`、`insufficient`、`denied`、`unknown` 等有限枚举。
+2. 将取值控制在 `sufficient`、`insufficient`、`unknown` 等有限枚举。
 3. 由语义抽取层产出，由 OPA 消费。
-4. 避免在 Python 业务层扩展为多分支规则状态机。
+4. 移除 evaluator 侧旧字段组合强召回门槛。
+5. 语义未知时不启用候选高分或关键词回退。
 
-当前残留状态：正向风险证据边界尚未产品化为独立字段，仍存在 evaluator 侧召回门槛与 OPA 侧证据判断概念重复的问题。该重复是阶段 0 为阻断误召回保留的过渡实现，后续应通过显式字段或更中性的召回输入契约替代。
+当前残留状态：`observed_features` 和复杂 `required_context` 满足语义仍属于后续阶段，不在本次迁移范围内。
 
 ### 6.2 结构化 `observed_features`
 
@@ -367,7 +369,6 @@ OPA 临床安全输入新增或强化了候选 `required_context` 字段。
 
 | 残留项 | 当前状态 | 后续收束方向 |
 |---|---|---|
-| 召回门槛与证据判断概念重复 | evaluator 侧仍有强召回门槛，OPA 侧也有证据不足判断 | 引入显式 `risk_evidence_state`，或将 evaluator 门槛改为纯召回输入可用性判断 |
 | 召回提示与策略上下文混合 | 语义层仍能生成包含画像和状态字段的查询提示 | 拆分召回事实文本与策略上下文 payload |
 | `required_context.symptoms` 缺少正式事实源 | 当前只能基于既有结构化线索做保守满足判断 | 引入 `observed_features` 或等价事实集合 |
 | 主信号排序契约不完整 | 响应层只实现最低限度主信号投影 | 将排序依据产品化为策略输出或统一投影契约 |
@@ -391,7 +392,7 @@ OPA 临床安全输入新增或强化了候选 `required_context` 字段。
 9. 不把 `required_context` 继续停留在文档字段。
 10. 不把测试夹具扩展为另一套隐式业务规则。
 11. 不把阶段 0 的过渡门槛解释为长期策略权威。
-12. 不在补齐 `risk_evidence_state` 前继续扩展 Python 侧证据判断分支。
+12. 不重新引入 Python 侧字段组合、关键词或候选分数证据判断分支。
 
 ## 9. 阶段 0 完成判定
 

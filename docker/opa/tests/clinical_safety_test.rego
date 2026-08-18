@@ -1,7 +1,7 @@
 # =============================================================================
 # 文件: docker/opa/tests/clinical_safety_test.rego
 # 作用: 验证临床安全 OPA 策略只基于结构化候选与可信语义裁决动作。
-# 范围: 覆盖空候选放行、急诊候选升级、可信否认暴露抑制、低置信语义不抑制和上下文过滤。
+# 范围: 覆盖空候选放行、急诊候选升级、可信否认暴露抑制、证据不可用不升级和上下文过滤。
 # 说明: 测试输入不包含用户原始文本，确保策略不依赖关键词、正则或文本扫描路径。
 # =============================================================================
 
@@ -32,6 +32,7 @@ base_input := {
 		"temporal_scope": "ongoing",
 		"resolution_state": "ongoing",
 		"intent_type": "toxicity",
+		"risk_evidence_state": "sufficient",
 		"high_risk_terms": ["泰诺"],
 		"negated_terms": [],
 	},
@@ -91,6 +92,7 @@ test_triage_without_positive_evidence_does_not_escalate if {
 		"exposure_state": "unknown",
 		"symptom_state": "unknown",
 		"intent_type": "triage",
+		"risk_evidence_state": "insufficient",
 		"high_risk_terms": [],
 	})
 	decision := clinical_safety.decision with input as object.union(base_input, {
@@ -101,7 +103,7 @@ test_triage_without_positive_evidence_does_not_escalate if {
 	decision.action == "allow"
 	decision.allow == true
 	count(decision.signals) == 0
-	decision.reasons[0] == "clinical_safety_candidate_insufficient_evidence:TOXIC_SUBSTANCE"
+	"clinical_safety_candidate_insufficient_evidence:TOXIC_SUBSTANCE" in decision.reasons
 }
 
 test_trusted_denied_exposure_suppresses_toxic_candidate if {
@@ -120,10 +122,11 @@ test_trusted_denied_exposure_suppresses_toxic_candidate if {
 	decision.reasons[0] == "clinical_safety_candidate_suppressed:TOXIC_SUBSTANCE"
 }
 
-test_untrusted_semantic_does_not_suppress_toxic_candidate if {
+test_untrusted_semantic_does_not_escalate_toxic_candidate if {
 	untrusted_semantic := object.union(base_input.semantic, {
 		"trusted": false,
 		"stage": "llm_low_confidence",
+		"risk_evidence_state": "unknown",
 		"exposure_state": "denied",
 		"intent_type": "other",
 		"high_risk_terms": [],
@@ -133,9 +136,25 @@ test_untrusted_semantic_does_not_suppress_toxic_candidate if {
 		"candidates": [toxic_candidate],
 	})
 
-	decision.action == "escalate"
+	decision.action == "allow"
 	decision.allow == true
-	decision.signals[0].severity == "urgent"
+	count(decision.signals) == 0
+	"clinical_safety_candidate_evidence_unavailable:TOXIC_SUBSTANCE" in decision.reasons
+}
+
+test_trusted_unknown_evidence_does_not_escalate_toxic_candidate if {
+	unknown_evidence_semantic := object.union(base_input.semantic, {
+		"risk_evidence_state": "unknown",
+	})
+	decision := clinical_safety.decision with input as object.union(base_input, {
+		"semantic": unknown_evidence_semantic,
+		"candidates": [toxic_candidate],
+	})
+
+	decision.action == "allow"
+	decision.allow == true
+	count(decision.signals) == 0
+	"clinical_safety_candidate_evidence_unavailable:TOXIC_SUBSTANCE" in decision.reasons
 }
 
 test_species_context_mismatch_filters_candidate if {

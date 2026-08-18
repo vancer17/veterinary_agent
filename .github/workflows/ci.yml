@@ -28,6 +28,7 @@ env:
   PYTHON_VERSION: "3.12"
   UV_PYTHON_DOWNLOADS: automatic
   UV_LINK_MODE: copy
+  CI_BUILD_APP_GUARDRAILS_IMAGE: ${{ vars.CI_BUILD_APP_GUARDRAILS_IMAGE || 'false' }}
 
 jobs:
   # ---------------------------------------------------------------------------

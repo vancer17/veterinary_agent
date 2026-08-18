@@ -25,6 +25,7 @@ from vet_agent.clinical_safety import (
     ClinicalSafetyPolicyDecision,
     ClinicalSafetyPolicyInput,
     ClinicalSafetyResolutionState,
+    ClinicalSafetyRiskEvidenceState,
     ClinicalSafetyRetriever,
     ClinicalSafetySex,
     ClinicalSafetySemanticResult,
@@ -430,6 +431,7 @@ def _trusted_toxic_semantic(
     temporal_scope: ClinicalSafetyTemporalScope = "ongoing",
     resolution_state: ClinicalSafetyResolutionState = "ongoing",
     intent_type: ClinicalSafetyIntentType = "toxicity",
+    risk_evidence_state: ClinicalSafetyRiskEvidenceState = "sufficient",
     source_text: str = "我家猫误食泰诺后呕吐。",
 ) -> ClinicalSafetySemanticResult:
     """构造可信毒物语义输入。
@@ -443,6 +445,7 @@ def _trusted_toxic_semantic(
     :param temporal_scope: 时间范围。
     :param resolution_state: 事件恢复状态。
     :param intent_type: 用户意图类型。
+    :param risk_evidence_state: 当前回合正向风险证据边界。
     :param source_text: 原始来源文本摘要。
     :return: 返回临床安全结构化语义结果。
     """
@@ -458,6 +461,7 @@ def _trusted_toxic_semantic(
         resolution_state=resolution_state,
         temporal_text="现在" if temporal_scope == "ongoing" else "昨天",
         intent_type=intent_type,
+        risk_evidence_state=risk_evidence_state,
         high_risk_terms=("泰诺", "呕吐"),
         negated_terms=(),
         confidence=0.95,
@@ -490,18 +494,19 @@ def test_clinical_safety_evaluator_passes_low_confidence_state_to_policy() -> No
         )
     )
 
-    assert result.signals
-    assert result.signals[0].severity == "urgent"
+    assert result.signals == []
+    assert result.fallback_state.retrieval.stage == "none"
+    assert "empty_query" in result.fallback_state.retrieval.reasons
     assert result.fallback_state.semantic.stage == "llm_low_confidence"
     assert result.fallback_state.semantic.degraded is True
     assert result.fallback_state.semantic.strategy == "litellm_response_format_low_confidence"
     assert result.policy_decision["policy_backend"] == "static_test"
 
 
-def test_clinical_safety_evaluator_uses_policy_to_suppress_denied_exposure() -> None:
-    """验证可信否认暴露抑制由注入策略客户端完成。
+def test_clinical_safety_evaluator_does_not_recall_denied_exposure_without_risk_evidence() -> None:
+    """验证可信否认暴露在证据不足时不会进入强召回。
 
-    :return: 无返回值；断言通过表示 evaluator 只负责组装策略输入。
+    :return: 无返回值；断言通过表示 evaluator 使用统一证据边界控制召回入口。
     """
     asset = _human_drug_asset(symptoms=())
     chunk = _recognition_chunk(asset, text="泰诺；对乙酰氨基酚；扑热息痛")
@@ -516,6 +521,7 @@ def test_clinical_safety_evaluator_uses_policy_to_suppress_denied_exposure() -> 
                 exposure_state="denied",
                 symptom_state="unknown",
                 intent_type="other",
+                risk_evidence_state="insufficient",
                 source_text="家里有泰诺，已经收起来了，没有给它吃。",
             ),
         )
@@ -635,6 +641,7 @@ def test_clinical_safety_evaluator_does_not_strongly_recall_without_positive_evi
         temporal_scope="unclear",
         resolution_state="unknown",
         intent_type="triage",
+        risk_evidence_state="insufficient",
         high_risk_terms=(),
         negated_terms=(),
         confidence=0.96,
@@ -670,16 +677,35 @@ def test_clinical_safety_evaluator_uses_vector_thresholds() -> None:
     """
     asset = _danger_pattern_asset()
     chunk = _recognition_chunk(asset, text="发绀；发紫；轻微不适")
+    semantic = _trusted_toxic_semantic(
+        exposure_state="unknown",
+        symptom_state="present",
+        intent_type="symptom",
+        source_text="轻微不适",
+    )
 
-    vector_signal = asyncio.run(_evaluator_for(asset, chunk, hit_score=0.68).assess("轻微不适"))
-    urgent_vector_signal = asyncio.run(_evaluator_for(asset, chunk, hit_score=0.78).assess("轻微不适"))
+    vector_signal = asyncio.run(
+        _evaluator_for(asset, chunk, hit_score=0.68).assess(
+            "轻微不适",
+            semantic_result=semantic,
+        )
+    )
+    urgent_vector_signal = asyncio.run(
+        _evaluator_for(asset, chunk, hit_score=0.78).assess(
+            "轻微不适",
+            semantic_result=semantic,
+        )
+    )
     low_score_vector_signal = asyncio.run(
         _evaluator_for(
             asset,
             chunk,
             hit_score=0.28,
             min_score=0.20,
-        ).assess("轻微不适")
+        ).assess(
+            "轻微不适",
+            semantic_result=semantic,
+        )
     )
 
     assert vector_signal
@@ -708,6 +734,13 @@ def test_clinical_safety_evaluator_compacts_duplicate_matched_terms() -> None:
             "猫现在牙龈发紫，呼吸很快。",
             context_text="宠物画像: 物种=猫, 年龄=5岁",
             age_text="5岁",
+            semantic_result=_trusted_toxic_semantic(
+                species="cat",
+                exposure_state="unknown",
+                symptom_state="present",
+                intent_type="symptom",
+                source_text="猫现在牙龈发紫，呼吸很快。",
+            ),
         )
     )
 
