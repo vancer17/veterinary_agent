@@ -377,8 +377,18 @@ def _candidate_payload(candidate: ClinicalSafetyCandidate) -> dict[str, Any]:
         "retrieval_source": candidate.retrieval_source,
         "message": _candidate_message(candidate),
         "matched_terms": list(candidate.matched_terms()),
+        "required_context": _required_context_payload(asset.required_context),
         "decision_hints": dict(asset.decision_hints),
     }
+
+
+def _required_context_payload(value: dict[str, tuple[str, ...]]) -> dict[str, list[str]]:
+    """构造 OPA 裁决使用的候选前置上下文要求。
+
+    :param value: 标准资产声明的 required_context。
+    :return: 返回可序列化的 required_context 字典。
+    """
+    return {key: list(items) for key, items in value.items() if items}
 
 
 def _candidate_message(candidate: ClinicalSafetyCandidate) -> str:

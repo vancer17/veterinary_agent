@@ -86,6 +86,24 @@ test_emergency_candidate_escalates if {
 	"泰诺" in decision.signals[0].matched_terms
 }
 
+test_triage_without_positive_evidence_does_not_escalate if {
+	triage_semantic := object.union(base_input.semantic, {
+		"exposure_state": "unknown",
+		"symptom_state": "unknown",
+		"intent_type": "triage",
+		"high_risk_terms": [],
+	})
+	decision := clinical_safety.decision with input as object.union(base_input, {
+		"semantic": triage_semantic,
+		"candidates": [toxic_candidate],
+	})
+
+	decision.action == "allow"
+	decision.allow == true
+	count(decision.signals) == 0
+	decision.reasons[0] == "clinical_safety_candidate_insufficient_evidence:TOXIC_SUBSTANCE"
+}
+
 test_trusted_denied_exposure_suppresses_toxic_candidate if {
 	denied_semantic := object.union(base_input.semantic, {
 		"exposure_state": "denied",
@@ -132,4 +150,29 @@ test_species_context_mismatch_filters_candidate if {
 	decision.allow == true
 	count(decision.signals) == 0
 	decision.reasons[0] == "clinical_safety_candidate_context_mismatch:TOXIC_SUBSTANCE"
+}
+
+test_required_context_mismatch_filters_candidate if {
+	contextual_candidate := object.union(toxic_candidate, {
+		"code": "CYANOSIS_RISK_PATTERN",
+		"asset_type": "emergency_red_flag",
+		"required_context": {
+			"species": ["cat", "dog"],
+			"symptoms": ["呼吸困难"],
+		},
+	})
+	semantic_without_symptom := object.union(base_input.semantic, {
+		"exposure_state": "unknown",
+		"symptom_state": "present",
+		"high_risk_terms": ["呕吐"],
+	})
+	decision := clinical_safety.decision with input as object.union(base_input, {
+		"semantic": semantic_without_symptom,
+		"candidates": [contextual_candidate],
+	})
+
+	decision.action == "allow"
+	decision.allow == true
+	count(decision.signals) == 0
+	decision.reasons[0] == "clinical_safety_candidate_required_context_mismatch:CYANOSIS_RISK_PATTERN"
 }

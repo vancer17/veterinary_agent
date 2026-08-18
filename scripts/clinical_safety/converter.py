@@ -300,8 +300,13 @@ def _convert_item(
     age_scope = _age_scope(f"{item_text}。{aliases_text}。{species_text}")
     required_context = _required_context(species_scope, sex_scope, age_scope, symptoms)
     decision_hints = _decision_hints(asset_type, action_class)
-    asset_id = _asset_id(asset_type, item_text, section, index)
     canonical_name = _canonical_name(item_text, index)
+    asset_id = _asset_id(asset_type, item_text, section, index)
+    code = _asset_code(
+        raw_item,
+        canonical_name=canonical_name,
+        source_path=f"{section}[{index}]",
+    )
     return ClinicalSafetyAsset(
         asset_id=asset_id,
         asset_type=asset_type,
@@ -312,7 +317,7 @@ def _convert_item(
         age_scope=age_scope,
         severity=severity,
         action_class=action_class,
-        code=_asset_code(asset_type, canonical_name, section, index),
+        code=code,
         aliases=aliases,
         carriers=carriers,
         user_expressions=user_expressions,
@@ -424,33 +429,23 @@ def _chunks_for_asset(asset: ClinicalSafetyAsset) -> list[ClinicalSafetyChunk]:
 
 
 def _asset_code(
-    asset_type: ClinicalSafetyAssetType,
+    raw_item: dict[str, Any],
+    *,
     canonical_name: str,
-    section: str,
-    index: int,
+    source_path: str,
 ) -> str:
-    """生成离线资产治理阶段使用的稳定安全信号编码。
+    """读取原始资产显式声明的稳定安全信号编码。
 
-    :param asset_type: 标准安全资产类型。
+    :param raw_item: 原始临床安全条目。
     :param canonical_name: 资产规范名称。
-    :param section: 原始条目所属顶层分组。
-    :param index: 条目在分组中的序号。
-    :return: 返回离线生成并等待审核发布的安全信号编码。
+    :param source_path: 原始条目的来源路径。
+    :return: 返回经规范化的显式安全信号编码。
+    :raises ValueError: 原始条目缺少 code 时抛出，避免离线转换器兜底生成临时编码。
     """
-    curated_codes: dict[str, str] = {
-        "木糖醇": "TOXIC_XYLITOL",
-        "尿频尿少但仍能尿一点 / 疑似部分尿道梗阻": "PARTIAL_URINARY_OBSTRUCTION_RISK",
-        "老年猫:消瘦 + 食欲不减反而亢进 + 多饮多尿": "SENIOR_CAT_POLYDIPSIA_WEIGHT_LOSS_RISK",
-        "胃扩张扭转": "GDV_RISK_PATTERN",
-        "舌/牙龈发绀发紫": "CYANOSIS_RISK_PATTERN",
-    }
-    if canonical_name in curated_codes:
-        return curated_codes[canonical_name]
-    if asset_type in {"toxin", "human_drug", "plant_toxin", "chemical_toxin"}:
-        return f"TOXIC_SUBSTANCE_{index:03d}"
-    if asset_type == "emergency_red_flag":
-        return f"EMERGENCY_RED_FLAG_{index:03d}"
-    return f"DANGER_PATTERN_{section.upper()}_{index:03d}"
+    raw_code = _clean_text(raw_item.get("code"))
+    if not raw_code:
+        raise ValueError(f"clinical safety asset code is required: {source_path}:{canonical_name}")
+    return raw_code.strip().upper()
 
 
 def _asset_type(section: str, category: str, item_text: str) -> ClinicalSafetyAssetType:
