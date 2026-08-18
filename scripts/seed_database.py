@@ -20,17 +20,18 @@ from sqlalchemy.orm import Session
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from vet_agent import Settings
-from vet_agent.clinical_safety import FileClinicalSafetyRepository
+from vet_agent.clinical_safety import FileClinicalSafetyRepository, validate_clinical_safety_publish_contract
 from vet_agent.db import (
     ClinicalSafetyAssetModel,
     ClinicalSafetyChunkModel,
     ConsultationDomainModel,
     ConsultationSlotModel,
     KnowledgeChunkModel,
-    SafetyRuleModel,
+    TaskRoutingDomainModel,
     make_session_factory,
 )
 from vet_agent.runtime import QwenEmbeddingClient
+from vet_agent.task_routing import default_task_routing_domains
 
 
 def parse_args() -> argparse.Namespace:
@@ -45,8 +46,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--with-embeddings", action="store_true")
     parser.add_argument(
         "--clinical-safety-review-status",
-        default="approved",
+        default=os.getenv("CLINICAL_SAFETY_REVIEW_STATUS", "pending"),
         choices=("approved", "pending"),
+    )
+    parser.add_argument(
+        "--clinical-safety-dry-run",
+        action="store_true",
+        help="只执行临床安全发布态严格契约校验，不写入数据库。",
+    )
+    parser.add_argument(
+        "--allow-missing-clinical-safety-embeddings",
+        action="store_true",
+        help="发布态严格校验时允许 chunk 暂缺 embedding 元信息；仅开发 dry-run 使用。",
     )
     return parser.parse_args()
 
@@ -57,16 +68,22 @@ def main() -> None:
     :return: 无返回值。
     """
     args = parse_args()
+    clinical_safety_dir = Path(args.clinical_safety_dir)
+    if args.clinical_safety_dry_run:
+        validate_clinical_safety_assets_for_publish(
+            clinical_safety_dir,
+            require_embeddings=not args.allow_missing_clinical_safety_embeddings,
+        )
+        return
     if not args.database_url:
         raise SystemExit("DATABASE_URL is required")
 
     settings = Settings.from_env()
     embedding_client = QwenEmbeddingClient(settings) if args.with_embeddings else None
     seed_dir = Path(args.seed_dir)
-    clinical_safety_dir = Path(args.clinical_safety_dir)
     session_factory = make_session_factory(args.database_url)
     with session_factory() as session:
-        seed_safety(session, seed_dir / "safety_rules.json")
+        seed_task_routing_domains(session)
         seed_consultation(session, seed_dir / "consultation_rules.json")
         seed_knowledge(session, seed_dir / "knowledge_chunks.json", embedding_client)
         seed_clinical_safety(
@@ -75,44 +92,32 @@ def main() -> None:
             embedding_client,
             embedding_model=settings.qwen_embedding_model,
             review_status=args.clinical_safety_review_status,
+            require_publish_embeddings=not args.allow_missing_clinical_safety_embeddings,
         )
         session.commit()
 
 
-def seed_safety(session: Session, path: Path) -> None:
-    """写入安全规则 seed。
+def seed_task_routing_domains(session: Session) -> None:
+    """写入任务路由正式任务域目录。
 
     :param session: 数据库会话。
-    :param path: 安全规则 JSON 文件路径。
     :return: 无返回值。
     """
-    rows = json.loads(path.read_text(encoding="utf-8"))
-    for item in rows:
-        for pattern in item.get("patterns", []):
-            model = session.scalar(
-                select(SafetyRuleModel).where(
-                    SafetyRuleModel.code == item["code"],
-                    SafetyRuleModel.rule_type == item["rule_type"],
-                    SafetyRuleModel.match_type == item["match_type"],
-                    SafetyRuleModel.pattern == pattern,
-                )
-            )
-            if model is None:
-                model = SafetyRuleModel(
-                    code=item["code"],
-                    rule_type=item["rule_type"],
-                    match_type=item["match_type"],
-                    pattern=pattern,
-                )
-                session.add(model)
-            model.severity = item.get("severity", "caution")
-            model.message = item["message"]
-            model.response_template = item.get("response_template")
-            model.metadata_json = item.get("metadata", {})
+    for item in default_task_routing_domains():
+        model = session.get(TaskRoutingDomainModel, item.domain)
+        if model is None:
+            model = TaskRoutingDomainModel(domain=item.domain)
+            session.add(model)
+        model.title = item.title
+        model.description = item.description
+        model.priority = item.priority
+        model.enabled = True
+        model.version = item.version
+        model.metadata_json = dict(item.metadata)
 
 
 def seed_consultation(session: Session, path: Path) -> None:
-    """写入问诊分流 seed。
+    """写入问诊领域与槽位目录 seed。
 
     :param session: 数据库会话。
     :param path: 问诊规则 JSON 文件路径。
@@ -125,7 +130,6 @@ def seed_consultation(session: Session, path: Path) -> None:
             model = ConsultationDomainModel(domain=item["domain"])
             session.add(model)
         model.required_slots = item.get("required_slots", [])
-        model.classifier_keywords = item.get("classifier_keywords", [])
         model.priority = int(item.get("priority", 100))
     for item in raw.get("slots", []):
         model = session.get(ConsultationSlotModel, item["slot_name"])
@@ -134,7 +138,6 @@ def seed_consultation(session: Session, path: Path) -> None:
             session.add(model)
         model.question = item["question"]
         model.label = item["label"]
-        model.extraction_rules = item.get("extraction_rules", [])
         model.priority = int(item.get("priority", 100))
 
 
@@ -179,6 +182,7 @@ def seed_clinical_safety(
     *,
     embedding_model: str,
     review_status: str = "approved",
+    require_publish_embeddings: bool = True,
 ) -> None:
     """写入临床安全独立表。
 
@@ -187,8 +191,15 @@ def seed_clinical_safety(
     :param embedding_client: 可选的 embedding 客户端。
     :param embedding_model: 生成向量时使用的模型名称。
     :param review_status: 写入数据库时采用的审核状态。
+    :param require_publish_embeddings: 发布态导入是否要求静态 chunk 已具备 embedding 元信息。
     :return: 无返回值。
     """
+    if review_status == "approved":
+        validate_clinical_safety_assets_for_publish(
+            asset_dir,
+            require_embeddings=require_publish_embeddings
+            and not (embedding_client is not None and embedding_client.available),
+        )
     repository = FileClinicalSafetyRepository(asset_dir)
     assets = repository.assets(published_only=False)
     chunks = repository.chunks(published_only=False)
@@ -200,7 +211,7 @@ def seed_clinical_safety(
         if model is None:
             model = ClinicalSafetyAssetModel(asset_id=asset.asset_id)
             session.add(model)
-        model.code = asset.resolved_code()
+        model.code = asset.code
         model.asset_type = asset.asset_type
         model.canonical_name = asset.canonical_name
         model.category = asset.category
@@ -243,15 +254,43 @@ def seed_clinical_safety(
         if embedding_client is not None and embedding_client.available:
             try:
                 embedding = embedding_client.embed(chunk.embedding_text)
-            except Exception:
+            except Exception as exc:
+                if approved:
+                    raise RuntimeError(
+                        f"clinical safety published chunk embedding failed: {chunk.chunk_id}"
+                    ) from exc
                 embedding = None
+            if approved and not embedding:
+                raise RuntimeError(f"clinical safety published chunk embedding is empty: {chunk.chunk_id}")
             model.embedding = embedding
             model.embedding_model = embedding_model if embedding else None
             model.embedding_dimension = len(embedding) if embedding else None
         else:
+            if approved:
+                raise RuntimeError("clinical safety approved import requires an available embedding client")
             model.embedding = None
             model.embedding_model = None
             model.embedding_dimension = None
+
+
+def validate_clinical_safety_assets_for_publish(
+    asset_dir: Path,
+    *,
+    require_embeddings: bool = True,
+) -> None:
+    """执行临床安全静态资产发布态严格契约 dry-run。
+
+    :param asset_dir: 标准临床安全资产目录。
+    :param require_embeddings: 是否要求发布态 chunk 已具备 embedding 元信息。
+    :return: 无返回值；校验通过表示资产可以进入发布态导入流程。
+    """
+    asset_document = json.loads((asset_dir / "vet_safety_assets.v1.json").read_text(encoding="utf-8"))
+    chunk_document = json.loads((asset_dir / "vet_safety_chunks.v1.json").read_text(encoding="utf-8"))
+    validate_clinical_safety_publish_contract(
+        asset_document,
+        chunk_document,
+        require_embeddings=require_embeddings,
+    )
 
 
 def _content_hash(text: str) -> str:

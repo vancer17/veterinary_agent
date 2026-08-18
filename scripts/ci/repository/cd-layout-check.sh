@@ -124,6 +124,17 @@ if grep -R -n -E '@sha256:[[:xdigit:]]{32,}' \
     exit 1
 fi
 
+for worker_compose_file in docker/compose.yml docker/compose.dev.yml; do
+    if ! grep -q -E '^[[:space:]]{2}worker:' "$worker_compose_file"; then
+        echo "Compose 缺少独立后台 worker 服务: ${worker_compose_file}" >&2
+        exit 1
+    fi
+    if ! grep -q 'vet_agent.background_tasks.worker' "$worker_compose_file"; then
+        echo "后台 worker 服务未指向标准任务入口: ${worker_compose_file}" >&2
+        exit 1
+    fi
+done
+
 if grep -R -n -E '(^|[[:space:]])--build([[:space:]]|$)' scripts/cd/repository; then
     echo "生产部署脚本不得包含 --build 参数。" >&2
     exit 1

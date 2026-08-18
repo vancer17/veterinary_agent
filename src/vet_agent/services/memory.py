@@ -7,38 +7,37 @@
 
 from __future__ import annotations
 
-import asyncio
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import Any
 
 from vet_agent import TrustedIdentity
+from vet_agent.repositories import ConsultationStateRepository, JsonConsultationStateRepository
 from vet_agent.stores import JsonDocumentStore
 
 
 class MemoryService:
-    def __init__(self, store: JsonDocumentStore) -> None:
-        """初始化当前对象。
+    """基于 JSON 文档的记忆业务服务，供显式测试或嵌入场景使用。
 
-        :param store: 参数 store。
+    :return: 无返回值。
+    """
+
+    def __init__(
+        self,
+        store: JsonDocumentStore,
+        consultation_state_repository: ConsultationStateRepository | None = None,
+    ) -> None:
+        """初始化 JSON 记忆业务服务及问诊状态仓储。
+
+        :param store: JSON 记忆文档存储。
+        :param consultation_state_repository: 活跃问诊状态仓储；
+            未提供时使用当前文档存储构造测试实现。
         :return: 无返回值。
         """
         self.store = store
-        self._turn_locks: dict[str, asyncio.Lock] = {}
-        self._idempotency_locks: dict[str, asyncio.Lock] = {}
-
-    @asynccontextmanager
-    async def turn_lock(self, identity: TrustedIdentity) -> AsyncIterator[None]:
-        """执行 turn_lock 业务逻辑。
-
-        :param identity: 可信身份信息。
-        :return: 返回异步执行结果。
-        """
-        key = f"{identity.user_id}:{identity.pet_id}:{identity.session_id}"
-        lock = self._turn_locks.setdefault(key, asyncio.Lock())
-        async with lock:
-            yield
+        self.consultation_state_repository = (
+            consultation_state_repository
+            or JsonConsultationStateRepository(store)
+        )
 
     async def read(self, identity: TrustedIdentity) -> dict[str, Any]:
         """读取指定范围内的持久化数据。
@@ -93,92 +92,70 @@ class MemoryService:
         self.store.save(data)
 
     async def read_consultation_state(self, identity: TrustedIdentity) -> dict[str, Any]:
-        """执行 read_consultation_state 业务逻辑。
+        """通过问诊状态仓储读取默认活跃问诊状态。
 
-        :param identity: 可信身份信息。
-        :return: 返回函数执行结果。
+        :param identity: 当前可信用户、宠物与会话范围。
+        :return: 返回默认活跃问诊状态。
         """
-        data = self.store.load()
-        return (
-            data.get("sessions", {})
-            .get(identity.session_id, {})
-            .get("consultation_state", {})
-        )
+        return self.consultation_state_repository.read_default(identity)
 
     async def save_consultation_state(
         self,
         identity: TrustedIdentity,
         state: dict[str, Any],
     ) -> None:
-        """执行 save_consultation_state 业务逻辑。
+        """通过问诊状态仓储保存默认活跃问诊状态。
 
-        :param identity: 可信身份信息。
-        :param state: 参数 state。
-        :return: 返回函数执行结果。
+        :param identity: 当前可信用户、宠物与会话范围。
+        :param state: 待保存的结构化问诊状态。
+        :return: 无返回值。
         """
-        data = self.store.load()
-        data.setdefault("owners", {}).setdefault(identity.user_id, {})
-        data.setdefault("pets", {}).setdefault(identity.pet_id, {"turns": []})
-        session_memory = data.setdefault("sessions", {}).setdefault(identity.session_id, {"turns": []})
-        session_memory["consultation_state"] = state
-        data["pets"][identity.pet_id]["consultation_state"] = state
-        self.store.save(data)
+        self.consultation_state_repository.save_default(identity, state)
 
     async def read_task_consultation_states(self, identity: TrustedIdentity) -> dict[str, Any]:
-        """执行 read_task_consultation_states 业务逻辑。
+        """通过问诊状态仓储读取多任务活跃问诊状态。
 
-        :param identity: 可信身份信息。
-        :return: 返回函数执行结果。
+        :param identity: 当前可信用户、宠物与会话范围。
+        :return: 返回任务键到问诊状态的映射。
         """
-        data = self.store.load()
-        return (
-            data.get("sessions", {})
-            .get(identity.session_id, {})
-            .get("task_consultation_states", {})
-        )
+        return self.consultation_state_repository.read_tasks(identity)
 
     async def save_task_consultation_states(
         self,
         identity: TrustedIdentity,
         states: dict[str, Any],
+        *,
+        clear_default_state: bool = False,
     ) -> None:
-        """替换当前会话仍未完成的多任务问诊状态。
+        """通过问诊状态仓储替换多任务活跃问诊状态。
 
-        :param identity: 可信身份信息。
+        :param identity: 当前可信用户、宠物与会话范围。
         :param states: 未完成任务的活跃问诊状态集合。
-        :return: 返回函数执行结果。
+        :param clear_default_state: 是否在同一次写入中清理默认问诊状态；
+            仅用于 __default__ 迁移到具体任务键的场景。
+        :return: 无返回值。
         """
-        data = self.store.load()
-        data.setdefault("owners", {}).setdefault(identity.user_id, {})
-        data.setdefault("pets", {}).setdefault(identity.pet_id, {"turns": []})
-        session_memory = data.setdefault("sessions", {}).setdefault(identity.session_id, {"turns": []})
-        session_memory["task_consultation_states"] = states
-        data["pets"][identity.pet_id]["task_consultation_states"] = states
-        self.store.save(data)
+        self.consultation_state_repository.replace_tasks(
+            identity,
+            states,
+            clear_default=clear_default_state,
+        )
 
     async def clear_default_consultation_state(self, identity: TrustedIdentity) -> None:
-        """清理当前会话的默认活跃问诊状态。
+        """通过问诊状态仓储清理默认活跃问诊状态。
 
-        :param identity: 可信身份信息。
-        :return: 返回函数执行结果。
+        :param identity: 当前可信用户、宠物与会话范围。
+        :return: 无返回值。
         """
-        data = self.store.load()
-        data.get("sessions", {}).get(identity.session_id, {}).pop("consultation_state", None)
-        data.get("pets", {}).get(identity.pet_id, {}).pop("consultation_state", None)
-        self.store.save(data)
+        self.consultation_state_repository.clear_default(identity)
 
     async def clear_consultation_state(self, identity: TrustedIdentity) -> None:
-        """清理当前会话所有活跃问诊状态。
+        """通过问诊状态仓储清理全部活跃问诊状态。
 
-        :param identity: 可信身份信息。
-        :return: 返回函数执行结果。
+        :param identity: 当前可信用户、宠物与会话范围。
+        :return: 无返回值。
         """
-        data = self.store.load()
-        data.get("sessions", {}).get(identity.session_id, {}).pop("consultation_state", None)
-        data.get("sessions", {}).get(identity.session_id, {}).pop("task_consultation_states", None)
-        data.get("pets", {}).get(identity.pet_id, {}).pop("consultation_state", None)
-        data.get("pets", {}).get(identity.pet_id, {}).pop("task_consultation_states", None)
-        self.store.save(data)
+        self.consultation_state_repository.clear_all(identity)
 
     async def delete_pet_memory(self, pet_id: str, user_id: str | None = None) -> None:
         """执行 delete_pet_memory 业务逻辑。
@@ -190,6 +167,7 @@ class MemoryService:
         data = self.store.load()
         data.get("pets", {}).pop(pet_id, None)
         self.store.save(data)
+        self.consultation_state_repository.delete_for_pet(pet_id, user_id)
 
     async def upsert_pet_fact(
         self,
@@ -230,176 +208,3 @@ class MemoryService:
             "updated_at": datetime.now(UTC).isoformat(),
         }
         self.store.save(data)
-
-    async def read_idempotency_response(
-        self,
-        identity: TrustedIdentity,
-        idempotency_key: str,
-    ) -> dict[str, Any] | None:
-        """执行 read_idempotency_response 业务逻辑。
-
-        :param identity: 可信身份信息。
-        :param idempotency_key: 幂等键。
-        :return: 返回函数执行结果。
-        """
-        data = self.store.load()
-        key = self._idempotency_key(identity, idempotency_key)
-        record = data.get("idempotency_records", {}).get(key)
-        if isinstance(record, dict):
-            snapshot = record.get("response_snapshot")
-            return dict(snapshot) if isinstance(snapshot, dict) else None
-        return None
-
-    async def begin_idempotency(
-        self,
-        identity: TrustedIdentity,
-        *,
-        idempotency_key: str,
-        request_id: str,
-        trace_id: str,
-        wait_seconds: float,
-        processing_ttl_seconds: float,
-    ) -> dict[str, Any]:
-        """执行 begin_idempotency 业务逻辑。
-
-        :param identity: 可信身份信息。
-        :param idempotency_key: 幂等键。
-        :param request_id: 请求标识。
-        :param trace_id: 链路追踪标识。
-        :param wait_seconds: 等待秒数。
-        :param processing_ttl_seconds: 处理中状态的过期秒数。
-        :return: 返回函数执行结果。
-        """
-        key = self._idempotency_key(identity, idempotency_key)
-        lock = self._idempotency_locks.setdefault(key, asyncio.Lock())
-        deadline = asyncio.get_running_loop().time() + wait_seconds
-        while True:
-            async with lock:
-                data = self.store.load()
-                records = data.setdefault("idempotency_records", {})
-                record = records.get(key)
-                if isinstance(record, dict):
-                    snapshot = record.get("response_snapshot")
-                    if record.get("status") == "completed" and isinstance(snapshot, dict):
-                        return {"state": "replayed", "response_snapshot": dict(snapshot)}
-                    if self._is_stale(self._parse_time(record.get("updated_at")), processing_ttl_seconds):
-                        records[key] = self._processing_record(request_id, trace_id)
-                        self.store.save(data)
-                        return {"state": "claimed"}
-                else:
-                    records[key] = self._processing_record(request_id, trace_id)
-                    self.store.save(data)
-                    return {"state": "claimed"}
-            if asyncio.get_running_loop().time() >= deadline:
-                return {"state": "busy"}
-            await asyncio.sleep(0.05)
-
-    async def save_idempotency_response(
-        self,
-        identity: TrustedIdentity,
-        *,
-        idempotency_key: str,
-        request_id: str,
-        trace_id: str,
-        response_snapshot: dict[str, Any],
-    ) -> None:
-        """执行 save_idempotency_response 业务逻辑。
-
-        :param identity: 可信身份信息。
-        :param idempotency_key: 幂等键。
-        :param request_id: 请求标识。
-        :param trace_id: 链路追踪标识。
-        :param response_snapshot: 响应快照。
-        :return: 返回函数执行结果。
-        """
-        data = self.store.load()
-        key = self._idempotency_key(identity, idempotency_key)
-        data.setdefault("idempotency_records", {})[key] = {
-            "request_id": request_id,
-            "trace_id": trace_id,
-            "response_id": response_snapshot.get("id"),
-            "status": "completed",
-            "response_snapshot": response_snapshot,
-            "updated_at": datetime.now(UTC).isoformat(),
-        }
-        self.store.save(data)
-
-    async def mark_idempotency_failed(
-        self,
-        identity: TrustedIdentity,
-        *,
-        idempotency_key: str,
-        request_id: str,
-        trace_id: str,
-        error_type: str,
-    ) -> None:
-        """执行 mark_idempotency_failed 业务逻辑。
-
-        :param identity: 可信身份信息。
-        :param idempotency_key: 幂等键。
-        :param request_id: 请求标识。
-        :param trace_id: 链路追踪标识。
-        :param error_type: 错误类型。
-        :return: 返回函数执行结果。
-        """
-        data = self.store.load()
-        key = self._idempotency_key(identity, idempotency_key)
-        data.setdefault("idempotency_records", {})[key] = {
-            "request_id": request_id,
-            "trace_id": trace_id,
-            "status": "failed",
-            "response_snapshot": None,
-            "error_type": error_type,
-            "updated_at": datetime.now(UTC).isoformat(),
-        }
-        self.store.save(data)
-
-    def _idempotency_key(self, identity: TrustedIdentity, idempotency_key: str) -> str:
-        """执行 _idempotency_key 内部辅助逻辑。
-
-        :param identity: 可信身份信息。
-        :param idempotency_key: 幂等键。
-        :return: 返回函数执行结果。
-        """
-        return f"{identity.user_id}:{identity.pet_id}:{identity.session_id}:{idempotency_key}"
-
-    def _processing_record(self, request_id: str, trace_id: str) -> dict[str, Any]:
-        """执行 _processing_record 内部辅助逻辑。
-
-        :param request_id: 请求标识。
-        :param trace_id: 链路追踪标识。
-        :return: 返回函数执行结果。
-        """
-        return {
-            "request_id": request_id,
-            "trace_id": trace_id,
-            "status": "processing",
-            "response_snapshot": None,
-            "updated_at": datetime.now(UTC).isoformat(),
-        }
-
-    def _parse_time(self, value: Any) -> datetime | None:
-        """执行内部解析逻辑。
-
-        :param value: 待处理值。
-        :return: 返回函数执行结果。
-        """
-        if not isinstance(value, str) or not value:
-            return None
-        try:
-            return datetime.fromisoformat(value)
-        except ValueError:
-            return None
-
-    def _is_stale(self, updated_at: datetime | None, ttl_seconds: float) -> bool:
-        """执行 _is_stale 内部辅助逻辑。
-
-        :param updated_at: 参数 updated_at。
-        :param ttl_seconds: 参数 ttl_seconds。
-        :return: 返回函数执行结果。
-        """
-        if updated_at is None:
-            return True
-        if updated_at.tzinfo is None:
-            updated_at = updated_at.replace(tzinfo=UTC)
-        return (datetime.now(UTC) - updated_at).total_seconds() > ttl_seconds

@@ -38,20 +38,48 @@ class StaticEmbeddingClient:
         return [0.2, 0.8]
 
 
+class UnavailableEmbeddingClient:
+    """提供不可用 embedding 状态的测试客户端。"""
+
+    @property
+    def available(self) -> bool:
+        """声明测试 embedding 客户端不可用。
+
+        :return: 始终返回 False。
+        """
+        return False
+
+    def embed(self, text: str) -> list[float]:
+        """防止不可用客户端被错误调用。
+
+        :param text: 待向量化的查询文本。
+        :return: 本路径不应返回向量。
+        :raises AssertionError: 该方法被调用时表示召回器未遵循可用性门禁。
+        """
+        raise AssertionError(f"不可用 embedding 客户端不应被调用：{text}")
+
+
 class VectorOnlyClinicalSafetyRepository:
     """提供固定向量命中的内存临床安全仓储。"""
 
-    def __init__(self, asset: ClinicalSafetyAsset, chunk: ClinicalSafetyChunk) -> None:
+    def __init__(
+        self,
+        asset: ClinicalSafetyAsset | None,
+        chunk: ClinicalSafetyChunk,
+        *,
+        fail_asset_read: bool = False,
+    ) -> None:
         """初始化内存测试仓储。
 
         :param asset: 用于候选聚合的测试资产。
         :param chunk: 用于向量命中的测试 chunk。
+        :param fail_asset_read: 是否模拟资产读取异常。
         :return: 无返回值。
         """
         self.asset = asset
         self.chunk = chunk
+        self.fail_asset_read = fail_asset_read
         self.vector_calls = 0
-        self.text_calls = 0
 
     def assets(self, *, published_only: bool = True) -> list[ClinicalSafetyAsset]:
         """读取测试资产。
@@ -60,7 +88,7 @@ class VectorOnlyClinicalSafetyRepository:
         :return: 返回单个测试资产。
         """
         del published_only
-        return [self.asset]
+        return [self.asset] if self.asset is not None else []
 
     def chunks(
         self,
@@ -92,6 +120,10 @@ class VectorOnlyClinicalSafetyRepository:
         :return: 标识匹配时返回测试资产，否则返回 None。
         """
         del published_only
+        if self.fail_asset_read:
+            raise RuntimeError("asset read failed")
+        if self.asset is None:
+            return None
         return self.asset if asset_id == self.asset.asset_id else None
 
     def chunks_by_asset_id(
@@ -107,6 +139,8 @@ class VectorOnlyClinicalSafetyRepository:
         :return: 标识匹配时返回测试 chunk，否则返回空列表。
         """
         del published_only
+        if self.asset is None:
+            return []
         return [self.chunk] if asset_id == self.asset.asset_id else []
 
     def retrieve_vector_chunk_hits(
@@ -141,26 +175,6 @@ class VectorOnlyClinicalSafetyRepository:
             )
         ]
 
-    def retrieve_text_chunk_hits(
-        self,
-        query: str,
-        *,
-        chunk_types: tuple[ClinicalSafetyChunkType, ...],
-        limit: int,
-    ) -> list[ClinicalSafetyChunkHit]:
-        """记录文本回退调用；本测试不应走到该分支。
-
-        :param query: 原始查询文本。
-        :param chunk_types: 允许参与召回的 chunk 类型。
-        :param limit: 返回 chunk 命中数量上限。
-        :return: 始终返回空列表。
-        """
-        self.text_calls += 1
-        assert query
-        assert chunk_types
-        assert limit > 0
-        return []
-
     def is_ready(self) -> bool:
         """声明测试仓储始终可用。
 
@@ -184,6 +198,7 @@ def test_retriever_prefers_pgvector_hits_when_embedding_is_available() -> None:
         age_scope=(),
         severity="urgent",
         action_class="emergency",
+        code="CYANOSIS_RISK_PATTERN",
         aliases=("牙龈发紫",),
     )
     chunk = ClinicalSafetyChunk(
@@ -205,8 +220,131 @@ def test_retriever_prefers_pgvector_hits_when_embedding_is_available() -> None:
     candidates = retriever.retrieve("猫牙龈发紫，呼吸很快。")
 
     assert repository.vector_calls == 1
-    assert repository.text_calls == 0
     assert len(candidates) == 1
-    assert candidates[0].asset.resolved_code() == "CYANOSIS_RISK_PATTERN"
+    assert candidates[0].asset.code == "CYANOSIS_RISK_PATTERN"
     assert candidates[0].score_type == "cosine_similarity"
     assert candidates[0].retrieval_source == "clinical_safety_pgvector"
+
+
+def test_retriever_returns_empty_when_embedding_is_unavailable() -> None:
+    """验证 embedding 不可用时不会回退到文本、文件或资产短语召回。
+
+    :return: 无返回值；断言通过表示候选召回遵循向量主路径 Fail Fast 语义。
+    """
+    asset = ClinicalSafetyAsset(
+        asset_id="safety_emergency_cyanosis",
+        asset_type="emergency_red_flag",
+        canonical_name="舌/牙龈发绀发紫",
+        category="呼吸循环",
+        species_scope=("dog", "cat"),
+        sex_scope=(),
+        age_scope=(),
+        severity="urgent",
+        action_class="emergency",
+        code="CYANOSIS_RISK_PATTERN",
+        aliases=("牙龈发紫",),
+    )
+    chunk = ClinicalSafetyChunk(
+        chunk_id="safety_emergency_cyanosis.recognition.v1",
+        asset_id=asset.asset_id,
+        chunk_type="recognition",
+        title="舌/牙龈发绀发紫 风险识别",
+        embedding_text="牙龈发紫；舌头发青；发绀",
+        metadata={},
+        review_status="approved",
+    )
+    repository = VectorOnlyClinicalSafetyRepository(asset, chunk)
+    retriever = ClinicalSafetyRetriever(
+        repository,
+        UnavailableEmbeddingClient(),
+        min_score=0.35,
+    )
+
+    result = retriever.retrieve_with_resolution("猫牙龈发紫，呼吸很快。")
+
+    assert repository.vector_calls == 0
+    assert result.candidates == []
+    assert result.state.stage == "none"
+    assert result.state.degraded is True
+    assert result.state.reasons == (
+        "embedding_client_unavailable",
+        "clinical_safety_retrieval_empty",
+    )
+    assert result.state.vector_hit_count == 0
+    assert result.state.candidate_count == 0
+
+
+def test_retriever_marks_degraded_when_vector_hit_references_missing_asset() -> None:
+    """验证 chunk 命中但资产缺失时返回显式降级原因。
+
+    :return: 无返回值；断言通过表示候选召回不会静默吞掉非法资产引用。
+    """
+    chunk = ClinicalSafetyChunk(
+        chunk_id="missing_asset.recognition.v1",
+        asset_id="missing_asset",
+        chunk_type="recognition",
+        title="缺失资产 风险识别",
+        embedding_text="缺失资产测试",
+        metadata={},
+        review_status="approved",
+    )
+    repository = VectorOnlyClinicalSafetyRepository(None, chunk)
+    retriever = ClinicalSafetyRetriever(
+        repository,
+        StaticEmbeddingClient(),
+        min_score=0.35,
+    )
+
+    result = retriever.retrieve_with_resolution("测试缺失资产引用。")
+
+    assert result.candidates == []
+    assert result.state.degraded is True
+    assert result.state.reasons == ("invalid_asset_reference", "vector_candidate_count_zero")
+    assert result.state.vector_hit_count == 1
+    assert result.state.candidate_count == 0
+
+
+def test_retriever_marks_degraded_when_asset_read_fails() -> None:
+    """验证资产读取异常不会被静默转为无命中。
+
+    :return: 无返回值；断言通过表示仓储异常会进入候选召回审计状态。
+    """
+    asset = ClinicalSafetyAsset(
+        asset_id="safety_emergency_cyanosis",
+        asset_type="emergency_red_flag",
+        canonical_name="舌/牙龈发绀发紫",
+        category="呼吸循环",
+        species_scope=("dog", "cat"),
+        sex_scope=(),
+        age_scope=(),
+        severity="urgent",
+        action_class="emergency",
+        code="CYANOSIS_RISK_PATTERN",
+        aliases=("牙龈发紫",),
+    )
+    chunk = ClinicalSafetyChunk(
+        chunk_id="safety_emergency_cyanosis.recognition.v1",
+        asset_id=asset.asset_id,
+        chunk_type="recognition",
+        title="舌/牙龈发绀发紫 风险识别",
+        embedding_text="牙龈发紫；舌头发青；发绀",
+        metadata={},
+        review_status="approved",
+    )
+    repository = VectorOnlyClinicalSafetyRepository(asset, chunk, fail_asset_read=True)
+    retriever = ClinicalSafetyRetriever(
+        repository,
+        StaticEmbeddingClient(),
+        min_score=0.35,
+    )
+
+    result = retriever.retrieve_with_resolution("猫牙龈发紫，呼吸很快。")
+
+    assert result.candidates == []
+    assert result.state.degraded is True
+    assert result.state.reasons == (
+        "clinical_safety_asset_read_failed:RuntimeError",
+        "vector_candidate_count_zero",
+    )
+    assert result.state.vector_hit_count == 1
+    assert result.state.candidate_count == 0

@@ -6,6 +6,8 @@
 - `converter.py`：将原始资产转换为标准临床安全资产和向量检索片段。
 - `convert_safety_reference.py`：命令行入口，默认输出到 `assets/clinical_safety/`。
 
+原始资产必须显式声明稳定 `code`，转换器不会根据条目序号、资产类型或医学名称生成默认编码；缺失 `code` 时直接失败，避免旧版兜底编码进入发布链路。
+
 转换结果中的 `recognition_phrases` 同时保存主标题整体、标题拆分项、用户表达、原子症状和同句组合症状；`recognition` chunk 只从这些稳定字段构造候选召回文本，避免标题组合在转换时丢失。
 
 运行时安全层位于 `src/vet_agent/clinical_safety/`，只保留模型、仓库和评估器等在线链路需要的对象。

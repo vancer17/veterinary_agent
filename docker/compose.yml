@@ -189,10 +189,11 @@ services:
       litellm:
         condition: service_healthy
     command: >
-      sh -c 'if [ "$${SEED_WITH_EMBEDDINGS:-false}" = "true" ]; then
-      python scripts/seed_database.py --with-embeddings;
+      sh -c 'review_status="$${CLINICAL_SAFETY_REVIEW_STATUS:-approved}";
+      if [ "$${SEED_WITH_EMBEDDINGS:-false}" = "true" ]; then
+      python scripts/seed_database.py --with-embeddings --clinical-safety-review-status "$${review_status}";
       else
-      python scripts/seed_database.py;
+      python scripts/seed_database.py --clinical-safety-review-status "$${review_status}";
       fi'
     profiles: ["ops"]
 
@@ -228,6 +229,22 @@ services:
           "CMD-SHELL",
           "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).read()\"",
         ]
+      interval: 15s
+      timeout: 5s
+      retries: 30
+
+  worker:
+    <<: *app-common
+    restart: unless-stopped
+    init: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # 后台 worker 复用正式应用镜像，只覆盖启动命令；生产环境不得现场构建第二套 worker 镜像。
+    command: ["python", "-m", "vet_agent.background_tasks.worker"]
+    healthcheck:
+      # worker 不暴露 HTTP 端口，健康状态以 PostgreSQL 后台任务表可访问性为准。
+      test: ["CMD-SHELL", "python -m vet_agent.background_tasks.healthcheck"]
       interval: 15s
       timeout: 5s
       retries: 30

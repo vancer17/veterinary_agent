@@ -102,8 +102,8 @@ if ! mkdir "$lock_dir" 2>/dev/null; then
 fi
 trap 'rmdir "$lock_dir" >/dev/null 2>&1 || true' EXIT
 
-# 拉取发布镜像后再启动服务；所有启动命令均使用 --no-build，禁止生产现场构建。
-"${compose_cmd[@]}" pull app mem0 mem0-dashboard opa
+# 拉取发布镜像后再启动服务；app 与 worker 复用同一个预编译镜像。
+"${compose_cmd[@]}" pull app worker mem0 mem0-dashboard opa
 "${compose_cmd[@]}" up -d --no-build --pull missing --wait postgres litellm mem0 opa
 
 case "$CD_RUN_MIGRATION" in
@@ -115,6 +115,7 @@ case "$CD_RUN_MIGRATION" in
         ;;
 esac
 
-"${compose_cmd[@]}" up -d --no-build --pull never --no-deps --force-recreate --wait app
+# 数据库迁移完成后再同时启动 API 与后台 worker，避免 worker 抢先访问尚未创建的任务表。
+"${compose_cmd[@]}" up -d --no-build --pull never --no-deps --force-recreate --wait app worker
 "${compose_cmd[@]}" ps
 REMOTE

@@ -7,32 +7,35 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
-from scripts.clinical_safety import build_standard_safety_documents, load_safety_reference
+import pytest
+
+from scripts.clinical_safety import build_standard_safety_documents
+from vet_agent.clinical_safety import validate_clinical_safety_publish_contract
 
 
-def test_safety_reference_converts_to_standard_assets() -> None:
-    """验证原始安全参考数据可全量转换为标准临床安全资产。
+def test_safety_reference_converts_explicit_codes_to_standard_assets() -> None:
+    """验证显式编码的原始安全参考数据可转换为标准临床安全资产。
 
-    :return: 无返回值；断言通过表示标准资产转换结果符合预期。
+    :return: 无返回值；断言通过表示离线转换器不再依赖仓库内不稳定参考资产。
     """
-    source = Path("scripts/clinical_safety/assets/vet_safety_reference.json")
-    payload = load_safety_reference(source)
+    payload = _minimal_reference_payload()
 
     asset_document, chunk_document = build_standard_safety_documents(
         payload,
-        source_file=str(source),
+        source_file="tests/fixtures/clinical_safety_reference.json",
         version="v1",
         review_status="pending",
     )
 
     assets = asset_document["assets"]
     chunks = chunk_document["chunks"]
-    assert asset_document["_meta"]["asset_count"] == 130
-    assert chunk_document["_meta"]["chunk_count"] == 390
+    assert asset_document["_meta"]["asset_count"] == 2
+    assert chunk_document["_meta"]["chunk_count"] == 6
     assert len(chunks) == len(assets) * 3
+    assert all(asset["review_status"] == "pending" and asset["enabled"] is False for asset in assets)
+    assert all(chunk["review_status"] == "pending" and chunk["enabled"] is False for chunk in chunks)
     xylitol = _find_asset(assets, "木糖醇")
     assert xylitol["code"] == "TOXIC_XYLITOL"
     assert xylitol["asset_type"] == "toxin"
@@ -41,28 +44,93 @@ def test_safety_reference_converts_to_standard_assets() -> None:
     assert "无糖口香糖" in xylitol["carriers"]
     assert xylitol["decision_hints"]["actual_exposure"] == "safety_escalated"
 
-    senior_cat = _find_asset(assets, "老年猫:消瘦 + 食欲不减反而亢进 + 多饮多尿")
-    assert senior_cat["canonical_name"] == "老年猫:消瘦 + 食欲不减反而亢进 + 多饮多尿"
-    assert "消瘦" in senior_cat["recognition_phrases"]
-    assert "食欲不减反而亢进" in senior_cat["recognition_phrases"]
-    assert "多饮多尿" in senior_cat["recognition_phrases"]
-    assert senior_cat["canonical_name"] in _recognition_chunk_text(chunks, senior_cat["asset_id"])
-
-    gdv = _find_asset(assets, "胃扩张扭转")
-    assert {"胃扩张扭转", "GDV", "胃扭转", "腹胀", "干呕"}.issubset(
-        set(gdv["recognition_phrases"])
-    )
-    recognition_text = _recognition_chunk_text(chunks, gdv["asset_id"])
-    assert any(
-        phrase in recognition_text
-        for phrase in ("无效干呕+腹胀", "腹胀+无效干呕+流口水")
-    )
-
     cyanosis = _find_asset(assets, "舌/牙龈发绀发紫")
+    assert cyanosis["code"] == "CYANOSIS_RISK_PATTERN"
     assert {"舌/牙龈发绀发紫", "牙龈发绀发紫", "发绀", "发紫"}.issubset(
         set(cyanosis["recognition_phrases"])
     )
     assert "发绀" in _recognition_chunk_text(chunks, cyanosis["asset_id"])
+
+
+def test_safety_reference_can_pass_publish_contract() -> None:
+    """验证显式编码的转换结果可进入发布态严格契约校验。
+
+    :return: 无返回值；断言通过表示离线转换结果具备严格发布态结构。
+    """
+    payload = _minimal_reference_payload()
+
+    asset_document, chunk_document = build_standard_safety_documents(
+        payload,
+        source_file="tests/fixtures/clinical_safety_reference.json",
+        version="v1",
+        review_status="approved",
+    )
+
+    contract = validate_clinical_safety_publish_contract(
+        asset_document,
+        chunk_document,
+        require_embeddings=False,
+    )
+
+    assert contract.asset_count == 2
+    assert contract.chunk_count == 6
+    assert all(asset.review_status == "approved" and asset.enabled for asset in contract.asset_document.assets)
+    assert all(chunk.review_status == "approved" and chunk.enabled for chunk in contract.chunk_document.chunks)
+
+
+def test_safety_reference_conversion_rejects_missing_explicit_code() -> None:
+    """验证离线转换器缺少显式 code 时快速失败。
+
+    :return: 无返回值；断言通过表示转换阶段不会生成序号型临床安全兜底编码。
+    """
+    payload = _minimal_reference_payload()
+    del payload["toxinsAndDrugs"][0]["code"]
+
+    with pytest.raises(ValueError, match="clinical safety asset code is required"):
+        build_standard_safety_documents(
+            payload,
+            source_file="tests/fixtures/clinical_safety_reference.json",
+            version="v1",
+            review_status="pending",
+        )
+
+
+def _minimal_reference_payload() -> dict[str, Any]:
+    """构造转换测试使用的最小临床安全参考数据。
+
+    :return: 返回不依赖仓库静态资产文件的原始参考数据。
+    """
+    return {
+        "_meta": {
+            "file_name": "clinical_safety_reference.test.json",
+            "clinical_review_required": True,
+        },
+        "toxinsAndDrugs": [
+            {
+                "code": "TOXIC_XYLITOL",
+                "category": "毒物",
+                "item": "木糖醇(xylitol)",
+                "aliases": "xylitol、无糖口香糖、木糖醇口香糖",
+                "species": "犬",
+                "danger": "犬误食后可出现呕吐、低血糖和虚弱。",
+                "action": "急诊。疑似误食需立即联系线下兽医医院。",
+                "source": "测试来源。",
+            }
+        ],
+        "emergencyRedFlags": [
+            {
+                "code": "CYANOSIS_RISK_PATTERN",
+                "category": "呼吸循环",
+                "item": "舌/牙龈发绀发紫",
+                "aliases": "牙龈发绀发紫、发绀、发紫",
+                "species": "犬猫",
+                "danger": "可见呼吸困难、呼吸很快和牙龈发紫。",
+                "action": "急诊。正在发生时优先线下处理。",
+                "source": "测试来源。",
+            }
+        ],
+        "dangerPatterns": [],
+    }
 
 
 def _find_asset(assets: list[dict[str, Any]], canonical_name: str) -> dict[str, Any]:
