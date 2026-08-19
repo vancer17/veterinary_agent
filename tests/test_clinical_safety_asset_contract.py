@@ -80,6 +80,45 @@ def test_publish_contract_rejects_missing_embedding_metadata() -> None:
         validate_clinical_safety_publish_contract(asset_document, chunk_document)
 
 
+def test_publish_contract_rejects_restricted_scope_without_required_context() -> None:
+    """验证受限适用范围必须声明等值的裁决前置上下文。
+
+    :return: 无返回值；断言通过表示语义画像未知时受限资产不会在裁决层 fail-open。
+    """
+    asset_document, chunk_document = _valid_publish_documents()
+    asset_document["assets"][0]["required_context"] = {"symptoms": ["呼吸困难"]}
+
+    with pytest.raises(ClinicalSafetyAssetContractError):
+        validate_clinical_safety_publish_contract(asset_document, chunk_document)
+
+
+def test_publish_contract_rejects_misaligned_required_context_values() -> None:
+    """验证受限适用范围与前置上下文取值不得漂移。
+
+    :return: 无返回值；断言通过表示召回过滤与裁决前置保持同一资产治理口径。
+    """
+    asset_document, chunk_document = _valid_publish_documents()
+    asset_document["assets"][0]["required_context"]["species"] = ["cat"]
+
+    with pytest.raises(ClinicalSafetyAssetContractError):
+        validate_clinical_safety_publish_contract(asset_document, chunk_document)
+
+
+def test_publish_contract_accepts_unrestricted_scope_without_profile_context() -> None:
+    """验证通用资产可以不声明画像前置上下文。
+
+    :return: 无返回值；断言通过表示新增一致性规则不会强制通用资产携带无意义前提。
+    """
+    asset_document, chunk_document = _valid_publish_documents()
+    asset = asset_document["assets"][0]
+    asset["species_scope"] = []
+    asset["required_context"] = {"symptoms": ["呼吸困难"]}
+
+    contract = validate_clinical_safety_publish_contract(asset_document, chunk_document)
+
+    assert contract.asset_count == 1
+
+
 def test_publish_contract_can_generate_json_schema() -> None:
     """验证发布态严格契约可导出 JSON Schema 供静态文档和工具链使用。
 

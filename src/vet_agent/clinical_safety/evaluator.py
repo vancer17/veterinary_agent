@@ -20,6 +20,7 @@ from .fallback import (
     ClinicalSafetyFallbackState,
     ClinicalSafetySemanticFallbackState,
 )
+from .query import ClinicalSafetyRetrievalRequest
 from .policy import (
     ClinicalSafetyPolicyClient,
     ClinicalSafetyPolicyInput,
@@ -49,13 +50,13 @@ class ClinicalSafetyEvaluator:
         """
         self.retriever = retriever
         self.policy_client = policy_client
-        self.thresholds = thresholds or getattr(retriever, "thresholds", ClinicalSafetyThresholds())
+        self.thresholds: ClinicalSafetyThresholds = (
+            thresholds if thresholds is not None else retriever.thresholds
+        )
 
     async def assess(
         self,
         text: str,
-        context_text: str = "",
-        age_text: str = "",
         *,
         request: AgentTurnRequest | None = None,
         semantic_result: ClinicalSafetySemanticResult | None = None,
@@ -63,16 +64,12 @@ class ClinicalSafetyEvaluator:
         """根据当前文本与可信上下文执行临床安全策略裁决。
 
         :param text: 用户本轮主诉和补充信息。
-        :param context_text: 宠物画像等可信上下文的文本摘要。
-        :param age_text: 宠物年龄的原始文本表达；当前仅用于召回查询增强，不用于关键词裁决。
         :param request: 当前 Agent 回合请求；用于构造策略审计范围。
         :param semantic_result: 由 LLM 抽取的结构化临床安全语义。
         :return: 返回命中的标准安全信号列表。
         """
         result = await self.assess_with_resolution(
             text,
-            context_text=context_text,
-            age_text=age_text,
             request=request,
             semantic_result=semantic_result,
         )
@@ -81,8 +78,6 @@ class ClinicalSafetyEvaluator:
     async def assess_with_resolution(
         self,
         text: str,
-        context_text: str = "",
-        age_text: str = "",
         *,
         request: AgentTurnRequest | None = None,
         semantic_result: ClinicalSafetySemanticResult | None = None,
@@ -90,21 +85,12 @@ class ClinicalSafetyEvaluator:
         """召回临床安全候选，提交 OPA 策略裁决，并显式返回审计状态。
 
         :param text: 用户本轮主诉和补充信息。
-        :param context_text: 宠物画像等可信上下文的文本摘要。
-        :param age_text: 宠物年龄的原始文本表达；当前仅用于召回查询增强，不用于关键词裁决。
         :param request: 当前 Agent 回合请求；为空时使用空审计范围，主要供单元测试替身使用。
         :param semantic_result: 由 LLM 抽取的结构化临床安全语义。
         :return: 返回临床安全信号与显式状态。
         """
-        trusted_semantic_result = self._trusted_semantic_result(semantic_result)
-        retrieval_result = self.retriever.retrieve_with_resolution(
-            self._build_query(
-                text=text,
-                context_text=context_text,
-                age_text=age_text,
-                semantic_result=trusted_semantic_result,
-            )
-        )
+        retrieval_request = ClinicalSafetyRetrievalRequest.from_semantic_result(text, semantic_result)
+        retrieval_result = self.retriever.retrieve_with_resolution(retrieval_request)
         semantic_fallback = (
             semantic_result.to_fallback_state()
             if semantic_result is not None
@@ -136,48 +122,6 @@ class ClinicalSafetyEvaluator:
             fallback_state=fallback_state,
             policy_decision=decision.to_metadata(),
         )
-
-    def _build_query(
-        self,
-        *,
-        text: str,
-        context_text: str,
-        age_text: str,
-        semantic_result: ClinicalSafetySemanticResult | None,
-    ) -> str:
-        """构造临床安全向量召回查询。
-
-        :param text: 用户本轮主诉和补充信息。
-        :param context_text: 可信宠物上下文摘要。
-        :param age_text: 宠物年龄原文。
-        :param semantic_result: 结构化临床安全语义结果。
-        :return: 返回合并后的召回查询文本。
-        """
-        del context_text, age_text
-        base_query = text.strip()
-        if semantic_result is None or not semantic_result.is_trusted():
-            return ""
-        semantic_hints = semantic_result.to_query_hints()
-        if not semantic_hints:
-            return ""
-        if not base_query:
-            return ""
-        return "\n".join(part for part in (base_query, semantic_hints) if part)
-
-    def _trusted_semantic_result(
-        self,
-        semantic_result: ClinicalSafetySemanticResult | None,
-    ) -> ClinicalSafetySemanticResult | None:
-        """筛选可进入召回增强的可信结构化语义。
-
-        :param semantic_result: 由 LLM 抽取的结构化临床安全语义。
-        :return: 语义可信时返回原对象，否则返回 None；不可信语义仍会以降级状态进入 OPA。
-        """
-        if semantic_result is None:
-            return None
-        if not semantic_result.is_trusted():
-            return None
-        return semantic_result
 
     def _dedupe_signals(self, signals: list[SafetySignal]) -> list[SafetySignal]:
         """按安全编码去重，并保留更高严重级别的信号。

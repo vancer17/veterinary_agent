@@ -47,8 +47,9 @@ context_mismatch(candidate) if {
 
 context_mismatch(candidate) if {
 	semantic_trusted
-	"senior" in object.get(candidate, "age_scope", [])
-	not input.semantic.age_group in {"senior", "unknown"}
+	count(object.get(candidate, "age_scope", [])) > 0
+	input.semantic.age_group != "unknown"
+	not input.semantic.age_group in candidate.age_scope
 }
 
 # 证据充分性边界由语义抽取层统一输出；OPA 不再重新拼装症状、暴露和意图字段。
@@ -133,17 +134,13 @@ required_context_mismatch(candidate) if {
 	not input.semantic.age_group in values
 }
 
-required_context_mismatch(candidate) if {
+# 结构化症状事实尚未进入当前语义契约时，要求症状前提的候选只能保留审计，不能升级。
+required_context_unavailable(candidate) if {
 	semantic_trusted
 	required := object.get(candidate, "required_context", {})
 	values := object.get(required, "symptoms", [])
 	count(values) > 0
-	not required_symptom_context_satisfied(values)
-}
-
-required_symptom_context_satisfied(values) if {
-	some term in object.get(input.semantic, "high_risk_terms", [])
-	term in values
+	count(object.get(input.semantic, "observed_features", [])) == 0
 }
 
 applicable_candidate(candidate) if {
@@ -156,6 +153,7 @@ applicable_candidate(candidate) if {
 	not insufficient_evidence_candidate(candidate)
 	not unavailable_evidence_candidate(candidate)
 	not required_context_mismatch(candidate)
+	not required_context_unavailable(candidate)
 }
 
 urgent_candidate(candidate) if {
@@ -260,33 +258,25 @@ reasons := [reason |
 	reason := candidate_reason(candidate)
 ]
 
-candidate_reason(candidate) := sprintf("clinical_safety_candidate:%s:%s", [candidate.code, candidate.action_class]) if {
-	applicable_candidate(candidate)
-	observable_candidate(candidate)
-}
-
-candidate_reason(candidate) := sprintf("clinical_safety_candidate_suppressed:%s", [candidate.code]) if {
-	suppressed_candidate(candidate)
-}
-
-candidate_reason(candidate) := sprintf("clinical_safety_candidate_context_mismatch:%s", [candidate.code]) if {
-	context_mismatch(candidate)
-}
-
-candidate_reason(candidate) := sprintf("clinical_safety_candidate_insufficient_evidence:%s", [candidate.code]) if {
-	insufficient_evidence_candidate(candidate)
-}
-
+# 候选审计原因按固定优先级输出唯一值；多个不适用谓词同时命中时不得产生多输出冲突。
+# 优先级：证据不可用 > 证据不足 > 语义否认/远期已缓解 > 前置上下文缺失 > 结构化范围不匹配 > 正常可观察候选。
 candidate_reason(candidate) := sprintf("clinical_safety_candidate_evidence_unavailable:%s", [candidate.code]) if {
 	unavailable_evidence_candidate(candidate)
-}
-
-candidate_reason(candidate) := sprintf("clinical_safety_candidate_required_context_mismatch:%s", [candidate.code]) if {
-	required_context_mismatch(candidate)
-}
-
-candidate_reason(candidate) := sprintf("clinical_safety_candidate_temporally_resolved:%s", [candidate.code]) if {
+} else := sprintf("clinical_safety_candidate_insufficient_evidence:%s", [candidate.code]) if {
+	insufficient_evidence_candidate(candidate)
+} else := sprintf("clinical_safety_candidate_suppressed:%s", [candidate.code]) if {
+	suppressed_candidate(candidate)
+} else := sprintf("clinical_safety_candidate_temporally_resolved:%s", [candidate.code]) if {
 	temporally_resolved_candidate(candidate)
+} else := sprintf("clinical_safety_candidate_required_context_mismatch:%s", [candidate.code]) if {
+	required_context_mismatch(candidate)
+} else := sprintf("clinical_safety_candidate_required_context_unavailable:%s", [candidate.code]) if {
+	required_context_unavailable(candidate)
+} else := sprintf("clinical_safety_candidate_context_mismatch:%s", [candidate.code]) if {
+	context_mismatch(candidate)
+} else := sprintf("clinical_safety_candidate:%s:%s", [candidate.code, candidate.action_class]) if {
+	applicable_candidate(candidate)
+	observable_candidate(candidate)
 }
 
 signals := [signal |
@@ -320,17 +310,9 @@ signal_severity(candidate) := "caution" if {
 	candidate.severity != "blocked"
 }
 
+# 命中词只来自向量候选自身；语义抽取的 high_risk_terms 不进入 OPA 或用户信号投影。
 matched_terms(candidate) := terms if {
 	terms := object.get(candidate, "matched_terms", [])
-	not semantic_trusted
-}
-
-matched_terms(candidate) := terms if {
-	semantic_trusted
-	terms := array.concat(
-		object.get(candidate, "matched_terms", []),
-		object.get(input.semantic, "high_risk_terms", []),
-	)
 }
 
 semantic_trusted if {

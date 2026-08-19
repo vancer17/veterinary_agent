@@ -39,6 +39,7 @@ from vet_agent.clinical_safety import (
     ClinicalSafetyChunk,
     ClinicalSafetyChunkHit,
     ClinicalSafetyChunkType,
+    ClinicalSafetyRetrievalScope,
 )
 from vet_agent.consultation_state import LocalConsultationAnswerabilityPolicyClient
 from vet_agent.followup_rag import (
@@ -65,7 +66,7 @@ from vet_agent.input_safety import (
 )
 from vet_agent.observability import AgentPathNode
 from vet_agent.rag_miss_governance import RagMissGovernanceProtocol, RagMissRecord, RagMissRecordRequest
-from vet_agent.repositories import FileRuleRepository, KnowledgeHit, ScopeRepository, SessionBinding, VerifiedPetProfile
+from vet_agent.repositories import KnowledgeHit, ScopeRepository, SessionBinding, VerifiedPetProfile
 from vet_agent.runtime import QwenClient
 from vet_agent.services import MemoryService, TurnExecutionGateProtocol, TurnExecutor
 from vet_agent.stores import JsonDocumentStore
@@ -184,8 +185,9 @@ class StaticClinicalSafetyPolicyClient(ClinicalSafetyPolicyClient):
         if asset.sex_scope and semantic.sex != "unknown" and semantic.sex not in asset.sex_scope:
             return True
         return bool(
-            "senior" in asset.age_scope
-            and semantic.age_group not in {"senior", "unknown"}
+            asset.age_scope
+            and semantic.age_group != "unknown"
+            and semantic.age_group not in asset.age_scope
         )
 
 
@@ -505,6 +507,7 @@ class StaticClinicalSafetyRepository:
         self,
         query_embedding: Sequence[float],
         *,
+        scope: ClinicalSafetyRetrievalScope,
         chunk_types: tuple[ClinicalSafetyChunkType, ...],
         limit: int,
         min_score: float,
@@ -512,12 +515,13 @@ class StaticClinicalSafetyRepository:
         """根据本轮查询文本返回对应测试向量命中。
 
         :param query_embedding: 查询 embedding。
+        :param scope: 结构化宠物画像范围。
         :param chunk_types: 允许参与召回的 chunk 类型。
         :param limit: 返回 chunk 命中数量上限。
         :param min_score: 候选最低相似度分数。
         :return: 返回匹配测试场景的向量命中。
         """
-        del query_embedding, min_score
+        del query_embedding, min_score, scope
         assert limit > 0
         if "recognition" not in chunk_types:
             return []

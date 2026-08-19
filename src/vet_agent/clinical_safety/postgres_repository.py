@@ -8,7 +8,8 @@ from __future__ import annotations
 
 from typing import Any, Sequence, cast
 
-from sqlalchemy import ColumnElement, literal, select
+from sqlalchemy import ColumnElement, Text, cast as sql_cast, func, literal, or_, select
+from sqlalchemy.dialects.postgresql import ARRAY as PostgreSQLArray
 from sqlalchemy.exc import SQLAlchemyError
 
 from vet_agent.db import (
@@ -26,6 +27,7 @@ from .models import (
     ClinicalSafetyChunkType,
     SafetySeverity,
 )
+from .query import ClinicalSafetyRetrievalScope
 from .repository import ClinicalSafetyVectorRepository, PUBLISHED_REVIEW_STATUS
 
 
@@ -121,6 +123,7 @@ class PostgresClinicalSafetyRepository(ClinicalSafetyVectorRepository):
         self,
         query_embedding: Sequence[float],
         *,
+        scope: ClinicalSafetyRetrievalScope,
         chunk_types: tuple[ClinicalSafetyChunkType, ...],
         limit: int,
         min_score: float,
@@ -128,6 +131,7 @@ class PostgresClinicalSafetyRepository(ClinicalSafetyVectorRepository):
         """通过 pgvector 余弦距离召回已发布的临床安全 chunk。
 
         :param query_embedding: 已生成的查询 embedding。
+        :param scope: 结构化宠物画像范围；仅用于过滤不适用资产。
         :param chunk_types: 允许参与召回的 chunk 类型。
         :param limit: 返回 chunk 命中数量上限。
         :param min_score: 候选最低相似度分数。
@@ -149,6 +153,7 @@ class PostgresClinicalSafetyRepository(ClinicalSafetyVectorRepository):
                 *self._published_asset_filters(),
                 ClinicalSafetyChunkModel.embedding.is_not(None),
                 ClinicalSafetyChunkModel.chunk_type.in_(chunk_types),
+                *self._scope_filters(scope),
             )
             .order_by(distance)
             .limit(limit)
@@ -216,6 +221,40 @@ class PostgresClinicalSafetyRepository(ClinicalSafetyVectorRepository):
             ClinicalSafetyChunkModel.embedding_dimension.is_not(None),
             ClinicalSafetyChunkModel.content_hash != "",
         )
+
+    def _scope_filters(self, scope: ClinicalSafetyRetrievalScope) -> tuple[ColumnElement[bool], ...]:
+        """构造结构化宠物画像对应的资产范围过滤条件。
+
+        :param scope: 可信临床安全召回范围。
+        :return: 返回只过滤资产适用范围的 SQL 条件元组。
+        """
+        filters: list[ColumnElement[bool]] = []
+        if scope.species != "unknown":
+            filters.append(
+                or_(
+                    func.cardinality(ClinicalSafetyAssetModel.species_scope) == 0,
+                    sql_cast(ClinicalSafetyAssetModel.species_scope, PostgreSQLArray(Text)).contains(
+                        [scope.species]
+                    ),
+                )
+            )
+        if scope.sex != "unknown":
+            filters.append(
+                or_(
+                    func.cardinality(ClinicalSafetyAssetModel.sex_scope) == 0,
+                    sql_cast(ClinicalSafetyAssetModel.sex_scope, PostgreSQLArray(Text)).contains([scope.sex]),
+                )
+            )
+        if scope.age_group != "unknown":
+            filters.append(
+                or_(
+                    func.cardinality(ClinicalSafetyAssetModel.age_scope) == 0,
+                    sql_cast(ClinicalSafetyAssetModel.age_scope, PostgreSQLArray(Text)).contains(
+                        [scope.age_group]
+                    ),
+                )
+            )
+        return tuple(filters)
 
     def _asset_from_row(self, row: ClinicalSafetyAssetModel) -> ClinicalSafetyAsset:
         """将数据库资产行转换为临床安全领域模型。

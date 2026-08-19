@@ -71,6 +71,7 @@ from .semantic_extractor import (
     ClinicalSafetyTemporalState,
 )
 from .postgres_repository import PostgresClinicalSafetyRepository
+from .query import ClinicalSafetyRetrievalRequest, ClinicalSafetyRetrievalScope
 from .repository import (
     PUBLISHED_REVIEW_STATUS,
     ClinicalSafetyAssetRepository,
@@ -113,6 +114,8 @@ __all__ = [
     "ClinicalSafetyPublishContract",
     "ClinicalSafetyScoreType",
     "ClinicalSafetyRetrievalResult",
+    "ClinicalSafetyRetrievalRequest",
+    "ClinicalSafetyRetrievalScope",
     "ClinicalSafetyRetrievalStage",
     "ClinicalSafetyRetrievalState",
     "ClinicalSafetySemanticExtractorAgent",

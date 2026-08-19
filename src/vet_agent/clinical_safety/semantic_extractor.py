@@ -150,43 +150,6 @@ class ClinicalSafetySemanticResult:
         """
         return self.strategy == "litellm_response_format"
 
-    def to_query_hints(self) -> str:
-        """转换为用于向量召回增强的查询提示词。
-
-        :return: 返回临床安全语义提示文本；语义不可信或证据不足时返回空字符串。
-        """
-        if not self.is_trusted():
-            return ""
-        if self.risk_evidence_state != "sufficient":
-            return ""
-        lines: list[str] = []
-        if self.species != "unknown":
-            lines.append(f"物种={self.species}")
-        if self.sex != "unknown":
-            lines.append(f"性别={self.sex}")
-        if self.age_group != "unknown":
-            lines.append(f"年龄阶段={self.age_group}")
-        if self.age_text:
-            lines.append(f"年龄原文={self.age_text}")
-        if self.exposure_state != "unknown":
-            lines.append(f"暴露状态={self.exposure_state}")
-        if self.symptom_state != "unknown":
-            lines.append(f"症状状态={self.symptom_state}")
-        if self.temporal_state != "unknown":
-            lines.append(f"时间状态={self.temporal_state}")
-        if self.temporal_scope != "unclear":
-            lines.append(f"时间范围={self.temporal_scope}")
-        if self.resolution_state != "unknown":
-            lines.append(f"恢复状态={self.resolution_state}")
-        if self.intent_type != "other":
-            lines.append(f"意图类型={self.intent_type}")
-        if self.temporal_text:
-            lines.append(f"时间原文={self.temporal_text}")
-        if self.high_risk_terms:
-            lines.append(f"高风险线索={'、'.join(self.high_risk_terms)}")
-        return "\n".join(lines)
-
-
 class ClinicalSafetySemanticItem(BaseModel):
     """定义 LiteLLM response_format 返回的临床安全结构化语义契约。"""
 

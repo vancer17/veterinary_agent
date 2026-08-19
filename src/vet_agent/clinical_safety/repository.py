@@ -21,6 +21,7 @@ from .models import (
     ClinicalSafetyChunkType,
     SafetySeverity,
 )
+from .query import ClinicalSafetyRetrievalScope
 
 
 PUBLISHED_REVIEW_STATUS = "approved"
@@ -100,6 +101,7 @@ class ClinicalSafetyVectorRepository(ClinicalSafetyAssetRepository, Protocol):
         self,
         query_embedding: Sequence[float],
         *,
+        scope: ClinicalSafetyRetrievalScope,
         chunk_types: tuple[ClinicalSafetyChunkType, ...],
         limit: int,
         min_score: float,
@@ -107,6 +109,7 @@ class ClinicalSafetyVectorRepository(ClinicalSafetyAssetRepository, Protocol):
         """按查询向量召回临床安全 chunk。
 
         :param query_embedding: 已生成的查询 embedding。
+        :param scope: 结构化宠物画像范围；仅用于过滤不适用资产。
         :param chunk_types: 允许参与召回的 chunk 类型。
         :param limit: 返回 chunk 命中数量上限。
         :param min_score: 候选最低相似度分数。

@@ -46,9 +46,9 @@ class ClinicalSafetyAsset:
     :param code: 对外安全信号编码。
     :param aliases: 别名、英文名、商品名或俗称。
     :param carriers: 风险载体或暴露来源。
-    :param user_expressions: 用户常见表达。
+    :param user_expressions: 用户常见表达，仅用于离线生成向量文本。
     :param symptoms: 症状或风险线索。
-    :param recognition_phrases: 用于候选召回的完整组合短语与原子短语。
+    :param recognition_phrases: 离线生成向量文本所需的组合短语与原子短语，不作为运行时关键词规则。
     :param required_context: 用于裁决的结构化上下文提示。
     :param decision_hints: 不同用户意图下的动作提示。
     :param clinical_risk_summary: 临床风险摘要。

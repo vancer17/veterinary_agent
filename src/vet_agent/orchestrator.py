@@ -197,8 +197,6 @@ class VetOrchestrator:
         )
         clinical_safety_result = await self.clinical_safety.assess_with_resolution(
             user_text,
-            pet_context.summary(),
-            age_text=str(pet_context.verified_profile.get("age") or ""),
             request=request,
             semantic_result=clinical_semantic,
         )
