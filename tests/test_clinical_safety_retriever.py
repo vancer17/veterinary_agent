@@ -13,12 +13,21 @@ from vet_agent.clinical_safety import (
     ClinicalSafetyChunk,
     ClinicalSafetyChunkHit,
     ClinicalSafetyChunkType,
+    ClinicalSafetyRetrievalRequest,
+    ClinicalSafetyRetrievalScope,
     ClinicalSafetyRetriever,
 )
 
 
 class StaticEmbeddingClient:
     """提供固定 embedding 的测试客户端。"""
+
+    def __init__(self) -> None:
+        """初始化固定 embedding 测试客户端。
+
+        :return: 无返回值。
+        """
+        self.queries: list[str] = []
 
     @property
     def available(self) -> bool:
@@ -35,6 +44,7 @@ class StaticEmbeddingClient:
         :return: 返回固定二维向量。
         """
         assert text
+        self.queries.append(text)
         return [0.2, 0.8]
 
 
@@ -147,6 +157,7 @@ class VectorOnlyClinicalSafetyRepository:
         self,
         query_embedding: Sequence[float],
         *,
+        scope: ClinicalSafetyRetrievalScope,
         chunk_types: tuple[ClinicalSafetyChunkType, ...],
         limit: int,
         min_score: float,
@@ -154,12 +165,14 @@ class VectorOnlyClinicalSafetyRepository:
         """返回固定 pgvector 命中，并记录向量调用次数。
 
         :param query_embedding: 查询 embedding。
+        :param scope: 结构化宠物画像范围。
         :param chunk_types: 允许参与召回的 chunk 类型。
         :param limit: 返回 chunk 命中数量上限。
         :param min_score: 候选最低相似度分数。
         :return: 返回固定向量命中。
         """
         self.vector_calls += 1
+        assert scope.species in {"dog", "cat", "unknown"}
         assert list(query_embedding) == [0.2, 0.8]
         assert self.chunk.chunk_type in chunk_types
         assert limit > 0
@@ -210,6 +223,55 @@ def test_retriever_prefers_pgvector_hits_when_embedding_is_available() -> None:
         metadata={},
         review_status="approved",
     )
+    embedding_client = StaticEmbeddingClient()
+    repository = VectorOnlyClinicalSafetyRepository(asset, chunk)
+    retriever = ClinicalSafetyRetriever(
+        repository,
+        embedding_client,
+        min_score=0.35,
+    )
+
+    candidates = retriever.retrieve(
+        ClinicalSafetyRetrievalRequest(
+            query_text="本轮明确描述：牙龈发紫，呼吸很快。",
+            risk_evidence_state="sufficient",
+        )
+    )
+
+    assert embedding_client.queries == ["本轮明确描述：牙龈发紫，呼吸很快。"]
+    assert repository.vector_calls == 1
+    assert len(candidates) == 1
+    assert candidates[0].asset.code == "CYANOSIS_RISK_PATTERN"
+    assert candidates[0].score_type == "cosine_similarity"
+    assert candidates[0].retrieval_source == "clinical_safety_pgvector"
+
+
+def test_retriever_filters_asset_scope_after_vector_retrieval() -> None:
+    """验证候选聚合阶段会再次执行结构化适用范围过滤。
+
+    :return: 无返回值；断言通过表示不适用物种、性别或年龄资产不会进入候选。
+    """
+    asset = ClinicalSafetyAsset(
+        asset_id="safety_juvenile_only",
+        asset_type="danger_pattern",
+        canonical_name="幼年动物专属风险",
+        category="测试",
+        species_scope=("dog",),
+        sex_scope=(),
+        age_scope=("juvenile",),
+        severity="urgent",
+        action_class="urgent_visit",
+        code="JUVENILE_ONLY_RISK",
+    )
+    chunk = ClinicalSafetyChunk(
+        chunk_id="safety_juvenile_only.recognition.v1",
+        asset_id=asset.asset_id,
+        chunk_type="recognition",
+        title="幼年动物专属风险识别",
+        embedding_text="幼年动物专属风险",
+        metadata={},
+        review_status="approved",
+    )
     repository = VectorOnlyClinicalSafetyRepository(asset, chunk)
     retriever = ClinicalSafetyRetriever(
         repository,
@@ -217,13 +279,66 @@ def test_retriever_prefers_pgvector_hits_when_embedding_is_available() -> None:
         min_score=0.35,
     )
 
-    candidates = retriever.retrieve("猫牙龈发紫，呼吸很快。")
+    result = retriever.retrieve_with_resolution(
+        ClinicalSafetyRetrievalRequest(
+            query_text="狗当前出现明确风险事实。",
+            scope=ClinicalSafetyRetrievalScope(species="dog", age_group="adult"),
+            risk_evidence_state="sufficient",
+        )
+    )
 
-    assert repository.vector_calls == 1
-    assert len(candidates) == 1
-    assert candidates[0].asset.code == "CYANOSIS_RISK_PATTERN"
-    assert candidates[0].score_type == "cosine_similarity"
-    assert candidates[0].retrieval_source == "clinical_safety_pgvector"
+    assert result.candidates == []
+    assert result.state.vector_hit_count == 1
+    assert result.state.candidate_count == 0
+    assert result.state.degraded is True
+    assert result.state.reasons == (
+        "scope_filtered_candidate:safety_juvenile_only",
+        "vector_candidate_count_zero",
+    )
+
+
+def test_retriever_falls_back_to_chunk_title_for_audit_terms() -> None:
+    """验证生产 pgvector 命中缺少短语时仍保留结构化审计可解释性。
+
+    :return: 无返回值；断言通过表示安全信号命中词回退到资产治理域生成的 chunk 标题，
+             而不是恢复用户原文或资产短语扫描。
+    """
+    asset = ClinicalSafetyAsset(
+        asset_id="safety_title_fallback",
+        asset_type="human_drug",
+        canonical_name="对乙酰氨基酚",
+        category="测试",
+        species_scope=("cat", "dog"),
+        sex_scope=(),
+        age_scope=(),
+        severity="urgent",
+        action_class="emergency",
+        code="TOXIC_SUBSTANCE",
+    )
+    chunk = ClinicalSafetyChunk(
+        chunk_id="safety_title_fallback.recognition.v1",
+        asset_id=asset.asset_id,
+        chunk_type="recognition",
+        title="对乙酰氨基酚风险识别",
+        embedding_text="对乙酰氨基酚",
+        metadata={},
+        review_status="approved",
+    )
+    retriever = ClinicalSafetyRetriever(
+        VectorOnlyClinicalSafetyRepository(asset, chunk),
+        StaticEmbeddingClient(),
+        min_score=0.35,
+    )
+
+    candidates = retriever.retrieve(
+        ClinicalSafetyRetrievalRequest(
+            query_text="猫误食了对乙酰氨基酚类药物。",
+            scope=ClinicalSafetyRetrievalScope(species="cat"),
+            risk_evidence_state="sufficient",
+        )
+    )
+
+    assert candidates[0].matched_terms() == ("对乙酰氨基酚风险识别",)
 
 
 def test_retriever_returns_empty_when_embedding_is_unavailable() -> None:
@@ -260,7 +375,12 @@ def test_retriever_returns_empty_when_embedding_is_unavailable() -> None:
         min_score=0.35,
     )
 
-    result = retriever.retrieve_with_resolution("猫牙龈发紫，呼吸很快。")
+    result = retriever.retrieve_with_resolution(
+        ClinicalSafetyRetrievalRequest(
+            query_text="猫牙龈发紫，呼吸很快。",
+            risk_evidence_state="sufficient",
+        )
+    )
 
     assert repository.vector_calls == 0
     assert result.candidates == []
@@ -272,6 +392,50 @@ def test_retriever_returns_empty_when_embedding_is_unavailable() -> None:
     )
     assert result.state.vector_hit_count == 0
     assert result.state.candidate_count == 0
+
+
+def test_retriever_skips_embedding_when_evidence_is_not_sufficient() -> None:
+    """验证证据不足时直接跳过 embedding 和向量仓储。
+
+    :return: 无返回值；断言通过表示宠物画像不会替代本轮风险事实。
+    """
+    asset = ClinicalSafetyAsset(
+        asset_id="safety_triage_only",
+        asset_type="danger_pattern",
+        canonical_name="分诊测试资产",
+        category="测试",
+        species_scope=("dog",),
+        sex_scope=(),
+        age_scope=("adult",),
+        severity="urgent",
+        action_class="urgent_visit",
+        code="TRIAGE_ONLY_RISK",
+    )
+    chunk = ClinicalSafetyChunk(
+        chunk_id="safety_triage_only.recognition.v1",
+        asset_id=asset.asset_id,
+        chunk_type="recognition",
+        title="分诊测试资产识别",
+        embedding_text="分诊测试资产",
+        metadata={},
+        review_status="approved",
+    )
+    embedding_client = StaticEmbeddingClient()
+    repository = VectorOnlyClinicalSafetyRepository(asset, chunk)
+    retriever = ClinicalSafetyRetriever(repository, embedding_client, min_score=0.35)
+
+    result = retriever.retrieve_with_resolution(
+        ClinicalSafetyRetrievalRequest(
+            query_text="成年犬需要什么时候去医院？",
+            scope=ClinicalSafetyRetrievalScope(species="dog", age_group="adult"),
+            risk_evidence_state="insufficient",
+        )
+    )
+
+    assert result.candidates == []
+    assert result.state.reasons == ("risk_evidence_not_sufficient",)
+    assert embedding_client.queries == []
+    assert repository.vector_calls == 0
 
 
 def test_retriever_marks_degraded_when_vector_hit_references_missing_asset() -> None:
@@ -295,7 +459,12 @@ def test_retriever_marks_degraded_when_vector_hit_references_missing_asset() -> 
         min_score=0.35,
     )
 
-    result = retriever.retrieve_with_resolution("测试缺失资产引用。")
+    result = retriever.retrieve_with_resolution(
+        ClinicalSafetyRetrievalRequest(
+            query_text="测试缺失资产引用。",
+            risk_evidence_state="sufficient",
+        )
+    )
 
     assert result.candidates == []
     assert result.state.degraded is True
@@ -338,7 +507,12 @@ def test_retriever_marks_degraded_when_asset_read_fails() -> None:
         min_score=0.35,
     )
 
-    result = retriever.retrieve_with_resolution("猫牙龈发紫，呼吸很快。")
+    result = retriever.retrieve_with_resolution(
+        ClinicalSafetyRetrievalRequest(
+            query_text="猫牙龈发紫，呼吸很快。",
+            risk_evidence_state="sufficient",
+        )
+    )
 
     assert result.candidates == []
     assert result.state.degraded is True

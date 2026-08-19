@@ -268,6 +268,29 @@ class ClinicalSafetyAssetPublishContract(BaseModel):
         """
         return _validate_tuple_values(value, allowed={"juvenile", "adult", "senior"}, field_name="age_scope")
 
+    @model_validator(mode="after")
+    def validate_scope_required_context_alignment(self) -> Self:
+        """校验受限适用范围必须声明等值的裁决前置上下文。
+
+        :return: 返回通过范围与前置上下文一致性校验的资产契约。
+        :raises ValueError: 受限范围缺少等值 required_context 声明时抛出。
+        """
+        expectations: tuple[tuple[ClinicalSafetyContextKeyContract, tuple[str, ...]], ...] = (
+            (ClinicalSafetyContextKeyContract.SPECIES, self.species_scope),
+            (ClinicalSafetyContextKeyContract.SEX, self.sex_scope),
+            (ClinicalSafetyContextKeyContract.AGE, self.age_scope),
+        )
+        for context_key, scope_values in expectations:
+            if not scope_values:
+                continue
+            context_values = self.required_context.get(context_key, ())
+            if tuple(context_values) != tuple(scope_values):
+                raise ValueError(
+                    "clinical safety asset restricted scope requires matching required_context: "
+                    f"{context_key.value}"
+                )
+        return self
+
     @field_validator("source")
     @classmethod
     def validate_source(cls, value: dict[str, str]) -> dict[str, str]:

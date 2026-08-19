@@ -172,7 +172,7 @@ def test_clinical_safety_semantic_low_confidence_returns_explicit_degraded_resul
     assert result.exposure_state == "unknown"
     assert result.intent_type == "other"
     assert result.risk_evidence_state == "unknown"
-    assert result.to_query_hints() == ""
+    assert not hasattr(result, "to_query_hints")
 
 
 def test_clinical_safety_semantic_disabled_does_not_create_rule_based_facts() -> None:
@@ -221,7 +221,7 @@ def test_clinical_safety_semantic_insufficient_evidence_does_not_emit_query_hint
     )
 
     assert result.is_trusted()
-    assert result.to_query_hints() == ""
+    assert not hasattr(result, "to_query_hints")
 
 
 def test_clinical_safety_semantic_missing_evidence_state_fails_fast() -> None:

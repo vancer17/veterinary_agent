@@ -33,8 +33,6 @@ base_input := {
 		"resolution_state": "ongoing",
 		"intent_type": "toxicity",
 		"risk_evidence_state": "sufficient",
-		"high_risk_terms": ["泰诺"],
-		"negated_terms": [],
 	},
 	"retrieval": {
 		"stage": "vector",
@@ -84,7 +82,8 @@ test_emergency_candidate_escalates if {
 	decision.allow == true
 	decision.signals[0].code == "TOXIC_SUBSTANCE"
 	decision.signals[0].severity == "urgent"
-	"泰诺" in decision.signals[0].matched_terms
+	"对乙酰氨基酚" in decision.signals[0].matched_terms
+	not "泰诺" in decision.signals[0].matched_terms
 }
 
 test_triage_without_positive_evidence_does_not_escalate if {
@@ -93,7 +92,6 @@ test_triage_without_positive_evidence_does_not_escalate if {
 		"symptom_state": "unknown",
 		"intent_type": "triage",
 		"risk_evidence_state": "insufficient",
-		"high_risk_terms": [],
 	})
 	decision := clinical_safety.decision with input as object.union(base_input, {
 		"semantic": triage_semantic,
@@ -129,7 +127,6 @@ test_untrusted_semantic_does_not_escalate_toxic_candidate if {
 		"risk_evidence_state": "unknown",
 		"exposure_state": "denied",
 		"intent_type": "other",
-		"high_risk_terms": [],
 	})
 	decision := clinical_safety.decision with input as object.union(base_input, {
 		"semantic": untrusted_semantic,
@@ -171,7 +168,7 @@ test_species_context_mismatch_filters_candidate if {
 	decision.reasons[0] == "clinical_safety_candidate_context_mismatch:TOXIC_SUBSTANCE"
 }
 
-test_required_context_mismatch_filters_candidate if {
+test_required_context_symptom_condition_fails_fast if {
 	contextual_candidate := object.union(toxic_candidate, {
 		"code": "CYANOSIS_RISK_PATTERN",
 		"asset_type": "emergency_red_flag",
@@ -183,7 +180,6 @@ test_required_context_mismatch_filters_candidate if {
 	semantic_without_symptom := object.union(base_input.semantic, {
 		"exposure_state": "unknown",
 		"symptom_state": "present",
-		"high_risk_terms": ["呕吐"],
 	})
 	decision := clinical_safety.decision with input as object.union(base_input, {
 		"semantic": semantic_without_symptom,
@@ -193,5 +189,82 @@ test_required_context_mismatch_filters_candidate if {
 	decision.action == "allow"
 	decision.allow == true
 	count(decision.signals) == 0
-	decision.reasons[0] == "clinical_safety_candidate_required_context_mismatch:CYANOSIS_RISK_PATTERN"
+	decision.reasons[0] == "clinical_safety_candidate_required_context_unavailable:CYANOSIS_RISK_PATTERN"
+}
+
+test_age_context_mismatch_filters_candidate if {
+	senior_only_candidate := object.union(toxic_candidate, {
+		"code": "SENIOR_ONLY_RISK",
+		"age_scope": ["senior"],
+	})
+	decision := clinical_safety.decision with input as object.union(base_input, {
+		"candidates": [senior_only_candidate],
+	})
+
+	decision.action == "allow"
+	decision.allow == true
+	count(decision.signals) == 0
+	decision.reasons[0] == "clinical_safety_candidate_context_mismatch:SENIOR_ONLY_RISK"
+}
+
+test_unknown_scope_without_required_context_stays_observable if {
+	# 语义未知时不从 scope 推断不匹配；该边界要求资产治理为受限范围声明 required_context。
+	unknown_semantic := object.union(base_input.semantic, {
+		"species": "unknown",
+		"sex": "unknown",
+		"age_group": "unknown",
+	})
+	cat_scope_candidate := object.union(toxic_candidate, {
+		"code": "CAT_SCOPE_ONLY_RISK",
+		"species_scope": ["cat"],
+	})
+	decision := clinical_safety.decision with input as object.union(base_input, {
+		"semantic": unknown_semantic,
+		"candidates": [cat_scope_candidate],
+	})
+
+	decision.action == "escalate"
+	count(decision.signals) == 1
+	not contains(concat(",", decision.reasons), "context_mismatch")
+}
+
+test_unknown_required_context_fails_closed if {
+	# required_context 表示前置条件；语义未知时必须 Fail Closed，不能用候选分数补足。
+	unknown_semantic := object.union(base_input.semantic, {
+		"species": "unknown",
+	})
+	required_context_candidate := object.union(toxic_candidate, {
+		"code": "CAT_REQUIRED_RISK",
+		"species_scope": ["cat"],
+		"required_context": {"species": ["cat"]},
+	})
+	decision := clinical_safety.decision with input as object.union(base_input, {
+		"semantic": unknown_semantic,
+		"candidates": [required_context_candidate],
+	})
+
+	decision.action == "allow"
+	count(decision.signals) == 0
+	decision.reasons[0] == "clinical_safety_candidate_required_context_mismatch:CAT_REQUIRED_RISK"
+}
+
+test_multiple_rejection_predicates_emit_single_deterministic_reason if {
+	# species 前提未知与症状事实缺失同时命中时，审计原因必须唯一且可预期。
+	unknown_semantic := object.union(base_input.semantic, {
+		"species": "unknown",
+	})
+	multi_condition_candidate := object.union(toxic_candidate, {
+		"code": "MULTI_CONDITION_RISK",
+		"species_scope": ["cat"],
+		"required_context": {"species": ["cat"], "symptoms": ["呕吐"]},
+	})
+	decision := clinical_safety.decision with input as object.union(base_input, {
+		"semantic": unknown_semantic,
+		"candidates": [multi_condition_candidate],
+	})
+
+	decision.action == "allow"
+	count(decision.signals) == 0
+	count(decision.reasons) == 1
+	decision.reasons[0] == "clinical_safety_candidate_required_context_mismatch:MULTI_CONDITION_RISK"
 }

@@ -13,6 +13,7 @@ from dataclasses import replace
 from vet_agent.runtime import EmbeddingClient
 
 from .fallback import ClinicalSafetyRetrievalResult, ClinicalSafetyRetrievalState
+from .query import ClinicalSafetyRetrievalRequest, ClinicalSafetyRetrievalScope
 from .models import (
     ClinicalSafetyCandidate,
     ClinicalSafetyChunkHit,
@@ -62,40 +63,51 @@ class ClinicalSafetyRetriever:
 
     def retrieve(
         self,
-        query: str,
+        request: ClinicalSafetyRetrievalRequest,
         *,
         limit: int = 12,
         chunk_types: tuple[ClinicalSafetyChunkType, ...] = DEFAULT_CHUNK_TYPES,
     ) -> list[ClinicalSafetyCandidate]:
         """召回与查询最相关的临床安全资产候选。
 
-        :param query: 已合并用户输入与可信上下文的安全查询文本。
+        :param request: 临床安全结构化召回请求。
         :param limit: 返回资产候选数量上限。
         :param chunk_types: 允许参与召回的 chunk 类型。
         :return: 返回按相似度排序的临床安全候选列表。
         """
         return self.retrieve_with_resolution(
-            query,
+            request,
             limit=limit,
             chunk_types=chunk_types,
         ).candidates
 
     def retrieve_with_resolution(
         self,
-        query: str,
+        request: ClinicalSafetyRetrievalRequest,
         *,
         limit: int = 12,
         chunk_types: tuple[ClinicalSafetyChunkType, ...] = DEFAULT_CHUNK_TYPES,
     ) -> ClinicalSafetyRetrievalResult:
         """召回临床安全候选，并显式返回本轮召回状态。
 
-        :param query: 已合并用户输入与可信上下文的安全查询文本。
+        :param request: 临床安全结构化召回请求。
         :param limit: 返回资产候选数量上限。
         :param chunk_types: 允许参与召回的 chunk 类型。
         :return: 返回候选列表和召回状态。
         """
-        if not query.strip() or limit <= 0 or not chunk_types:
-            reason = "empty_query" if not query.strip() else "invalid_retrieval_arguments"
+        skip_reason = request.skip_reason()
+        if skip_reason:
+            return ClinicalSafetyRetrievalResult(
+                candidates=[],
+                state=ClinicalSafetyRetrievalState(
+                    stage="none",
+                    degraded=False,
+                    reasons=(skip_reason,),
+                ),
+            )
+        normalized_query = request.normalized_query_text()
+        if limit <= 0 or not chunk_types:
+            reason = "invalid_retrieval_arguments"
             return ClinicalSafetyRetrievalResult(
                 candidates=[],
                 state=ClinicalSafetyRetrievalState(
@@ -106,7 +118,8 @@ class ClinicalSafetyRetriever:
             )
 
         vector_hits, vector_reasons = self._retrieve_vector_hits(
-            query,
+            normalized_query,
+            scope=request.scope,
             chunk_types=chunk_types,
             limit=limit * 3,
         )
@@ -122,13 +135,17 @@ class ClinicalSafetyRetriever:
                 ),
             )
 
-        candidates, aggregate_reasons = self._aggregate_candidates(vector_hits, limit=limit)
+        candidates, aggregate_reasons = self._aggregate_candidates(
+            vector_hits,
+            scope=request.scope,
+            limit=limit,
+        )
         if not candidates:
             return ClinicalSafetyRetrievalResult(
                 candidates=[],
                 state=ClinicalSafetyRetrievalState(
                     stage="none",
-                    degraded=True,
+                    degraded=bool(vector_reasons or aggregate_reasons),
                     reasons=self._compact_reasons(
                         [*vector_reasons, *aggregate_reasons, "vector_candidate_count_zero"]
                     ),
@@ -153,12 +170,14 @@ class ClinicalSafetyRetriever:
         self,
         query: str,
         *,
+        scope: ClinicalSafetyRetrievalScope,
         chunk_types: tuple[ClinicalSafetyChunkType, ...],
         limit: int,
     ) -> tuple[list[ClinicalSafetyChunkHit], tuple[str, ...]]:
         """调用 embedding 客户端和仓储执行生产向量召回。
 
         :param query: 待召回的安全查询文本。
+        :param scope: 临床安全召回使用的结构化适用范围。
         :param chunk_types: 允许参与召回的 chunk 类型。
         :param limit: 返回 chunk 命中数量上限。
         :return: 返回向量召回命中和未命中原因。
@@ -174,6 +193,7 @@ class ClinicalSafetyRetriever:
         try:
             hits = self.repository.retrieve_vector_chunk_hits(
                 query_embedding,
+                scope=scope,
                 chunk_types=chunk_types,
                 limit=limit,
                 min_score=self.thresholds.retrieval_min_score,
@@ -188,11 +208,13 @@ class ClinicalSafetyRetriever:
         self,
         hits: list[ClinicalSafetyChunkHit],
         *,
+        scope: ClinicalSafetyRetrievalScope,
         limit: int,
     ) -> tuple[list[ClinicalSafetyCandidate], tuple[str, ...]]:
         """按安全资产聚合 chunk 命中并补充审计命中词。
 
         :param hits: chunk 级召回命中。
+        :param scope: 临床安全召回使用的结构化适用范围。
         :param limit: 返回资产候选数量上限。
         :return: 返回聚合后的临床安全候选和聚合阶段异常原因。
         """
@@ -211,6 +233,9 @@ class ClinicalSafetyRetriever:
             if asset is None:
                 reasons.append("invalid_asset_reference")
                 continue
+            if not scope.matches_asset(asset):
+                reasons.append(f"scope_filtered_candidate:{asset_id}")
+                continue
             asset_hits = [replace(hit, matched_terms=self._matched_terms_from_hit(hit)) for hit in raw_asset_hits]
             candidates.append(
                 ClinicalSafetyCandidate(
@@ -224,12 +249,19 @@ class ClinicalSafetyRetriever:
         return sorted(candidates, key=lambda item: item.score, reverse=True)[:limit], self._compact_reasons(reasons)
 
     def _matched_terms_from_hit(self, hit: ClinicalSafetyChunkHit) -> tuple[str, ...]:
-        """从 chunk 命中中提取审计命中词。
+        """从 chunk 命中中提取审计命中特征词。
+
+        生产 pgvector 命中不携带短语命中词；此时回退到资产治理域生成的
+        chunk 标题，保证安全信号仍具备最小可解释性，且不扫描用户原文。
 
         :param hit: 单个 chunk 命中。
-        :return: 返回命中词元组。
+        :return: 返回去重后的审计命中特征词元组。
         """
-        return tuple(dict.fromkeys(term for term in hit.matched_terms if term))
+        terms = tuple(dict.fromkeys(term for term in hit.matched_terms if term))
+        if terms:
+            return terms
+        fallback_title = hit.chunk.title.strip()
+        return (fallback_title,) if fallback_title else ()
 
     def _score_type(self, hits: list[ClinicalSafetyChunkHit]) -> ClinicalSafetyScoreType:
         """确定候选使用的主召回分数类型。

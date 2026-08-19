@@ -25,6 +25,8 @@ from vet_agent.clinical_safety import (
     ClinicalSafetyPolicyDecision,
     ClinicalSafetyPolicyInput,
     ClinicalSafetyResolutionState,
+    ClinicalSafetyRetrievalRequest,
+    ClinicalSafetyRetrievalScope,
     ClinicalSafetyRiskEvidenceState,
     ClinicalSafetyRetriever,
     ClinicalSafetySex,
@@ -71,19 +73,7 @@ class StaticClinicalSafetyPolicyClient(ClinicalSafetyPolicyClient):
                 message=candidate.asset.triage_message
                 or candidate.asset.clinical_risk_summary
                 or f"命中临床安全风险：{candidate.asset.canonical_name}",
-                matched_terms=list(
-                    dict.fromkeys(
-                        [
-                            *candidate.matched_terms(),
-                            *(
-                                policy_input.semantic_result.high_risk_terms
-                                if policy_input.semantic_result is not None
-                                and policy_input.semantic_result.is_trusted()
-                                else ()
-                            ),
-                        ]
-                    )
-                ),
+                matched_terms=list(candidate.matched_terms()),
             )
             for candidate in candidates
         )
@@ -294,6 +284,7 @@ class VectorHitClinicalSafetyRepository:
         self,
         query_embedding: Sequence[float],
         *,
+        scope: ClinicalSafetyRetrievalScope,
         chunk_types: tuple[ClinicalSafetyChunkType, ...],
         limit: int,
         min_score: float,
@@ -307,6 +298,7 @@ class VectorHitClinicalSafetyRepository:
         :return: 返回固定向量命中列表。
         """
         assert list(query_embedding) == [0.2, 0.8]
+        assert scope.species in {"cat", "dog", "unknown"}
         assert self.chunk.chunk_type in chunk_types
         assert limit > 0
         if self.hit_score < min_score:
@@ -488,15 +480,13 @@ def test_clinical_safety_evaluator_passes_low_confidence_state_to_policy() -> No
     result = asyncio.run(
         evaluator.assess_with_resolution(
             "我家猫误食泰诺后呕吐。",
-            context_text="宠物画像: 物种=猫, 年龄=3岁",
-            age_text="3岁",
             semantic_result=semantic,
         )
     )
 
     assert result.signals == []
     assert result.fallback_state.retrieval.stage == "none"
-    assert "empty_query" in result.fallback_state.retrieval.reasons
+    assert "risk_evidence_unknown" in result.fallback_state.retrieval.reasons
     assert result.fallback_state.semantic.stage == "llm_low_confidence"
     assert result.fallback_state.semantic.degraded is True
     assert result.fallback_state.semantic.strategy == "litellm_response_format_low_confidence"
@@ -515,8 +505,6 @@ def test_clinical_safety_evaluator_does_not_recall_denied_exposure_without_risk_
     denied_signals = asyncio.run(
         evaluator.assess(
             "家里有泰诺，已经收起来了，没有给它吃。",
-            context_text="宠物画像: 物种=猫, 年龄=3岁",
-            age_text="3岁",
             semantic_result=_trusted_toxic_semantic(
                 exposure_state="denied",
                 symptom_state="unknown",
@@ -529,8 +517,6 @@ def test_clinical_safety_evaluator_does_not_recall_denied_exposure_without_risk_
     confirmed_signals = asyncio.run(
         evaluator.assess(
             "我家猫误食了泰诺，已经开始呕吐。",
-            context_text="宠物画像: 物种=猫, 年龄=3岁",
-            age_text="3岁",
             semantic_result=_trusted_toxic_semantic(source_text="我家猫误食了泰诺，已经开始呕吐。"),
         ),
     )
@@ -553,8 +539,6 @@ def test_clinical_safety_evaluator_keeps_temporal_state_as_policy_input() -> Non
     result = asyncio.run(
         evaluator.assess_with_resolution(
             "昨天误食泰诺，今天已经完全恢复。",
-            context_text="宠物画像: 物种=猫, 年龄=3岁",
-            age_text="3岁",
             semantic_result=_trusted_toxic_semantic(
                 temporal_state="past",
                 temporal_scope="recent_past",
@@ -583,8 +567,6 @@ def test_clinical_safety_evaluator_keeps_ongoing_toxic_event_urgent() -> None:
     result = asyncio.run(
         evaluator.assess_with_resolution(
             "现在误食泰诺并正在呕吐。",
-            context_text="宠物画像: 物种=猫, 年龄=3岁",
-            age_text="3岁",
             semantic_result=_trusted_toxic_semantic(source_text="现在误食泰诺并正在呕吐。"),
         )
     )
@@ -608,8 +590,6 @@ def test_clinical_safety_evaluator_returns_explicit_vector_resolution() -> None:
     result = asyncio.run(
         evaluator.assess_with_resolution(
             "我家猫误食泰诺后呕吐。",
-            context_text="宠物画像: 物种=猫, 年龄=3岁",
-            age_text="3岁",
             semantic_result=_trusted_toxic_semantic(source_text="我家猫误食泰诺后呕吐。"),
         )
     )
@@ -649,25 +629,26 @@ def test_clinical_safety_evaluator_does_not_strongly_recall_without_positive_evi
         source_text="要不要去医院？",
     )
 
-    query = evaluator._build_query(
-        text="要不要去医院？",
-        context_text="宠物画像: 物种=狗, 年龄=3岁, 性别=雌性",
-        age_text="3岁",
-        semantic_result=semantic,
+    retrieval_request = ClinicalSafetyRetrievalRequest.from_semantic_result(
+        "要不要去医院？",
+        semantic,
     )
     result = asyncio.run(
         evaluator.assess_with_resolution(
             "要不要去医院？",
-            context_text="宠物画像: 物种=狗, 年龄=3岁, 性别=雌性",
-            age_text="3岁",
             semantic_result=semantic,
         )
     )
 
-    assert query == ""
+    assert retrieval_request.query_text == ""
+    assert retrieval_request.scope == ClinicalSafetyRetrievalScope(
+        species="dog",
+        sex="female",
+        age_group="adult",
+    )
     assert result.signals == []
     assert result.fallback_state.retrieval.stage == "none"
-    assert "empty_query" in result.fallback_state.retrieval.reasons
+    assert "risk_evidence_not_sufficient" in result.fallback_state.retrieval.reasons
 
 
 def test_clinical_safety_evaluator_uses_vector_thresholds() -> None:
@@ -732,8 +713,6 @@ def test_clinical_safety_evaluator_compacts_duplicate_matched_terms() -> None:
     signals = asyncio.run(
         evaluator.assess(
             "猫现在牙龈发紫，呼吸很快。",
-            context_text="宠物画像: 物种=猫, 年龄=5岁",
-            age_text="5岁",
             semantic_result=_trusted_toxic_semantic(
                 species="cat",
                 exposure_state="unknown",

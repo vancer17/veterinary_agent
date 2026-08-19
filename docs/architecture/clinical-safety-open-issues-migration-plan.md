@@ -220,6 +220,9 @@ OPA 必须同时消费：
 
 ### 阶段 2：收紧召回输入
 
+> **迁移状态**：已完成；实现细节与稳定契约见
+> [clinical-safety-retrieval-input-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/clinical-safety-retrieval-input-change-summary.md)。
+
 **目标**
 
 把宠物画像从“正文语义”迁移为“结构化过滤或弱增强”。
@@ -228,17 +231,24 @@ OPA 必须同时消费：
 
 - [src/vet_agent/clinical_safety/evaluator.py](/home/vancer17/veterinary_agent/src/vet_agent/clinical_safety/evaluator.py:134)
 - [src/vet_agent/clinical_safety/retriever.py](/home/vancer17/veterinary_agent/src/vet_agent/clinical_safety/retriever.py:83)
+- [src/vet_agent/clinical_safety/query.py](/home/vancer17/veterinary_agent/src/vet_agent/clinical_safety/query.py:1)
+- [src/vet_agent/clinical_safety/postgres_repository.py](/home/vancer17/veterinary_agent/src/vet_agent/clinical_safety/postgres_repository.py:121)
 
 **执行方式**
 
-1. 向量正文优先保留用户明确症状和暴露。
-2. 宠物画像仅作为范围过滤条件，不参与过宽正文拼接。
-3. 当症状与暴露都未知时，召回应默认保守。
+1. 使用 `ClinicalSafetyRetrievalRequest` 分离 `query_text`、结构化范围和证据充分性。
+2. 向量正文仅保留用户本轮事实文本，不再拼接画像、年龄、意图或泛化状态。
+3. PostgreSQL/pgvector 使用物种、性别和年龄数组范围执行结构化过滤。
+4. `high_risk_terms` 仅保留审计 metadata，不再进入 OPA、召回正文或症状前提判断。
+5. `required_context.symptoms` 在 `observed_features` 尚未建立前显式不可用，不执行短语匹配回退。
+6. 当证据状态为 `insufficient` 或 `unknown` 时直接跳过强召回。
 
 **验收标准**
 
 - 无明确症状的 triage 请求不会因宠物画像单独召回大量急诊资产。
 - 成年犬不会仅因 `species=dog` 被召回幼犬专属模式。
+- 可信证据充分时，embedding 客户端只接收用户本轮查询正文。
+- 语义失败、证据不足和范围未知不会触发画像字符串或关键词回退。
 
 ---
 

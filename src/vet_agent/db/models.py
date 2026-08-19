@@ -350,6 +350,18 @@ class ClinicalSafetyAssetModel(Base):
             name="ck_clinical_safety_assets_action_class",
         ),
         CheckConstraint(
+            "species_scope <@ ARRAY['dog', 'cat']::text[]",
+            name="ck_clinical_safety_assets_species_scope_domain",
+        ),
+        CheckConstraint(
+            "sex_scope <@ ARRAY['male', 'female']::text[]",
+            name="ck_clinical_safety_assets_sex_scope_domain",
+        ),
+        CheckConstraint(
+            "age_scope <@ ARRAY['juvenile', 'adult', 'senior']::text[]",
+            name="ck_clinical_safety_assets_age_scope_domain",
+        ),
+        CheckConstraint(
             "review_status IN ('pending', 'approved', 'rejected', 'quarantined')",
             name="ck_clinical_safety_assets_review_status",
         ),

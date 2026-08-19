@@ -32,6 +32,7 @@ DISALLOWED_RUNTIME_REFERENCES: tuple[str, ...] = (
 DISALLOWED_GENERATED_CODE_PATTERN = re.compile(
     r"return\s+f[\"'](?:TOXIC_SUBSTANCE|EMERGENCY_RED_FLAG|DANGER_PATTERN)[^\"']*\{index:03d\}"
 )
+DISALLOWED_RETRIEVAL_REQUEST_CONSTRUCTION = re.compile(r"ClinicalSafetyRetrievalRequest\s*\(")
 
 
 def test_clinical_safety_runtime_does_not_reference_legacy_rule_paths() -> None:
@@ -53,6 +54,18 @@ def test_clinical_safety_converter_does_not_generate_numbered_fallback_codes() -
     source_text = Path("scripts/clinical_safety/converter.py").read_text(encoding="utf-8")
 
     assert DISALLOWED_GENERATED_CODE_PATTERN.search(source_text) is None
+
+
+def test_clinical_safety_runtime_constructs_retrieval_request_only_via_factory() -> None:
+    """验证临床安全运行时代码不直接构造结构化召回请求。
+
+    :return: 无返回值；断言通过表示生产链路不能绕过证据边界工厂捏造召回输入。
+    """
+    for path in RUNTIME_SOURCE_PATHS:
+        source_paths = [path] if path.is_file() else sorted(path.glob("*.py"))
+        for source_path in source_paths:
+            source_text = source_path.read_text(encoding="utf-8")
+            assert DISALLOWED_RETRIEVAL_REQUEST_CONSTRUCTION.search(source_text) is None, source_path
 
 
 def test_clinical_safety_policy_payload_excludes_raw_user_text() -> None:
@@ -83,6 +96,8 @@ def test_clinical_safety_policy_payload_excludes_raw_user_text() -> None:
     payload_text = json.dumps(payload, ensure_ascii=False)
 
     assert "source_text" not in payload["semantic"]
+    assert "high_risk_terms" not in payload["semantic"]
+    assert "negated_terms" not in payload["semantic"]
     assert payload["semantic"]["risk_evidence_state"] == "sufficient"
     assert "用户原始输入不应进入 OPA 负载" not in payload_text
 
