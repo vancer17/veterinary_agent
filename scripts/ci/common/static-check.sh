@@ -59,12 +59,67 @@ for workflow_file in .github/workflows/*.yml; do
     check_header_block "$workflow_file"
 done
 
+for make_entrypoint in Makefile make/*.mk; do
+    check_header_block "$make_entrypoint"
+done
+
 for shell_entrypoint in scripts/ci/*.sh scripts/ci/common/*.sh scripts/ci/repository/*.sh scripts/cd/common/*.sh scripts/cd/repository/*.sh; do
     check_header_block "$shell_entrypoint"
 done
 
 # Makefile 入口只做 dry-run 解析，避免静态检查阶段执行实际命令。
-make -n ci-common ci-repository ci-cd-layout ci-dry-run ci-try-run ci-response-generation-api cd-verify-release cd-resolve-images cd-build-images cd-sync-production cd-deploy-production cd-health-check >/dev/null
+make_entrypoints=(
+    help
+    ci
+    ci-common
+    ci-repository
+    ci-static
+    ci-python
+    ci-compose
+    ci-secret-boundary
+    ci-cd-layout
+    ci-db
+    ci-image
+    ci-image-core
+    ci-image-guardrails
+    ci-image-variants
+    ci-offline-image
+    ci-dry-run
+    ci-try-run
+    ci-response-generation-api
+    cd-verify-release
+    cd-resolve-images
+    cd-build-images
+    cd-build-images-guardrails
+    cd-sync-production
+    cd-deploy-production
+    cd-health-check
+    docker-dev-config
+    docker-prod-config
+    dev-build
+    dev-build-core
+    dev-build-guardrails
+    dev-up-no-wait
+    dev-up-core
+    dev-up-guardrails
+    dev-down
+    dev-test
+    prod-config
+    prod-pull
+    prod-up
+    prod-ready
+    db-shell
+    db-dev-migrate
+    db-prod-migrate
+    request-ready
+    request-business-all
+    runtime-offline-check
+    dev-offline-check
+    smoke-external-api
+    mem0-build
+    mem0-config
+)
+make -n "${make_entrypoints[@]}" >/dev/null
 
 if command -v actionlint >/dev/null 2>&1; then
     actionlint .github/workflows/*.yml

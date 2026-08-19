@@ -204,6 +204,9 @@ services:
       opa:
         condition: service_healthy
     env_file: *app-env-files
+    # 显式覆盖 env_file 中的默认 core，保证 Make 选择的构建变体同步传递到运行时入口。
+    environment:
+      VET_AGENT_IMAGE_VARIANT: ${VET_AGENT_IMAGE_VARIANT:-core}
     ports:
       - "${APP_PORT:-8000}:8000"
     volumes:
@@ -238,6 +241,9 @@ services:
       app:
         condition: service_healthy
     env_file: *app-env-files
+    # worker 与 app 必须使用同一镜像变体，避免后台任务入口的离线检查结果不一致。
+    environment:
+      VET_AGENT_IMAGE_VARIANT: ${VET_AGENT_IMAGE_VARIANT:-core}
     volumes:
       - ..:/app
     # 开发环境 worker 复用同一套源码挂载与应用镜像，仅切换为后台任务入口。
