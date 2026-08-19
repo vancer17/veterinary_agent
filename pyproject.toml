@@ -45,13 +45,13 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [[tool.uv.index]]
-url = "https://pypi.org/simple"
-
-[[tool.uv.index]]
 # 将 uv 依赖解析与锁文件生成固定到清华 PyPI 镜像，匹配当前国内服务器网络环境。
 name = "tsinghua"
 url = "https://pypi.tuna.tsinghua.edu.cn/simple"
 default = true
+
+[[tool.uv.index]]
+url = "https://pypi.org/simple"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -63,4 +63,10 @@ testpaths = ["tests"]
 norecursedirs = [".git", ".venv", "vendor"]
 markers = [
     "integration: 需要真实 OPA、真实模型网关或其他外部服务的集成测试。",
+]
+
+[dependency-groups]
+dev = [
+    "mypy>=2.3.1",
+    "ruff>=0.16.3",
 ]
