@@ -290,6 +290,7 @@ class VetOrchestrator:
             task_domain=task.domain,
             semantic_result=semantic_result,
             clinical_safety_semantic=clinical_semantic,
+            clinical_safety_precondition_unknown=clinical_safety_result.requires_precondition_information,
             max_questions=request.turn_options.max_followup_questions,
         )
 
@@ -754,6 +755,7 @@ class VetOrchestrator:
                 task_domain=task.domain,
                 semantic_result=semantic_result,
                 clinical_safety_semantic=clinical_safety_semantic,
+                clinical_safety_precondition_unknown=clinical_safety_resolution.requires_precondition_information,
                 max_questions=request.turn_options.max_followup_questions,
             )
             user_evidence = self.reasoning_display.user_answer_evidence(consultation_decision.state.to_dict())

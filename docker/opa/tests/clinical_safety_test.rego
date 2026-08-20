@@ -33,7 +33,12 @@ base_input := {
 		"resolution_state": "ongoing",
 		"intent_type": "toxicity",
 		"risk_evidence_state": "sufficient",
+		"observed_features": [
+			{"id": "f1", "kind": "symptom", "state": "present"},
+			{"id": "f2", "kind": "symptom", "state": "denied"},
+		],
 	},
+	"precondition_assessments": {},
 	"retrieval": {
 		"stage": "vector",
 		"degraded": false,
@@ -190,6 +195,248 @@ test_required_context_symptom_condition_fails_fast if {
 	decision.allow == true
 	count(decision.signals) == 0
 	decision.reasons[0] == "clinical_safety_candidate_required_context_unavailable:CYANOSIS_RISK_PATTERN"
+}
+
+test_required_context_semantic_assessment_allows_applicable_candidate if {
+	contextual_candidate := object.union(toxic_candidate, {
+		"code": "CYANOSIS_RISK_PATTERN",
+		"asset_type": "emergency_red_flag",
+		"required_context": {
+			"species": ["cat", "dog"],
+			"symptoms": ["牙龈或黏膜发紫"],
+		},
+		"required_context_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	})
+	semantic_with_symptom := object.union(base_input.semantic, {
+		"exposure_state": "unknown",
+		"symptom_state": "present",
+	})
+	decision := clinical_safety.decision with input as object.union(base_input, {
+		"semantic": semantic_with_symptom,
+		"candidates": [contextual_candidate],
+		"precondition_assessments": {
+			"safety_human_drug_001": {
+				"required_context_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				"status": "satisfied",
+				"evidence_ids": ["f1"],
+				"confidence": 0.93,
+				"trusted": true,
+			},
+		},
+	})
+
+	decision.action == "escalate"
+	count(decision.signals) == 1
+	decision.signals[0].code == "CYANOSIS_RISK_PATTERN"
+}
+
+test_required_context_hash_mismatch_fails_closed if {
+	contextual_candidate := object.union(toxic_candidate, {
+		"code": "HASH_MISMATCH_RISK",
+		"required_context": {"symptoms": ["呼吸困难"]},
+		"required_context_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+	})
+	decision := clinical_safety.decision with input as object.union(base_input, {
+		"candidates": [contextual_candidate],
+		"precondition_assessments": {
+			"safety_human_drug_001": {
+				"required_context_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+				"status": "satisfied",
+				"evidence_ids": ["f1"],
+				"confidence": 0.93,
+				"trusted": true,
+			},
+		},
+	})
+
+	decision.action == "allow"
+	count(decision.signals) == 0
+	decision.reasons[0] == "clinical_safety_candidate_required_context_unavailable:HASH_MISMATCH_RISK"
+}
+
+test_required_context_empty_hash_fails_closed if {
+	contextual_candidate := object.union(toxic_candidate, {
+		"code": "EMPTY_HASH_RISK",
+		"required_context": {"symptoms": ["呼吸困难"]},
+	})
+	decision := clinical_safety.decision with input as object.union(base_input, {
+		"candidates": [contextual_candidate],
+		"precondition_assessments": {
+			"safety_human_drug_001": {
+				"required_context_hash": "",
+				"status": "satisfied",
+				"evidence_ids": ["f1"],
+				"confidence": 0.93,
+				"trusted": true,
+			},
+		},
+	})
+
+	decision.action == "allow"
+	count(decision.signals) == 0
+	decision.reasons[0] == "clinical_safety_candidate_required_context_unavailable:EMPTY_HASH_RISK"
+}
+
+test_required_context_malformed_hash_fails_closed if {
+	contextual_candidate := object.union(toxic_candidate, {
+		"code": "MALFORMED_HASH_RISK",
+		"required_context": {"symptoms": ["呼吸困难"]},
+		"required_context_hash": "sha256:not-a-real-digest",
+	})
+	decision := clinical_safety.decision with input as object.union(base_input, {
+		"candidates": [contextual_candidate],
+		"precondition_assessments": {
+			"safety_human_drug_001": {
+				"required_context_hash": "sha256:not-a-real-digest",
+				"status": "satisfied",
+				"evidence_ids": ["f1"],
+				"confidence": 0.93,
+				"trusted": true,
+			},
+		},
+	})
+
+	decision.action == "allow"
+	count(decision.signals) == 0
+	decision.reasons[0] == "clinical_safety_candidate_required_context_unavailable:MALFORMED_HASH_RISK"
+}
+
+test_precondition_plan_filters_candidates_before_semantic_assessment if {
+	assessable_candidate := object.union(toxic_candidate, {
+		"code": "PLAN_ASSESSABLE_RISK",
+		"required_context": {"symptoms": ["呼吸困难"]},
+	})
+	mismatched_candidate := object.union(toxic_candidate, {
+		"asset_id": "safety_plan_mismatch",
+		"code": "PLAN_MISMATCH_RISK",
+		"species_scope": ["cat"],
+		"required_context": {"species": ["cat"], "symptoms": ["呼吸困难"]},
+	})
+	low_value_candidate := object.union(toxic_candidate, {
+		"asset_id": "safety_plan_low_value",
+		"code": "PLAN_LOW_VALUE_RISK",
+		"asset_type": "danger_pattern",
+		"severity": "caution",
+		"action_class": "safety_warning",
+		"score": 0.2,
+		"required_context": {"symptoms": ["呼吸困难"]},
+	})
+	dog_semantic := object.union(base_input.semantic, {"species": "dog"})
+	plan := clinical_safety.precondition_plan with input as object.union(base_input, {
+		"semantic": dog_semantic,
+		"candidates": [assessable_candidate, mismatched_candidate, low_value_candidate],
+	})
+
+	plan.asset_ids == [assessable_candidate.asset_id]
+}
+
+test_required_context_invalid_evidence_fails_closed if {
+	contextual_candidate := object.union(toxic_candidate, {
+		"code": "INVALID_EVIDENCE_RISK",
+		"required_context": {"symptoms": ["呼吸困难"]},
+		"required_context_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	})
+	decision := clinical_safety.decision with input as object.union(base_input, {
+		"candidates": [contextual_candidate],
+		"precondition_assessments": {
+			"safety_human_drug_001": {
+				"required_context_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				"status": "satisfied",
+				"evidence_ids": ["missing-feature"],
+				"confidence": 0.93,
+				"trusted": true,
+			},
+		},
+	})
+
+	decision.action == "allow"
+	count(decision.signals) == 0
+	decision.reasons[0] == "clinical_safety_candidate_required_context_unavailable:INVALID_EVIDENCE_RISK"
+}
+
+test_required_context_satisfied_requires_present_evidence if {
+	contextual_candidate := object.union(toxic_candidate, {
+		"code": "NON_PRESENT_EVIDENCE_RISK",
+		"required_context": {"symptoms": ["呼吸困难"]},
+		"required_context_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	})
+	decision := clinical_safety.decision with input as object.union(base_input, {
+		"candidates": [contextual_candidate],
+		"precondition_assessments": {
+			"safety_human_drug_001": {
+				"required_context_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				"status": "satisfied",
+				"evidence_ids": ["f2"],
+				"confidence": 0.93,
+				"trusted": true,
+			},
+		},
+	})
+
+	decision.action == "allow"
+	count(decision.signals) == 0
+	decision.reasons[0] == "clinical_safety_candidate_required_context_unavailable:NON_PRESENT_EVIDENCE_RISK"
+}
+
+test_required_context_not_satisfied_filters_candidate if {
+	contextual_candidate := object.union(toxic_candidate, {
+		"code": "NOT_SATISFIED_RISK",
+		"required_context": {"symptoms": ["呼吸困难"]},
+		"required_context_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	})
+	decision := clinical_safety.decision with input as object.union(base_input, {
+		"candidates": [contextual_candidate],
+		"precondition_assessments": {
+			"safety_human_drug_001": {
+				"required_context_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				"status": "not_satisfied",
+				"evidence_ids": ["f1"],
+				"confidence": 0.93,
+				"trusted": true,
+			},
+		},
+	})
+
+	decision.action == "allow"
+	count(decision.signals) == 0
+	decision.reasons[0] == "clinical_safety_candidate_required_context_mismatch:NOT_SATISFIED_RISK"
+}
+
+test_precondition_plan_filters_inapplicable_candidates if {
+	plannable_candidate := object.union(toxic_candidate, {
+		"code": "PLANNABLE_RISK",
+		"required_context": {"species": ["cat", "dog"], "symptoms": ["呼吸困难"]},
+		"required_context_hash": "sha256:plannable",
+	})
+	mismatched_candidate := object.union(toxic_candidate, {
+		"asset_id": "safety_context_mismatch",
+		"code": "PLAN_CONTEXT_MISMATCH_RISK",
+		"species_scope": ["dog"],
+		"required_context": {"species": ["dog"], "symptoms": ["呼吸困难"]},
+		"required_context_hash": "sha256:mismatch",
+	})
+	plan := clinical_safety.precondition_plan with input as object.union(base_input, {
+		"candidates": [plannable_candidate, mismatched_candidate],
+	})
+
+	plan.asset_ids == ["safety_human_drug_001"]
+}
+
+test_precondition_plan_keeps_information_gap_candidate_without_present_feature if {
+	contextual_candidate := object.union(toxic_candidate, {
+		"code": "PLAN_NO_EVIDENCE_RISK",
+		"required_context": {"symptoms": ["呼吸困难"]},
+		"required_context_hash": "sha256:no-evidence",
+	})
+	semantic_without_symptom := object.union(base_input.semantic, {
+		"observed_features": [],
+	})
+	plan := clinical_safety.precondition_plan with input as object.union(base_input, {
+		"semantic": semantic_without_symptom,
+		"candidates": [contextual_candidate],
+	})
+
+	plan.asset_ids == ["safety_human_drug_001"]
 }
 
 test_age_context_mismatch_filters_candidate if {

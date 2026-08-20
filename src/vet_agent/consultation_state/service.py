@@ -11,7 +11,7 @@
 
 from __future__ import annotations
 
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from vet_agent.clinical_safety import ClinicalSafetySemanticResult
 from vet_agent.repositories import ConsultationRuleSet, RuleRepository
@@ -19,7 +19,6 @@ from vet_agent.services import PetContext
 
 from .errors import ConsultationStateContractError, ConsultationStateDependencyError
 from .models import (
-    AnswerabilityDecision,
     ConsultationDecision,
     ConsultationState,
     ConsultationStatePolicyContext,
@@ -68,6 +67,7 @@ class ConsultationStateService:
         task_domain: str,
         semantic_result: SemanticExtractionResult | None = None,
         clinical_safety_semantic: ClinicalSafetySemanticResult | None = None,
+        clinical_safety_precondition_unknown: bool = False,
         max_questions: int,
     ) -> ConsultationDecision:
         """更新多轮问诊状态并给出本轮回答或追问决策。
@@ -79,6 +79,7 @@ class ConsultationStateService:
         :param task_domain: 已由任务路由器确定的稳定任务域。
         :param semantic_result: 结构化问诊语义抽取结果。
         :param clinical_safety_semantic: 临床安全语义抽取结果。
+        :param clinical_safety_precondition_unknown: 临床安全自然语言前提是否仍缺少可问诊补充的信息。
         :param max_questions: 本轮最多追问数量。
         :return: 返回本轮问诊决策。
         """
@@ -92,8 +93,22 @@ class ConsultationStateService:
 
         rules = self.rule_repository.consultation_rules()
         unresolved_slots = self._required_slots(rules, state.domain)
-        unresolved_slots = [slot for slot in unresolved_slots if not state.slots.get(slot)]
-        state.evidence_profile = self._build_evidence_profile(state, unresolved_slots, rules)
+        unresolved_slots = [
+            slot for slot in unresolved_slots if not state.slots.get(slot)
+        ]
+        if clinical_safety_precondition_unknown:
+            unresolved_slots.insert(0, "symptom_detail")
+            unresolved_slots = list(dict.fromkeys(unresolved_slots))
+        state.evidence_profile = self._build_evidence_profile(
+            state, unresolved_slots, rules
+        )
+        if clinical_safety_precondition_unknown:
+            state.evidence_profile["clinical_safety_precondition_unknown"] = True
+            advisory_slots = list(state.evidence_profile.get("advisory_slots") or [])
+            advisory_slots.insert(0, "symptom_detail")
+            state.evidence_profile["advisory_slots"] = list(
+                dict.fromkeys(advisory_slots)
+            )
         policy_input = self._build_policy_input(
             state=state,
             policy_context=policy_context,
@@ -114,7 +129,11 @@ class ConsultationStateService:
 
         state.answerability = answerability.to_dict()
         ready = answerability.decision == "answer"
-        missing_slots = [] if ready else list(answerability.blocking_slots or answerability.unresolved_slots)
+        missing_slots = (
+            []
+            if ready
+            else list(answerability.blocking_slots or answerability.unresolved_slots)
+        )
         if not ready and not missing_slots:
             raise ConsultationStateContractError(
                 "consultation answerability policy returned ask decision without follow-up slots",
@@ -148,8 +167,13 @@ class ConsultationStateService:
         """
         rules = self.rule_repository.consultation_rules()
         known = self._known_lines(decision.state)
-        missing = "、".join(self._label_for(rules, slot) for slot in decision.missing_slots[:5])
-        questions = "\n".join(f"{index + 1}. {question}" for index, question in enumerate(decision.questions))
+        missing = "、".join(
+            self._label_for(rules, slot) for slot in decision.missing_slots[:5]
+        )
+        questions = "\n".join(
+            f"{index + 1}. {question}"
+            for index, question in enumerate(decision.questions)
+        )
         reasons = "\n".join(question_reasons or [])
         reason_section = f"\n\n为什么先问这些？\n{reasons}" if reasons else ""
         return (
@@ -203,7 +227,9 @@ class ConsultationStateService:
             ),
             evidence_profile=evidence_profile,
             unresolved_slots=unresolved_slots,
-            advisory_slots=tuple(str(item) for item in evidence_profile.get("advisory_slots") or ()),
+            advisory_slots=tuple(
+                str(item) for item in evidence_profile.get("advisory_slots") or ()
+            ),
         )
 
     def _merge_user_text(self, state: ConsultationState, user_text: str) -> None:
@@ -230,7 +256,10 @@ class ConsultationStateService:
         """
         if semantic_result is None:
             return
-        if semantic_result.temporal_scope == "unclear" and semantic_result.temporal_state in {"unknown", "unclear"}:
+        if (
+            semantic_result.temporal_scope == "unclear"
+            and semantic_result.temporal_state in {"unknown", "unclear"}
+        ):
             return
         state.temporal_context = {
             "state": semantic_result.temporal_state,
@@ -239,7 +268,9 @@ class ConsultationStateService:
             "text": semantic_result.temporal_text,
         }
 
-    def _prefill_from_pet_context(self, state: ConsultationState, pet_context: PetContext) -> None:
+    def _prefill_from_pet_context(
+        self, state: ConsultationState, pet_context: PetContext
+    ) -> None:
         """从后端宠物资料预填稳定事实。
 
         :param state: 问诊状态。
@@ -271,12 +302,18 @@ class ConsultationStateService:
         if semantic_result is None or not semantic_result.is_trusted():
             return False
         facts = semantic_result.facts
-        applied_observation_count = self._merge_semantic_observations(state, semantic_result)
+        applied_observation_count = self._merge_semantic_observations(
+            state, semantic_result
+        )
         if not facts:
             if state.semantic_extraction:
                 state.semantic_extraction["applied_fact_keys"] = []
-                state.semantic_extraction["applied_observation_count"] = applied_observation_count
-                state.semantic_extraction["used_as_primary_semantic_path"] = applied_observation_count > 0
+                state.semantic_extraction["applied_observation_count"] = (
+                    applied_observation_count
+                )
+                state.semantic_extraction["used_as_primary_semantic_path"] = (
+                    applied_observation_count > 0
+                )
             return applied_observation_count > 0
 
         rules = self.rule_repository.consultation_rules()
@@ -291,7 +328,11 @@ class ConsultationStateService:
                 continue
             if status in {"unknown", "uncertain"}:
                 continue
-            if key in {"species", "life_stage_or_age", "weight"} and state.slots.get(key) and not correction:
+            if (
+                key in {"species", "life_stage_or_age", "weight"}
+                and state.slots.get(key)
+                and not correction
+            ):
                 continue
             if not value:
                 continue
@@ -300,11 +341,17 @@ class ConsultationStateService:
 
         if state.semantic_extraction:
             state.semantic_extraction["applied_fact_keys"] = applied_keys
-            state.semantic_extraction["applied_observation_count"] = applied_observation_count
-            state.semantic_extraction["used_as_primary_semantic_path"] = bool(applied_keys or applied_observation_count)
+            state.semantic_extraction["applied_observation_count"] = (
+                applied_observation_count
+            )
+            state.semantic_extraction["used_as_primary_semantic_path"] = bool(
+                applied_keys or applied_observation_count
+            )
         return bool(applied_keys or applied_observation_count)
 
-    def _semantic_intent(self, semantic_result: SemanticExtractionResult | None) -> dict[str, Any]:
+    def _semantic_intent(
+        self, semantic_result: SemanticExtractionResult | None
+    ) -> dict[str, Any]:
         """读取语义抽取结果中的用户意图。
 
         :param semantic_result: 结构化问诊语义抽取结果。
@@ -345,7 +392,8 @@ class ConsultationStateService:
             state.working_facts,
             record,
             key=key,
-            replace_existing=correction or record["status"] in {"confirmed", "negative", "contradicted"},
+            replace_existing=correction
+            or record["status"] in {"confirmed", "negative", "contradicted"},
             limit=64,
         )
 
@@ -420,7 +468,9 @@ class ConsultationStateService:
         :param limit: 最大保留记录数。
         :return: 返回追加后的结构化记录列表。
         """
-        if self._record_identity_exists(records, record, identity_fields=identity_fields):
+        if self._record_identity_exists(
+            records, record, identity_fields=identity_fields
+        ):
             return records[-limit:]
         return [*records, record][-limit:]
 
@@ -439,7 +489,10 @@ class ConsultationStateService:
         :return: 存在相同身份记录时返回 True，否则返回 False。
         """
         identity = tuple(str(record.get(field) or "") for field in identity_fields)
-        return any(tuple(str(item.get(field) or "") for field in identity_fields) == identity for item in records)
+        return any(
+            tuple(str(item.get(field) or "") for field in identity_fields) == identity
+            for item in records
+        )
 
     def _build_evidence_profile(
         self,
@@ -454,15 +507,21 @@ class ConsultationStateService:
         :param rules: 问诊规则集合。
         :return: 返回结构化证据画像。
         """
-        profile = {
-            "patient_identity": self._profile_item(state, ["species", "life_stage_or_age", "weight"]),
+        profile: dict[str, Any] = {
+            "patient_identity": self._profile_item(
+                state, ["species", "life_stage_or_age", "weight"]
+            ),
             "symptom_profile": {
-                "status": "known" if state.chief_complaint or state.slots.get("symptom_detail") else "unknown",
+                "status": "known"
+                if state.chief_complaint or state.slots.get("symptom_detail")
+                else "unknown",
                 "slots": ["chief_complaint", "symptom_detail"],
             },
             "time_course": self._time_course_profile(state),
             "systemic_status": self._profile_item(state, ["mental_status", "appetite"]),
-            "intake_output": self._profile_item(state, ["appetite", "vomiting", "stool"]),
+            "intake_output": self._profile_item(
+                state, ["appetite", "vomiting", "stool"]
+            ),
             "domain_specific": self._profile_item(
                 state,
                 ["breathing", "pain_or_mobility", "behavior_context", "current_food"],
@@ -510,14 +569,21 @@ class ConsultationStateService:
             ("time_course", ("onset",)),
             ("systemic_status", ("mental_status", "appetite")),
             ("intake_output", ("appetite", "vomiting", "stool")),
-            ("domain_specific", ("breathing", "pain_or_mobility", "behavior_context", "current_food")),
+            (
+                "domain_specific",
+                ("breathing", "pain_or_mobility", "behavior_context", "current_food"),
+            ),
         )
         unresolved_set = set(unresolved_slots)
         for category, slots in category_mapping:
             if profile.get(category, {}).get("status") == "known":
                 continue
             for slot in slots:
-                if slot in rules.slots and slot not in slot_order and (slot in unresolved_set or slot not in state.slots):
+                if (
+                    slot in rules.slots
+                    and slot not in slot_order
+                    and (slot in unresolved_set or slot not in state.slots)
+                ):
                     slot_order.append(slot)
         if not slot_order and unresolved_slots:
             slot_order.extend(slot for slot in unresolved_slots if slot in rules.slots)
@@ -534,8 +600,13 @@ class ConsultationStateService:
             for item in state.observations
             if item.get("value") and item.get("status") not in {"unknown", "uncertain"}
         ]
-        categories = sorted({str(item.get("category") or "other") for item in observations})
-        labels = [str(item.get("label") or item.get("category") or "观察") for item in observations[-6:]]
+        categories = sorted(
+            {str(item.get("category") or "other") for item in observations}
+        )
+        labels = [
+            str(item.get("label") or item.get("category") or "观察")
+            for item in observations[-6:]
+        ]
         return {
             "status": "known" if observations else "unknown",
             "count": len(observations),
@@ -555,7 +626,9 @@ class ConsultationStateService:
             profile["temporal_context"] = dict(state.temporal_context)
         return profile
 
-    def _profile_item(self, state: ConsultationState, slots: list[str]) -> dict[str, Any]:
+    def _profile_item(
+        self, state: ConsultationState, slots: list[str]
+    ) -> dict[str, Any]:
         """构建单个语义证据维度的状态。
 
         :param state: 当前问诊状态。
@@ -586,9 +659,11 @@ class ConsultationStateService:
         :param domain: 问诊领域。
         :return: 返回规则建议的关注槽位。
         """
-        if domain in rules.domains:
-            return rules.domains[domain].required_slots
-        return rules.domains.get("general").required_slots if "general" in rules.domains else []
+        domain_rule = rules.domains.get(domain)
+        if domain_rule is not None:
+            return domain_rule.required_slots
+        general_rule = rules.domains.get("general")
+        return general_rule.required_slots if general_rule is not None else []
 
     def _label_for(self, rules: ConsultationRuleSet, slot: str) -> str:
         """返回槽位对应的用户可见标签。

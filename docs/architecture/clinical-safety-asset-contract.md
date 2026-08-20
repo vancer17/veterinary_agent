@@ -46,6 +46,8 @@
 8. `recognition_phrases`、`clinical_risk_summary` 和 `triage_message` 必须非空。
 9. `decision_hints` 如存在，只能使用枚举化键和值，不得作为自由格式策略 DSL。
 10. `required_context` 如存在，只能使用受控上下文字段。
+11. `required_context.symptoms` 是条目级 `any_of` 自然语言准入描述集合；每个条目内部可表达组合语义，
+    但数组本身不展开为枚举或组合候选。
 
 `recognition_phrases` 和 `user_expressions` 仅用于离线生成 embedding 文本，不允许作为运行时关键词规则。
 

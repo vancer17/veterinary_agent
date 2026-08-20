@@ -21,6 +21,7 @@ from vet_agent.clinical_safety import (
     ClinicalSafetyThresholds,
     OpaClinicalSafetyPolicyClient,
     PostgresClinicalSafetyRepository,
+    QwenClinicalSafetyPreconditionAssessor,
 )
 from vet_agent.consultation_state import (
     ConsultationAnswerabilityPolicyClient,
@@ -264,6 +265,10 @@ class Container:
             self.qwen_client,
             settings,
         )
+        self.clinical_safety_precondition_assessor = QwenClinicalSafetyPreconditionAssessor(
+            self.qwen_client,
+            settings,
+        )
         self.clinical_safety_policy_client = (
             clinical_safety_policy_client
             if clinical_safety_policy_client is not None
@@ -273,6 +278,7 @@ class Container:
             self.clinical_safety_retriever,
             self.clinical_safety_policy_client,
             thresholds=self.clinical_safety_thresholds,
+            precondition_assessor=self.clinical_safety_precondition_assessor,
         )
         self.task_routing_domain_repository = self._task_routing_domain_repository(
             settings,

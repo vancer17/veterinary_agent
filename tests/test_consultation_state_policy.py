@@ -88,7 +88,9 @@ class _MockAsyncClient:
         """
         return None
 
-    async def post(self, url: str, *, headers: dict[str, str], json: dict[str, Any]) -> _MockResponse:
+    async def post(
+        self, url: str, *, headers: dict[str, str], json: dict[str, Any]
+    ) -> _MockResponse:
         """记录请求并返回预置响应。
 
         :param url: 请求地址。
@@ -112,7 +114,10 @@ def test_opa_consultation_answerability_client_builds_prefixed_data_api_url() ->
         rule_name="decision",
     )
 
-    assert client._decision_url() == "http://example.test/opa/v1/data/vet_agent/consultation_state/decision"
+    assert (
+        client._decision_url()
+        == "http://example.test/opa/v1/data/vet_agent/consultation_state/decision"
+    )
 
 
 def test_opa_consultation_answerability_client_parses_structured_result(
@@ -152,7 +157,9 @@ def test_opa_consultation_answerability_client_parses_structured_result(
     assert decision.mode == "needs_high_value_evidence"
     assert decision.policy_backend == "opa"
     assert decision.policy_path == "vet_agent.consultation_state/decision"
-    assert mock_client.requests[0]["headers"]["Authorization"] == "Bearer opa-test-token"
+    assert (
+        mock_client.requests[0]["headers"]["Authorization"] == "Bearer opa-test-token"
+    )
 
 
 def test_opa_consultation_answerability_client_fails_fast_when_policy_is_missing(
@@ -180,7 +187,9 @@ def test_opa_consultation_answerability_client_fails_fast_when_policy_is_missing
     assert exc_info.value.details["payload_keys"] == ["decision_id"]
 
 
-def test_local_consultation_answerability_client_uses_policy_state_boolean_summary() -> None:
+def test_local_consultation_answerability_client_uses_policy_state_boolean_summary() -> (
+    None
+):
     """验证本地策略客户端按策略摘要布尔字段判断最低上下文。
 
     :return: 无返回值；断言通过表示本地测试后端与 OPA 输入模型保持一致。
@@ -194,10 +203,29 @@ def test_local_consultation_answerability_client_uses_policy_state_boolean_summa
     assert decision.policy_backend == "local"
 
 
-def _policy_input(*, answer_now: bool = False) -> ConsultationStatePolicyInput:
+def test_local_consultation_answerability_client_asks_for_precondition_gap() -> None:
+    """验证本地策略与 OPA 同步要求补充临床安全前提信息。
+
+    :return: 无返回值；断言通过表示前提 unknown 会进入显式追问路径。
+    """
+    client = LocalConsultationAnswerabilityPolicyClient()
+
+    decision = asyncio.run(client.decide(_policy_input(precondition_unknown=True)))
+
+    assert decision.decision == "ask"
+    assert decision.mode == "clinical_safety_precondition_unknown"
+    assert decision.blocking_slots == ["onset"]
+
+
+def _policy_input(
+    *,
+    answer_now: bool = False,
+    precondition_unknown: bool = False,
+) -> ConsultationStatePolicyInput:
     """构造问诊回答充分性策略客户端单测输入。
 
     :param answer_now: 是否模拟用户明确要求先给阶段性回答。
+    :param precondition_unknown: 是否模拟临床安全前提存在信息缺口。
     :return: 返回不包含用户原始文本的策略输入对象。
     """
     return ConsultationStatePolicyInput(
@@ -222,11 +250,14 @@ def _policy_input(*, answer_now: bool = False) -> ConsultationStatePolicyInput:
             correction=False,
             raw_intent="先给阶段性判断" if answer_now else "",
         ),
-        limits=ConsultationStatePolicyLimits(max_followup_rounds=2, min_known_categories=2, max_questions=3),
+        limits=ConsultationStatePolicyLimits(
+            max_followup_rounds=2, min_known_categories=2, max_questions=3
+        ),
         evidence_profile={
             "minimum_context": True,
             "known_category_count": 1,
             "known_categories": ["patient_identity"],
+            "clinical_safety_precondition_unknown": precondition_unknown,
         },
         unresolved_slots=("onset",),
         advisory_slots=("onset",),

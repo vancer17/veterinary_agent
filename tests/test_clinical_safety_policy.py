@@ -17,13 +17,17 @@ from vet_agent.clinical_safety import (
     ClinicalSafetyCandidate,
     ClinicalSafetyChunk,
     ClinicalSafetyChunkHit,
+    ClinicalSafetyObservedFeature,
     ClinicalSafetyPolicyAction,
-    ClinicalSafetyPolicyDecision,
     ClinicalSafetyPolicyInput,
     ClinicalSafetyPolicyRequestContext,
+    ClinicalSafetyPreconditionAssessment,
     ClinicalSafetyRetrievalState,
+    ClinicalSafetySemanticResult,
     ClinicalSafetyThresholds,
     OpaClinicalSafetyPolicyClient,
+    clinical_safety_required_context_hash,
+    clinical_safety_semantic_premise_hash,
 )
 
 
@@ -87,7 +91,9 @@ class _MockAsyncClient:
         """
         return None
 
-    async def post(self, url: str, *, headers: dict[str, str], json: dict[str, Any]) -> _MockResponse:
+    async def post(
+        self, url: str, *, headers: dict[str, str], json: dict[str, Any]
+    ) -> _MockResponse:
         """记录请求并返回预置响应。
 
         :param url: 请求地址。
@@ -99,7 +105,9 @@ class _MockAsyncClient:
         return _MockResponse(self.response_payload)
 
 
-def test_opa_clinical_safety_policy_client_builds_prefixed_data_api_url(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_opa_clinical_safety_policy_client_builds_prefixed_data_api_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """验证 OPA 临床安全客户端会正确拼接 Data API URL。
 
     :param monkeypatch: pytest 替身工具。
@@ -111,7 +119,44 @@ def test_opa_clinical_safety_policy_client_builds_prefixed_data_api_url(monkeypa
         package_path="vet_agent.clinical_safety",
         rule_name="decision",
     )
-    assert client._decision_url() == "http://example.test/opa/v1/data/vet_agent/clinical_safety/decision"
+    assert (
+        client._decision_url()
+        == "http://example.test/opa/v1/data/vet_agent/clinical_safety/decision"
+    )
+
+
+def test_opa_clinical_safety_policy_client_parses_precondition_plan(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证 OPA 前提评估计划客户端会请求独立规则并解析资产列表。
+
+    :param monkeypatch: pytest 替换工具。
+    :return: 无返回值；断言通过表示前提计划与最终裁决共用客户端但使用不同规则。
+    """
+    mock_client = _MockAsyncClient(
+        {"result": {"asset_ids": ["safety_a", "safety_a", "safety_b"]}}
+    )
+    monkeypatch.setattr(httpx, "AsyncClient", lambda timeout: mock_client)
+    client = OpaClinicalSafetyPolicyClient(
+        base_url="http://example.test/opa",
+        version="v1",
+        package_path="vet_agent.clinical_safety",
+        rule_name="decision",
+    )
+    policy_input = ClinicalSafetyPolicyInput(
+        context=ClinicalSafetyPolicyRequestContext(),
+        semantic_result=None,
+        retrieval_state=ClinicalSafetyRetrievalState(),
+        candidates=(),
+        thresholds=ClinicalSafetyThresholds(),
+    )
+
+    planned_asset_ids = asyncio.run(client.plan_preconditions(policy_input))
+
+    assert planned_asset_ids == ("safety_a", "safety_b")
+    assert mock_client.requests[0]["url"] == (
+        "http://example.test/opa/v1/data/vet_agent/clinical_safety/precondition_plan"
+    )
 
 
 def test_clinical_safety_policy_input_passes_required_context_to_opa() -> None:
@@ -171,7 +216,83 @@ def test_clinical_safety_policy_input_passes_required_context_to_opa() -> None:
     }
 
 
-def test_opa_clinical_safety_policy_client_parses_result(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_clinical_safety_policy_input_projects_precondition_evidence_without_text() -> (
+    None
+):
+    """验证策略输入保留事实引用和前提哈希但移除自然语言事实文本。
+
+    :return: 无返回值；断言通过表示 OPA 不获得可被用于文本匹配的语义正文。
+    """
+    asset = ClinicalSafetyAsset(
+        asset_id="safety_precondition_projection",
+        asset_type="emergency_red_flag",
+        canonical_name="呼吸循环测试风险",
+        category="呼吸循环",
+        species_scope=("cat", "dog"),
+        sex_scope=(),
+        age_scope=(),
+        severity="urgent",
+        action_class="emergency",
+        code="CYANOSIS_RISK_PATTERN",
+        required_context={"species": ("cat", "dog"), "symptoms": ("呼吸困难",)},
+    )
+    candidate = ClinicalSafetyCandidate(asset=asset, score=0.92, chunk_hits=())
+    required_context_hash = clinical_safety_required_context_hash(
+        asset.required_context
+    )
+    semantic = ClinicalSafetySemanticResult(
+        symptom_state="present",
+        risk_evidence_state="sufficient",
+        observed_features=(
+            ClinicalSafetyObservedFeature(
+                feature_id="f1",
+                feature_kind="symptom",
+                state="present",
+                normalized_text="呼吸很快",
+                temporal_scope="ongoing",
+                resolution_state="ongoing",
+            ),
+        ),
+        confidence=0.95,
+        strategy="litellm_response_format",
+    )
+    assessment = ClinicalSafetyPreconditionAssessment(
+        asset_id=asset.asset_id,
+        required_context_hash=required_context_hash,
+        semantic_premise_hash=clinical_safety_semantic_premise_hash(
+            asset.required_context
+        ),
+        status="satisfied",
+        evidence_ids=("f1",),
+        confidence=0.93,
+        strategy="qwen_response_format",
+    )
+
+    payload = ClinicalSafetyPolicyInput(
+        context=ClinicalSafetyPolicyRequestContext(),
+        semantic_result=semantic,
+        retrieval_state=ClinicalSafetyRetrievalState(),
+        candidates=(candidate,),
+        thresholds=ClinicalSafetyThresholds(),
+        precondition_assessments={asset.asset_id: assessment},
+    ).to_payload()
+
+    assert payload["semantic"]["observed_features"] == [
+        {"id": "f1", "kind": "symptom", "state": "present"}
+    ]
+    assert payload["candidates"][0]["required_context_hash"] == required_context_hash
+    assert payload["precondition_assessments"][asset.asset_id] == {
+        "required_context_hash": required_context_hash,
+        "status": "satisfied",
+        "evidence_ids": ["f1"],
+        "confidence": 0.93,
+        "trusted": True,
+    }
+
+
+def test_opa_clinical_safety_policy_client_parses_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """验证 OPA 临床安全客户端能解析结构化裁决结果。
 
     :param monkeypatch: pytest 替身工具。

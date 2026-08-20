@@ -30,7 +30,9 @@ class ConsultationAnswerabilityPolicyClient(Protocol):
     :return: 无返回值；业务层通过该协议隔离 OPA 传输实现。
     """
 
-    async def decide(self, policy_input: ConsultationStatePolicyInput) -> AnswerabilityDecision:
+    async def decide(
+        self, policy_input: ConsultationStatePolicyInput
+    ) -> AnswerabilityDecision:
         """对本轮问诊状态执行回答充分性裁决。
 
         :param policy_input: 已完成本地状态合并和证据归一的策略输入。
@@ -71,7 +73,9 @@ class ConsultationStatePolicyDecisionPayload:
     reasons: tuple[str, ...] = ()
     metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_decision(self, *, backend: str, policy_path: str, policy_payload: dict[str, Any]) -> AnswerabilityDecision:
+    def to_decision(
+        self, *, backend: str, policy_path: str, policy_payload: dict[str, Any]
+    ) -> AnswerabilityDecision:
         """转换为问诊状态链路可消费的统一决策对象。
 
         :param backend: 策略后端名称。
@@ -133,7 +137,9 @@ class OpaConsultationAnswerabilityPolicyClient(ConsultationAnswerabilityPolicyCl
         self.auth_token = auth_token
         self.timeout_seconds = timeout_seconds
 
-    async def decide(self, policy_input: ConsultationStatePolicyInput) -> AnswerabilityDecision:
+    async def decide(
+        self, policy_input: ConsultationStatePolicyInput
+    ) -> AnswerabilityDecision:
         """向 OPA 提交问诊状态结构化输入并解析结果。
 
         :param policy_input: 已完成本地状态合并和证据归一的策略输入。
@@ -151,7 +157,9 @@ class OpaConsultationAnswerabilityPolicyClient(ConsultationAnswerabilityPolicyCl
             headers["Authorization"] = f"Bearer {self.auth_token}"
         try:
             async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-                response = await client.post(url, headers=headers, json={"input": policy_input.to_policy_input()})
+                response = await client.post(
+                    url, headers=headers, json={"input": policy_input.to_policy_input()}
+                )
                 response.raise_for_status()
                 result = response.json()
         except Exception as exc:
@@ -172,14 +180,20 @@ class OpaConsultationAnswerabilityPolicyClient(ConsultationAnswerabilityPolicyCl
 
         :return: OPA 连接参数齐全时返回 True。
         """
-        return bool(self.base_url and self.version and self.package_path and self.rule_name)
+        return bool(
+            self.base_url and self.version and self.package_path and self.rule_name
+        )
 
     def _decision_url(self) -> str:
         """构造 OPA Data API 裁决 URL。
 
         :return: 返回可提交裁决请求的完整 URL。
         """
-        package_parts = [quote(part, safe="") for part in self.package_path.replace("/", ".").split(".") if part]
+        package_parts = [
+            quote(part, safe="")
+            for part in self.package_path.replace("/", ".").split(".")
+            if part
+        ]
         rule = quote(self.rule_name, safe="")
         path = "/".join([*package_parts, rule])
         return f"{self.base_url}/data/{path}"
@@ -210,14 +224,21 @@ class LocalConsultationAnswerabilityPolicyClient(ConsultationAnswerabilityPolicy
     :return: 无返回值。
     """
 
-    async def decide(self, policy_input: ConsultationStatePolicyInput) -> AnswerabilityDecision:
+    async def decide(
+        self, policy_input: ConsultationStatePolicyInput
+    ) -> AnswerabilityDecision:
         """对本轮问诊状态执行本地最小裁决。
 
         :param policy_input: 已完成本地状态合并和证据归一的策略输入。
         :return: 返回问诊回答充分性策略决策。
         """
         minimum_context = self._has_minimum_context(policy_input)
-        known_category_count = int(policy_input.evidence_profile.get("known_category_count") or 0)
+        clinical_safety_precondition_unknown = bool(
+            policy_input.evidence_profile.get("clinical_safety_precondition_unknown")
+        )
+        known_category_count = int(
+            policy_input.evidence_profile.get("known_category_count") or 0
+        )
         unresolved_slots = list(policy_input.unresolved_slots)
         advisory_slots = list(policy_input.advisory_slots)
         blocking_slots = advisory_slots or unresolved_slots
@@ -230,7 +251,11 @@ class LocalConsultationAnswerabilityPolicyClient(ConsultationAnswerabilityPolicy
                 policy_input=policy_input,
             )
 
-        if minimum_context and not unresolved_slots:
+        if (
+            minimum_context
+            and not unresolved_slots
+            and not clinical_safety_precondition_unknown
+        ):
             return self._answer(
                 mode="slot_complete",
                 unresolved_slots=tuple(unresolved_slots),
@@ -242,6 +267,7 @@ class LocalConsultationAnswerabilityPolicyClient(ConsultationAnswerabilityPolicy
             minimum_context
             and policy_input.state.followup_rounds >= 1
             and known_category_count >= policy_input.limits.min_known_categories
+            and not clinical_safety_precondition_unknown
         ):
             return self._answer(
                 mode="sufficient_semantic_evidence",
@@ -250,7 +276,11 @@ class LocalConsultationAnswerabilityPolicyClient(ConsultationAnswerabilityPolicy
                 policy_input=policy_input,
             )
 
-        if minimum_context and policy_input.state.followup_rounds >= policy_input.limits.max_followup_rounds:
+        if (
+            minimum_context
+            and policy_input.state.followup_rounds
+            >= policy_input.limits.max_followup_rounds
+        ):
             return self._answer(
                 mode="max_followup_rounds_reached",
                 unresolved_slots=tuple(unresolved_slots),
@@ -258,7 +288,24 @@ class LocalConsultationAnswerabilityPolicyClient(ConsultationAnswerabilityPolicy
                 policy_input=policy_input,
             )
 
+        if (
+            minimum_context
+            and clinical_safety_precondition_unknown
+            and policy_input.state.followup_rounds
+            < policy_input.limits.max_followup_rounds
+        ):
+            return self._ask(
+                mode="clinical_safety_precondition_unknown",
+                blocking_slots=tuple(
+                    blocking_slots[: policy_input.limits.max_questions]
+                ),
+                unresolved_slots=tuple(unresolved_slots),
+                policy_input=policy_input,
+                reason="临床安全前提仍缺少关键症状或背景信息。",
+            )
+
         return self._ask(
+            mode="needs_high_value_evidence",
             blocking_slots=tuple(blocking_slots[: policy_input.limits.max_questions]),
             unresolved_slots=tuple(unresolved_slots),
             policy_input=policy_input,
@@ -307,11 +354,14 @@ class LocalConsultationAnswerabilityPolicyClient(ConsultationAnswerabilityPolicy
             reason=reason,
             metadata={"policy_backend": "local"},
         )
-        return decision.to_decision(backend="local", policy_path="local", policy_payload=payload)
+        return decision.to_decision(
+            backend="local", policy_path="local", policy_payload=payload
+        )
 
     def _ask(
         self,
         *,
+        mode: str,
         blocking_slots: tuple[str, ...],
         unresolved_slots: tuple[str, ...],
         policy_input: ConsultationStatePolicyInput,
@@ -319,6 +369,7 @@ class LocalConsultationAnswerabilityPolicyClient(ConsultationAnswerabilityPolicy
     ) -> AnswerabilityDecision:
         """构造继续追问的决策。
 
+        :param mode: 追问决策模式。
         :param blocking_slots: 当前建议继续追问的槽位。
         :param unresolved_slots: 尚未确认但不再机械阻塞的槽位。
         :param policy_input: 已完成本地状态合并和证据归一的策略输入。
@@ -329,24 +380,36 @@ class LocalConsultationAnswerabilityPolicyClient(ConsultationAnswerabilityPolicy
         decision = ConsultationStatePolicyDecisionPayload(
             action=ConsultationStatePolicyAction.ASK,
             allow=False,
-            mode="needs_high_value_evidence",
+            mode=mode,
             answer_scope="insufficient",
             blocking_slots=blocking_slots,
             unresolved_slots=unresolved_slots,
             reason=reason,
             metadata={"policy_backend": "local"},
         )
-        return decision.to_decision(backend="local", policy_path="local", policy_payload=payload)
+        return decision.to_decision(
+            backend="local", policy_path="local", policy_payload=payload
+        )
 
 
-def _decision_payload_from_dict(payload: dict[str, Any]) -> ConsultationStatePolicyDecisionPayload:
+def _decision_payload_from_dict(
+    payload: dict[str, Any],
+) -> ConsultationStatePolicyDecisionPayload:
     """将 OPA 返回字典转换为问诊回答充分性策略负载。
 
     :param payload: OPA 返回的裁决字典。
     :return: 返回结构化策略负载。
     :raises ConsultationStateDependencyError: 策略动作非法时抛出。
     """
-    required_fields = ("action", "allow", "mode", "answer_scope", "blocking_slots", "unresolved_slots", "reason")
+    required_fields = (
+        "action",
+        "allow",
+        "mode",
+        "answer_scope",
+        "blocking_slots",
+        "unresolved_slots",
+        "reason",
+    )
     missing_fields = [field for field in required_fields if field not in payload]
     if missing_fields:
         raise ConsultationStateDependencyError(
@@ -360,9 +423,14 @@ def _decision_payload_from_dict(payload: dict[str, Any]) -> ConsultationStatePol
     if not isinstance(payload["allow"], bool):
         raise ConsultationStateDependencyError(
             "consultation answerability policy returned invalid decision payload",
-            details={"reason": "invalid_allow_type", "allow_type": type(payload["allow"]).__name__},
+            details={
+                "reason": "invalid_allow_type",
+                "allow_type": type(payload["allow"]).__name__,
+            },
         )
-    if not isinstance(payload["blocking_slots"], list) or not isinstance(payload["unresolved_slots"], list):
+    if not isinstance(payload["blocking_slots"], list) or not isinstance(
+        payload["unresolved_slots"], list
+    ):
         raise ConsultationStateDependencyError(
             "consultation answerability policy returned invalid decision payload",
             details={
@@ -384,11 +452,17 @@ def _decision_payload_from_dict(payload: dict[str, Any]) -> ConsultationStatePol
     if allow != (action == ConsultationStatePolicyAction.ANSWER):
         raise ConsultationStateDependencyError(
             "consultation answerability policy returned invalid decision payload",
-            details={"reason": "inconsistent_action_allow", "action": action.value, "allow": allow},
+            details={
+                "reason": "inconsistent_action_allow",
+                "action": action.value,
+                "allow": allow,
+            },
         )
     raw_blocking_slots = payload["blocking_slots"]
     raw_unresolved_slots = payload["unresolved_slots"]
-    reasons = tuple(str(item) for item in payload.get("reasons", []) if str(item).strip())
+    reasons = tuple(
+        str(item) for item in payload.get("reasons", []) if str(item).strip()
+    )
     mode = str(payload["mode"]).strip()
     answer_scope = str(payload["answer_scope"]).strip()
     reason = str(payload["reason"]).strip()
@@ -402,8 +476,12 @@ def _decision_payload_from_dict(payload: dict[str, Any]) -> ConsultationStatePol
         allow=allow,
         mode=mode,
         answer_scope=answer_scope,
-        blocking_slots=tuple(str(item) for item in raw_blocking_slots if str(item).strip()),
-        unresolved_slots=tuple(str(item) for item in raw_unresolved_slots if str(item).strip()),
+        blocking_slots=tuple(
+            str(item) for item in raw_blocking_slots if str(item).strip()
+        ),
+        unresolved_slots=tuple(
+            str(item) for item in raw_unresolved_slots if str(item).strip()
+        ),
         reason=reason,
         reasons=reasons,
         metadata={"policy_payload": payload},

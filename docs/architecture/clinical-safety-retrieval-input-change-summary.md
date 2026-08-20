@@ -1,89 +1,81 @@
 <!--
 =============================================================================
 文件: docs/architecture/clinical-safety-retrieval-input-change-summary.md
-作用: 总结临床安全阶段 2“收紧召回输入”迁移后的稳定边界、对接契约与
-      有意预留 TODO 项。
-范围: 适用于临床安全语义抽取、候选召回输入、结构化画像过滤、OPA 输入边界、
-      资产治理对接与阶段 2 回归验收。
-说明: 本文档只描述跨模块稳定契约、可观察行为和明确不做事项；不承载疾病知识、
-      关键词词表、资产正文、软件包内部函数实现或具体 SQL 细节。
-维护: 当 query_text、ClinicalSafetyRetrievalScope、risk_evidence_state、
-      召回/裁决原因码、observed_features 或资产范围契约变化时同步维护。
+作用: 维护临床安全召回输入的稳定边界、跨模块对接契约与有意预留 TODO。
+范围: 覆盖召回准入、向量正文、结构化画像过滤、候选身份、语义事实交接、
+      OPA 输入边界和资产治理要求。
+说明: 本文档只描述跨模块可依赖的行为边界；不描述疾病知识、关键词词表、
+      软件包内部实现、数据库细节、提示词内容或测试替身实现。
+维护: 当召回准入字段、向量正文边界、observed_features、required_context、
+      候选/裁决原因码或资产范围契约变化时同步维护。
 =============================================================================
 -->
 
-# 临床安全召回输入收紧变更总结
+# 临床安全召回输入边界
 
-> **文档状态**：阶段 2 迁移与审查加固完成后的对齐基线
+> **文档状态**：阶段 2 完成后维护、阶段 3 事实交接边界更新后的对齐基线
 >
-> **适用范围**：临床安全召回输入、结构化宠物画像过滤、pgvector 候选召回、OPA 输入边界、资产治理对接
+> **适用范围**：临床安全召回输入、结构化宠物画像过滤、候选召回、语义事实交接、OPA 输入边界、资产治理对接
 >
-> **不适用范围**：`observed_features` 正式特征词汇治理、完整 `required_context` 组合语义、
-> 资产 code 拆分、主安全信号排序和医学资产运营
+> **不适用范围**：医学资产运营、完整医学词汇治理、急诊 code 拆分、主安全信号排序、问诊追问策略、长期记忆
 
-## 1. 迁移目标与输入职责
+## 1. 稳定输入职责
 
-本阶段将临床安全候选召回从“单一混合字符串查询”迁移为三个正交输入：
+临床安全强召回只消费三个正交输入：
 
-| 输入 | 作用 | 禁止承担的职责 |
+| 输入 | 允许承担的职责 | 禁止承担的职责 |
 |---|---|---|
-| `query_text` | 生成 embedding 并寻找语义相关候选 | 不直接决定急诊、阻断或安全 code |
-| `ClinicalSafetyRetrievalScope` | 过滤不适用物种、性别和年龄范围 | 不替代本轮风险证据 |
-| `risk_evidence_state` | 决定是否具备强召回资格 | 不表示疾病、诊断或最终动作 |
+| `query_text` | 生成 embedding，寻找语义相关候选 | 证明风险成立、决定急诊或推断资产 code |
+| `ClinicalSafetyRetrievalScope` | 按物种、性别、年龄过滤明显不适用资产 | 作为本轮风险证据或症状事实 |
+| `risk_evidence_state` | 决定是否具备强召回资格 | 表示疾病、诊断、处置或最终动作 |
 
-宠物画像是适用性上下文，不是本轮风险证据；候选相似度不是风险等级。
+稳定不变量：
 
-## 2. 稳定查询契约
+1. 宠物画像是适用性上下文，不是本轮风险证据。
+2. 用户询问分诊不等于当前存在高危事实。
+3. 候选相似度不是风险等级。
+4. `matched_terms` 只能审计，不是事实或前提满足证据。
+5. 候选 `severity` / `action_class` 不能补足缺失的回合事实。
 
-召回入口统一接收 `ClinicalSafetyRetrievalRequest`，不再接收可同时承载画像和查询正文的
-任意字符串。该对象只包含：
+## 2. 强召回准入边界
 
-```text
-query_text
-scope
-risk_evidence_state
-```
+召回请求由可信语义结果统一构造，外部实现不得绕过该入口拼接查询。
 
-准入矩阵：
-
-| 语义状态 | `query_text` | 效果 |
+| 语义状态 | `query_text` | 强召回结果 |
 |---|---|---|
-| 缺失 / 低置信 / 失败 / 禁用 | 强制为空 | 完全阻断强召回，不采用任何画像值 |
-| 可信但 `insufficient` | 强制为空 | 阻断强召回；画像仅保留为审计信息 |
-| 可信且 `sufficient` 且正文非空 | 用户本轮原文（去首尾空白、限长） | 进入 embedding 与结构化过滤 |
+| 语义缺失、低置信、失败或禁用 | 空 | 阻断 |
+| 可信但证据 `insufficient` | 空 | 阻断 |
+| 可信且证据 `sufficient`，正文非空 | 用户本轮事实正文 | 允许 |
+| 可信且证据 `sufficient`，正文为空 | 空 | 阻断 |
 
-跳过强召回的稳定原因码：
+稳定跳过原因：
 
 | 场景 | 原因码 |
 |---|---|
-| `risk_evidence_state=insufficient` | `risk_evidence_not_sufficient` |
-| `risk_evidence_state=unknown` | `risk_evidence_unknown` |
+| 证据不足 | `risk_evidence_not_sufficient` |
+| 证据未知 | `risk_evidence_unknown` |
 | 证据充分但正文为空 | `empty_query` |
 
-跳过强召回不是医学安全结论，也不是普通错误回退，而是显式的临床安全候选准入结果；
-该状态不标记为链路降级。生产链路只允许通过“由可信语义结果构造召回请求”的统一入口
-发起强召回，不得绕过证据边界直接捏造查询正文或证据状态。
+跳过强召回是候选准入结果，不是医学结论，也不是依赖降级。
 
 ## 3. 向量正文边界
 
-当前阶段使用用户本轮原文作为 `query_text`，但只在证据充分时使用，并具备确定性长度
-上限（2000 字符）；超长输入保留头部主诉，不因超长跳过召回。
+向量正文只允许使用当前回合用户事实文本，并具备确定性长度上限。
 
-以下信息永久退出向量正文：
+以下信息永久禁止进入召回正文：
 
-1. 物种、性别和年龄（含年龄原文摘要）。
-2. `intent_type`。
-3. `symptom_state`、`exposure_state` 等泛化状态标签。
-4. `temporal_scope`、`resolution_state` 等策略状态标签。
-5. `high_risk_terms`。
-6. 宠物上下文摘要。
+1. 物种、性别、年龄和宠物画像摘要。
+2. 分诊、知识、预防等意图标签。
+3. 症状、暴露、时间、缓解等泛化状态标签。
+4. `high_risk_terms`、`negated_terms` 等审计短语。
+5. 资产名称、候选 code、风险等级或处置文案。
+6. `observed_features` 的自然语言正文。
 
-语义结果只承载结构化事实与审计信息，不再提供任何“查询提示拼接”职责；召回入口也
-不再接收画像文本摘要或年龄原文参数。
+`observed_features` 用于阶段 3 前提语义评估，不反向改变阶段 2 的召回正文。
 
-## 4. 结构化范围过滤语义
+## 4. 结构化范围过滤
 
-范围字段与受控值域：
+范围值域：
 
 | 字段 | 允许值 |
 |---|---|
@@ -91,141 +83,163 @@ risk_evidence_state
 | `sex` | `male` / `female` / `unknown` |
 | `age_group` | `juvenile` / `adult` / `senior` / `unknown` |
 
-召回过滤、防御校验与 OPA 裁决共享同一语义矩阵，任何一层实现调整都必须保持一致：
+过滤语义：
 
 | 条件 | 结果 |
 |---|---|
 | 资产范围为空数组 | 该维度不限制 |
-| 当前值为 `unknown` | 不生成过滤条件，不推断默认值 |
-| 当前值在资产范围内 | 允许参与召回 / 裁决 |
+| 当前值为 `unknown` | 不推断默认值；召回层不猜物种、性别或年龄 |
+| 当前值在资产范围内 | 允许参与召回 |
 | 当前值不在资产范围内 | 排除或判定不适用 |
 
-部署形态：
+`unknown` 不代表匹配成功。受限资产的最终裁决依赖对应 `required_context` Fail Closed。
 
-1. PostgreSQL/pgvector 在向量检索阶段按资产表 `species_scope`、`sex_scope`、`age_scope`
-   数组执行结构化过滤。
-2. 候选聚合阶段保留同一判断作为防御性校验；防御性拦截输出
-   `scope_filtered_candidate:<asset_id>` 原因并标记链路降级，仓储协议违约不得被静默吞掉。
-3. OPA 裁决层对已知失配值再次判定不适用（防御纵深）。
+## 5. 回合事实与候选交接
 
-该过滤只判断资产适用性：不解析用户文本、不读取召回短语资产、不生成医学事实。
+召回后交给前提裁决链路的稳定事实包括：
 
-## 5. `high_risk_terms` 边界收缩
+1. 本轮结构化语义状态。
+2. `observed_features` 的引用标识、类别和状态。
+3. 候选的完整前置上下文哈希。
+4. 只覆盖症状前提的语义去重哈希。
+5. 前提评估状态、置信度和 evidence 引用。
 
-`high_risk_terms` 仍可保留在语义 metadata 中，用于审计模型抽取结果，但不再进入：
+边界：
 
-1. embedding 查询正文。
-2. OPA 策略输入。
-3. `required_context.symptoms` 满足判断。
-4. 安全信号 `matched_terms` 投影。
-5. 风险证据充分性补写。
-6. 候选严重级别或安全 code 生成。
+1. `observed_features.normalized_text` 只供前提语义评估使用。
+2. OPA 只消费 `id / kind / state`，不接收自然语言事实正文。
+3. `satisfied` 必须由当前回合 present 症状事实支撑。
+4. denied、resolved、possible 或缺失事实不能支撑急性前提满足。
+5. 共享语义评估结果的候选仍必须保留各自完整候选哈希。
+6. 候选分数、severity、action_class、code 和 triage 文案不得进入前提事实判断。
 
-在正式 `observed_features` 契约完成前，OPA 对含有 `required_context.symptoms` 的候选
-执行显式不可用处理，稳定原因码为：
+## 6. `required_context` 对接语义
+
+### 6.1 结构化维度
+
+`species`、`sex`、`age` 是等值结构化前提，必须在发布契约中与资产受限范围保持一致。
+
+### 6.2 自然语言症状前提
+
+`required_context.symptoms` 是条目级 `any_of` 自然语言准入描述集合：
+
+1. 每个数组元素是一条完整准入描述。
+2. 当前回合事实明确蕴含任意一条完整描述时，前提可为 `satisfied`。
+3. 只满足组合描述的一部分时必须 `unknown`。
+4. 明确否定、已缓解或仅相关但不蕴含时不得 `satisfied`。
+5. 不展开症状组合，不生成额外候选，不把条目改造为全局医学枚举。
+
+组合语义写在自然语言条目内部，例如“多饮多尿背景下新发拒食”，而不是由数组顺序或全部条目隐式推导。
+
+## 7. OPA 输入边界
+
+OPA 只消费结构化摘要：
+
+1. 语义可信状态。
+2. 结构化 scope。
+3. observed feature 引用。
+4. 候选 required context 与哈希。
+5. 前提评估状态和 evidence 引用。
+6. 候选 severity、action、分数与阈值。
+
+OPA 不接收：
+
+1. 用户原文。
+2. `observed_features.normalized_text`。
+3. `high_risk_terms`、`negated_terms`。
+4. 资产全文或向量 chunk 全文。
+5. 前提评估模型自由文本说明。
+
+最终动作始终由 OPA 统一裁决；前提语义评估器不输出 action、severity、message 或 signal。
+
+## 8. 稳定可观察状态
+
+召回状态暴露：
 
 ```text
-clinical_safety_candidate_required_context_unavailable:<code>
+stage
+degraded
+reasons
+retrieval_source
+vector_hit_count
+candidate_count
 ```
 
-系统不使用自由中文短语猜测症状前提是否满足。
-
-## 6. 审查加固后的稳定边界
-
-1. **审计原因唯一性**：同一候选同时命中多个不适用条件时，OPA 必须输出唯一确定性
-   原因，不得产生多输出冲突。优先级固定为：证据不可用 > 证据不足 > 语义否认 / 远期
-   已缓解 > 前置上下文缺失 > 结构化范围不匹配 > 正常可观察候选。
-2. **命中可解释性回退**：生产 pgvector 命中不携带短语命中词时，安全信号 `matched_terms`
-   回退到资产治理域生成的 chunk 标题；不回退到用户原文、`high_risk_terms` 或资产短语扫描。
-3. **范围失配与前置缺失的区分**：`unknown` 画像值对资产 scope 放行（不推断），但对
-   资产声明的 `required_context` 阻断（前提必须肯定存在）。
-4. **画像未知的收口责任在资产治理**：受限 `species_scope`、`sex_scope`、`age_scope`
-   必须声明等值的 `required_context`，保证画像未知时受限资产在裁决层 Fail Closed；
-   通用资产（空范围）不强制声明画像前置。
-5. **值域双层约束**：三个范围维度的受控枚举同时由资产发布契约与数据库层约束执行；
-   越界值在发布或写入阶段显式失败，不进入运行时静默失配。
-
-## 7. 跨层职责边界
-
-| 层 | 当前职责 |
-|---|---|
-| 临床安全语义抽取 | 输出可信结构化状态、受控画像值和审计短语 |
-| 查询契约 | 依据证据边界整理 `query_text` 与结构化范围，执行强召回准入 |
-| embedding 客户端 | 将 `query_text` 转换为向量 |
-| PostgreSQL/pgvector 仓储 | 按向量相似度和结构化范围召回已发布 chunk |
-| 候选聚合层 | 聚合候选并执行防御性范围校验与显式降级留痕 |
-| OPA | 消费不含原始文本和审计短语的结构化输入，执行动作裁决 |
-
-本阶段没有新增按症状、资产 code 或物种组合的 Python / Rego 医学分支。
-
-## 8. 对接契约
-
-### 8.1 外部 API 兼容
-
-外部 API 请求与响应主结构保持兼容；本阶段行为变化全部通过响应 metadata 可审计，
-不引入破坏性字段变更。
-
-### 8.2 可观察状态与稳定原因码
-
-召回状态通过 metadata 暴露 `stage`、`degraded`、`reasons`、`vector_hit_count`、
-`candidate_count` 与 `retrieval_source`。集成方可以依赖的稳定原因码族：
+稳定召回原因码族：
 
 | 类别 | 原因码 |
 |---|---|
 | 准入跳过 | `risk_evidence_not_sufficient` / `risk_evidence_unknown` / `empty_query` |
-| 依赖不可用或失败 | `embedding_client_unavailable` / `embedding_generation_failed:<异常类型>` / `vector_retrieval_failed:<异常类型>` |
-| 向量结果为空 | `query_embedding_empty` / `vector_hit_count_zero` / `clinical_safety_retrieval_empty` / `vector_candidate_count_zero` |
-| 数据一致性异常 | `invalid_asset_reference` / `clinical_safety_asset_read_failed:<异常类型>` / `scope_filtered_candidate:<asset_id>` |
-| 调用参数异常 | `invalid_retrieval_arguments` |
+| 依赖失败 | `embedding_client_unavailable` / `embedding_generation_failed:<异常类型>` / `vector_retrieval_failed:<异常类型>` |
+| 向量为空 | `query_embedding_empty` / `vector_hit_count_zero` / `clinical_safety_retrieval_empty` / `vector_candidate_count_zero` |
+| 数据契约异常 | `invalid_asset_reference` / `clinical_safety_asset_read_failed:<异常类型>` / `scope_filtered_candidate:<asset_id>` |
+| 参数异常 | `invalid_retrieval_arguments` |
 
-OPA 裁决原因码族保持 `clinical_safety_candidate_<原因>:<code>` 结构；`<code>` 为资产
-身份，不承载 Python / Rego 医学分支语义。
+OPA 候选原因保持：
 
-### 8.3 资产治理对接要求
+```text
+clinical_safety_candidate_<原因>:<code>
+```
 
-1. 受限范围维度必须声明等值 `required_context`（species / sex / age）。
-2. 范围值只能使用受控枚举；空数组表示不限制。
-3. `required_context.symptoms` 在 `observed_features` 落地前只会触发显式不可用，
-   不会被短语匹配满足。
+其中 `<code>` 只是资产身份，不承载 Python 或 Rego 医学分支。
 
-### 8.4 仓储实现对接要求
+## 9. 资产与仓储对接要求
 
-任何向量仓储实现必须在向量检索阶段消费结构化范围；未消费范围的实现会在聚合层被
-防御性拦截并表现为降级状态，而不是静默放出不适用候选。
+资产治理必须保证：
 
-### 8.5 集成禁止事项
+1. 受限 species / sex / age 声明等值 `required_context`。
+2. 范围数组只使用受控枚举，空数组表示不限制。
+3. `required_context.symptoms` 保持条目级 any_of 自然语言语义。
+4. 运营说明、处置说明和 Agent 指令不得混入症状前提。
+5. 每个急诊模式拥有可审计身份；通用大类不得替代具体模式身份。
 
-1. 不绕过统一入口直接构造召回请求。
-2. 不把 `high_risk_terms`、`matched_terms` 或候选分数当作症状事实或风险等级。
-3. 不新增关键词、正则、资产短语或文本 JSON 检索回退。
-4. 不在 Python 业务层按 `candidate.code` 编写医学分支。
+向量仓储必须：
 
-## 9. 有意预留 TODO
+1. 在检索阶段消费结构化范围。
+2. 只返回已发布、已审核且具备有效向量的候选。
+3. 不以文本文件、资产 JSON 或关键词扫描作为生产回退。
+4. 不在仓储层推断临床风险或候选前提满足性。
 
-以下事项属于有意不做，后续实现必须以替代式迁移收束，不得在现有边界旁新增旁路：
+## 10. 集成禁止事项
 
-| TODO | 当前边界 | 对接要求 |
+1. 不绕过可信语义结果直接构造召回请求。
+2. 不把画像拼入 embedding 正文。
+3. 不把 `matched_terms`、候选分数或 severity 当作事实。
+4. 不新增关键词、正则、资产短语或文本 JSON 检索回退。
+5. 不按 `candidate.code` 编写 Python / Rego 医学分支。
+6. 不把原始用户文本传给 OPA。
+7. 不让前提评估器输出最终临床动作。
+8. 不用可能、否定、已缓解或远期事实支撑当前急性前提。
+9. 不在语义失败、模型失败或评估超时后恢复本地医学规则回退。
+
+## 11. 有意预留 TODO
+
+| TODO | 当前边界 | 后续对接要求 |
 |---|---|---|
-| `observed_features` 正式事实集合 | 尚无受控结构化症状/暴露事实契约；`required_context.symptoms` 显式不可用 | 由语义抽取输出受治理词汇；OPA 只做集合关系判断，不扫描原文 |
-| `required_context` 完整组合语义 | 仅实现单维度等值与 fail-closed；未定义 `all_of`、`any_of`、否定和未知值组合 | 先扩展资产契约与结构化事实契约，再实现通用策略匹配 |
-| 命中可解释性增强 | `matched_terms` 仅回退到 chunk 标题；“为什么命中/为什么未升级”完整投影未建设 | 阶段 3 随裁决理由统一设计；不得恢复短语扫描 |
-| 画像弱增强 | 画像只做结构化过滤，不做文本增强 | 除非 `observed_features` 稳定后提供受控事实投影 |
-| 画像未知的运行时收紧 | `unknown` 对 scope 放行；收口依赖资产 `required_context` 声明 | 预发布回归须包含“画像未知 + 受限资产”样本；资产审核强制第 8.3 节规则 |
-| 资产 code 拆分与主信号排序 | 仍存在多模式复用同一急诊 code；响应可能拼接多条建议 | 阶段 4 资产治理处理；`code` 不得成为 Python 医学分支条件 |
-| 语义质量与版本治理 | 结构化字段与失败语义已稳定，医学表达覆盖未治理 | 建立医学审核样本、版本兼容策略和真实服务契约测试 |
-| 召回多样性与排序策略 | 仅保证范围过滤与相似度主路径；未做候选多样性治理 | 如需调整，须先定义可审计的排序契约，再改实现 |
+| 医学观察事实词汇治理 | `observed_features` 由语义抽取输出自然语言事实，未形成完整受控词汇 | 建立医学审核事实集、同义映射和版本兼容策略；不得恢复关键词推断 |
+| `required_context.symptoms` 资产质量 | 保留自然语言条目级 any_of，不展开组合 | 审计高频 unknown / partial 条目，逐步治理运营说明和不可观察描述 |
+| 前提语义质量 golden set | 已有真实服务集成与隔离评估样例，未形成完整医学审核集 | 扩充物种、年龄、否定、缓解、组合和近似表达样本，并绑定模型 / prompt 版本 |
+| 画像弱增强 | 画像只做结构化过滤 | 如需增强，必须先定义受控事实投影和隐私边界，不得恢复文本拼接 |
+| 召回排序与多样性 | 当前以相似度和结构化范围为主，未治理候选多样性 | 先定义可审计排序契约，再调整候选顺序或 TopK 策略 |
+| 跨回合前提评估缓存 | 仅回合内按症状前提哈希去重 | 如引入缓存，键必须包含事实摘要、模型、prompt 和 schema 版本 |
+| 资产 code 拆分 | 属于阶段 4 | 每个急诊模式应有独立稳定 code；大类只作为分组信息 |
+| 主信号排序与响应投影 | 多候选审计保留，用户主信号治理未完成 | 由策略输出或统一投影层选择主信号，不得在响应层拼接全部 urgent 建议 |
+| 线上质量监控 | 已有真实服务验证，未形成持续指标治理 | 监控召回率、unknown 率、误升级、模型耗时、成本和评估漂移 |
 
-## 10. 验收基线
+## 12. 验收基线
 
-阶段 2 回归测试至少覆盖：
+后续变更至少保持以下行为：
 
-1. 证据充分时 embedding 正文只包含用户本轮限长文本。
-2. 物种、性别和年龄只进入结构化范围对象。
-3. `insufficient` 语义不调用 embedding。
-4. `unknown` 语义不从原文推断召回范围。
-5. 成年犬不会仅凭画像召回幼犬专属资产。
-6. OPA payload 不包含 `source_text`、`high_risk_terms` 和 `negated_terms`。
-7. embedding 或 PostgreSQL 不可用时不回退到关键词、文件或资产短语召回。
-8. 多个不适用谓词同时命中时 OPA 输出唯一确定性审计原因。
-9. 受限资产缺少等值 `required_context` 时发布契约显式失败。
-10. 三层范围过滤语义一致，且不包含值域外过滤值。
+1. 证据不足、未知或语义失败时不执行强召回。
+2. embedding 正文只包含用户本轮限长事实文本。
+3. 物种、性别、年龄只进入结构化范围。
+4. `unknown` 范围不被推断成任何具体值。
+5. 明确范围失配候选不能进入最终升级。
+6. OPA 输入不包含用户原文、事实自然语言正文或审计短语。
+7. `required_context.symptoms` 不满足时不能 trusted satisfied。
+8. 部分满足组合前提时必须 unknown。
+9. denied / resolved / possible 事实不能支撑当前急性前提。
+10. 候选分数、severity、action_class 和 code 不能补足前提事实。
+11. 前提语义评估失败或超时时不能恢复关键词或本地医学规则回退。
+12. 依赖失败通过 metadata 暴露稳定原因码。
+13. 资产发布契约持续拒绝范围与 `required_context` 不一致的受限资产。
