@@ -254,6 +254,9 @@ OPA 必须同时消费：
 
 ### 阶段 3：把 `required_context` 接入裁决
 
+> **迁移状态**：已完成；实现细节与稳定契约见
+> [clinical-safety-required-context-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/clinical-safety-required-context-change-summary.md)。
+
 **目标**
 
 让候选的前提条件真正进入 OPA 决策，而不是停留在资产文档。

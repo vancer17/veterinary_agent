@@ -8,35 +8,42 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Sequence
+from dataclasses import replace
 
 from vet_agent import SafetySignal
 from vet_agent.clinical_safety import (
-    ClinicalSafetyAsset,
     ClinicalSafetyAgeGroup,
+    ClinicalSafetyAsset,
     ClinicalSafetyCandidate,
     ClinicalSafetyChunk,
     ClinicalSafetyChunkHit,
     ClinicalSafetyChunkType,
-    ClinicalSafetyExposureState,
     ClinicalSafetyEvaluator,
+    ClinicalSafetyExposureState,
     ClinicalSafetyIntentType,
+    ClinicalSafetyObservedFeature,
     ClinicalSafetyPolicyAction,
     ClinicalSafetyPolicyClient,
     ClinicalSafetyPolicyDecision,
     ClinicalSafetyPolicyInput,
+    ClinicalSafetyPreconditionAssessment,
+    ClinicalSafetyPreconditionAssessmentResult,
+    ClinicalSafetyPreconditionAssessor,
+    ClinicalSafetyPreconditionState,
     ClinicalSafetyResolutionState,
     ClinicalSafetyRetrievalRequest,
     ClinicalSafetyRetrievalScope,
-    ClinicalSafetyRiskEvidenceState,
     ClinicalSafetyRetriever,
-    ClinicalSafetySex,
+    ClinicalSafetyRiskEvidenceState,
     ClinicalSafetySemanticResult,
+    ClinicalSafetySex,
     ClinicalSafetySpecies,
     ClinicalSafetySymptomState,
     ClinicalSafetyTemporalScope,
     ClinicalSafetyTemporalState,
+    clinical_safety_required_context_hash,
+    clinical_safety_semantic_premise_hash,
 )
-
 
 TOXIC_TEST_ASSET_TYPES = {"toxin", "human_drug", "plant_toxin", "chemical_toxin"}
 
@@ -47,7 +54,9 @@ class StaticClinicalSafetyPolicyClient(ClinicalSafetyPolicyClient):
     说明：该替身只消费 evaluator 组装出的结构化候选与可信语义，不读取原始用户文本。
     """
 
-    async def decide(self, policy_input: ClinicalSafetyPolicyInput) -> ClinicalSafetyPolicyDecision:
+    async def decide(
+        self, policy_input: ClinicalSafetyPolicyInput
+    ) -> ClinicalSafetyPolicyDecision:
         """根据结构化策略输入返回测试决策。
 
         :param policy_input: evaluator 组装后的临床安全策略输入。
@@ -77,6 +86,7 @@ class StaticClinicalSafetyPolicyClient(ClinicalSafetyPolicyClient):
             )
             for candidate in candidates
         )
+
         action = (
             ClinicalSafetyPolicyAction.ESCALATE
             if any(signal.severity in {"urgent", "blocked"} for signal in signals)
@@ -89,6 +99,22 @@ class StaticClinicalSafetyPolicyClient(ClinicalSafetyPolicyClient):
             reasons=tuple(candidate.asset.code for candidate in candidates),
             signals=signals,
             metadata={"policy_backend": "static_test"},
+        )
+
+    async def plan_preconditions(
+        self,
+        policy_input: ClinicalSafetyPolicyInput,
+    ) -> tuple[str, ...]:
+        """返回所有声明症状前提且未被测试规则抑制的候选。
+
+        :param policy_input: evaluator 组装后的临床安全策略输入。
+        :return: 返回需要进入前提评估替身的资产标识元组。
+        """
+        return tuple(
+            candidate.asset.asset_id
+            for candidate in policy_input.candidates
+            if candidate.asset.required_context.get("symptoms", ())
+            and not self._suppressed(candidate, policy_input)
         )
 
     def is_ready(self) -> bool:
@@ -132,7 +158,11 @@ class StaticClinicalSafetyPolicyClient(ClinicalSafetyPolicyClient):
         """
         asset = candidate.asset
         score = candidate.score
-        if asset.severity == "urgent" or asset.action_class in {"emergency", "same_day_visit", "urgent_visit"}:
+        if asset.severity == "urgent" or asset.action_class in {
+            "emergency",
+            "same_day_visit",
+            "urgent_visit",
+        }:
             return "urgent"
         if score >= policy_input.thresholds.urgent_min_score:
             return "urgent"
@@ -146,7 +176,9 @@ class DuplicateSignalClinicalSafetyPolicyClient(ClinicalSafetyPolicyClient):
     用于验证 evaluator 只负责审计展示去重，不执行临床动作裁决。
     """
 
-    async def decide(self, policy_input: ClinicalSafetyPolicyInput) -> ClinicalSafetyPolicyDecision:
+    async def decide(
+        self, policy_input: ClinicalSafetyPolicyInput
+    ) -> ClinicalSafetyPolicyDecision:
         """返回包含重复安全编码的测试策略决策。
 
         :param policy_input: evaluator 组装后的临床安全策略输入。
@@ -174,12 +206,139 @@ class DuplicateSignalClinicalSafetyPolicyClient(ClinicalSafetyPolicyClient):
             metadata={"policy_backend": "duplicate_signal_test"},
         )
 
+    async def plan_preconditions(
+        self,
+        policy_input: ClinicalSafetyPolicyInput,
+    ) -> tuple[str, ...]:
+        """返回重复信号测试中所有声明症状前提的候选。
+
+        :param policy_input: evaluator 组装后的临床安全策略输入。
+        :return: 返回全部症状前提候选资产标识。
+        """
+        del policy_input
+        return ()
+
     def is_ready(self) -> bool:
         """声明重复信号测试策略客户端可用。
 
         :return: 始终返回 True。
         """
         return True
+
+
+class CapturingClinicalSafetyPolicyClient(ClinicalSafetyPolicyClient):
+    """提供记录策略输入的测试客户端。"""
+
+    def __init__(self) -> None:
+        """初始化策略输入记录器。
+
+        :return: 无返回值。
+        """
+        self.policy_input: ClinicalSafetyPolicyInput | None = None
+        self.plan_input: ClinicalSafetyPolicyInput | None = None
+
+    async def decide(
+        self, policy_input: ClinicalSafetyPolicyInput
+    ) -> ClinicalSafetyPolicyDecision:
+        """记录 evaluator 组装出的策略输入并返回 allow 决策。
+
+        :param policy_input: evaluator 组装后的临床安全策略输入。
+        :return: 返回无安全信号的测试决策。
+        """
+        self.policy_input = policy_input
+        return ClinicalSafetyPolicyDecision(
+            action=ClinicalSafetyPolicyAction.ALLOW,
+            allow=True,
+            message="测试临床安全策略允许继续。",
+            metadata={"policy_backend": "capturing_test"},
+        )
+
+    async def plan_preconditions(
+        self,
+        policy_input: ClinicalSafetyPolicyInput,
+    ) -> tuple[str, ...]:
+        """返回捕获测试中所有声明症状前提的候选。
+
+        :param policy_input: evaluator 组装后的临床安全策略输入。
+        :return: 返回全部症状前提候选资产标识。
+        """
+        self.plan_input = policy_input
+        return tuple(
+            candidate.asset.asset_id
+            for candidate in policy_input.candidates
+            if candidate.asset.required_context.get("symptoms", ())
+        )
+
+    def is_ready(self) -> bool:
+        """声明捕获策略测试客户端可用。
+
+        :return: 始终返回 True。
+        """
+        return True
+
+
+class SatisfiedClinicalSafetyPreconditionAssessor(ClinicalSafetyPreconditionAssessor):
+    """提供返回满足前提结果的测试评估器。"""
+
+    def __init__(self) -> None:
+        """初始化前提评估输入记录器。
+
+        :return: 无返回值。
+        """
+        self.candidate_count = 0
+
+    async def assess(
+        self,
+        semantic_result: ClinicalSafetySemanticResult | None,
+        candidates: Sequence[ClinicalSafetyCandidate],
+    ) -> ClinicalSafetyPreconditionAssessmentResult:
+        """为所有声明症状前提的候选返回 satisfied 评估结果。
+
+        :param semantic_result: 当前回合结构化语义结果。
+        :param candidates: 本轮召回的临床安全候选。
+        :return: 返回全部前提满足的测试评估结果。
+        """
+        del semantic_result
+        self.candidate_count = len(candidates)
+        assessments = {
+            candidate.asset.asset_id: ClinicalSafetyPreconditionAssessment(
+                asset_id=candidate.asset.asset_id,
+                required_context_hash=clinical_safety_required_context_hash(
+                    candidate.asset.required_context
+                ),
+                semantic_premise_hash=clinical_safety_semantic_premise_hash(
+                    candidate.asset.required_context
+                ),
+                status="satisfied",
+                evidence_ids=("f1",),
+                confidence=0.94,
+                strategy="qwen_response_format",
+            )
+            for candidate in candidates
+            if candidate.asset.required_context.get("symptoms", ())
+        }
+        return ClinicalSafetyPreconditionAssessmentResult(
+            assessments=assessments,
+            state=_test_precondition_state(len(candidates), assessments),
+        )
+
+
+def _test_precondition_state(
+    candidate_count: int,
+    assessments: dict[str, ClinicalSafetyPreconditionAssessment],
+) -> ClinicalSafetyPreconditionState:
+    """构造测试用前提评估状态。
+
+    :param candidate_count: 本轮候选总数。
+    :param assessments: 候选级前提评估映射。
+    :return: 返回满足前提的测试状态。
+    """
+    return ClinicalSafetyPreconditionState(
+        strategy="qwen_response_format",
+        candidate_count=candidate_count,
+        required_count=len(assessments),
+        satisfied_count=len(assessments),
+    )
 
 
 class StaticEmbeddingClient:
@@ -489,11 +648,16 @@ def test_clinical_safety_evaluator_passes_low_confidence_state_to_policy() -> No
     assert "risk_evidence_unknown" in result.fallback_state.retrieval.reasons
     assert result.fallback_state.semantic.stage == "llm_low_confidence"
     assert result.fallback_state.semantic.degraded is True
-    assert result.fallback_state.semantic.strategy == "litellm_response_format_low_confidence"
+    assert (
+        result.fallback_state.semantic.strategy
+        == "litellm_response_format_low_confidence"
+    )
     assert result.policy_decision["policy_backend"] == "static_test"
 
 
-def test_clinical_safety_evaluator_does_not_recall_denied_exposure_without_risk_evidence() -> None:
+def test_clinical_safety_evaluator_does_not_recall_denied_exposure_without_risk_evidence() -> (
+    None
+):
     """验证可信否认暴露在证据不足时不会进入强召回。
 
     :return: 无返回值；断言通过表示 evaluator 使用统一证据边界控制召回入口。
@@ -517,7 +681,9 @@ def test_clinical_safety_evaluator_does_not_recall_denied_exposure_without_risk_
     confirmed_signals = asyncio.run(
         evaluator.assess(
             "我家猫误食了泰诺，已经开始呕吐。",
-            semantic_result=_trusted_toxic_semantic(source_text="我家猫误食了泰诺，已经开始呕吐。"),
+            semantic_result=_trusted_toxic_semantic(
+                source_text="我家猫误食了泰诺，已经开始呕吐。"
+            ),
         ),
     )
 
@@ -567,7 +733,9 @@ def test_clinical_safety_evaluator_keeps_ongoing_toxic_event_urgent() -> None:
     result = asyncio.run(
         evaluator.assess_with_resolution(
             "现在误食泰诺并正在呕吐。",
-            semantic_result=_trusted_toxic_semantic(source_text="现在误食泰诺并正在呕吐。"),
+            semantic_result=_trusted_toxic_semantic(
+                source_text="现在误食泰诺并正在呕吐。"
+            ),
         )
     )
 
@@ -590,19 +758,25 @@ def test_clinical_safety_evaluator_returns_explicit_vector_resolution() -> None:
     result = asyncio.run(
         evaluator.assess_with_resolution(
             "我家猫误食泰诺后呕吐。",
-            semantic_result=_trusted_toxic_semantic(source_text="我家猫误食泰诺后呕吐。"),
+            semantic_result=_trusted_toxic_semantic(
+                source_text="我家猫误食泰诺后呕吐。"
+            ),
         )
     )
 
     assert result.signals
     assert result.fallback_state.retrieval.stage == "vector"
     assert result.fallback_state.retrieval.degraded is False
-    assert result.fallback_state.retrieval.retrieval_source == "clinical_safety_pgvector"
+    assert (
+        result.fallback_state.retrieval.retrieval_source == "clinical_safety_pgvector"
+    )
     assert result.fallback_state.semantic.stage == "llm"
     assert result.to_metadata()["fallback_state"]["retrieval"]["stage"] == "vector"
 
 
-def test_clinical_safety_evaluator_does_not_strongly_recall_without_positive_evidence() -> None:
+def test_clinical_safety_evaluator_does_not_strongly_recall_without_positive_evidence() -> (
+    None
+):
     """验证没有正向风险证据时，evaluator 不会将宠物画像拼入强召回查询。
 
     :return: 无返回值；断言通过表示模糊分诊不会仅因宠物画像触发急诊候选。
@@ -708,7 +882,9 @@ def test_clinical_safety_evaluator_compacts_duplicate_matched_terms() -> None:
         embedding_client=StaticEmbeddingClient(),
         min_score=0.35,
     )
-    evaluator = ClinicalSafetyEvaluator(retriever, DuplicateSignalClinicalSafetyPolicyClient())
+    evaluator = ClinicalSafetyEvaluator(
+        retriever, DuplicateSignalClinicalSafetyPolicyClient()
+    )
 
     signals = asyncio.run(
         evaluator.assess(
@@ -730,3 +906,67 @@ def test_clinical_safety_evaluator_compacts_duplicate_matched_terms() -> None:
         message="命中较高等级测试信号。",
         matched_terms=["牙龈发紫并呼吸很快"],
     )
+
+
+def test_clinical_safety_evaluator_passes_precondition_assessments_to_policy() -> None:
+    """验证 evaluator 会把前提评估结果和回退状态接入 OPA 输入。
+
+    :return: 无返回值；断言通过表示自然语言前提判断不会在编排层丢失。
+    """
+    asset = replace(
+        _human_drug_asset(symptoms=("呕吐",)),
+        required_context={"species": ("cat", "dog"), "symptoms": ("呕吐",)},
+    )
+    chunk = _recognition_chunk(asset, text="泰诺；对乙酰氨基酚；呕吐")
+    retriever = ClinicalSafetyRetriever(
+        VectorHitClinicalSafetyRepository(asset, chunk),
+        embedding_client=StaticEmbeddingClient(),
+        min_score=0.35,
+    )
+    policy_client = CapturingClinicalSafetyPolicyClient()
+    precondition_assessor = SatisfiedClinicalSafetyPreconditionAssessor()
+    evaluator = ClinicalSafetyEvaluator(
+        retriever,
+        policy_client,
+        precondition_assessor=precondition_assessor,
+    )
+    semantic = replace(
+        _trusted_toxic_semantic(),
+        observed_features=(
+            ClinicalSafetyObservedFeature(
+                feature_id="f1",
+                feature_kind="symptom",
+                state="present",
+                normalized_text="呕吐",
+                temporal_scope="ongoing",
+                resolution_state="ongoing",
+            ),
+        ),
+    )
+
+    result = asyncio.run(
+        evaluator.assess_with_resolution(
+            "我家猫误食泰诺后开始呕吐。",
+            semantic_result=semantic,
+        )
+    )
+
+    policy_input = policy_client.policy_input
+    assert policy_input is not None
+    candidate = policy_input.candidates[0]
+    assessment = policy_input.precondition_assessments[asset.asset_id]
+    payload = policy_input.to_payload()
+    assert precondition_assessor.candidate_count == 1
+    assert policy_client.plan_input is not None
+    assert policy_client.plan_input.candidates == policy_input.candidates
+    assert policy_client.plan_input.precondition_assessments == {}
+    assert assessment.status == "satisfied"
+    assert assessment.evidence_ids == ("f1",)
+    assert payload["semantic"]["observed_features"] == [
+        {"id": "f1", "kind": "symptom", "state": "present"}
+    ]
+    assert payload["candidates"][0][
+        "required_context_hash"
+    ] == clinical_safety_required_context_hash(candidate.asset.required_context)
+    assert result.fallback_state.precondition.required_count == 1
+    assert result.fallback_state.precondition.satisfied_count == 1

@@ -29,6 +29,19 @@ ClinicalSafetySemanticStage = Literal[
     "skipped",
 ]
 
+ClinicalSafetyPreconditionStrategy = Literal[
+    "not_required",
+    "no_present_evidence",
+    "qwen_response_format",
+    "qwen_low_confidence",
+    "qwen_invalid_response",
+    "qwen_unavailable",
+    "qwen_failed",
+    "qwen_timeout",
+    "qwen_total_timeout",
+    "invalid_contract",
+]
+
 
 @dataclass(frozen=True)
 class ClinicalSafetyRetrievalState:
@@ -196,24 +209,101 @@ class ClinicalSafetySemanticFallbackState:
 
 
 @dataclass(frozen=True)
+class ClinicalSafetyPreconditionState:
+    """表示自然语言候选前提评估层的运行状态和计数摘要。
+
+    :param strategy: 本轮前提评估最终策略或失败状态。
+    :param degraded: 前提评估链路是否发生依赖降级或协议错误。
+    :param reasons: 前提评估降级、缺失或协议错误原因。
+    :param candidate_count: 本轮参与评估编排的候选总数。
+    :param required_count: 声明自然语言症状前提的候选数。
+    :param satisfied_count: 被评估为满足前提的候选数。
+    :param not_satisfied_count: 被评估为明确不满足前提的候选数。
+    :param unknown_count: 因证据、置信或协议边界只能保持未知的候选数。
+    :param requires_information: 是否存在可通过继续问诊补充的前提信息缺口。
+    :param requested_model: 本次前提评估请求的默认模型。
+    :param model_candidates: 本次前提评估允许使用的模型候选链。
+    :param prompt_version: 前提评估提示词版本。
+    :param response_schema_version: 前提评估响应结构版本。
+    :param latency_ms: 本轮前提评估耗时。
+    :param batch_count: 实际需要的模型请求批次数。
+    :param deduplicated_group_count: 按 semantic_premise_hash 去重后的分组数。
+    :return: 无返回值；该对象只承载审计状态，不承载最终动作。
+    """
+
+    strategy: ClinicalSafetyPreconditionStrategy = "not_required"
+    degraded: bool = False
+    reasons: tuple[str, ...] = field(default_factory=tuple)
+    candidate_count: int = 0
+    required_count: int = 0
+    satisfied_count: int = 0
+    not_satisfied_count: int = 0
+    unknown_count: int = 0
+    requires_information: bool = False
+    requested_model: str = ""
+    model_candidates: tuple[str, ...] = ()
+    prompt_version: str = ""
+    response_schema_version: str = ""
+    latency_ms: int = 0
+    batch_count: int = 0
+    deduplicated_group_count: int = 0
+
+    def to_dict(self) -> dict[str, Any]:
+        """转换为临床安全响应 metadata 中的前提评估审计字典。
+
+        :return: 返回可序列化的前提评估状态摘要。
+        """
+        return {
+            "strategy": self.strategy,
+            "degraded": self.degraded,
+            "reasons": list(self.reasons),
+            "candidate_count": self.candidate_count,
+            "required_count": self.required_count,
+            "satisfied_count": self.satisfied_count,
+            "not_satisfied_count": self.not_satisfied_count,
+            "unknown_count": self.unknown_count,
+            "requires_information": self.requires_information,
+            "requested_model": self.requested_model,
+            "model_candidates": list(self.model_candidates),
+            "prompt_version": self.prompt_version,
+            "response_schema_version": self.response_schema_version,
+            "latency_ms": self.latency_ms,
+            "batch_count": self.batch_count,
+            "deduplicated_group_count": self.deduplicated_group_count,
+        }
+
+
+@dataclass(frozen=True)
 class ClinicalSafetyFallbackState:
-    """聚合临床安全链路的召回与语义显式回退状态。
+    """聚合临床安全链路的召回、语义与前提评估显式回退状态。
 
     :param retrieval: 候选召回层回退状态。
     :param semantic: 结构化语义层回退状态。
+    :param precondition: 自然语言候选前提评估层回退状态。
     :return: 无返回值。
     """
 
-    retrieval: ClinicalSafetyRetrievalState = field(default_factory=ClinicalSafetyRetrievalState)
-    semantic: ClinicalSafetySemanticFallbackState = field(default_factory=ClinicalSafetySemanticFallbackState)
+    retrieval: ClinicalSafetyRetrievalState = field(
+        default_factory=ClinicalSafetyRetrievalState
+    )
+    semantic: ClinicalSafetySemanticFallbackState = field(
+        default_factory=ClinicalSafetySemanticFallbackState
+    )
+    precondition: ClinicalSafetyPreconditionState = field(
+        default_factory=ClinicalSafetyPreconditionState
+    )
 
     @property
     def degraded(self) -> bool:
         """判断临床安全链路是否发生任一层降级。
 
-        :return: 召回或语义任一层降级时返回 True。
+        :return: 召回、语义或前提评估任一层降级时返回 True。
         """
-        return self.retrieval.degraded or self.semantic.degraded
+        return (
+            self.retrieval.degraded
+            or self.semantic.degraded
+            or self.precondition.degraded
+        )
 
     def to_dict(self) -> dict[str, Any]:
         """转换为可写入响应 metadata 的字典。
@@ -224,6 +314,7 @@ class ClinicalSafetyFallbackState:
             "degraded": self.degraded,
             "retrieval": self.retrieval.to_dict(),
             "semantic": self.semantic.to_dict(),
+            "precondition": self.precondition.to_dict(),
         }
 
 
@@ -272,6 +363,15 @@ class ClinicalSafetyEvaluationResult:
         return {
             "agent": "ClinicalSafetyEvaluator",
             "signal_count": len(self.signals),
+            "requires_precondition_information": self.requires_precondition_information,
             "fallback_state": self.fallback_state.to_dict(),
             "policy_decision": dict(self.policy_decision),
         }
+
+    @property
+    def requires_precondition_information(self) -> bool:
+        """判断临床安全前提层是否存在可继续问诊补充的信息缺口。
+
+        :return: 前提评估状态要求补充信息时返回 True。
+        """
+        return self.fallback_state.precondition.requires_information

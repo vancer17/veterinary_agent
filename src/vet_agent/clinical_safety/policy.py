@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Protocol
@@ -25,6 +26,10 @@ from vet_agent import AgentTurnRequest, SafetySignal
 
 from .fallback import ClinicalSafetyRetrievalState
 from .models import ClinicalSafetyCandidate
+from .precondition import (
+    ClinicalSafetyPreconditionAssessment,
+    clinical_safety_required_context_hash,
+)
 from .semantic_extractor import ClinicalSafetySemanticResult
 from .thresholds import ClinicalSafetyThresholds
 
@@ -60,7 +65,9 @@ class ClinicalSafetyPolicyRequestContext:
     session_id: str = ""
 
     @classmethod
-    def from_request(cls, request: AgentTurnRequest) -> "ClinicalSafetyPolicyRequestContext":
+    def from_request(
+        cls, request: AgentTurnRequest
+    ) -> "ClinicalSafetyPolicyRequestContext":
         """从 Agent 回合请求构造临床安全策略范围摘要。
 
         :param request: 当前 Agent 回合请求对象。
@@ -97,6 +104,7 @@ class ClinicalSafetyPolicyInput:
     :param semantic_result: 临床安全结构化语义结果；不可信结果只保留降级状态。
     :param retrieval_state: 临床安全向量召回运行状态。
     :param candidates: 已由 pgvector 召回并按资产聚合的候选列表。
+    :param precondition_assessments: 候选自然语言前提的语义蕴含评估结果。
     :param thresholds: 候选动作策略使用的阈值配置。
     :return: 无返回值；该对象是 Python 到 OPA 的唯一输入边界。
     """
@@ -106,6 +114,9 @@ class ClinicalSafetyPolicyInput:
     retrieval_state: ClinicalSafetyRetrievalState
     candidates: tuple[ClinicalSafetyCandidate, ...]
     thresholds: ClinicalSafetyThresholds
+    precondition_assessments: Mapping[str, ClinicalSafetyPreconditionAssessment] = (
+        field(default_factory=dict)
+    )
 
     def to_payload(self) -> dict[str, Any]:
         """转换为 OPA Data API 请求所需的结构化 JSON 负载。
@@ -116,7 +127,13 @@ class ClinicalSafetyPolicyInput:
             "context": self.context.to_policy_input(),
             "semantic": _semantic_payload(self.semantic_result),
             "retrieval": self.retrieval_state.to_dict(),
-            "candidates": [_candidate_payload(candidate) for candidate in self.candidates],
+            "candidates": [
+                _candidate_payload(candidate) for candidate in self.candidates
+            ],
+            "precondition_assessments": _precondition_assessments_payload(
+                self.candidates,
+                self.precondition_assessments,
+            ),
             "thresholds": {
                 "signal_min_score": self.thresholds.signal_min_score,
                 "urgent_min_score": self.thresholds.urgent_min_score,
@@ -181,11 +198,25 @@ class ClinicalSafetyPolicyClient(Protocol):
     :return: 无返回值；业务层通过该协议隔离 OPA 传输实现。
     """
 
-    async def decide(self, policy_input: ClinicalSafetyPolicyInput) -> ClinicalSafetyPolicyDecision:
+    async def decide(
+        self, policy_input: ClinicalSafetyPolicyInput
+    ) -> ClinicalSafetyPolicyDecision:
         """根据结构化候选和可信语义执行临床安全动作裁决。
 
         :param policy_input: 已完成候选召回和语义状态归一的策略输入。
         :return: 返回临床安全策略决策。
+        :raises RuntimeError: 策略服务不可用或返回结构不合法时抛出。
+        """
+        ...
+
+    async def plan_preconditions(
+        self,
+        policy_input: ClinicalSafetyPolicyInput,
+    ) -> tuple[str, ...]:
+        """计算需要进入自然语言前提评估的候选资产集合。
+
+        :param policy_input: 未附加前提评估结果的基础策略输入。
+        :return: 返回需要评估的 asset_id 元组。
         :raises RuntimeError: 策略服务不可用或返回结构不合法时抛出。
         """
         ...
@@ -236,7 +267,9 @@ class OpaClinicalSafetyPolicyClient(ClinicalSafetyPolicyClient):
         self.auth_token = auth_token
         self.timeout_seconds = timeout_seconds
 
-    async def decide(self, policy_input: ClinicalSafetyPolicyInput) -> ClinicalSafetyPolicyDecision:
+    async def decide(
+        self, policy_input: ClinicalSafetyPolicyInput
+    ) -> ClinicalSafetyPolicyDecision:
         """向 OPA 提交临床安全结构化策略输入并解析结果。
 
         :param policy_input: 已完成候选召回和可信语义归一的策略输入。
@@ -270,24 +303,71 @@ class OpaClinicalSafetyPolicyClient(ClinicalSafetyPolicyClient):
             policy_path=f"{self.package_path}/{self.rule_name}",
         )
 
+    async def plan_preconditions(
+        self,
+        policy_input: ClinicalSafetyPolicyInput,
+    ) -> tuple[str, ...]:
+        """请求 OPA 计算需要自然语言前提评估的候选集合。
+
+        :param policy_input: 未附加前提评估结果的基础策略输入。
+        :return: 返回需要进入语义蕴含评估的 asset_id 元组。
+        :raises RuntimeError: OPA 调用失败或返回结构不合法时抛出。
+        """
+        url = self._rule_url("precondition_plan")
+        headers = {"Content-Type": "application/json"}
+        if self.auth_token:
+            headers["Authorization"] = f"Bearer {self.auth_token}"
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+                response = await client.post(
+                    url,
+                    headers=headers,
+                    json={"input": policy_input.to_payload()},
+                )
+                response.raise_for_status()
+                result = response.json()
+        except Exception as exc:
+            raise RuntimeError("clinical safety OPA precondition plan failed") from exc
+        payload = self._unwrap_result(result)
+        raw_asset_ids = payload.get("asset_ids")
+        if not isinstance(raw_asset_ids, list) or not all(
+            isinstance(item, str) and item.strip() for item in raw_asset_ids
+        ):
+            raise RuntimeError(
+                "clinical safety OPA returned an invalid precondition plan"
+            )
+        return tuple(
+            dict.fromkeys(item.strip() for item in raw_asset_ids if item.strip())
+        )
+
     def is_ready(self) -> bool:
         """检查 OPA 临床安全策略客户端的连接参数是否完整。
 
         :return: OPA 地址、版本、策略包和规则名称均有效时返回 True。
         """
-        return bool(self.base_url and self.version and self.package_path and self.rule_name)
+        return bool(
+            self.base_url and self.version and self.package_path and self.rule_name
+        )
 
     def _decision_url(self) -> str:
         """构造 OPA 临床安全决策 Data API URL。
 
         :return: 返回经过 URL 编码的临床安全策略决策地址。
         """
+        return self._rule_url(self.rule_name)
+
+    def _rule_url(self, rule_name: str) -> str:
+        """构造临床安全指定规则的 OPA Data API URL。
+
+        :param rule_name: OPA 规则名称。
+        :return: 返回经过 URL 编码的临床安全规则地址。
+        """
         package_parts = [
             quote(part, safe="")
             for part in self.package_path.replace("/", ".").split(".")
             if part
         ]
-        rule = quote(self.rule_name, safe="")
+        rule = quote(rule_name.strip("/"), safe="")
         path = "/".join([*package_parts, rule])
         return f"{self.base_url}/data/{path}"
 
@@ -331,6 +411,7 @@ def _semantic_payload(
             "resolution_state": "unknown",
             "intent_type": "other",
             "risk_evidence_state": "unknown",
+            "observed_features": [],
         }
     fallback_state = semantic_result.to_fallback_state()
     trusted = semantic_result.is_trusted()
@@ -349,7 +430,14 @@ def _semantic_payload(
         "temporal_scope": semantic_result.temporal_scope if trusted else "unclear",
         "resolution_state": semantic_result.resolution_state if trusted else "unknown",
         "intent_type": semantic_result.intent_type if trusted else "other",
-        "risk_evidence_state": semantic_result.risk_evidence_state if trusted else "unknown",
+        "risk_evidence_state": semantic_result.risk_evidence_state
+        if trusted
+        else "unknown",
+        "observed_features": (
+            [feature.to_policy_dict() for feature in semantic_result.observed_features]
+            if trusted
+            else []
+        ),
     }
 
 
@@ -376,11 +464,37 @@ def _candidate_payload(candidate: ClinicalSafetyCandidate) -> dict[str, Any]:
         "message": _candidate_message(candidate),
         "matched_terms": list(candidate.matched_terms()),
         "required_context": _required_context_payload(asset.required_context),
+        "required_context_hash": clinical_safety_required_context_hash(
+            asset.required_context
+        ),
         "decision_hints": dict(asset.decision_hints),
     }
 
 
-def _required_context_payload(value: dict[str, tuple[str, ...]]) -> dict[str, list[str]]:
+def _precondition_assessments_payload(
+    candidates: tuple[ClinicalSafetyCandidate, ...],
+    assessments: Mapping[str, ClinicalSafetyPreconditionAssessment],
+) -> dict[str, dict[str, Any]]:
+    """构造 OPA 使用的候选前提评估映射。
+
+    :param candidates: 本轮参与策略裁决的候选列表。
+    :param assessments: 以前提评估器返回的候选级评估映射。
+    :return: 返回只包含候选关联、结构化状态和证据引用的评估投影。
+    """
+    payload: dict[str, dict[str, Any]] = {}
+    for candidate in candidates:
+        if not candidate.asset.required_context.get("symptoms", ()):
+            continue
+        assessment = assessments.get(candidate.asset.asset_id)
+        if assessment is None:
+            continue
+        payload[candidate.asset.asset_id] = assessment.to_policy_dict()
+    return payload
+
+
+def _required_context_payload(
+    value: dict[str, tuple[str, ...]],
+) -> dict[str, list[str]]:
     """构造 OPA 裁决使用的候选前置上下文要求。
 
     :param value: 标准资产声明的 required_context。
@@ -428,34 +542,41 @@ def _decision_from_payload(
         raise RuntimeError("clinical safety policy allow must be boolean")
     if not isinstance(raw_message, str) or not raw_message.strip():
         raise RuntimeError("clinical safety policy message must be a non-empty string")
-    if not isinstance(raw_reasons, list) or not all(isinstance(item, str) for item in raw_reasons):
+    if not isinstance(raw_reasons, list) or not all(
+        isinstance(item, str) for item in raw_reasons
+    ):
         raise RuntimeError("clinical safety policy reasons must be a string list")
     if not isinstance(raw_signals, list):
         raise RuntimeError("clinical safety policy signals must be a list")
     try:
         action = ClinicalSafetyPolicyAction(raw_action)
     except ValueError as exc:
-        raise RuntimeError(f"invalid clinical safety policy action: {raw_action}") from exc
+        raise RuntimeError(
+            f"invalid clinical safety policy action: {raw_action}"
+        ) from exc
     if action == ClinicalSafetyPolicyAction.BLOCK and raw_allow:
-        raise RuntimeError("clinical safety policy block action cannot allow the main chain")
+        raise RuntimeError(
+            "clinical safety policy block action cannot allow the main chain"
+        )
     if action != ClinicalSafetyPolicyAction.BLOCK and not raw_allow:
-        raise RuntimeError("clinical safety non-block action cannot deny the main chain")
+        raise RuntimeError(
+            "clinical safety non-block action cannot deny the main chain"
+        )
     signals = tuple(_signal_from_payload(item) for item in raw_signals)
     if action == ClinicalSafetyPolicyAction.ALLOW and signals:
         raise RuntimeError("clinical safety allow action cannot return signals")
     if action == ClinicalSafetyPolicyAction.OBSERVE and any(
-        signal.severity in {"urgent", "blocked"}
-        for signal in signals
+        signal.severity in {"urgent", "blocked"} for signal in signals
     ):
-        raise RuntimeError("clinical safety observe action cannot return urgent or blocked signals")
+        raise RuntimeError(
+            "clinical safety observe action cannot return urgent or blocked signals"
+        )
     if action == ClinicalSafetyPolicyAction.ESCALATE and not any(
-        signal.severity == "urgent"
-        for signal in signals
+        signal.severity == "urgent" for signal in signals
     ):
         raise RuntimeError("clinical safety escalate action requires an urgent signal")
     if action == ClinicalSafetyPolicyAction.BLOCK and not any(
-        signal.severity == "blocked"
-        for signal in signals
+        signal.severity == "blocked" for signal in signals
     ):
         raise RuntimeError("clinical safety block action requires a blocked signal")
     return ClinicalSafetyPolicyDecision(

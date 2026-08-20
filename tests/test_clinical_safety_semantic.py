@@ -95,6 +95,15 @@ def test_clinical_safety_semantic_extractor_parses_llm_json() -> None:
               "temporal_text": "现在",
               "intent_type": "toxicity",
               "risk_evidence_state": "sufficient",
+              "observed_features": [
+                {
+                  "feature_kind": "symptom",
+                  "state": "present",
+                  "normalized_text": "呕吐",
+                  "temporal_scope": "ongoing",
+                  "resolution_state": "ongoing"
+                }
+              ],
               "high_risk_terms": ["泰诺", "呕吐"],
               "negated_terms": [],
               "confidence": 0.92,
@@ -121,6 +130,10 @@ def test_clinical_safety_semantic_extractor_parses_llm_json() -> None:
     assert result.exposure_state == "confirmed"
     assert result.intent_type == "toxicity"
     assert result.risk_evidence_state == "sufficient"
+    assert result.observed_features[0].feature_id == "f1"
+    assert result.observed_features[0].state == "present"
+    assert result.observed_features[0].normalized_text == "呕吐"
+    assert result.to_dict()["observed_features"][0]["normalized_text"] == "呕吐"
     assert "泰诺" in result.high_risk_terms
 
 
@@ -146,6 +159,15 @@ def test_clinical_safety_semantic_low_confidence_returns_explicit_degraded_resul
               "temporal_text": "现在",
               "intent_type": "toxicity",
               "risk_evidence_state": "sufficient",
+              "observed_features": [
+                {
+                  "feature_kind": "symptom",
+                  "state": "present",
+                  "normalized_text": "呕吐",
+                  "temporal_scope": "ongoing",
+                  "resolution_state": "ongoing"
+                }
+              ],
               "high_risk_terms": ["泰诺", "呕吐"],
               "negated_terms": [],
               "confidence": 0.31,

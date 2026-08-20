@@ -94,6 +94,95 @@ test_semantic_evidence_allows_without_full_slot_completion if {
 	decision.mode == "sufficient_semantic_evidence"
 }
 
+test_clinical_safety_precondition_unknown_requires_followup if {
+	decision := consultation_state.decision with input as {
+		"context": {
+			"request_id": "r-clinical-unknown",
+			"trace_id": "t-clinical-unknown",
+			"user_id": "u1",
+			"pet_id": "p1",
+			"session_id": "s1",
+		},
+		"state": {
+			"domain": "general",
+			"phase": "collecting_info",
+			"followup_rounds": 1,
+			"asked_question_count": 1,
+			"has_chief_complaint": true,
+			"has_species": true,
+		},
+		"intent": {
+			"answer_now": false,
+			"wants_triage": false,
+			"correction": false,
+			"raw_intent": "",
+		},
+		"limits": {
+			"max_followup_rounds": 2,
+			"min_known_categories": 2,
+			"max_questions": 3,
+		},
+		"evidence_profile": {
+			"minimum_context": true,
+			"known_category_count": 2,
+			"known_categories": ["patient_identity", "time_course"],
+			"clinical_safety_precondition_unknown": true,
+		},
+		"unresolved_slots": ["symptom_detail"],
+		"advisory_slots": ["symptom_detail"],
+	}
+
+	decision.allow == false
+	decision.action == "ask"
+	decision.mode == "clinical_safety_precondition_unknown"
+	decision.blocking_slots == ["symptom_detail"]
+}
+
+test_clinical_safety_precondition_unknown_requires_followup if {
+	decision := consultation_state.decision with input as {
+		"context": {
+			"request_id": "r_precondition",
+			"trace_id": "t_precondition",
+			"user_id": "u1",
+			"pet_id": "p1",
+			"session_id": "s1",
+		},
+		"state": {
+			"domain": "general",
+			"phase": "collecting_info",
+			"followup_rounds": 1,
+			"asked_question_count": 1,
+			"has_chief_complaint": true,
+			"has_species": true,
+		},
+		"intent": {
+			"answer_now": false,
+			"wants_triage": false,
+			"correction": false,
+			"raw_intent": "",
+		},
+		"limits": {
+			"max_followup_rounds": 2,
+			"min_known_categories": 2,
+			"max_questions": 3,
+		},
+		"evidence_profile": {
+			"minimum_context": true,
+			"known_category_count": 2,
+			"known_categories": ["patient_identity", "time_course"],
+			"clinical_safety_precondition_unknown": true,
+		},
+		"unresolved_slots": ["symptom_detail"],
+		"advisory_slots": ["symptom_detail"],
+	}
+
+	decision.allow == false
+	decision.action == "ask"
+	decision.mode == "clinical_safety_precondition_unknown"
+	decision.blocking_slots == ["symptom_detail"]
+	decision.reasons == ["consultation_answerability_clinical_safety_precondition_unknown"]
+}
+
 test_minimum_context_missing_stays_in_followup if {
 	decision := consultation_state.decision with input as {
 		"context": {

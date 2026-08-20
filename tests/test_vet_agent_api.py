@@ -141,7 +141,9 @@ class StaticClinicalSafetyPolicyClient(ClinicalSafetyPolicyClient):
             for candidate in policy_input.candidates
             if candidate.score >= policy_input.thresholds.signal_min_score
             and not self._context_mismatch(candidate, policy_input)
+            and self._precondition_satisfied(candidate, policy_input)
         )
+
         action = (
             ClinicalSafetyPolicyAction.ESCALATE
             if any(signal.severity in {"urgent", "blocked"} for signal in signals)
@@ -158,12 +160,50 @@ class StaticClinicalSafetyPolicyClient(ClinicalSafetyPolicyClient):
             metadata={"policy_backend": "static_api_test"},
         )
 
+    async def plan_preconditions(
+        self,
+        policy_input: ClinicalSafetyPolicyInput,
+    ) -> tuple[str, ...]:
+        """返回 API 测试中所有声明症状前提且范围可用的候选。
+
+        :param policy_input: evaluator 组装后的临床安全策略输入。
+        :return: 返回需要进入前提评估替身的资产标识元组。
+        """
+        return tuple(
+            candidate.asset.asset_id
+            for candidate in policy_input.candidates
+            if candidate.asset.required_context.get("symptoms", ())
+            and not self._context_mismatch(candidate, policy_input)
+        )
+
     def is_ready(self) -> bool:
         """声明 API 测试策略客户端可用。
 
         :return: 始终返回 True。
         """
         return True
+
+    def _precondition_satisfied(
+        self,
+        candidate: ClinicalSafetyCandidate,
+        policy_input: ClinicalSafetyPolicyInput,
+    ) -> bool:
+        """判断测试候选的自然语言前提是否已被可信评估满足。
+
+        :param candidate: 待判断的临床安全候选。
+        :param policy_input: evaluator 已组装的临床安全策略输入。
+        :return: 无症状前提或前提可信满足时返回 True。
+        """
+        if not candidate.asset.required_context.get("symptoms", ()):
+            return True
+        assessment = policy_input.precondition_assessments.get(
+            candidate.asset.asset_id
+        )
+        return bool(
+            assessment is not None
+            and assessment.trusted
+            and assessment.status == "satisfied"
+        )
 
     def _context_mismatch(
         self,
@@ -560,6 +600,8 @@ class StaticClinicalSafetyRepository:
             matches.append("safety_toxin_chocolate")
         if "呼吸困难" in text or "站不起来" in text:
             matches.append("safety_emergency_red_flag")
+        if "前提不足" in text:
+            matches.append("safety_precondition_unknown")
         if "尿少尿频" in text or "尿频" in text:
             matches.append("safety_urinary_obstruction")
         if "多饮多尿" in text and "消瘦" in text:
@@ -619,6 +661,21 @@ class StaticClinicalSafetyRepository:
                 code="EMERGENCY_RED_FLAG",
                 symptoms=("呼吸困难", "站不起来"),
                 recognition_phrases=("呼吸困难", "站不起来"),
+            ),
+            "safety_precondition_unknown": ClinicalSafetyAsset(
+                asset_id="safety_precondition_unknown",
+                asset_type="danger_pattern",
+                canonical_name="前提信息不足测试风险",
+                category="测试",
+                species_scope=("cat", "dog"),
+                sex_scope=(),
+                age_scope=(),
+                severity="caution",
+                action_class="safety_warning",
+                code="PRECONDITION_UNKNOWN_RISK",
+                symptoms=("前提不足",),
+                recognition_phrases=("前提不足",),
+                required_context={"species": ("cat", "dog"), "symptoms": ("前提不足",)},
             ),
             "safety_urinary_obstruction": ClinicalSafetyAsset(
                 asset_id="safety_urinary_obstruction",
@@ -1335,6 +1392,37 @@ async def _fake_litellm_send_structured_chat(
     if prompt_payload.get("task") == "将用户本轮输入归一为结构化问诊事实、开放观察与意图信号。":
         request_text = str(prompt_payload.get("user_text") or "")
         return response_model.model_validate(_consultation_semantic_payload(request_text))
+    if prompt_payload.get("task") == "判断当前回合观察事实是否明确蕴含每个候选前置条件。":
+        observed_features = list(prompt_payload.get("observed_features") or [])
+        present_feature_ids = [
+            str(feature.get("id"))
+            for feature in observed_features
+            if isinstance(feature, dict)
+            and feature.get("kind") == "symptom"
+            and feature.get("state") == "present"
+        ]
+        has_information_gap_item = any(
+            "前提不足" in str(item.get("required_context", {}).get("symptoms", ""))
+            for item in list(prompt_payload.get("items") or [])
+            if isinstance(item, dict)
+        )
+        payload = {
+            "assessments": [
+                {
+                    "item_id": str(item.get("item_id")),
+                    "status": (
+                        "unknown"
+                        if has_information_gap_item or not present_feature_ids
+                        else "satisfied"
+                    ),
+                    "evidence_ids": present_feature_ids[:1],
+                    "confidence": 0.93 if present_feature_ids else 0.0,
+                }
+                for item in list(prompt_payload.get("items") or [])
+                if isinstance(item, dict)
+            ]
+        }
+        return response_model.model_validate(payload)
     if prompt_payload.get("task") != "将用户输入归一为临床安全结构化语义。":
         return response_model.model_validate_json("{}")
     request_text = str(prompt_payload.get("user_text") or "")
@@ -1392,6 +1480,16 @@ async def _fake_litellm_send_structured_chat(
                 "rationale": "测试替身返回明确否认暴露语义。",
             }
         )
+    if payload["symptom_state"] == "present":
+        payload["observed_features"] = [
+            {
+                "feature_kind": "symptom",
+                "state": "present",
+                "normalized_text": request_text[:120],
+                "temporal_scope": payload["temporal_scope"],
+                "resolution_state": payload["resolution_state"],
+            }
+        ]
     return response_model.model_validate(payload)
 
 
@@ -1874,6 +1972,34 @@ def test_emergency_red_flag_skips_followup(tmp_path: Path, monkeypatch: pytest.M
     assert "请尽快联系线下兽医医院" in data["output_text"]
     assert any(signal["code"] == "EMERGENCY_RED_FLAG" for signal in data["safety_signals"])
     assert data["metadata"]["input_safety_decision"]["allow"] is True
+
+
+def test_precondition_unknown_routes_to_followup(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证临床安全前提信息缺口会进入问诊追问而不是被静默放行。
+
+    :param tmp_path: 临时数据目录。
+    :param monkeypatch: pytest 环境变量和模型调用替换工具。
+    :return: 无返回值；断言通过表示前提 unknown 与问诊状态域完成结构化联动。
+    """
+    client = _client(tmp_path, monkeypatch)
+
+    response = client.post("/agent/turns", json=_payload("猫现在前提不足，需要补充信息"))
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "requires_followup"
+    assert (
+        data["metadata"]["clinical_safety_resolution"]["requires_precondition_information"]
+        is True
+    )
+    assert (
+        data["metadata"]["answerability"]["mode"]
+        == "clinical_safety_precondition_unknown"
+    )
+    assert "symptom_detail" in data["metadata"]["answerability"]["blocking_slots"]
 
 
 def test_radiology_attachment_is_blocked(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

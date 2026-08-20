@@ -134,13 +134,113 @@ required_context_mismatch(candidate) if {
 	not input.semantic.age_group in values
 }
 
-# 结构化症状事实尚未进入当前语义契约时，要求症状前提的候选只能保留审计，不能升级。
-required_context_unavailable(candidate) if {
-	semantic_trusted
+# 自然语言症状前提由应用侧语义评估器转换为结构化状态；OPA 只校验绑定和证据引用。
+symptom_context_required(candidate) if {
 	required := object.get(candidate, "required_context", {})
 	values := object.get(required, "symptoms", [])
 	count(values) > 0
-	count(object.get(input.semantic, "observed_features", [])) == 0
+}
+
+present_observed_feature(feature_id) if {
+	some feature in object.get(input.semantic, "observed_features", [])
+	feature.id == feature_id
+	feature.kind == "symptom"
+	feature.state == "present"
+}
+
+observed_symptom_feature(feature_id) if {
+	some feature in object.get(input.semantic, "observed_features", [])
+	feature.id == feature_id
+	feature.kind == "symptom"
+}
+
+candidate_precondition_assessment(candidate) := assessment if {
+	assessments := object.get(input, "precondition_assessments", {})
+	assessment := object.get(assessments, candidate.asset_id, {})
+	count(assessment) > 0
+}
+
+valid_precondition_evidence(assessment) if {
+	evidence_ids := object.get(assessment, "evidence_ids", [])
+	count(evidence_ids) > 0
+	every evidence_id in evidence_ids {
+		observed_symptom_feature(evidence_id)
+	}
+}
+
+present_precondition_evidence(assessment) if {
+	evidence_ids := object.get(assessment, "evidence_ids", [])
+	every evidence_id in evidence_ids {
+		present_observed_feature(evidence_id)
+	}
+}
+
+definitive_precondition_assessment(candidate) if {
+	symptom_context_required(candidate)
+	assessment := candidate_precondition_assessment(candidate)
+	candidate_hash := object.get(candidate, "required_context_hash", "")
+	assessment_hash := object.get(assessment, "required_context_hash", "")
+	count(candidate_hash) > 0
+	count(assessment_hash) > 0
+	regex.match(`^sha256:[0-9a-f]{64}$`, candidate_hash)
+	regex.match(`^sha256:[0-9a-f]{64}$`, assessment_hash)
+	candidate_hash == assessment_hash
+	object.get(assessment, "trusted", false) == true
+	valid_precondition_evidence(assessment)
+}
+
+required_context_mismatch(candidate) if {
+	semantic_trusted
+	symptom_context_required(candidate)
+	assessment := candidate_precondition_assessment(candidate)
+	object.get(assessment, "status", "unknown") == "not_satisfied"
+	definitive_precondition_assessment(candidate)
+}
+
+# 评估缺失、unknown、低置信、哈希错配、证据非法或事实不足时均 Fail Closed。
+required_context_unavailable(candidate) if {
+	semantic_trusted
+	symptom_context_required(candidate)
+	not satisfied_precondition_context(candidate)
+}
+
+satisfied_precondition_context(candidate) if {
+	semantic_trusted
+	definitive_precondition_assessment(candidate)
+	assessment := candidate_precondition_assessment(candidate)
+	present_precondition_evidence(assessment)
+	object.get(assessment, "status", "unknown") == "satisfied"
+}
+
+potentially_signal_candidate(candidate) if {
+	candidate.severity in {"blocked", "urgent"}
+}
+
+potentially_signal_candidate(candidate) if {
+	candidate.action_class in {"emergency", "same_day_visit", "urgent_visit"}
+}
+
+potentially_signal_candidate(candidate) if {
+	candidate.score >= object.get(input.thresholds, "signal_min_score", 0.65)
+}
+
+precondition_plan_candidate(candidate) if {
+	some item in input.candidates
+	candidate = item
+	semantic_evidence_sufficient
+	symptom_context_required(candidate)
+	potentially_signal_candidate(candidate)
+	not suppressed_candidate(candidate)
+	not temporally_resolved_candidate(candidate)
+	not context_mismatch(candidate)
+	not required_context_mismatch(candidate)
+}
+
+precondition_plan := {
+	"asset_ids": [candidate.asset_id |
+		some candidate in input.candidates
+		precondition_plan_candidate(candidate)
+	],
 }
 
 applicable_candidate(candidate) if {

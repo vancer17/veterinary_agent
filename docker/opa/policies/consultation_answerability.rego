@@ -25,6 +25,10 @@ slot_complete if {
 	count(object.get(input, "unresolved_slots", [])) == 0
 }
 
+clinical_safety_precondition_unknown if {
+	object.get(input.evidence_profile, "clinical_safety_precondition_unknown", false) == true
+}
+
 sufficient_semantic_evidence if {
 	object.get(input.state, "followup_rounds", 0) >= 1
 	object.get(input.evidence_profile, "known_category_count", 0) >= object.get(input.limits, "min_known_categories", 2)
@@ -42,11 +46,13 @@ allow if {
 allow if {
 	minimum_context
 	slot_complete
+	not clinical_safety_precondition_unknown
 }
 
 allow if {
 	minimum_context
 	sufficient_semantic_evidence
+	not clinical_safety_precondition_unknown
 }
 
 allow if {
@@ -80,6 +86,12 @@ mode := "sufficient_semantic_evidence" if {
 	sufficient_semantic_evidence
 }
 
+mode := "clinical_safety_precondition_unknown" if {
+	not allow
+	minimum_context
+	clinical_safety_precondition_unknown
+}
+
 mode := "max_followup_rounds_reached" if {
 	allow
 	not answer_now_requested
@@ -91,6 +103,7 @@ mode := "max_followup_rounds_reached" if {
 mode := "needs_high_value_evidence" if {
 	not allow
 	minimum_context
+	not clinical_safety_precondition_unknown
 }
 
 mode := "needs_minimum_context" if {
@@ -130,6 +143,10 @@ reason := "仍缺少进入阶段性回答所需的最低问诊上下文。" if {
 	mode == "needs_minimum_context"
 }
 
+reason := "临床安全前提仍缺少关键症状或背景信息。" if {
+	mode == "clinical_safety_precondition_unknown"
+}
+
 policy_reason := "consultation_answerability_user_requested_answer_now" if {
 	mode == "user_requested_answer_now"
 }
@@ -148,6 +165,10 @@ policy_reason := "consultation_answerability_followup_limit_reached" if {
 
 policy_reason := "consultation_answerability_more_evidence_needed" if {
 	mode == "needs_high_value_evidence"
+}
+
+policy_reason := "consultation_answerability_clinical_safety_precondition_unknown" if {
+	mode == "clinical_safety_precondition_unknown"
 }
 
 policy_reason := "consultation_answerability_minimum_context_missing" if {
