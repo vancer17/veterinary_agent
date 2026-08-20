@@ -46,6 +46,10 @@
 
 - `asset_id`：资产稳定标识。
 - `code`：对外安全信号编码，必须稳定且非空。
+- `emergency_red_flag.code`：阶段 4 起必须使用唯一的
+  `EMERGENCY_MODE_[A-Z0-9]{10}` opaque 资产级编码；不承载医学语义。
+- `emergency_red_flag.metadata.code_governance`：必须包含非空
+  `strategy` 与 `legacy_code`，用于稳定保留阶段 4 历史编码审计映射。
 - `asset_type`：资产类型，只能使用受控枚举。
 - `canonical_name`：资产规范名称。
 - `severity`：资产默认风险级别。

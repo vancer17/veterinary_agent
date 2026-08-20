@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
 # 文件: scripts/integration/run-clinical-safety-api-smoke.sh
-# 作用: 通过远程开发环境执行临床安全阶段 3 真实服务集成测试。
+# 作用: 通过远程开发环境执行临床安全阶段 3 / 阶段 4 真实服务集成测试。
 # 范围: 建立 PostgreSQL、LiteLLM 与 OPA 的 SSH 隧道，注入安全环境变量并执行
 #       tests/integration/test_clinical_safety_api_external.py。
 # 说明: 脚本不会回显密钥；远程策略同步与数据库迁移可通过环境变量关闭。
@@ -17,6 +17,7 @@ remote_project_dir="${EXTERNAL_API_TEST_REMOTE_PROJECT_DIR:-/home/devlop/veterin
 
 sync_remote_policy="${CLINICAL_SAFETY_SMOKE_SYNC_REMOTE_POLICY:-true}"
 upgrade_remote_database="${CLINICAL_SAFETY_SMOKE_UPGRADE_REMOTE_DATABASE:-true}"
+seed_remote_clinical_safety="${CLINICAL_SAFETY_SMOKE_SEED_REMOTE_ASSETS:-auto}"
 tunnel_http_services="${EXTERNAL_API_TEST_TUNNEL_HTTP_SERVICES:-true}"
 tunnel_ready_seconds="${EXTERNAL_API_TEST_TUNNEL_READY_SECONDS:-2}"
 
@@ -166,6 +167,89 @@ else
     export EXTERNAL_API_TEST_OPA_BASE_URL="${EXTERNAL_API_TEST_OPA_BASE_URL:-http://47.97.19.58/opa}"
 fi
 
+seed_remote_assets=false
+if [[ "${seed_remote_clinical_safety,,}" == "always" ]]; then
+    seed_remote_assets=true
+elif [[ "${seed_remote_clinical_safety,,}" == "auto" ]]; then
+    seed_remote_assets="$(
+        LITELLM_BASE_URL="${EXTERNAL_API_TEST_LITELLM_BASE_URL}" \
+        LITELLM_API_KEY="${EXTERNAL_API_TEST_LITELLM_API_KEY}" \
+        uv run python - "${EXTERNAL_API_TEST_DATABASE_URL}" <<'PY'
+import sys
+
+from sqlalchemy import text
+
+from vet_agent.db import make_session_factory
+
+
+def main() -> None:
+    """检查远程临床安全资产是否需要阶段 4 发布态导入。
+
+    :return: 无返回值；输出 true 表示需要导入，false 表示可复用现有资产。
+    """
+    with make_session_factory(sys.argv[1])() as session:
+        row = session.execute(
+            text(
+                """
+                SELECT
+                    count(*) AS total_count,
+                    count(*) FILTER (
+                        WHERE code !~ '^EMERGENCY_MODE_[A-Z0-9]{10}$'
+                    ) AS invalid_count,
+                    count(*) FILTER (
+                        WHERE metadata -> 'code_governance' ->>'strategy'
+                            IS DISTINCT FROM 'opaque_asset_identity_v1'
+                    ) AS governance_missing_count
+                FROM clinical_safety_assets
+                WHERE asset_type = 'emergency_red_flag'
+                  AND review_status = 'approved'
+                  AND enabled IS TRUE
+                """
+            )
+        ).mappings().one()
+        duplicate_count = session.execute(
+            text(
+                """
+                SELECT count(*)
+                FROM (
+                    SELECT code
+                    FROM clinical_safety_assets
+                    WHERE asset_type = 'emergency_red_flag'
+                      AND review_status = 'approved'
+                      AND enabled IS TRUE
+                    GROUP BY code
+                    HAVING count(*) > 1
+                ) duplicated_codes
+                """
+            )
+        ).scalar_one()
+    needs_seed = (
+        int(row["total_count"]) == 0
+        or int(row["invalid_count"]) > 0
+        or int(row["governance_missing_count"]) > 0
+        or int(duplicate_count or 0) > 0
+    )
+    print("true" if needs_seed else "false")
+
+
+if __name__ == "__main__":
+    main()
+PY
+    )"
+fi
+
+if [[ "${seed_remote_assets}" == "true" ]]; then
+    echo "导入阶段 4 临床安全静态资产并生成真实向量..."
+    LITELLM_BASE_URL="${EXTERNAL_API_TEST_LITELLM_BASE_URL}" \
+    LITELLM_API_KEY="${EXTERNAL_API_TEST_LITELLM_API_KEY}" \
+    QWEN_EMBEDDING_MODEL="${EXTERNAL_API_TEST_QWEN_EMBEDDING_MODEL:-text-embedding-v4}" \
+        uv run python scripts/seed_database.py \
+            --database-url "${EXTERNAL_API_TEST_DATABASE_URL}" \
+            --clinical-safety-dir assets/clinical_safety \
+            --clinical-safety-review-status approved \
+            --with-embeddings
+fi
+
 export RUN_CLINICAL_SAFETY_API_EXTERNAL_TEST=true
 
 if [[ "${upgrade_remote_database}" == "true" ]]; then
@@ -173,5 +257,5 @@ if [[ "${upgrade_remote_database}" == "true" ]]; then
     DATABASE_URL="${EXTERNAL_API_TEST_DATABASE_URL}" uv run alembic upgrade head
 fi
 
-echo "执行临床安全阶段 3 真实服务集成测试..."
+echo "执行临床安全阶段 3 / 阶段 4 真实服务集成测试..."
 uv run pytest tests/integration/test_clinical_safety_api_external.py -m integration -q "$@"

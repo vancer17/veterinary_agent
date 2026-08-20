@@ -427,7 +427,7 @@ scripts/integration/run-clinical-safety-precondition-isolation-smoke.sh
 | 批量 item 隔离质量 | 真实评估确认 4/8 存在顺序和状态漂移，生产默认已收敛为单项调用 | 如需恢复批量，扩充医学审核样本并重新通过隔离评估阈值 |
 | 全局前提评估并发治理 | 当前仅控制单回合并发，实际模型并发由 Qwen 客户端统一限流 | 根据线上限流和超时数据评估是否需要独立 bulkhead |
 | `required_context.symptoms` 资产质量 | 保留自然语言，不解释不可靠条目 | 审计高频 unknown 条目后逐步治理资产文案 |
-| 主信号排序与 code 拆分 | 属于阶段 4 | 由资产治理和响应投影阶段处理 |
+| 主信号排序与 code 拆分 | 阶段 4 已完成资产级 opaque code 与 OPA primary_signal 投影 | 医学优先级模型如需扩展，应独立临床审核 |
 
 ## 12. 相关文档
 
@@ -435,3 +435,4 @@ scripts/integration/run-clinical-safety-precondition-isolation-smoke.sh
 2. [临床安全证据充分性边界变更总结](/home/vancer17/veterinary_agent/docs/architecture/clinical-safety-evidence-boundary-change-summary.md)
 3. [临床安全召回输入收紧变更总结](/home/vancer17/veterinary_agent/docs/architecture/clinical-safety-retrieval-input-change-summary.md)
 4. [临床安全补齐测试基线变更总结](/home/vancer17/veterinary_agent/docs/architecture/clinical-safety-test-baseline-change-summary.md)
+5. [临床安全急诊 code 与响应投影变更总结](/home/vancer17/veterinary_agent/docs/architecture/clinical-safety-emergency-code-response-change-summary.md)

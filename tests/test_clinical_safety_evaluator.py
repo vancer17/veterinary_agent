@@ -10,7 +10,6 @@ import asyncio
 from collections.abc import Sequence
 from dataclasses import replace
 
-from vet_agent import SafetySignal
 from vet_agent.clinical_safety import (
     ClinicalSafetyAgeGroup,
     ClinicalSafetyAsset,
@@ -36,6 +35,7 @@ from vet_agent.clinical_safety import (
     ClinicalSafetyRetriever,
     ClinicalSafetyRiskEvidenceState,
     ClinicalSafetySemanticResult,
+    ClinicalSafetySignal,
     ClinicalSafetySex,
     ClinicalSafetySpecies,
     ClinicalSafetySymptomState,
@@ -75,13 +75,17 @@ class StaticClinicalSafetyPolicyClient(ClinicalSafetyPolicyClient):
                 message="测试临床安全策略允许继续执行。",
                 metadata={"policy_backend": "static_test"},
             )
+        candidate_severities = {
+            candidate.asset.asset_id: self._severity(candidate, policy_input)
+            for candidate in candidates
+        }
         signals = tuple(
-            SafetySignal(
+            ClinicalSafetySignal(
+                asset_id=candidate.asset.asset_id,
+                canonical_name=candidate.asset.canonical_name,
                 code=candidate.asset.code,
                 severity=self._severity(candidate, policy_input),
-                message=candidate.asset.triage_message
-                or candidate.asset.clinical_risk_summary
-                or f"命中临床安全风险：{candidate.asset.canonical_name}",
+                message=candidate.asset.triage_message,
                 matched_terms=list(candidate.matched_terms()),
             )
             for candidate in candidates
@@ -98,6 +102,12 @@ class StaticClinicalSafetyPolicyClient(ClinicalSafetyPolicyClient):
             message="测试临床安全策略完成结构化候选裁决。",
             reasons=tuple(candidate.asset.code for candidate in candidates),
             signals=signals,
+            primary_signal=self._primary_signal(
+                candidates,
+                candidate_severities,
+                signals,
+                action,
+            ),
             metadata={"policy_backend": "static_test"},
         )
 
@@ -154,7 +164,7 @@ class StaticClinicalSafetyPolicyClient(ClinicalSafetyPolicyClient):
 
         :param candidate: 待转换为安全信号的候选对象。
         :param policy_input: evaluator 组装后的临床安全策略输入。
-        :return: 返回 SafetySignal 可接受的严重级别。
+        :return: 返回临床安全信号可接受的严重级别。
         """
         asset = candidate.asset
         score = candidate.score
@@ -167,6 +177,53 @@ class StaticClinicalSafetyPolicyClient(ClinicalSafetyPolicyClient):
         if score >= policy_input.thresholds.urgent_min_score:
             return "urgent"
         return asset.severity
+
+    def _primary_signal(
+        self,
+        candidates: list[ClinicalSafetyCandidate],
+        candidate_severities: dict[str, str],
+        signals: tuple[ClinicalSafetySignal, ...],
+        action: ClinicalSafetyPolicyAction,
+    ) -> ClinicalSafetySignal | None:
+        """按通用结构化字段选择测试策略主信号。
+
+        :param candidates: 参与测试裁决的临床安全候选列表。
+        :param candidate_severities: 以资产标识索引的测试信号级别。
+        :param signals: 候选投影出的安全信号列表。
+        :param action: 测试策略裁决动作。
+        :return: 升级或阻断时返回唯一主信号，其余动作返回 None。
+        """
+        if action not in {
+            ClinicalSafetyPolicyAction.ESCALATE,
+            ClinicalSafetyPolicyAction.BLOCK,
+        }:
+            return None
+        severity_rank = {"blocked": 0, "urgent": 1}
+        action_rank = {"emergency": 0, "same_day_visit": 1, "urgent_visit": 2}
+        eligible = [
+            candidate
+            for candidate in candidates
+            if candidate_severities[candidate.asset.asset_id] in severity_rank
+        ]
+        if not eligible:
+            return None
+
+        def ordering_key(candidate: ClinicalSafetyCandidate) -> tuple[int, int, str]:
+            """构造不使用召回分数的稳定测试排序键。
+
+            :param candidate: 待排序的临床安全候选。
+            :return: 返回严重级别、动作分类和资产标识组成的排序键。
+            """
+            return (
+                severity_rank[candidate_severities[candidate.asset.asset_id]],
+                action_rank.get(candidate.asset.action_class, 3),
+                candidate.asset.asset_id,
+            )
+
+        selected = min(eligible, key=ordering_key)
+        return next(
+            signal for signal in signals if signal.asset_id == selected.asset.asset_id
+        )
 
 
 class DuplicateSignalClinicalSafetyPolicyClient(ClinicalSafetyPolicyClient):
@@ -190,18 +247,30 @@ class DuplicateSignalClinicalSafetyPolicyClient(ClinicalSafetyPolicyClient):
             allow=True,
             message="测试临床安全策略返回重复安全信号。",
             signals=(
-                SafetySignal(
+                ClinicalSafetySignal(
+                    asset_id="safety_duplicate_signal",
+                    canonical_name="重复信号测试",
                     code="CYANOSIS_RISK_PATTERN",
                     severity="caution",
                     message="命中较低等级测试信号。",
                     matched_terms=["牙龈发紫", "呼吸很快"],
                 ),
-                SafetySignal(
+                ClinicalSafetySignal(
+                    asset_id="safety_duplicate_signal",
+                    canonical_name="重复信号测试",
                     code="CYANOSIS_RISK_PATTERN",
                     severity="urgent",
                     message="命中较高等级测试信号。",
                     matched_terms=[" 牙龈发紫 ", "牙龈发紫并呼吸很快"],
                 ),
+            ),
+            primary_signal=ClinicalSafetySignal(
+                asset_id="safety_duplicate_signal",
+                canonical_name="重复信号测试",
+                code="CYANOSIS_RISK_PATTERN",
+                severity="urgent",
+                message="命中较高等级测试信号。",
+                matched_terms=[" 牙龈发紫 ", "牙龈发紫并呼吸很快"],
             ),
             metadata={"policy_backend": "duplicate_signal_test"},
         )
@@ -498,6 +567,7 @@ def _human_drug_asset(*, symptoms: tuple[str, ...] = ("呕吐",)) -> ClinicalSaf
         severity="urgent",
         action_class="emergency",
         code="TOXIC_SUBSTANCE",
+        triage_message="疑似误食人用药需要立即联系线下急诊兽医。",
         aliases=("泰诺", "扑热息痛"),
         carriers=(),
         user_expressions=(),
@@ -522,6 +592,7 @@ def _danger_pattern_asset() -> ClinicalSafetyAsset:
         severity="caution",
         action_class="safety_warning",
         code="CYANOSIS_RISK_PATTERN",
+        triage_message="发绀或呼吸异常需要优先线下处理。",
         aliases=("皮肤发紫",),
         carriers=(),
         user_expressions=(),
@@ -900,7 +971,9 @@ def test_clinical_safety_evaluator_compacts_duplicate_matched_terms() -> None:
     )
 
     assert len(signals) == 1
-    assert signals[0] == SafetySignal(
+    assert signals[0] == ClinicalSafetySignal(
+        asset_id="safety_duplicate_signal",
+        canonical_name="重复信号测试",
         code="CYANOSIS_RISK_PATTERN",
         severity="urgent",
         message="命中较高等级测试信号。",

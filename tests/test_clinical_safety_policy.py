@@ -19,11 +19,13 @@ from vet_agent.clinical_safety import (
     ClinicalSafetyChunkHit,
     ClinicalSafetyObservedFeature,
     ClinicalSafetyPolicyAction,
+    ClinicalSafetyPolicyDecision,
     ClinicalSafetyPolicyInput,
     ClinicalSafetyPolicyRequestContext,
     ClinicalSafetyPreconditionAssessment,
     ClinicalSafetyRetrievalState,
     ClinicalSafetySemanticResult,
+    ClinicalSafetySignal,
     ClinicalSafetyThresholds,
     OpaClinicalSafetyPolicyClient,
     clinical_safety_required_context_hash,
@@ -51,7 +53,7 @@ class _MockResponse:
 
         :return: 无返回值。
         """
-        return None
+        return
 
     def json(self) -> dict[str, Any]:
         """返回预置 JSON。
@@ -77,7 +79,7 @@ class _MockAsyncClient:
         self.response_payload = response_payload
         self.requests: list[dict[str, Any]] = []
 
-    async def __aenter__(self) -> "_MockAsyncClient":
+    async def __aenter__(self) -> _MockAsyncClient:
         """进入异步上下文。
 
         :return: 返回客户端自身。
@@ -89,7 +91,7 @@ class _MockAsyncClient:
 
         :return: 无返回值。
         """
-        return None
+        return
 
     async def post(
         self, url: str, *, headers: dict[str, str], json: dict[str, Any]
@@ -175,6 +177,7 @@ def test_clinical_safety_policy_input_passes_required_context_to_opa() -> None:
         severity="urgent",
         action_class="emergency",
         code="CYANOSIS_RISK_PATTERN",
+        triage_message="呼吸循环测试风险需要优先线下处理。",
         symptoms=("呼吸困难",),
         recognition_phrases=("呼吸困难",),
         required_context={"species": ("cat", "dog"), "symptoms": ("呼吸困难",)},
@@ -234,6 +237,7 @@ def test_clinical_safety_policy_input_projects_precondition_evidence_without_tex
         severity="urgent",
         action_class="emergency",
         code="CYANOSIS_RISK_PATTERN",
+        triage_message="呼吸循环测试风险需要优先线下处理。",
         required_context={"species": ("cat", "dog"), "symptoms": ("呼吸困难",)},
     )
     candidate = ClinicalSafetyCandidate(asset=asset, score=0.92, chunk_hits=())
@@ -307,12 +311,22 @@ def test_opa_clinical_safety_policy_client_parses_result(
                 "reasons": ["clinical_safety_candidate:TOXIC_SUBSTANCE:emergency"],
                 "signals": [
                     {
+                        "asset_id": "safety_human_drug_001",
+                        "canonical_name": "对乙酰氨基酚",
                         "code": "TOXIC_SUBSTANCE",
                         "severity": "urgent",
                         "message": "需要线下处理。",
                         "matched_terms": ["泰诺"],
                     }
                 ],
+                "primary_signal": {
+                    "asset_id": "safety_human_drug_001",
+                    "canonical_name": "对乙酰氨基酚",
+                    "code": "TOXIC_SUBSTANCE",
+                    "severity": "urgent",
+                    "message": "需要线下处理。",
+                    "matched_terms": ["泰诺"],
+                },
             }
         }
     )
@@ -340,4 +354,142 @@ def test_opa_clinical_safety_policy_client_parses_result(
     assert decision.action == ClinicalSafetyPolicyAction.ESCALATE
     assert decision.allow is True
     assert decision.signals[0].code == "TOXIC_SUBSTANCE"
+    assert decision.primary_signal is not None
+    assert decision.primary_signal.asset_id == "safety_human_drug_001"
     assert mock_client.requests[0]["headers"]["X-Request-ID"] == "req_test"
+
+
+def test_opa_clinical_safety_policy_client_rejects_missing_primary_signal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证升级决策缺少主信号时策略客户端快速失败。
+
+    :param monkeypatch: pytest 替身工具。
+    :return: 无返回值；断言通过表示 Python 不使用本地排序兜底。
+    """
+    payload = _escalation_result_payload()
+    del payload["result"]["primary_signal"]
+    mock_client = _MockAsyncClient(payload)
+
+    def async_client_factory(timeout: float) -> _MockAsyncClient:
+        """构造缺失主信号的策略响应客户端替身。
+
+        :param timeout: httpx 客户端超时时间。
+        :return: 返回预置响应的异步客户端替身。
+        """
+        del timeout
+        return mock_client
+
+    monkeypatch.setattr(httpx, "AsyncClient", async_client_factory)
+    client = OpaClinicalSafetyPolicyClient(
+        base_url="http://example.test/opa",
+        version="v1",
+        package_path="vet_agent.clinical_safety",
+        rule_name="decision",
+    )
+
+    with pytest.raises(RuntimeError, match="primary_signal field is required"):
+        asyncio.run(client.decide(_empty_policy_input()))
+
+
+def test_opa_clinical_safety_policy_client_rejects_missing_allow_primary_field(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """验证 allow 决策也必须显式返回 null 主信号字段。
+
+    :param monkeypatch: pytest 替身工具。
+    :return: 无返回值；断言通过表示字段缺失不会被误当作 null。
+    """
+    payload = {
+        "result": {
+            "action": "allow",
+            "allow": True,
+            "message": "测试临床安全策略允许继续。",
+            "reasons": [],
+            "signals": [],
+        }
+    }
+    mock_client = _MockAsyncClient(payload)
+
+    def async_client_factory(timeout: float) -> _MockAsyncClient:
+        """构造缺失 allow 主信号字段的策略响应客户端替身。
+
+        :param timeout: httpx 客户端超时时间。
+        :return: 返回预置响应的异步客户端替身。
+        """
+        del timeout
+        return mock_client
+
+    monkeypatch.setattr(httpx, "AsyncClient", async_client_factory)
+    client = OpaClinicalSafetyPolicyClient(
+        base_url="http://example.test/opa",
+        version="v1",
+        package_path="vet_agent.clinical_safety",
+        rule_name="decision",
+    )
+
+    with pytest.raises(RuntimeError, match="primary_signal field is required"):
+        asyncio.run(client.decide(_empty_policy_input()))
+
+
+def test_clinical_safety_policy_decision_rejects_invalid_primary_contract() -> None:
+    """验证策略决策对象在构造阶段拒绝主信号与信号集脱钩。
+
+    :return: 无返回值；断言通过表示自定义策略客户端也不能绕过主信号契约。
+    """
+    signal = ClinicalSafetySignal(
+        asset_id="safety_human_drug_001",
+        canonical_name="对乙酰氨基酚",
+        code="TOXIC_SUBSTANCE",
+        severity="urgent",
+        message="需要线下处理。",
+    )
+
+    with pytest.raises(
+        ValueError, match="primary signal must match exactly one signal"
+    ):
+        ClinicalSafetyPolicyDecision(
+            action=ClinicalSafetyPolicyAction.ESCALATE,
+            allow=True,
+            message="测试临床安全策略完成结构化候选裁决。",
+            primary_signal=signal,
+        )
+
+
+def _escalation_result_payload() -> dict[str, Any]:
+    """构造包含有效主信号的最小 OPA 升级结果。
+
+    :return: 返回可被策略客户端解析的响应负载。
+    """
+    signal = {
+        "asset_id": "safety_human_drug_001",
+        "canonical_name": "对乙酰氨基酚",
+        "code": "TOXIC_SUBSTANCE",
+        "severity": "urgent",
+        "message": "需要线下处理。",
+        "matched_terms": ["泰诺"],
+    }
+    return {
+        "result": {
+            "action": "escalate",
+            "allow": True,
+            "message": "需要线下处理。",
+            "reasons": ["clinical_safety_candidate:TOXIC_SUBSTANCE:emergency"],
+            "signals": [signal],
+            "primary_signal": signal,
+        }
+    }
+
+
+def _empty_policy_input() -> ClinicalSafetyPolicyInput:
+    """构造不依赖候选和外部服务的策略输入。
+
+    :return: 返回最小临床安全策略输入对象。
+    """
+    return ClinicalSafetyPolicyInput(
+        context=ClinicalSafetyPolicyRequestContext(),
+        semantic_result=None,
+        retrieval_state=ClinicalSafetyRetrievalState(),
+        candidates=(),
+        thresholds=ClinicalSafetyThresholds(),
+    )

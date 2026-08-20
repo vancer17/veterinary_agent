@@ -70,7 +70,9 @@ class OutputSafetyService:
         context = OutputSafetyReviewContext.from_response(response)
         decision = await self.evaluate(context)
         self._append_policy_path(response, decision)
-        response.safety_signals = self._dedupe_signals([*response.safety_signals, *decision.signals])
+        response.safety_signals = self._dedupe_signals(
+            [*response.safety_signals, *decision.signals]
+        )
         response.metadata["output_safety_decision"] = {
             **decision.to_metadata(),
             "enabled": True,
@@ -81,7 +83,9 @@ class OutputSafetyService:
             return response
         return self._apply_enforced_decision(response, decision)
 
-    async def evaluate(self, context: OutputSafetyReviewContext) -> OutputSafetyDecision:
+    async def evaluate(
+        self, context: OutputSafetyReviewContext
+    ) -> OutputSafetyDecision:
         """采集候选并执行输出安全策略裁决。
 
         :param context: 本轮输出安全复核上下文。
@@ -136,16 +140,29 @@ class OutputSafetyService:
         :return: 返回应用动作后的 Agent 响应。
         :raises RuntimeError: rewrite 未就绪或策略缺少整段替换文本时抛出。
         """
-        if decision.action in {OutputSafetyDecisionAction.ALLOW, OutputSafetyDecisionAction.OBSERVE}:
+        if decision.action in {
+            OutputSafetyDecisionAction.ALLOW,
+            OutputSafetyDecisionAction.OBSERVE,
+        }:
             return response
         if decision.rewrite_requested:
             raise RuntimeError("output safety rewrite action is not implemented")
-        if decision.action not in {OutputSafetyDecisionAction.BLOCK, OutputSafetyDecisionAction.ESCALATE}:
+        if decision.action not in {
+            OutputSafetyDecisionAction.BLOCK,
+            OutputSafetyDecisionAction.ESCALATE,
+        }:
             return response
         replacement_text = (decision.replacement_text or "").strip()
         if not replacement_text:
-            raise RuntimeError("output safety policy requested response replacement without replacement_text")
-        status = "blocked" if decision.action == OutputSafetyDecisionAction.BLOCK else "safety_escalated"
+            raise RuntimeError(
+                "output safety policy requested response replacement without replacement_text"
+            )
+        response.status = (
+            "blocked"
+            if decision.action == OutputSafetyDecisionAction.BLOCK
+            else "safety_escalated"
+        )
+        status = response.status
         response.status = status
         response.output_text = replacement_text
         response.segments = [
@@ -161,7 +178,9 @@ class OutputSafetyService:
         response.reasoning_display = None
         return response
 
-    def _append_policy_path(self, response: AgentTurnResponse, decision: OutputSafetyDecision) -> None:
+    def _append_policy_path(
+        self, response: AgentTurnResponse, decision: OutputSafetyDecision
+    ) -> None:
         """根据策略后端追加输出安全策略审计节点。
 
         :param response: 当前 Agent 响应。
@@ -185,7 +204,9 @@ class OutputSafetyService:
         if isinstance(path, list) and node.value not in path:
             path.append(node.value)
 
-    def _dedupe_candidates(self, candidates: list[OutputSafetyCandidate]) -> tuple[OutputSafetyCandidate, ...]:
+    def _dedupe_candidates(
+        self, candidates: list[OutputSafetyCandidate]
+    ) -> tuple[OutputSafetyCandidate, ...]:
         """按候选编码、片段和命中线索去重。
 
         :param candidates: 待去重候选列表。
@@ -202,15 +223,22 @@ class OutputSafetyService:
         return tuple(result)
 
     def _dedupe_signals(self, signals: list[SafetySignal]) -> list[SafetySignal]:
-        """按安全信号编码、级别、说明与线索去重。
+        """按安全信号编码、级别、说明、资产身份与线索去重。
 
         :param signals: 待去重安全信号列表。
         :return: 返回去重后的安全信号列表。
         """
-        seen: set[tuple[str, str, str, tuple[str, ...]]] = set()
+        seen: set[tuple[str, str, str, str, str, tuple[str, ...]]] = set()
         result: list[SafetySignal] = []
         for signal in signals:
-            key = (signal.code, signal.severity, signal.message, tuple(signal.matched_terms))
+            key = (
+                signal.code,
+                signal.severity,
+                signal.message,
+                str(getattr(signal, "asset_id", "")),
+                str(getattr(signal, "canonical_name", "")),
+                tuple(signal.matched_terms),
+            )
             if key in seen:
                 continue
             seen.add(key)
@@ -229,4 +257,6 @@ def _mode_from_settings(settings: Settings) -> OutputSafetyMode:
     try:
         return OutputSafetyMode(raw_mode)
     except ValueError as exc:
-        raise RuntimeError(f"unsupported OUTPUT_SAFETY_MODE: {settings.output_safety_mode}") from exc
+        raise RuntimeError(
+            f"unsupported OUTPUT_SAFETY_MODE: {settings.output_safety_mode}"
+        ) from exc

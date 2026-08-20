@@ -1,16 +1,18 @@
 """
+=============================================================================
 文件：src/vet_agent/services/reasoning_display.py
-作用：承载业务服务、记忆、报告解析、权限与治理逻辑。
-说明：本文件遵循项目标准文件树编排；跨包引用应通过对应包的 __init__.py 暴露能力。
+作用：构造面向用户展示的安全分诊与问诊过程摘要。
+范围：消费已完成的结构化证据和安全信号，仅做用户可见投影，不执行医学推理。
+说明：本文件遵循项目标准文件树编排；跨包引用通过对应包初始化文件暴露能力。
+=============================================================================
 """
-
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from uuid import uuid4
 
 from vet_agent import Evidence, ReasoningDisplay, SafetySignal
-
 
 SLOT_LABELS = {
     "species": "物种",
@@ -30,7 +32,7 @@ SLOT_LABELS = {
 
 
 class ReasoningDisplayBuilder:
-    """Builds safe user-visible reasoning summaries, not hidden chain-of-thought."""
+    """构造安全的用户可见过程摘要，不暴露隐藏思维链和候选安全编码。"""
 
     def user_answer_evidence(self, consultation_state: dict | None) -> list[Evidence]:
         """执行 user_answer_evidence 业务逻辑。
@@ -71,7 +73,7 @@ class ReasoningDisplayBuilder:
         evidence: list[Evidence],
         consultation_state: dict | None = None,
         missing_slots: list[str] | None = None,
-        safety_signals: list[SafetySignal] | None = None,
+        safety_signals: Sequence[SafetySignal] | None = None,
     ) -> ReasoningDisplay:
         """执行 build_turn_display 业务逻辑。
 
@@ -85,11 +87,15 @@ class ReasoningDisplayBuilder:
         """
         title = "本轮思考过程"
         if status == "requires_followup":
-            text = self._followup_text(consultation_state, missing_slots or [], evidence)
+            text = self._followup_text(
+                consultation_state, missing_slots or [], evidence
+            )
         elif status in {"safety_escalated", "blocked"}:
-            text = self._safety_text(status, safety_signals or [])
+            text = self._safety_text(status, safety_signals or ())
         else:
-            text = self._completed_text(consultation_state, evidence, safety_signals or [])
+            text = self._completed_text(
+                consultation_state, evidence, safety_signals or []
+            )
 
         return ReasoningDisplay(
             projection_id=f"rdp_{uuid4().hex}",
@@ -99,7 +105,9 @@ class ReasoningDisplayBuilder:
             metadata={
                 "kind": "user_visible_diagnostic_evidence",
                 "evidence_count": len(evidence),
-                "public_citation_count": sum(1 for item in evidence if item.public_citation),
+                "public_citation_count": sum(
+                    1 for item in evidence if item.public_citation
+                ),
             },
         )
 
@@ -180,7 +188,10 @@ class ReasoningDisplayBuilder:
         :return: 返回函数执行结果。
         """
         known = self._known_user_answers(consultation_state, limit=5)
-        missing = "、".join(SLOT_LABELS.get(slot, slot) for slot in missing_slots[:5]) or "关键问诊信息"
+        missing = (
+            "、".join(SLOT_LABELS.get(slot, slot) for slot in missing_slots[:5])
+            or "关键问诊信息"
+        )
         basis = self._evidence_source_summary(evidence)
         return (
             "我先核对了本轮主诉、系统已知宠物资料和安全风险。"
@@ -193,7 +204,7 @@ class ReasoningDisplayBuilder:
         self,
         consultation_state: dict | None,
         evidence: list[Evidence],
-        safety_signals: list[SafetySignal],
+        safety_signals: Sequence[SafetySignal],
     ) -> str:
         """执行 _completed_text 内部辅助逻辑。
 
@@ -212,7 +223,7 @@ class ReasoningDisplayBuilder:
             "基于这些信息，回复只给阶段性方向、观察要点和就医触发条件，不替代线下兽医诊断。"
         )
 
-    def _safety_text(self, status: str, safety_signals: list[SafetySignal]) -> str:
+    def _safety_text(self, status: str, safety_signals: Sequence[SafetySignal]) -> str:
         """执行 _safety_text 内部辅助逻辑。
 
         :param status: 业务状态。
@@ -226,7 +237,9 @@ class ReasoningDisplayBuilder:
             f"因此{action}，并保留明确的线下兽医兜底建议。"
         )
 
-    def _known_user_answers(self, consultation_state: dict | None, *, limit: int) -> str:
+    def _known_user_answers(
+        self, consultation_state: dict | None, *, limit: int
+    ) -> str:
         """执行 _known_user_answers 内部辅助逻辑。
 
         :param consultation_state: 问诊状态。
@@ -271,19 +284,18 @@ class ReasoningDisplayBuilder:
             parts.append("内部授权知识库摘要")
         return "、".join(parts)
 
-    def _safety_signal_summary(self, safety_signals: list[SafetySignal]) -> str:
-        """执行 _safety_signal_summary 内部辅助逻辑。
+    def _safety_signal_summary(self, safety_signals: Sequence[SafetySignal]) -> str:
+        """生成不暴露候选编码和命中词的安全信号数量摘要。
 
         :param safety_signals: 安全信号列表。
-        :return: 返回函数执行结果。
+        :return: 返回面向用户的安全信号摘要文本。
         """
         if not safety_signals:
             return "，未发现需要立刻中断普通问诊流程的安全信号"
-        labels = []
-        for signal in safety_signals[:3]:
-            term_text = f"({', '.join(signal.matched_terms[:3])})" if signal.matched_terms else ""
-            labels.append(f"{signal.code}{term_text}")
-        return f"，发现安全信号：{'、'.join(labels)}"
+        signal_count = len(safety_signals)
+        if signal_count == 1:
+            return "，识别到 1 个需要关注的安全信号"
+        return f"，识别到 {signal_count} 个需要关注的安全信号，已保留审计记录"
 
     def _unique(self, values: list[str]) -> list[str]:
         """执行 _unique 内部辅助逻辑。

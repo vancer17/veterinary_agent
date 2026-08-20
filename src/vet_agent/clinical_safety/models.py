@@ -10,6 +10,8 @@ from datetime import datetime
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from vet_agent import ClinicalSafetySignal
+
 
 SafetySeverity = Literal["info", "caution", "urgent", "blocked"]
 ClinicalSafetyAssetType = Literal[
@@ -126,7 +128,9 @@ class ClinicalSafetyAsset:
             "user_expressions": list(self.user_expressions),
             "symptoms": list(self.symptoms),
             "recognition_phrases": list(self.recognition_phrases),
-            "required_context": {key: list(value) for key, value in self.required_context.items()},
+            "required_context": {
+                key: list(value) for key, value in self.required_context.items()
+            },
             "decision_hints": dict(self.decision_hints),
             "clinical_risk_summary": self.clinical_risk_summary,
             "triage_message": self.triage_message,
@@ -134,7 +138,9 @@ class ClinicalSafetyAsset:
             "review_status": self.review_status,
             "version": self.version,
             "enabled": self.enabled,
-            "published_at": self.published_at.isoformat() if self.published_at is not None else None,
+            "published_at": self.published_at.isoformat()
+            if self.published_at is not None
+            else None,
             "raw_text": dict(self.raw_text),
             "metadata": dict(self.metadata),
         }

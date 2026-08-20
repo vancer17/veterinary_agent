@@ -8856,7 +8856,7 @@
       "carriers": [],
       "category": "泌尿消化",
       "clinical_risk_summary": "尿道被结晶/尿栓/结石堵死→尿排不出→急性肾后性肾衰、高钾血症(可致命性心律失常/心脏骤停)、膀胱可破裂。这是分秒级真急症。梗阻>24小时即出现呕吐、厌食、精神差、虚弱、木僵、体温下降、休克。未治疗常在24-48小时内死亡。",
-      "code": "EMERGENCY_RED_FLAG",
+      "code": "EMERGENCY_MODE_M5GBPYMACD",
       "decision_hints": {
         "active_symptom": "safety_escalated",
         "historical_context": "record_as_history",
@@ -8872,7 +8872,11 @@
           "target_contract_head": "ed6a83b96f18ef7b390452a0037986744d3d41e6"
         },
         "source_index": 1,
-        "source_section": "emergencyRedFlags"
+        "source_section": "emergencyRedFlags",
+        "code_governance": {
+          "strategy": "opaque_asset_identity_v1",
+          "legacy_code": "EMERGENCY_RED_FLAG"
+        }
       },
       "published_at": "2026-08-16T00:00:00+08:00",
       "raw_text": {
@@ -9005,7 +9009,7 @@
       "carriers": [],
       "category": "泌尿消化",
       "clinical_risk_summary": "临床进展极快,可在数小时内从\"只是尿频尿少带血\"恶化为完全尿闭+全身中毒。早期识别=救命窗口。部分梗阻随时可转为完全梗阻。",
-      "code": "PARTIAL_URINARY_OBSTRUCTION_RISK",
+      "code": "EMERGENCY_MODE_4K4P5HXWNX",
       "decision_hints": {
         "active_symptom": "safety_escalated",
         "historical_context": "record_as_history",
@@ -9021,7 +9025,11 @@
           "target_contract_head": "ed6a83b96f18ef7b390452a0037986744d3d41e6"
         },
         "source_index": 2,
-        "source_section": "emergencyRedFlags"
+        "source_section": "emergencyRedFlags",
+        "code_governance": {
+          "strategy": "opaque_asset_identity_v1",
+          "legacy_code": "PARTIAL_URINARY_OBSTRUCTION_RISK"
+        }
       },
       "published_at": "2026-08-16T00:00:00+08:00",
       "raw_text": {
@@ -9146,7 +9154,7 @@
       "carriers": [],
       "category": "泌尿消化",
       "clinical_risk_summary": "胃充气扩张并沿系膜轴扭转→堵住入口出口、压迫大血管→数小时内低血容量休克、胃壁坏死、脾扭转、心律失常、死亡。是犬最急、最快致命的急症之一,可在数小时内夺命。无效干呕(想吐吐不出)+腹胀是最经典组合。",
-      "code": "GDV_RISK_PATTERN",
+      "code": "EMERGENCY_MODE_BDHMCEB4RZ",
       "decision_hints": {
         "active_symptom": "safety_escalated",
         "historical_context": "record_as_history",
@@ -9162,7 +9170,11 @@
           "target_contract_head": "ed6a83b96f18ef7b390452a0037986744d3d41e6"
         },
         "source_index": 3,
-        "source_section": "emergencyRedFlags"
+        "source_section": "emergencyRedFlags",
+        "code_governance": {
+          "strategy": "opaque_asset_identity_v1",
+          "legacy_code": "GDV_RISK_PATTERN"
+        }
       },
       "published_at": "2026-08-16T00:00:00+08:00",
       "raw_text": {
@@ -9279,7 +9291,7 @@
       "carriers": [],
       "category": "泌尿消化",
       "clinical_risk_summary": "线一端锚定(常在舌根下或幽门),另一端被肠道蠕动往下拽→肠管像手风琴一样堆叠(X线\"串珠/褶皱\"征),线勒进肠壁→切割、穿孔、腹膜炎、脓毒症,可致命。比普通异物更凶险。",
-      "code": "EMERGENCY_RED_FLAG",
+      "code": "EMERGENCY_MODE_VW5VX623TH",
       "decision_hints": {
         "active_symptom": "clinical_caution",
         "historical_context": "record_as_history",
@@ -9295,7 +9307,11 @@
           "target_contract_head": "ed6a83b96f18ef7b390452a0037986744d3d41e6"
         },
         "source_index": 4,
-        "source_section": "emergencyRedFlags"
+        "source_section": "emergencyRedFlags",
+        "code_governance": {
+          "strategy": "opaque_asset_identity_v1",
+          "legacy_code": "EMERGENCY_RED_FLAG"
+        }
       },
       "published_at": "2026-08-16T00:00:00+08:00",
       "raw_text": {
@@ -9385,7 +9401,7 @@
       "carriers": [],
       "category": "泌尿消化",
       "clinical_risk_summary": "尖锐物可划伤/穿孔食道、胃、肠→出血、纵隔炎/腹膜炎。纽扣电池=急症中的急症(电流灼伤食道、数小时内穿孔)。多颗磁铁分处肠段会相吸夹坏肠壁坏死穿孔。碎骨可splinter刺穿。",
-      "code": "EMERGENCY_RED_FLAG",
+      "code": "EMERGENCY_MODE_2XRW8G48E2",
       "decision_hints": {
         "active_symptom": "safety_escalated",
         "historical_context": "record_as_history",
@@ -9401,7 +9417,11 @@
           "target_contract_head": "ed6a83b96f18ef7b390452a0037986744d3d41e6"
         },
         "source_index": 5,
-        "source_section": "emergencyRedFlags"
+        "source_section": "emergencyRedFlags",
+        "code_governance": {
+          "strategy": "opaque_asset_identity_v1",
+          "legacy_code": "EMERGENCY_RED_FLAG"
+        }
       },
       "published_at": "2026-08-16T00:00:00+08:00",
       "raw_text": {
@@ -9494,7 +9514,7 @@
       "carriers": [],
       "category": "泌尿消化",
       "clinical_risk_summary": "异物堵住胃或肠道→持续呕吐、脱水、电解质紊乱;完全性小肠梗阻常见喷射状呕吐并快速恶化。肠段可缺血坏死、穿孔→腹膜炎、脓毒性休克致命。胃内异物可能间歇发作数周,小肠梗阻则快速恶化。",
-      "code": "EMERGENCY_RED_FLAG",
+      "code": "EMERGENCY_MODE_3XR84H2E8N",
       "decision_hints": {
         "active_symptom": "clinical_caution",
         "historical_context": "record_as_history",
@@ -9510,7 +9530,11 @@
           "target_contract_head": "ed6a83b96f18ef7b390452a0037986744d3d41e6"
         },
         "source_index": 6,
-        "source_section": "emergencyRedFlags"
+        "source_section": "emergencyRedFlags",
+        "code_governance": {
+          "strategy": "opaque_asset_identity_v1",
+          "legacy_code": "EMERGENCY_RED_FLAG"
+        }
       },
       "published_at": "2026-08-16T00:00:00+08:00",
       "raw_text": {
@@ -9619,7 +9643,7 @@
       "carriers": [],
       "category": "泌尿消化",
       "clinical_risk_summary": "频繁呕吐本身导致脱水、电解质/酸碱紊乱;更重要是它是众多致命急症的共同表现——梗阻、GDV、胰腺炎、尿道梗阻(公猫)、中毒、肾衰、腹膜炎、异物。无法留住水分会快速脱水,幼猫幼犬尤快。",
-      "code": "EMERGENCY_RED_FLAG",
+      "code": "EMERGENCY_MODE_V7ZR6FYSP2",
       "decision_hints": {
         "active_symptom": "clinical_caution",
         "historical_context": "record_as_history",
@@ -9635,7 +9659,11 @@
           "target_contract_head": "ed6a83b96f18ef7b390452a0037986744d3d41e6"
         },
         "source_index": 7,
-        "source_section": "emergencyRedFlags"
+        "source_section": "emergencyRedFlags",
+        "code_governance": {
+          "strategy": "opaque_asset_identity_v1",
+          "legacy_code": "EMERGENCY_RED_FLAG"
+        }
       },
       "published_at": "2026-08-16T00:00:00+08:00",
       "raw_text": {
@@ -9762,7 +9790,7 @@
       "carriers": [],
       "category": "泌尿消化",
       "clinical_risk_summary": "呕吐物带血永远不正常。提示消化道出血——胃溃疡(常因NSAID类止痛药、应激、疾病)、尖锐异物划伤、中毒(如灭鼠药抗凝)、严重感染、肿瘤、凝血障碍。伴苍白牙龈=失血/休克,伴虚弱瘫倒=严重失血。",
-      "code": "EMERGENCY_RED_FLAG",
+      "code": "EMERGENCY_MODE_XWGHBV274N",
       "decision_hints": {
         "active_symptom": "clinical_caution",
         "historical_context": "record_as_history",
@@ -9778,7 +9806,11 @@
           "target_contract_head": "ed6a83b96f18ef7b390452a0037986744d3d41e6"
         },
         "source_index": 8,
-        "source_section": "emergencyRedFlags"
+        "source_section": "emergencyRedFlags",
+        "code_governance": {
+          "strategy": "opaque_asset_identity_v1",
+          "legacy_code": "EMERGENCY_RED_FLAG"
+        }
       },
       "published_at": "2026-08-16T00:00:00+08:00",
       "raw_text": {
@@ -9899,7 +9931,7 @@
       "carriers": [],
       "category": "泌尿消化",
       "clinical_risk_summary": "黑柏油样便=血液在上消化道(胃/小肠)出血后被消化变黑。常见于胃溃疡(NSAID药物、应激、疾病)、异物划伤、中毒(灭鼠药/抗凝)、凝血障碍、肿瘤、寄生虫、术后并发症、误吞血液。黑便容易被忽视,却始终应按紧急对待。",
-      "code": "EMERGENCY_RED_FLAG",
+      "code": "EMERGENCY_MODE_45ME3KCDWR",
       "decision_hints": {
         "active_symptom": "safety_escalated",
         "historical_context": "record_as_history",
@@ -9915,7 +9947,11 @@
           "target_contract_head": "ed6a83b96f18ef7b390452a0037986744d3d41e6"
         },
         "source_index": 9,
-        "source_section": "emergencyRedFlags"
+        "source_section": "emergencyRedFlags",
+        "code_governance": {
+          "strategy": "opaque_asset_identity_v1",
+          "legacy_code": "EMERGENCY_RED_FLAG"
+        }
       },
       "published_at": "2026-08-16T00:00:00+08:00",
       "raw_text": {
@@ -10007,7 +10043,7 @@
       "carriers": [],
       "category": "泌尿消化",
       "clinical_risk_summary": "鲜红血便提示下消化道出血——结肠炎、寄生虫(球虫/钩虫)、AHDS/HGE、直肠肛门损伤、异物、中毒、肿瘤、息肉、凝血障碍。少量血丝可能不急,但大量鲜血、血块,或伴随呕吐/脱水/精神差/苍白/腹痛则是急症。幼犬便血须警惕细小(parvo)。",
-      "code": "EMERGENCY_RED_FLAG",
+      "code": "EMERGENCY_MODE_JRRNA4FSWA",
       "decision_hints": {
         "active_symptom": "clinical_caution",
         "historical_context": "record_as_history",
@@ -10023,7 +10059,11 @@
           "target_contract_head": "ed6a83b96f18ef7b390452a0037986744d3d41e6"
         },
         "source_index": 10,
-        "source_section": "emergencyRedFlags"
+        "source_section": "emergencyRedFlags",
+        "code_governance": {
+          "strategy": "opaque_asset_identity_v1",
+          "legacy_code": "EMERGENCY_RED_FLAG"
+        }
       },
       "published_at": "2026-08-16T00:00:00+08:00",
       "raw_text": {
@@ -10148,7 +10188,7 @@
       "carriers": [],
       "category": "泌尿消化",
       "clinical_risk_summary": "突发大量血样水泻(约50%伴呕吐),血浆大量渗漏→数小时内严重脱水、血液浓缩、休克,即使当天早上还正常。可在12小时内从健康变危重。需与细小、寄生虫、异物、阿迪森病、胰腺炎、中毒、凝血障碍鉴别。",
-      "code": "EMERGENCY_RED_FLAG",
+      "code": "EMERGENCY_MODE_P37PGAY5ZQ",
       "decision_hints": {
         "active_symptom": "safety_escalated",
         "historical_context": "record_as_history",
@@ -10164,7 +10204,11 @@
           "target_contract_head": "ed6a83b96f18ef7b390452a0037986744d3d41e6"
         },
         "source_index": 11,
-        "source_section": "emergencyRedFlags"
+        "source_section": "emergencyRedFlags",
+        "code_governance": {
+          "strategy": "opaque_asset_identity_v1",
+          "legacy_code": "EMERGENCY_RED_FLAG"
+        }
       },
       "published_at": "2026-08-16T00:00:00+08:00",
       "raw_text": {
@@ -10260,7 +10304,7 @@
       "carriers": [],
       "category": "泌尿消化",
       "clinical_risk_summary": "持续腹泻→大量丢失水和电解质→脱水、低血容量、休克、酸碱紊乱。伴呕吐时脱水更快。可能是感染(细小/寄生虫)、中毒、AHDS、胰腺炎、异物梗阻等致命病的表现。幼猫幼犬可在半天到一天内脱水危及生命。",
-      "code": "EMERGENCY_RED_FLAG",
+      "code": "EMERGENCY_MODE_3EADW4XWXW",
       "decision_hints": {
         "active_symptom": "clinical_caution",
         "historical_context": "record_as_history",
@@ -10276,7 +10320,11 @@
           "target_contract_head": "ed6a83b96f18ef7b390452a0037986744d3d41e6"
         },
         "source_index": 12,
-        "source_section": "emergencyRedFlags"
+        "source_section": "emergencyRedFlags",
+        "code_governance": {
+          "strategy": "opaque_asset_identity_v1",
+          "legacy_code": "EMERGENCY_RED_FLAG"
+        }
       },
       "published_at": "2026-08-16T00:00:00+08:00",
       "raw_text": {
@@ -10393,7 +10441,7 @@
       "carriers": [],
       "category": "泌尿消化",
       "clinical_risk_summary": "\"祈祷/拱背姿势\"是动物试图缓解剧烈腹痛的典型表现。背后常是致命急症:急性胰腺炎、GDV胃扭转、肠梗阻、腹膜炎、中毒、内出血、公猫尿道梗阻。这些都可能危及生命。伴腹胀、苍白牙龈、瘫倒者提示已进入休克。",
-      "code": "EMERGENCY_RED_FLAG",
+      "code": "EMERGENCY_MODE_YBD6WP9JGH",
       "decision_hints": {
         "active_symptom": "clinical_caution",
         "historical_context": "record_as_history",
@@ -10409,7 +10457,11 @@
           "target_contract_head": "ed6a83b96f18ef7b390452a0037986744d3d41e6"
         },
         "source_index": 13,
-        "source_section": "emergencyRedFlags"
+        "source_section": "emergencyRedFlags",
+        "code_governance": {
+          "strategy": "opaque_asset_identity_v1",
+          "legacy_code": "EMERGENCY_RED_FLAG"
+        }
       },
       "published_at": "2026-08-16T00:00:00+08:00",
       "raw_text": {
@@ -10538,7 +10590,7 @@
       "carriers": [],
       "category": "呼吸循环",
       "clinical_risk_summary": "猫任何静息状态下的张口呼吸/panting几乎总是病理性的,提示重度呼吸/循环受损。Merck明确将张口呼吸+黏膜颜色异常列为「反映肺功能重度损害、可能先于呼吸骤停」的信号。最常见病因:肥厚性心肌病(HCM)致胸腔/肺积液、哮喘、胸腔积液、严重贫血。可在数十分钟内进展到呼吸骤停。",
-      "code": "EMERGENCY_RED_FLAG",
+      "code": "EMERGENCY_MODE_7VSY82P2MF",
       "decision_hints": {
         "active_symptom": "safety_escalated",
         "historical_context": "record_as_history",
@@ -10554,7 +10606,11 @@
           "target_contract_head": "ed6a83b96f18ef7b390452a0037986744d3d41e6"
         },
         "source_index": 14,
-        "source_section": "emergencyRedFlags"
+        "source_section": "emergencyRedFlags",
+        "code_governance": {
+          "strategy": "opaque_asset_identity_v1",
+          "legacy_code": "EMERGENCY_RED_FLAG"
+        }
       },
       "published_at": "2026-08-16T00:00:00+08:00",
       "raw_text": {
@@ -10655,7 +10711,7 @@
       "carriers": [],
       "category": "呼吸循环",
       "clinical_risk_summary": "发绀=血液氧含量严重不足,脱氧血呈暗蓝色透出黏膜。「Cyanosis is always an emergency」。中央性发绀(舌/牙龈/口唇整体发蓝)提示心肺本身重度衰竭(严重肺水肿、胸腔积液、重度哮喘、先心病右向左分流、重度肺炎、气道梗阻、某些中毒如对乙酰氨基酚致猫高铁血红蛋白血症)。是紧邻呼吸/循环骤停的终末信号,器官会在数分钟内因缺氧受损。",
-      "code": "CYANOSIS_RISK_PATTERN",
+      "code": "EMERGENCY_MODE_VAXXZTWVAE",
       "decision_hints": {
         "active_symptom": "safety_escalated",
         "historical_context": "record_as_history",
@@ -10671,7 +10727,11 @@
           "target_contract_head": "ed6a83b96f18ef7b390452a0037986744d3d41e6"
         },
         "source_index": 15,
-        "source_section": "emergencyRedFlags"
+        "source_section": "emergencyRedFlags",
+        "code_governance": {
+          "strategy": "opaque_asset_identity_v1",
+          "legacy_code": "CYANOSIS_RISK_PATTERN"
+        }
       },
       "published_at": "2026-08-16T00:00:00+08:00",
       "raw_text": {
@@ -10775,7 +10835,7 @@
       "carriers": [],
       "category": "呼吸循环",
       "clinical_risk_summary": "呼吸困难(dyspnea)=用明显额外力气呼吸;动用腹肌辅助呼吸(腹式/paradoxical)是呼吸窘迫加重的客观体征,提示肺或胸腔严重病变(肺水肿、胸腔积液、气胸、重度肺炎/ARDS、气道梗阻)。伴颈部前伸、鼻翼扇动、拒绝躺下时距呼吸衰竭已近。",
-      "code": "EMERGENCY_RED_FLAG",
+      "code": "EMERGENCY_MODE_HFH29MSWSY",
       "decision_hints": {
         "active_symptom": "safety_escalated",
         "historical_context": "record_as_history",
@@ -10791,7 +10851,11 @@
           "target_contract_head": "ed6a83b96f18ef7b390452a0037986744d3d41e6"
         },
         "source_index": 16,
-        "source_section": "emergencyRedFlags"
+        "source_section": "emergencyRedFlags",
+        "code_governance": {
+          "strategy": "opaque_asset_identity_v1",
+          "legacy_code": "EMERGENCY_RED_FLAG"
+        }
       },
       "published_at": "2026-08-16T00:00:00+08:00",
       "raw_text": {
@@ -10881,7 +10945,7 @@
       "carriers": [],
       "category": "呼吸循环",
       "clinical_risk_summary": "健康及病情受控的猫狗睡眠/静息呼吸频率为15-30次/分;持续>30次/分为异常,常是心力衰竭/肺水肿最早、最先于外在症状出现的信号(尤其猫HCM)。是「还能在家观察 vs 已需就医」的关键量化分界。区别于一过性做梦/刚活动后的快呼吸——要求安静静息状态、多次测量。",
-      "code": "EMERGENCY_RED_FLAG",
+      "code": "EMERGENCY_MODE_5W9V7VYZ87",
       "decision_hints": {
         "active_symptom": "safety_escalated",
         "historical_context": "record_as_history",
@@ -10897,7 +10961,11 @@
           "target_contract_head": "ed6a83b96f18ef7b390452a0037986744d3d41e6"
         },
         "source_index": 17,
-        "source_section": "emergencyRedFlags"
+        "source_section": "emergencyRedFlags",
+        "code_governance": {
+          "strategy": "opaque_asset_identity_v1",
+          "legacy_code": "EMERGENCY_RED_FLAG"
+        }
       },
       "published_at": "2026-08-16T00:00:00+08:00",
       "raw_text": {
@@ -10986,7 +11054,7 @@
       "carriers": [],
       "category": "呼吸循环",
       "clinical_risk_summary": "犬充血性心衰(CHF)最常见征象为持续咳嗽伴呼吸困难,机制为二尖瓣返流→左房压升高→肺水肿(肺内积液)。伴静息呼吸增快、乏力、腹围增大(腹水)、牙龈苍白或发绀。咳出粉红色泡沫痰=急性肺水肿,肺已无法有效换气,是急症。",
-      "code": "EMERGENCY_RED_FLAG",
+      "code": "EMERGENCY_MODE_WXG24SPGJA",
       "decision_hints": {
         "active_symptom": "safety_escalated",
         "historical_context": "record_as_history",
@@ -11002,7 +11070,11 @@
           "target_contract_head": "ed6a83b96f18ef7b390452a0037986744d3d41e6"
         },
         "source_index": 18,
-        "source_section": "emergencyRedFlags"
+        "source_section": "emergencyRedFlags",
+        "code_governance": {
+          "strategy": "opaque_asset_identity_v1",
+          "legacy_code": "EMERGENCY_RED_FLAG"
+        }
       },
       "published_at": "2026-08-16T00:00:00+08:00",
       "raw_text": {
@@ -11110,7 +11182,7 @@
       "carriers": [],
       "category": "呼吸循环",
       "clinical_risk_summary": "端坐呼吸(orthopnea)是重度呼吸窘迫的姿势代偿:动物为最大化气道开放和肺扩张而颈伸头前、肘部外展、胸卧或端坐,拒绝侧躺(躺下加重缺氧)。Merck将此类体位适应列为需即刻处理的重度呼吸障碍信号,常紧邻呼吸衰竭。",
-      "code": "EMERGENCY_RED_FLAG",
+      "code": "EMERGENCY_MODE_TY4P59J6YM",
       "decision_hints": {
         "active_symptom": "safety_escalated",
         "historical_context": "record_as_history",
@@ -11126,7 +11198,11 @@
           "target_contract_head": "ed6a83b96f18ef7b390452a0037986744d3d41e6"
         },
         "source_index": 19,
-        "source_section": "emergencyRedFlags"
+        "source_section": "emergencyRedFlags",
+        "code_governance": {
+          "strategy": "opaque_asset_identity_v1",
+          "legacy_code": "EMERGENCY_RED_FLAG"
+        }
       },
       "published_at": "2026-08-16T00:00:00+08:00",
       "raw_text": {
@@ -11191,7 +11267,7 @@
       "carriers": [],
       "category": "呼吸循环",
       "clinical_risk_summary": "急性虚脱是全身循环/氧供崩溃的表现,病因谱广且多凶险:内出血(脾/肝肿瘤破裂——尤其中老年大型犬)、心律失常或结构性心脏病致心输出骤降、严重贫血、过敏性休克、内分泌危象(阿狄森氏病)、低血糖、重度脱水/感染性休克、体温过高/过低。常伴牙龈苍白或发绀、四肢冰凉、呼吸急促。",
-      "code": "EMERGENCY_RED_FLAG",
+      "code": "EMERGENCY_MODE_C2R6XC2T57",
       "decision_hints": {
         "active_symptom": "safety_escalated",
         "historical_context": "record_as_history",
@@ -11207,7 +11283,11 @@
           "target_contract_head": "ed6a83b96f18ef7b390452a0037986744d3d41e6"
         },
         "source_index": 20,
-        "source_section": "emergencyRedFlags"
+        "source_section": "emergencyRedFlags",
+        "code_governance": {
+          "strategy": "opaque_asset_identity_v1",
+          "legacy_code": "EMERGENCY_RED_FLAG"
+        }
       },
       "published_at": "2026-08-16T00:00:00+08:00",
       "raw_text": {
@@ -11303,7 +11383,7 @@
       "carriers": [],
       "category": "呼吸循环",
       "clinical_risk_summary": "晕厥(syncope)=脑供血一过性不足致短暂意识丧失,典型特征:突发无预兆(常在运动/激动/咳嗽/排尿排便用力时)、持续<10-20秒、恢复后立即恢复正常。犬最常见根因为心脏病——心律失常(过快/过慢)或结构性心脏病致心输出骤降;也见于严重内出血致血压骤降。「跟没事一样」的快速恢复恰是它与癫痫的区别,且不代表没危险,反复发作可猝死。需与癫痫发作(常有抽搐、意识恢复慢、发作后迷糊)鉴别。",
-      "code": "EMERGENCY_RED_FLAG",
+      "code": "EMERGENCY_MODE_SMSGNKAYRE",
       "decision_hints": {
         "active_symptom": "safety_escalated",
         "historical_context": "record_as_history",
@@ -11319,7 +11399,11 @@
           "target_contract_head": "ed6a83b96f18ef7b390452a0037986744d3d41e6"
         },
         "source_index": 21,
-        "source_section": "emergencyRedFlags"
+        "source_section": "emergencyRedFlags",
+        "code_governance": {
+          "strategy": "opaque_asset_identity_v1",
+          "legacy_code": "EMERGENCY_RED_FLAG"
+        }
       },
       "published_at": "2026-08-16T00:00:00+08:00",
       "raw_text": {
@@ -11437,7 +11521,7 @@
       "carriers": [],
       "category": "呼吸循环",
       "clinical_risk_summary": "苍白黏膜=组织血流/供氧骤减,由血管收缩(低血容量性或心源性休克)或红细胞减少(贫血)引起。是休克与内出血(脾破裂、创伤、抗凝灭鼠药中毒)、重度贫血(溶血、失血、洋葱/大蒜中毒、跳蚤重度感染幼猫)、心衰的核心红旗。「Pale gums are always an emergency, especially in cats」。常伴虚弱、心率快、呼吸急、四肢冰凉。",
-      "code": "EMERGENCY_RED_FLAG",
+      "code": "EMERGENCY_MODE_2FTFRMTXDN",
       "decision_hints": {
         "active_symptom": "safety_escalated",
         "historical_context": "record_as_history",
@@ -11453,7 +11537,11 @@
           "target_contract_head": "ed6a83b96f18ef7b390452a0037986744d3d41e6"
         },
         "source_index": 22,
-        "source_section": "emergencyRedFlags"
+        "source_section": "emergencyRedFlags",
+        "code_governance": {
+          "strategy": "opaque_asset_identity_v1",
+          "legacy_code": "EMERGENCY_RED_FLAG"
+        }
       },
       "published_at": "2026-08-16T00:00:00+08:00",
       "raw_text": {
@@ -11550,7 +11638,7 @@
       ],
       "category": "呼吸循环",
       "clinical_risk_summary": "灰色/泥灰色黏膜提示重度循环衰竭/氧合崩溃(常见于失代偿性休克、脓毒症),Merck将灰或暗粉黏膜与张口呼吸、发绀并列为「反映肺功能重度损害、可能先于呼吸骤停」的终末信号。暗砖红/砖红色则提示脓毒症、一氧化碳中毒或严重充血。任一异色都需即刻处理。",
-      "code": "EMERGENCY_RED_FLAG",
+      "code": "EMERGENCY_MODE_D2RD3F9NCH",
       "decision_hints": {
         "active_symptom": "safety_escalated",
         "historical_context": "record_as_history",
@@ -11566,7 +11654,11 @@
           "target_contract_head": "ed6a83b96f18ef7b390452a0037986744d3d41e6"
         },
         "source_index": 23,
-        "source_section": "emergencyRedFlags"
+        "source_section": "emergencyRedFlags",
+        "code_governance": {
+          "strategy": "opaque_asset_identity_v1",
+          "legacy_code": "EMERGENCY_RED_FLAG"
+        }
       },
       "published_at": "2026-08-16T00:00:00+08:00",
       "raw_text": {
@@ -11665,7 +11757,7 @@
       "carriers": [],
       "category": "呼吸循环",
       "clinical_risk_summary": "正常CRT约1-2秒;>2秒提示外周灌注不足(休克、脱水、低血压、心输出下降);过快(<1秒)或黏膜暗红则提示脓毒/充血。CRT是用户能在家做的少数客观循环评估之一,配合牙龈颜色可快速分诊。CRT延长+苍白+四肢冰凉=典型休克三联,极危险。",
-      "code": "EMERGENCY_RED_FLAG",
+      "code": "EMERGENCY_MODE_NRDKEFJV4T",
       "decision_hints": {
         "active_symptom": "safety_escalated",
         "historical_context": "record_as_history",
@@ -11681,7 +11773,11 @@
           "target_contract_head": "ed6a83b96f18ef7b390452a0037986744d3d41e6"
         },
         "source_index": 24,
-        "source_section": "emergencyRedFlags"
+        "source_section": "emergencyRedFlags",
+        "code_governance": {
+          "strategy": "opaque_asset_identity_v1",
+          "legacy_code": "EMERGENCY_RED_FLAG"
+        }
       },
       "published_at": "2026-08-16T00:00:00+08:00",
       "raw_text": {
@@ -11770,7 +11866,7 @@
       "carriers": [],
       "category": "呼吸循环",
       "clinical_risk_summary": "两种危险指向:(1)休克——身体为保核心器官而收缩外周血管、把血流从四肢耳尾撤回,故末梢先凉,伴苍白、CRT延长、心率快、虚弱;(2)低体温——猫核心温<35°C(95°F)即危险、<32°C(90°F)为重度,可致意识模糊、发绀、呼吸心率减慢、僵硬、昏迷。两者都是危及生命的循环/代谢崩溃。",
-      "code": "EMERGENCY_RED_FLAG",
+      "code": "EMERGENCY_MODE_BVAEKV9JQV",
       "decision_hints": {
         "active_symptom": "safety_escalated",
         "historical_context": "record_as_history",
@@ -11786,7 +11882,11 @@
           "target_contract_head": "ed6a83b96f18ef7b390452a0037986744d3d41e6"
         },
         "source_index": 25,
-        "source_section": "emergencyRedFlags"
+        "source_section": "emergencyRedFlags",
+        "code_governance": {
+          "strategy": "opaque_asset_identity_v1",
+          "legacy_code": "EMERGENCY_RED_FLAG"
+        }
       },
       "published_at": "2026-08-16T00:00:00+08:00",
       "raw_text": {
@@ -11872,7 +11972,7 @@
       "carriers": [],
       "category": "呼吸循环",
       "clinical_risk_summary": "缓慢、张大口的喘息样(agonal)呼吸或呼吸间歇延长/暂停,是呼吸即将/正在停止的终末信号,常伴发绀、意识丧失、瞳孔散大。Merck指出张口呼吸+黏膜异色「可能先于呼吸骤停」。此阶段可在数分钟内进展为心肺骤停。",
-      "code": "EMERGENCY_RED_FLAG",
+      "code": "EMERGENCY_MODE_SCEQ7Y5NC9",
       "decision_hints": {
         "active_symptom": "safety_escalated",
         "historical_context": "record_as_history",
@@ -11888,7 +11988,11 @@
           "target_contract_head": "ed6a83b96f18ef7b390452a0037986744d3d41e6"
         },
         "source_index": 26,
-        "source_section": "emergencyRedFlags"
+        "source_section": "emergencyRedFlags",
+        "code_governance": {
+          "strategy": "opaque_asset_identity_v1",
+          "legacy_code": "EMERGENCY_RED_FLAG"
+        }
       },
       "published_at": "2026-08-16T00:00:00+08:00",
       "raw_text": {
@@ -11991,7 +12095,7 @@
       "carriers": [],
       "category": "神经/创伤/产科/眼/中暑/过敏",
       "clinical_risk_summary": "单次发作持续>5分钟(癫痫持续状态),或短时间内反复发作、两次发作间意识不恢复(群集性)。持续抽搐会因高热(继发中暑)、酸中毒、脑低灌注与缺氧导致死亡或不可逆脑损伤。伴颅内压增高(脑肿瘤/颅脑外伤)时更危险。",
-      "code": "EMERGENCY_RED_FLAG",
+      "code": "EMERGENCY_MODE_KMEGY4WK97",
       "decision_hints": {
         "active_symptom": "safety_escalated",
         "historical_context": "record_as_history",
@@ -12007,7 +12111,11 @@
           "target_contract_head": "ed6a83b96f18ef7b390452a0037986744d3d41e6"
         },
         "source_index": 27,
-        "source_section": "emergencyRedFlags"
+        "source_section": "emergencyRedFlags",
+        "code_governance": {
+          "strategy": "opaque_asset_identity_v1",
+          "legacy_code": "EMERGENCY_RED_FLAG"
+        }
       },
       "published_at": "2026-08-16T00:00:00+08:00",
       "raw_text": {
@@ -12107,7 +12215,7 @@
       "carriers": [],
       "category": "神经/创伤/产科/眼/中暑/过敏",
       "clinical_risk_summary": "椎间盘突出/脱出急性压迫脊髓,可在数小时内从\"能走但疼\"恶化为完全截瘫;后爪深部痛觉(deep pain)是否存在是预后分水岭,痛觉消失预后骤降。",
-      "code": "EMERGENCY_RED_FLAG",
+      "code": "EMERGENCY_MODE_ZTEFMP534H",
       "decision_hints": {
         "active_symptom": "safety_escalated",
         "historical_context": "record_as_history",
@@ -12123,7 +12231,11 @@
           "target_contract_head": "ed6a83b96f18ef7b390452a0037986744d3d41e6"
         },
         "source_index": 28,
-        "source_section": "emergencyRedFlags"
+        "source_section": "emergencyRedFlags",
+        "code_governance": {
+          "strategy": "opaque_asset_identity_v1",
+          "legacy_code": "EMERGENCY_RED_FLAG"
+        }
       },
       "published_at": "2026-08-16T00:00:00+08:00",
       "raw_text": {
@@ -12214,7 +12326,7 @@
       "carriers": [],
       "category": "神经/创伤/产科/眼/中暑/过敏",
       "clinical_risk_summary": "提示前庭系统(外周:内耳/中耳;或中枢:脑干)受累。多数特发性前庭综合征预后良好、常在72小时内好转;但须与中枢病变(脑干肿瘤/出血/炎症)、中耳内耳感染、耳毒性药物中毒鉴别。伴意识改变、多条脑神经缺失、或外伤史提示中枢/危重病因。外观酷似\"中风\"易吓到用户。",
-      "code": "EMERGENCY_RED_FLAG",
+      "code": "EMERGENCY_MODE_85HZC7Y4SS",
       "decision_hints": {
         "active_symptom": "safety_escalated",
         "historical_context": "record_as_history",
@@ -12230,7 +12342,11 @@
           "target_contract_head": "ed6a83b96f18ef7b390452a0037986744d3d41e6"
         },
         "source_index": 29,
-        "source_section": "emergencyRedFlags"
+        "source_section": "emergencyRedFlags",
+        "code_governance": {
+          "strategy": "opaque_asset_identity_v1",
+          "legacy_code": "EMERGENCY_RED_FLAG"
+        }
       },
       "published_at": "2026-08-16T00:00:00+08:00",
       "raw_text": {
@@ -12322,7 +12438,7 @@
       "carriers": [],
       "category": "神经/创伤/产科/眼/中暑/过敏",
       "clinical_risk_summary": "颅内出血或脑水肿导致颅内压升高,可迅速致命。瞳孔不等大、对光反射消失、意识进行性下降、呼吸节律异常是脑疝的危险信号。",
-      "code": "EMERGENCY_RED_FLAG",
+      "code": "EMERGENCY_MODE_8GS9QZPM6A",
       "decision_hints": {
         "active_symptom": "safety_escalated",
         "historical_context": "record_as_history",
@@ -12338,7 +12454,11 @@
           "target_contract_head": "ed6a83b96f18ef7b390452a0037986744d3d41e6"
         },
         "source_index": 30,
-        "source_section": "emergencyRedFlags"
+        "source_section": "emergencyRedFlags",
+        "code_governance": {
+          "strategy": "opaque_asset_identity_v1",
+          "legacy_code": "EMERGENCY_RED_FLAG"
+        }
       },
       "published_at": "2026-08-16T00:00:00+08:00",
       "raw_text": {
@@ -12420,7 +12540,7 @@
       "carriers": [],
       "category": "神经/创伤/产科/眼/中暑/过敏",
       "clinical_risk_summary": "内出血、气胸、膈疝、膀胱破裂、骨盆/脊柱骨折等可无明显体表伤口。休克(牙龈苍白、脉搏细弱、四肢发凉、精神沉郁)可致死;内伤症状可延迟12–72小时才显现。",
-      "code": "EMERGENCY_RED_FLAG",
+      "code": "EMERGENCY_MODE_AS7C33C6FP",
       "decision_hints": {
         "active_symptom": "safety_escalated",
         "historical_context": "record_as_history",
@@ -12436,7 +12556,11 @@
           "target_contract_head": "ed6a83b96f18ef7b390452a0037986744d3d41e6"
         },
         "source_index": 31,
-        "source_section": "emergencyRedFlags"
+        "source_section": "emergencyRedFlags",
+        "code_governance": {
+          "strategy": "opaque_asset_identity_v1",
+          "legacy_code": "EMERGENCY_RED_FLAG"
+        }
       },
       "published_at": "2026-08-16T00:00:00+08:00",
       "raw_text": {
@@ -12535,7 +12659,7 @@
       "carriers": [],
       "category": "神经/创伤/产科/眼/中暑/过敏",
       "clinical_risk_summary": "出现绿色/暗绿色分泌物却无幼崽娩出,常提示胎盘已剥离、胎儿窘迫(缺氧);可因原发/继发宫缩乏力、胎位或胎儿过大梗阻。拖延数小时→母子死亡率极高,并可继发子宫破裂、产后低钙、败血。",
-      "code": "EMERGENCY_RED_FLAG",
+      "code": "EMERGENCY_MODE_FH4R5SH3TW",
       "decision_hints": {
         "active_symptom": "safety_escalated",
         "historical_context": "record_as_history",
@@ -12551,7 +12675,11 @@
           "target_contract_head": "ed6a83b96f18ef7b390452a0037986744d3d41e6"
         },
         "source_index": 32,
-        "source_section": "emergencyRedFlags"
+        "source_section": "emergencyRedFlags",
+        "code_governance": {
+          "strategy": "opaque_asset_identity_v1",
+          "legacy_code": "EMERGENCY_RED_FLAG"
+        }
       },
       "published_at": "2026-08-16T00:00:00+08:00",
       "raw_text": {
@@ -12640,7 +12768,7 @@
       "carriers": [],
       "category": "神经/创伤/产科/眼/中暑/过敏",
       "clinical_risk_summary": "角膜暴露后数分钟内开始干燥坏死,视神经与眼外肌被牵拉缺血,视力与保眼机会随时间每小时下降。犬约25%可恢复视力,猫预后极差。",
-      "code": "EMERGENCY_RED_FLAG",
+      "code": "EMERGENCY_MODE_6BENX5K7CJ",
       "decision_hints": {
         "active_symptom": "safety_escalated",
         "historical_context": "record_as_history",
@@ -12656,7 +12784,11 @@
           "target_contract_head": "ed6a83b96f18ef7b390452a0037986744d3d41e6"
         },
         "source_index": 33,
-        "source_section": "emergencyRedFlags"
+        "source_section": "emergencyRedFlags",
+        "code_governance": {
+          "strategy": "opaque_asset_identity_v1",
+          "legacy_code": "EMERGENCY_RED_FLAG"
+        }
       },
       "published_at": "2026-08-16T00:00:00+08:00",
       "raw_text": {
@@ -12734,7 +12866,7 @@
       "carriers": [],
       "category": "神经/创伤/产科/眼/中暑/过敏",
       "clinical_risk_summary": "核心体温常>41°C(106°F)(正常直肠温约38.3–39.2°C)。高热直接损伤全身器官→弥散性血管内凝血(DIC)、急性肾衰、脑水肿、肠屏障崩溃,可迅速致命。就诊前先降温可将存活率从约50%提升到约80%。",
-      "code": "EMERGENCY_RED_FLAG",
+      "code": "EMERGENCY_MODE_TXBBC7SGKN",
       "decision_hints": {
         "active_symptom": "safety_escalated",
         "historical_context": "record_as_history",
@@ -12750,7 +12882,11 @@
           "target_contract_head": "ed6a83b96f18ef7b390452a0037986744d3d41e6"
         },
         "source_index": 34,
-        "source_section": "emergencyRedFlags"
+        "source_section": "emergencyRedFlags",
+        "code_governance": {
+          "strategy": "opaque_asset_identity_v1",
+          "legacy_code": "EMERGENCY_RED_FLAG"
+        }
       },
       "published_at": "2026-08-16T00:00:00+08:00",
       "raw_text": {
@@ -12861,7 +12997,7 @@
       ],
       "category": "神经/创伤/产科/眼/中暑/过敏",
       "clinical_risk_summary": "I型超敏反应,接触过敏原后可在数分钟内发展为过敏性休克——血压骤降、气道水肿,数分钟内即可致死。单纯局部面部肿胀/荨麻疹通常较轻,但可迅速进展为全身反应。",
-      "code": "EMERGENCY_RED_FLAG",
+      "code": "EMERGENCY_MODE_5JRR8G4DKB",
       "decision_hints": {
         "active_symptom": "safety_escalated",
         "historical_context": "record_as_history",
@@ -12877,7 +13013,11 @@
           "target_contract_head": "ed6a83b96f18ef7b390452a0037986744d3d41e6"
         },
         "source_index": 35,
-        "source_section": "emergencyRedFlags"
+        "source_section": "emergencyRedFlags",
+        "code_governance": {
+          "strategy": "opaque_asset_identity_v1",
+          "legacy_code": "EMERGENCY_RED_FLAG"
+        }
       },
       "published_at": "2026-08-16T00:00:00+08:00",
       "raw_text": {
@@ -12988,7 +13128,7 @@
       ],
       "category": "神经/创伤/产科/眼/中暑/过敏",
       "clinical_risk_summary": "完全梗阻→顽固呕吐、脱水、电解质与酸碱紊乱;受累肠段血供中断仅数小时即坏死→穿孔、腹膜炎、内毒素血症、低血容量休克。线状异物(缝衣线/毛线)可像锯子切割肠壁,极危险;若含纽扣电池、磁铁、尖锐物或大量吸水膨胀物更紧急。",
-      "code": "EMERGENCY_RED_FLAG",
+      "code": "EMERGENCY_MODE_F2FVT5M2Z6",
       "decision_hints": {
         "active_symptom": "safety_escalated",
         "historical_context": "record_as_history",
@@ -13004,7 +13144,11 @@
           "target_contract_head": "ed6a83b96f18ef7b390452a0037986744d3d41e6"
         },
         "source_index": 36,
-        "source_section": "emergencyRedFlags"
+        "source_section": "emergencyRedFlags",
+        "code_governance": {
+          "strategy": "opaque_asset_identity_v1",
+          "legacy_code": "EMERGENCY_RED_FLAG"
+        }
       },
       "published_at": "2026-08-16T00:00:00+08:00",
       "raw_text": {
@@ -13108,7 +13252,7 @@
       "carriers": [],
       "category": "神经/创伤/产科/眼/中暑/过敏",
       "clinical_risk_summary": "胃充满气体扩张并沿轴扭转→阻断自身血供与静脉回流,数小时内即致休克、胃壁坏死穿孔、心律失常、死亡。若不治疗常在数小时内死亡,是分秒必争的外科急症。",
-      "code": "GDV_RISK_PATTERN",
+      "code": "EMERGENCY_MODE_5FW63BED4Y",
       "decision_hints": {
         "active_symptom": "safety_escalated",
         "historical_context": "record_as_history",
@@ -13124,7 +13268,11 @@
           "target_contract_head": "ed6a83b96f18ef7b390452a0037986744d3d41e6"
         },
         "source_index": 37,
-        "source_section": "emergencyRedFlags"
+        "source_section": "emergencyRedFlags",
+        "code_governance": {
+          "strategy": "opaque_asset_identity_v1",
+          "legacy_code": "GDV_RISK_PATTERN"
+        }
       },
       "published_at": "2026-08-16T00:00:00+08:00",
       "raw_text": {

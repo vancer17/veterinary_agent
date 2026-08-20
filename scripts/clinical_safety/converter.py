@@ -4,7 +4,6 @@
 说明：转换逻辑用于离线数据治理；运行时安全裁决仍以已审核发布的结构化资产为准。
 """
 
-
 from __future__ import annotations
 
 import hashlib
@@ -23,7 +22,11 @@ from vet_agent.clinical_safety import (
 )
 
 
-SOURCE_SECTIONS: tuple[str, ...] = ("toxinsAndDrugs", "emergencyRedFlags", "dangerPatterns")
+SOURCE_SECTIONS: tuple[str, ...] = (
+    "toxinsAndDrugs",
+    "emergencyRedFlags",
+    "dangerPatterns",
+)
 SECTION_ASSET_TYPES: dict[str, ClinicalSafetyAssetType] = {
     "toxinsAndDrugs": "toxin",
     "emergencyRedFlags": "emergency_red_flag",
@@ -111,7 +114,9 @@ SYMPTOM_MARKERS: tuple[str, ...] = (
     "脱毛",
     "皮肤变薄",
 )
-TITLE_SPLIT_PATTERN = re.compile(r"\s*(?:\+|＋|/|／|、|,|，|;|；|:|：|→|->|\(|\)|（|）)\s*")
+TITLE_SPLIT_PATTERN = re.compile(
+    r"\s*(?:\+|＋|/|／|、|,|，|;|；|:|：|→|->|\(|\)|（|）)\s*"
+)
 NON_RECOGNITION_TERMS: frozenset[str] = frozenset(
     {
         "猫",
@@ -307,6 +312,11 @@ def _convert_item(
         canonical_name=canonical_name,
         source_path=f"{section}[{index}]",
     )
+    code_governance = _code_governance(
+        raw_item,
+        source_path=f"{section}[{index}]",
+        required=asset_type == "emergency_red_flag",
+    )
     return ClinicalSafetyAsset(
         asset_id=asset_id,
         asset_type=asset_type,
@@ -348,6 +358,7 @@ def _convert_item(
             "source_section": section,
             "source_index": index,
             "conversion_strategy": "deterministic_text_normalization_v1",
+            **({"code_governance": code_governance} if code_governance else {}),
         },
     )
 
@@ -386,8 +397,12 @@ def _chunks_for_asset(asset: ClinicalSafetyAsset) -> list[ClinicalSafetyChunk]:
             *asset.age_scope,
         ]
     )
-    clinical_text = _join_embedding_text([asset.canonical_name, asset.clinical_risk_summary])
-    triage_text = _join_embedding_text([asset.canonical_name, asset.action_class, asset.triage_message])
+    clinical_text = _join_embedding_text(
+        [asset.canonical_name, asset.clinical_risk_summary]
+    )
+    triage_text = _join_embedding_text(
+        [asset.canonical_name, asset.action_class, asset.triage_message]
+    )
     return [
         ClinicalSafetyChunk(
             chunk_id=f"{asset.asset_id}.recognition.{asset.version}",
@@ -444,8 +459,48 @@ def _asset_code(
     """
     raw_code = _clean_text(raw_item.get("code"))
     if not raw_code:
-        raise ValueError(f"clinical safety asset code is required: {source_path}:{canonical_name}")
+        raise ValueError(
+            f"clinical safety asset code is required: {source_path}:{canonical_name}"
+        )
     return raw_code.strip().upper()
+
+
+def _code_governance(
+    raw_item: dict[str, Any],
+    *,
+    source_path: str,
+    required: bool,
+) -> dict[str, str]:
+    """读取原始资产显式声明的安全信号编码治理信息。
+
+    :param raw_item: 原始临床安全条目。
+    :param source_path: 原始条目来源路径。
+    :param required: 当前资产是否必须声明编码治理信息。
+    :return: 返回可写入资产审计 metadata 的编码治理字典。
+    :raises ValueError: 编码治理信息缺失、非急诊资产声明、不是对象或缺少稳定策略与旧编码时抛出。
+    """
+    raw_value = raw_item.get("code_governance")
+    if raw_value is None:
+        if required:
+            raise ValueError(
+                f"clinical safety code governance is required: {source_path}"
+            )
+        return {}
+    if not required:
+        raise ValueError(
+            f"clinical safety code governance is reserved for emergency assets: {source_path}"
+        )
+    if not isinstance(raw_value, dict):
+        raise ValueError(
+            f"clinical safety code governance must be an object: {source_path}"
+        )
+    strategy = _clean_text(raw_value.get("strategy"))
+    legacy_code = _clean_text(raw_value.get("legacy_code"))
+    if not strategy or not legacy_code:
+        raise ValueError(
+            f"clinical safety code governance requires strategy and legacy_code: {source_path}"
+        )
+    return {"strategy": strategy, "legacy_code": legacy_code}
 
 
 def _asset_type(section: str, category: str, item_text: str) -> ClinicalSafetyAssetType:
@@ -460,9 +515,14 @@ def _asset_type(section: str, category: str, item_text: str) -> ClinicalSafetyAs
         combined = f"{category}。{item_text}"
         if "人用药" in combined or "药物" in combined:
             return "human_drug"
-        if "植物" in combined or any(marker in combined for marker in ("百合", "绿萝", "芦荟", "富贵竹")):
+        if "植物" in combined or any(
+            marker in combined for marker in ("百合", "绿萝", "芦荟", "富贵竹")
+        ):
             return "plant_toxin"
-        if any(marker in combined for marker in ("防冻液", "鼠药", "杀虫剂", "农药", "精油", "樟脑")):
+        if any(
+            marker in combined
+            for marker in ("防冻液", "鼠药", "杀虫剂", "农药", "精油", "樟脑")
+        ):
             return "chemical_toxin"
     return SECTION_ASSET_TYPES.get(section, "toxin")
 
@@ -474,11 +534,18 @@ def _action_class(action_text: str) -> ClinicalSafetyActionClass:
     :return: 返回标准分诊动作分类。
     """
     primary_sentence = re.split(r"[。；;]", action_text, maxsplit=1)[0]
-    if "当天" in primary_sentence or "勿拖过夜" in primary_sentence or "不要过夜" in primary_sentence:
+    if (
+        "当天" in primary_sentence
+        or "勿拖过夜" in primary_sentence
+        or "不要过夜" in primary_sentence
+    ):
         return "same_day_visit"
     if "尽快就诊" in primary_sentence or "数天内" in primary_sentence:
         return "urgent_visit"
-    if any(marker in primary_sentence for marker in ("即刻", "立即", "急诊", "最高优先级", "24h")):
+    if any(
+        marker in primary_sentence
+        for marker in ("即刻", "立即", "急诊", "最高优先级", "24h")
+    ):
         return "emergency"
     if any(marker in action_text for marker in ("当天", "勿拖过夜", "不要过夜")):
         return "same_day_visit"
@@ -527,7 +594,10 @@ def _user_expressions(aliases_text: str) -> tuple[str, ...]:
     :return: 返回用户表达列表。
     """
     expressions = _quoted_terms(aliases_text)
-    marker_match = re.search(r"(用户(?:常见)?描述样例|用户常见表达|用户说|关键早期用户描述样例)[:：]?(.*)", aliases_text)
+    marker_match = re.search(
+        r"(用户(?:常见)?描述样例|用户常见表达|用户说|关键早期用户描述样例)[:：]?(.*)",
+        aliases_text,
+    )
     if marker_match:
         expressions.extend(_terms_from_text(marker_match.group(2)))
     return _unique_terms(expressions, max_items=40)
@@ -544,7 +614,10 @@ def _carriers(terms: Iterable[str]) -> tuple[str, ...]:
         short = _short_term(term)
         if not short:
             continue
-        if any(marker in term or marker in short for marker in CARRIER_MARKERS) and len(short) <= 32:
+        if (
+            any(marker in term or marker in short for marker in CARRIER_MARKERS)
+            and len(short) <= 32
+        ):
             carriers.append(short)
     return _unique_terms(carriers)
 
@@ -585,7 +658,9 @@ def _recognition_phrases(
     :return: 返回去重后的召回短语列表。
     """
     title_phrases = _title_phrases(item_text)
-    combination_phrases = _combination_phrases(f"{item_text}。{danger_text}。{action_text}")
+    combination_phrases = _combination_phrases(
+        f"{item_text}。{danger_text}。{action_text}"
+    )
     candidates = [
         *title_phrases,
         *aliases,
@@ -651,7 +726,10 @@ def _markers_in_text(text: str) -> list[str]:
         )
     selected: list[tuple[int, int, str]] = []
     for start, end, marker in sorted(matches, key=_marker_sort_key):
-        if any(start < selected_end and end > selected_start for selected_start, selected_end, _ in selected):
+        if any(
+            start < selected_end and end > selected_start
+            for selected_start, selected_end, _ in selected
+        ):
             continue
         selected.append((start, end, marker))
     return [marker for _, _, marker in selected][:8]
@@ -674,9 +752,9 @@ def _species_scope(species_text: str) -> tuple[str, ...]:
     :return: 返回标准物种范围。
     """
     text = species_text.lower()
-    if any(marker in text for marker in ("老年猫", "公猫", "母猫", "猫特异", "feline")) and not any(
-        marker in text for marker in ("母犬", "公犬", "犬特异")
-    ):
+    if any(
+        marker in text for marker in ("老年猫", "公猫", "母猫", "猫特异", "feline")
+    ) and not any(marker in text for marker in ("母犬", "公犬", "犬特异")):
         return ("cat",)
     species: list[str] = []
     if any(marker in text for marker in ("both", "犬猫", "猫犬", "狗猫")):
@@ -710,7 +788,10 @@ def _age_scope(text: str) -> tuple[str, ...]:
     :return: 返回标准年龄范围。
     """
     age_scopes: list[str] = []
-    if any(marker in text.lower() for marker in ("老年", "高龄", "中老年", "senior", "年纪大")):
+    if any(
+        marker in text.lower()
+        for marker in ("老年", "高龄", "中老年", "senior", "年纪大")
+    ):
         age_scopes.append("senior")
     if any(marker in text for marker in ("幼犬", "幼猫", "小狗", "小猫")):
         age_scopes.append("juvenile")
@@ -753,7 +834,11 @@ def _decision_hints(
     :param action_class: 标准分诊动作分类。
     :return: 返回意图到动作的提示字典。
     """
-    urgent_action = "safety_escalated" if action_class in {"emergency", "same_day_visit"} else "clinical_caution"
+    urgent_action = (
+        "safety_escalated"
+        if action_class in {"emergency", "same_day_visit"}
+        else "clinical_caution"
+    )
     if asset_type in {"toxin", "human_drug", "plant_toxin", "chemical_toxin"}:
         return {
             "actual_exposure": "safety_escalated",
@@ -782,7 +867,9 @@ def _canonical_name(item_text: str, index: int) -> str:
     return re.split(r"[（(]", cleaned, maxsplit=1)[0].strip(" :-：")
 
 
-def _asset_id(asset_type: ClinicalSafetyAssetType, item_text: str, section: str, index: int) -> str:
+def _asset_id(
+    asset_type: ClinicalSafetyAssetType, item_text: str, section: str, index: int
+) -> str:
     """生成稳定临床安全资产标识。
 
     :param asset_type: 标准安全资产类型。
@@ -791,7 +878,9 @@ def _asset_id(asset_type: ClinicalSafetyAssetType, item_text: str, section: str,
     :param index: 条目在分组中的序号。
     :return: 返回稳定资产标识。
     """
-    digest = hashlib.sha256(f"{section}:{index}:{item_text}".encode("utf-8")).hexdigest()[:10]
+    digest = hashlib.sha256(
+        f"{section}:{index}:{item_text}".encode("utf-8")
+    ).hexdigest()[:10]
     return f"safety_{asset_type}_{index:03d}_{digest}"
 
 
@@ -806,7 +895,9 @@ def _terms_from_text(text: str) -> list[str]:
     cleaned = re.sub(r"关键早期用户描述样例[:：]?", " ", cleaned)
     cleaned = re.sub(r"用户常见表达[:：]?", " ", cleaned)
     cleaned = re.sub(r"用户说[:：]?", " ", cleaned)
-    tokens = re.split(r"[、，,;；。|/+＋→:：()（）=＝]+", _without_quoted_segments(cleaned))
+    tokens = re.split(
+        r"[、，,;；。|/+＋→:：()（）=＝]+", _without_quoted_segments(cleaned)
+    )
     terms: list[str] = []
     for token in tokens:
         for term in _term_candidates(token):
@@ -906,7 +997,9 @@ def _without_quoted_segments(text: str) -> str:
     return result
 
 
-def _unique_terms(values: Iterable[str], *, max_items: int | None = None) -> tuple[str, ...]:
+def _unique_terms(
+    values: Iterable[str], *, max_items: int | None = None
+) -> tuple[str, ...]:
     """对短语列表进行清洗、去重和截断。
 
     :param values: 原始短语列表。

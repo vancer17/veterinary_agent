@@ -281,6 +281,9 @@ OPA 必须同时消费：
 
 ### 阶段 4：拆分急诊 code 并收敛响应展示
 
+> **迁移状态**：已完成；实现细节与稳定契约见
+> [clinical-safety-emergency-code-response-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/clinical-safety-emergency-code-response-change-summary.md)。
+
 **目标**
 
 让每个急诊模式拥有独立身份，并避免用户看到多条互不相关的急诊建议。
@@ -292,9 +295,10 @@ OPA 必须同时消费：
 
 **执行方式**
 
-1. 将 `EMERGENCY_RED_FLAG` 拆分为具体、稳定、可审计的独立 `code`。
+1. 将 `EMERGENCY_RED_FLAG` 拆分为 opaque、稳定、可审计的资产级独立 `code`。
 2. 保留 `asset_type`、`category` 和 `action_class` 作为大类信息。
-3. 用户输出只投影一个主信号，其他候选进入 metadata 和审计记录。
+3. OPA 输出全部信号并显式裁定唯一 `primary_signal`。
+4. 用户输出只投影一个主信号，其他候选进入 metadata 和审计记录。
 
 **验收标准**
 

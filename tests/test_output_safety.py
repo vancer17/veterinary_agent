@@ -12,6 +12,7 @@ import asyncio
 import pytest
 
 from vet_agent import AgentTurnResponse, Settings, VetSegment
+from vet_agent.clinical_safety import ClinicalSafetySignal
 from vet_agent.output_safety import (
     LocalOutputSafetyPolicyClient,
     OpaOutputSafetyPolicyClient,
@@ -41,7 +42,9 @@ class _StaticOutputSafetyDetector:
         """
         self._candidates = candidates
 
-    def collect(self, context: OutputSafetyReviewContext) -> tuple[OutputSafetyCandidate, ...]:
+    def collect(
+        self, context: OutputSafetyReviewContext
+    ) -> tuple[OutputSafetyCandidate, ...]:
         """返回预置的输出安全候选。
 
         :param context: 输出安全复核上下文。
@@ -103,6 +106,7 @@ def _response(text: str) -> AgentTurnResponse:
         content=text,
         output_text=text,
     )
+
     return AgentTurnResponse(
         id="turn_test",
         request_id="req_test",
@@ -112,6 +116,39 @@ def _response(text: str) -> AgentTurnResponse:
         output_text=text,
         segments=[segment],
     )
+
+
+def test_output_safety_dedupe_preserves_clinical_asset_identity() -> None:
+    """验证输出安全去重不会合并来自不同资产的临床安全信号。
+
+    :return: 无返回值；断言通过表示输出安全复核保留资产级审计身份。
+    """
+    service = OutputSafetyService(
+        Settings(enable_output_safety=False),
+        repository=StaticOutputSafetyRepository(),
+        detectors=(),
+        policy_client=LocalOutputSafetyPolicyClient(),
+    )
+    signals = [
+        ClinicalSafetySignal(
+            asset_id="safety_asset_a",
+            canonical_name="测试资产 A",
+            code="EMERGENCY_MODE_7K4Q9PXRAB",
+            severity="urgent",
+            message="同一测试分诊口径。",
+        ),
+        ClinicalSafetySignal(
+            asset_id="safety_asset_b",
+            canonical_name="测试资产 B",
+            code="EMERGENCY_MODE_7K4Q9PXRAB",
+            severity="urgent",
+            message="同一测试分诊口径。",
+        ),
+    ]
+
+    result = service._dedupe_signals(signals)
+
+    assert result == signals
 
 
 def test_output_safety_observe_mode_preserves_dosage_expression() -> None:
@@ -134,10 +171,14 @@ def test_output_safety_observe_mode_preserves_dosage_expression() -> None:
         policy_client=LocalOutputSafetyPolicyClient(),
     )
 
-    result = asyncio.run(service.review_response(_response("You can give 5 mg/kg twice daily.")))
+    result = asyncio.run(
+        service.review_response(_response("You can give 5 mg/kg twice daily."))
+    )
 
     assert "5 mg/kg" in result.output_text
-    assert any(signal.code == "OUTPUT_DOSAGE_EXPRESSION" for signal in result.safety_signals)
+    assert any(
+        signal.code == "OUTPUT_DOSAGE_EXPRESSION" for signal in result.safety_signals
+    )
     assert result.metadata["output_safety_decision"]["action"] == "observe"
     assert result.metadata["multi_agent_path"][-2:] == [
         "OutputSafetyService",
@@ -180,4 +221,7 @@ def test_opa_output_safety_client_builds_prefixed_data_api_url() -> None:
         rule_name="decision",
     )
 
-    assert client._decision_url() == "http://example.test/opa/v1/data/vet_agent/output_safety/decision"
+    assert (
+        client._decision_url()
+        == "http://example.test/opa/v1/data/vet_agent/output_safety/decision"
+    )

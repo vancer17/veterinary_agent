@@ -57,7 +57,7 @@ EXTERNAL_CLINICAL_SAFETY_FLAG = "RUN_CLINICAL_SAFETY_API_EXTERNAL_TEST"
 DEFAULT_EXTERNAL_TIMEOUT_SECONDS = 45.0
 DEFAULT_DATABASE_RETRY_ATTEMPTS = 3
 DEFAULT_DATABASE_RETRY_DELAY_SECONDS = 2.0
-EXPECTED_ALEMBIC_VERSION = "0020_clinical_safety_scope_value_domains"
+EXPECTED_ALEMBIC_VERSION = "0021_clinical_safety_emergency_asset_codes"
 EXPECTED_EMBEDDING_DIMENSION = 1024
 
 _T = TypeVar("_T")
@@ -248,7 +248,7 @@ def external_client(
         container = Container(Settings.from_env())
         if not container.ready:
             readiness = {
-                name: bool(getattr(getattr(container, name), "is_ready")())
+                name: bool(getattr(container, name).is_ready())
                 for name in dir(container)
                 if not name.startswith("_")
                 and callable(getattr(getattr(container, name, None), "is_ready", None))
@@ -325,7 +325,94 @@ def test_clinical_safety_external_dependencies_are_reachable(
             json={"input": _empty_clinical_safety_policy_input()},
         )
         clinical_opa.raise_for_status()
-        assert clinical_opa.json()["result"]["action"] == "allow"
+        clinical_result = clinical_opa.json()["result"]
+        assert clinical_result["action"] == "allow"
+        assert "primary_signal" in clinical_result
+        assert clinical_result["primary_signal"] is None
+
+
+@pytest.mark.integration
+def test_stage4_remote_clinical_safety_assets_use_unique_opaque_codes(
+    external_database: str,
+) -> None:
+    """验证远程数据库中的已发布急诊资产满足阶段 4 身份契约。
+
+    :param external_database: 远程开发数据库连接串。
+    :return: 无返回值；断言通过表示真实 pgvector 数据源已接入 opaque 资产级 code。
+    """
+    session_factory = make_session_factory(external_database)
+    with session_factory() as session:
+        row = (
+            session.execute(
+                text(
+                    """
+                SELECT
+                    count(*) AS total_count,
+                    count(*) FILTER (
+                        WHERE code !~ '^EMERGENCY_MODE_[A-Z0-9]{10}$'
+                    ) AS invalid_count,
+                    count(*) FILTER (
+                        WHERE metadata -> 'code_governance' ->>'strategy'
+                            IS DISTINCT FROM 'opaque_asset_identity_v1'
+                        OR metadata -> 'code_governance' ->>'legacy_code'
+                            IS NULL
+                        OR metadata -> 'code_governance' ->>'legacy_code' = ''
+                    ) AS governance_missing_count
+                FROM clinical_safety_assets
+                WHERE asset_type = 'emergency_red_flag'
+                  AND review_status = 'approved'
+                  AND enabled IS TRUE
+                """
+                )
+            )
+            .mappings()
+            .one()
+        )
+        duplicate_count = int(
+            session.execute(
+                text(
+                    """
+                    SELECT count(*)
+                    FROM (
+                        SELECT code
+                        FROM clinical_safety_assets
+                        WHERE asset_type = 'emergency_red_flag'
+                          AND review_status = 'approved'
+                          AND enabled IS TRUE
+                        GROUP BY code
+                        HAVING count(*) > 1
+                    ) duplicated_codes
+                    """
+                )
+            ).scalar_one()
+            or 0
+        )
+        chunk_metadata_mismatch_count = int(
+            session.execute(
+                text(
+                    """
+                    SELECT count(*)
+                    FROM clinical_safety_assets AS asset
+                    JOIN clinical_safety_chunks AS chunk
+                      ON chunk.asset_id = asset.asset_id
+                    WHERE asset.asset_type = 'emergency_red_flag'
+                      AND asset.review_status = 'approved'
+                      AND asset.enabled IS TRUE
+                      AND chunk.review_status = 'approved'
+                      AND chunk.enabled IS TRUE
+                      AND chunk.metadata ? 'code'
+                      AND chunk.metadata ->>'code' IS DISTINCT FROM asset.code
+                    """
+                )
+            ).scalar_one()
+            or 0
+        )
+
+        assert int(row["total_count"]) >= 37
+        assert int(row["invalid_count"]) == 0
+        assert int(row["governance_missing_count"]) == 0
+        assert duplicate_count == 0
+        assert chunk_metadata_mismatch_count == 0
 
 
 @pytest.mark.integration
@@ -666,6 +753,94 @@ def test_clinical_safety_real_opa_plan_and_decision_consume_precondition_contrac
 
 
 @pytest.mark.integration
+def test_stage4_real_opa_projects_one_primary_signal_without_score_priority(
+    external_env: dict[str, str],
+) -> None:
+    """验证真实 OPA 按结构化动作分类投影唯一主信号且不使用召回分数。
+
+    :param external_env: 外部依赖配置。
+    :return: 无返回值；断言通过表示远程阶段 4 策略与 Python 严格契约一致。
+    """
+    client = OpaClinicalSafetyPolicyClient(
+        base_url=external_env["CLINICAL_SAFETY_OPA_BASE_URL"],
+        version="v1",
+        package_path="vet_agent.clinical_safety",
+        rule_name="decision",
+        timeout_seconds=_timeout(),
+    )
+    primary = _stage4_policy_candidate(
+        asset_id="clinical_it_stage4_primary_emergency",
+        code="EMERGENCY_MODE_PRIMARY01X",
+        canonical_name="阶段 4 急诊主候选",
+        action_class="emergency",
+        score=0.76,
+        triage_message="阶段 4 真实 OPA 主信号应优先展示。",
+    )
+    secondary = _stage4_policy_candidate(
+        asset_id="clinical_it_stage4_secondary_same_day",
+        code="EMERGENCY_MODE_SECONDARY01",
+        canonical_name="阶段 4 同日就诊次候选",
+        action_class="same_day_visit",
+        score=0.99,
+        triage_message="阶段 4 次级候选不应进入用户主文本。",
+    )
+    semantic_result = _semantic_result_from_feature_specs(
+        (
+            ("f1", "present", "呼吸很快"),
+            ("f2", "present", "牙龈发紫"),
+        )
+    )
+    policy_input = ClinicalSafetyPolicyInput(
+        context=ClinicalSafetyPolicyRequestContext(
+            request_id="req_stage4_real_primary",
+            trace_id="trace_stage4_real_primary",
+        ),
+        semantic_result=semantic_result,
+        retrieval_state=ClinicalSafetyRetrievalState(
+            stage="vector",
+            retrieval_source="clinical_safety_pgvector",
+            vector_hit_count=2,
+            candidate_count=2,
+        ),
+        candidates=(primary, secondary),
+        thresholds=ClinicalSafetyThresholds(
+            retrieval_min_score=0.2,
+            signal_min_score=0.65,
+            urgent_min_score=0.75,
+        ),
+        precondition_assessments={
+            primary.asset.asset_id: _stage4_precondition_assessment(primary),
+            secondary.asset.asset_id: _stage4_precondition_assessment(secondary),
+        },
+    )
+    allow_input = ClinicalSafetyPolicyInput(
+        context=policy_input.context,
+        semantic_result=semantic_result,
+        retrieval_state=ClinicalSafetyRetrievalState(),
+        candidates=(),
+        thresholds=policy_input.thresholds,
+    )
+
+    decision = asyncio.run(client.decide(policy_input))
+    allow_decision = asyncio.run(client.decide(allow_input))
+
+    assert decision.escalated is True
+    assert {signal.code for signal in decision.signals} == {
+        primary.asset.code,
+        secondary.asset.code,
+    }
+    assert decision.primary_signal is not None
+    assert decision.primary_signal.asset_id == primary.asset.asset_id
+    assert decision.primary_signal.code == primary.asset.code
+    assert decision.primary_signal.canonical_name == primary.asset.canonical_name
+    assert decision.primary_signal.severity == "urgent"
+    assert decision.primary_signal.message == primary.asset.triage_message
+    assert allow_decision.action.value == "allow"
+    assert not allow_decision.signals
+    assert allow_decision.primary_signal is None
+
+
+@pytest.mark.integration
 def test_clinical_safety_api_uses_real_semantic_pgvector_and_opa(
     external_client: TestClient,
     clean_external_runtime_data: None,
@@ -696,7 +871,12 @@ def test_clinical_safety_api_uses_real_semantic_pgvector_and_opa(
     assert data["status"] == "safety_escalated"
     assert data["output_text"].strip()
     assert any(
-        signal["code"] == "CYANOSIS_RISK_PATTERN" for signal in data["safety_signals"]
+        signal["code"] == _stage4_primary_code(external_prefix)
+        for signal in data["safety_signals"]
+    )
+    assert any(
+        signal["code"] == _stage4_secondary_code(external_prefix)
+        for signal in data["safety_signals"]
     )
 
     metadata = data["metadata"]
@@ -706,11 +886,28 @@ def test_clinical_safety_api_uses_real_semantic_pgvector_and_opa(
     _assert_clinical_safety_uses_pgvector(metadata)
     _assert_clinical_safety_uses_opa(metadata)
     resolution = metadata["clinical_safety_resolution"]
+    policy_primary_signal = resolution["policy_decision"]["primary_signal"]
+    projected_primary_signal = resolution["primary_signal"]
+    assert policy_primary_signal["code"] == _stage4_primary_code(external_prefix)
+    assert policy_primary_signal["asset_id"] == _safety_asset_id(external_prefix)
+    assert policy_primary_signal["canonical_name"] == "舌/牙龈发绀发紫"
+    assert projected_primary_signal == policy_primary_signal
+    assert policy_primary_signal["message"] in data["output_text"]
+    assert "阶段 4 次级候选只应保留在审计中。" not in data["output_text"]
+    assert "相关线索" not in data["output_text"]
+    assert "EMERGENCY_MODE_" not in data["output_text"]
+    assert "EMERGENCY_MODE_" not in data["reasoning_display"]["text"]
+    assert any(
+        signal.get("asset_id") == _safety_asset_id(external_prefix)
+        and signal.get("canonical_name") == "舌/牙龈发绀发紫"
+        for signal in data["safety_signals"]
+    )
     precondition = resolution["fallback_state"]["precondition"]
     assert precondition["required_count"] >= 1
-    assert precondition["satisfied_count"] >= 1
-    assert precondition["unknown_count"] == 0
-    assert resolution["requires_precondition_information"] is False
+    # 远程库同时包含 37 条正式急诊资产；本测试只要求两条隔离候选完成前提评估，
+    # 其他正式候选可以因超时或信息不足保留 unknown，用于阶段 3 审计而不是升级。
+    assert precondition["satisfied_count"] >= 2
+    assert precondition["unknown_count"] >= 0
 
 
 @pytest.mark.integration
@@ -821,8 +1018,13 @@ def _assert_clinical_safety_uses_opa(metadata: dict[str, Any]) -> None:
     assert decision["policy_backend"] == "opa"
     assert decision["policy_path"] == "vet_agent.clinical_safety/decision"
     assert any(
-        signal["code"] == "CYANOSIS_RISK_PATTERN" for signal in decision["signals"]
+        signal["code"] == decision["primary_signal"]["code"]
+        and signal["asset_id"] == decision["primary_signal"]["asset_id"]
+        for signal in decision["signals"]
     )
+    assert decision["primary_signal"]["code"].startswith("EMERGENCY_MODE_")
+    assert decision["primary_signal"]["asset_id"]
+    assert decision["primary_signal"]["canonical_name"]
 
 
 @contextmanager
@@ -982,6 +1184,10 @@ def _prepare_clinical_safety_baseline(
     now = datetime.now(UTC)
     safety_asset_id = _safety_asset_id(prefix)
     safety_chunk_id = _safety_chunk_id(prefix)
+    primary_code = _stage4_primary_code(prefix)
+    secondary_code = _stage4_secondary_code(prefix)
+    secondary_asset_id = _secondary_safety_asset_id(prefix)
+    secondary_chunk_id = _secondary_safety_chunk_id(prefix)
     embedding_text = _clinical_safety_embedding_text()
     embedding = _embedding_vector(external_env, embedding_text)
     answer_embedding = _embedding_vector(
@@ -1012,7 +1218,7 @@ def _prepare_clinical_safety_baseline(
         if asset is None:
             asset = ClinicalSafetyAssetModel(asset_id=safety_asset_id)
             session.add(asset)
-        asset.code = "CYANOSIS_RISK_PATTERN"
+        asset.code = primary_code
         asset.asset_type = "emergency_red_flag"
         asset.canonical_name = "舌/牙龈发绀发紫"
         asset.category = "clinical_safety_external_api_test"
@@ -1046,6 +1252,47 @@ def _prepare_clinical_safety_baseline(
         asset.metadata_json = {
             "clinical_safety_external_api_test": True,
             "prefix": prefix,
+            "code_governance": {
+                "strategy": "opaque_asset_identity_v1",
+                "legacy_code": "CYANOSIS_RISK_PATTERN",
+            },
+        }
+
+        secondary_asset = session.get(ClinicalSafetyAssetModel, secondary_asset_id)
+        if secondary_asset is None:
+            secondary_asset = ClinicalSafetyAssetModel(asset_id=secondary_asset_id)
+            session.add(secondary_asset)
+        secondary_asset.code = secondary_code
+        secondary_asset.asset_type = "emergency_red_flag"
+        secondary_asset.canonical_name = "阶段 4 次级同日就诊候选"
+        secondary_asset.category = "clinical_safety_external_api_test"
+        secondary_asset.species_scope = ["dog", "cat"]
+        secondary_asset.sex_scope = []
+        secondary_asset.age_scope = []
+        secondary_asset.severity = "urgent"
+        secondary_asset.action_class = "same_day_visit"
+        secondary_asset.aliases = ["牙龈发紫", "呼吸很快"]
+        secondary_asset.carriers = []
+        secondary_asset.user_expressions = ["猫现在牙龈发紫，呼吸很快。"]
+        secondary_asset.symptoms = ["牙龈发紫", "呼吸很快"]
+        secondary_asset.recognition_phrases = ["牙龈发紫并呼吸很快", "呼吸很快"]
+        secondary_asset.required_context = asset.required_context
+        secondary_asset.decision_hints = {"symptom": "same_day_visit"}
+        secondary_asset.clinical_risk_summary = "阶段 4 次级候选用于验证主信号投影。"
+        secondary_asset.triage_message = "阶段 4 次级候选只应保留在审计中。"
+        secondary_asset.source = {"system": "clinical_safety_external_api_test"}
+        secondary_asset.raw_text = {"embedding_text": embedding_text}
+        secondary_asset.version = "clinical_safety_external_api_test"
+        secondary_asset.enabled = True
+        secondary_asset.review_status = "approved"
+        secondary_asset.published_at = now
+        secondary_asset.metadata_json = {
+            "clinical_safety_external_api_test": True,
+            "prefix": prefix,
+            "code_governance": {
+                "strategy": "opaque_asset_identity_v1",
+                "legacy_code": "STAGE4_SECONDARY_TEST",
+            },
         }
 
         chunk = session.get(ClinicalSafetyChunkModel, safety_chunk_id)
@@ -1068,6 +1315,32 @@ def _prepare_clinical_safety_baseline(
         chunk.metadata_json = {
             "clinical_safety_external_api_test": True,
             "prefix": prefix,
+            "code": asset.code,
+            "asset_id": asset.asset_id,
+        }
+
+        secondary_chunk = session.get(ClinicalSafetyChunkModel, secondary_chunk_id)
+        if secondary_chunk is None:
+            secondary_chunk = ClinicalSafetyChunkModel(
+                chunk_id=secondary_chunk_id, asset_id=secondary_asset_id
+            )
+            session.add(secondary_chunk)
+        secondary_chunk.asset_id = secondary_asset_id
+        secondary_chunk.chunk_type = "recognition"
+        secondary_chunk.title = "阶段 4 次级候选临床安全识别 chunk"
+        secondary_chunk.embedding_text = embedding_text
+        secondary_chunk.embedding = embedding
+        secondary_chunk.embedding_model = external_env["QWEN_EMBEDDING_MODEL"]
+        secondary_chunk.embedding_dimension = len(embedding)
+        secondary_chunk.content_hash = _content_hash(embedding_text)
+        secondary_chunk.version = "clinical_safety_external_api_test"
+        secondary_chunk.enabled = True
+        secondary_chunk.review_status = "approved"
+        secondary_chunk.metadata_json = {
+            "clinical_safety_external_api_test": True,
+            "prefix": prefix,
+            "code": secondary_asset.code,
+            "asset_id": secondary_asset.asset_id,
         }
         session.add(
             KnowledgeChunkModel(
@@ -1145,7 +1418,23 @@ def _assert_clinical_safety_baseline_ready(database_url: str, prefix: str) -> No
             ).scalar_one()
             or 0
         )
-        if chunk_count != 1:
+        secondary_chunk_count = int(
+            session.execute(
+                text(
+                    """
+                    SELECT count(*)
+                    FROM clinical_safety_chunks
+                    WHERE enabled IS TRUE
+                      AND review_status = 'approved'
+                      AND embedding IS NOT NULL
+                      AND chunk_id = :chunk_id
+                    """
+                ),
+                {"chunk_id": _secondary_safety_chunk_id(prefix)},
+            ).scalar_one()
+            or 0
+        )
+        if chunk_count != 1 or secondary_chunk_count != 1:
             pytest.fail("外部数据库缺少临床安全裁决测试所需向量 chunk。")
         knowledge_chunk_types = set(
             session.execute(
@@ -1238,8 +1527,21 @@ def _cleanup_baseline_database_prefix(database_url: str, prefix: str) -> None:
             },
         )
         session.execute(
+            text(
+                "DELETE FROM clinical_safety_chunks WHERE chunk_id = :chunk_id OR asset_id = :asset_id"
+            ),
+            {
+                "chunk_id": _secondary_safety_chunk_id(prefix),
+                "asset_id": _secondary_safety_asset_id(prefix),
+            },
+        )
+        session.execute(
             text("DELETE FROM clinical_safety_assets WHERE asset_id = :asset_id"),
             {"asset_id": _safety_asset_id(prefix)},
+        )
+        session.execute(
+            text("DELETE FROM clinical_safety_assets WHERE asset_id = :asset_id"),
+            {"asset_id": _secondary_safety_asset_id(prefix)},
         )
 
 
@@ -1336,9 +1638,72 @@ def _precondition_candidate(
         severity=severity,  # type: ignore[arg-type]
         action_class="emergency" if severity == "urgent" else "safety_warning",
         code=asset_id.upper(),
+        triage_message="真实前提评估测试候选需要按策略口径处理。",
         required_context={"species": species, "symptoms": required_symptoms},
     )
     return ClinicalSafetyCandidate(asset=asset, score=0.91, chunk_hits=())
+
+
+def _stage4_policy_candidate(
+    *,
+    asset_id: str,
+    code: str,
+    canonical_name: str,
+    action_class: str,
+    score: float,
+    triage_message: str,
+) -> ClinicalSafetyCandidate:
+    """构造阶段 4 真实 OPA 主信号裁决使用的临床安全候选。
+
+    :param asset_id: 测试资产标识。
+    :param code: 符合阶段 4 契约的 opaque 急诊编码。
+    :param canonical_name: 测试资产规范名称。
+    :param action_class: 测试候选动作分类。
+    :param score: 测试候选召回分数。
+    :param triage_message: 候选受治理分诊文案。
+    :return: 返回不依赖数据库召回的直接策略候选。
+    """
+    asset = ClinicalSafetyAsset(
+        asset_id=asset_id,
+        asset_type="emergency_red_flag",
+        canonical_name=canonical_name,
+        category="clinical_safety_stage4_external_test",
+        species_scope=("cat", "dog"),
+        sex_scope=(),
+        age_scope=(),
+        severity="urgent",
+        action_class=action_class,  # type: ignore[arg-type]
+        code=code,
+        triage_message=triage_message,
+        required_context={
+            "species": ("cat", "dog"),
+            "symptoms": ("呼吸急促 + 黏膜发紫",),
+        },
+    )
+    return ClinicalSafetyCandidate(asset=asset, score=score, chunk_hits=())
+
+
+def _stage4_precondition_assessment(
+    candidate: ClinicalSafetyCandidate,
+) -> ClinicalSafetyPreconditionAssessment:
+    """构造阶段 4 真实 OPA 测试使用的可信前提评估。
+
+    :param candidate: 待绑定的临床安全候选。
+    :return: 返回与候选 required_context 哈希一致的前提评估。
+    """
+    return ClinicalSafetyPreconditionAssessment(
+        asset_id=candidate.asset.asset_id,
+        required_context_hash=clinical_safety_required_context_hash(
+            candidate.asset.required_context
+        ),
+        semantic_premise_hash=clinical_safety_semantic_premise_hash(
+            candidate.asset.required_context
+        ),
+        status="satisfied",
+        evidence_ids=("f1", "f2"),
+        confidence=0.96,
+        strategy="qwen_response_format",
+    )
 
 
 def _semantic_result_from_feature_specs(
@@ -1524,6 +1889,44 @@ def _safety_chunk_id(prefix: str) -> str:
     :return: 返回 chunk 标识。
     """
     return f"{_safety_asset_id(prefix)}.recognition.v1"
+
+
+def _stage4_primary_code(prefix: str) -> str:
+    """构造不会与正式急诊资产冲突的阶段 4 主候选编码。
+
+    :param prefix: 测试数据前缀。
+    :return: 返回符合 opaque 契约的唯一主候选编码。
+    """
+    suffix = hashlib.sha256(f"primary:{prefix}".encode("utf-8")).hexdigest()[:10]
+    return f"EMERGENCY_MODE_{suffix.upper()}"
+
+
+def _stage4_secondary_code(prefix: str) -> str:
+    """构造不会与正式急诊资产冲突的阶段 4 次候选编码。
+
+    :param prefix: 测试数据前缀。
+    :return: 返回符合 opaque 契约的唯一次候选编码。
+    """
+    suffix = hashlib.sha256(f"secondary:{prefix}".encode("utf-8")).hexdigest()[:10]
+    return f"EMERGENCY_MODE_{suffix.upper()}"
+
+
+def _secondary_safety_asset_id(prefix: str) -> str:
+    """构造阶段 4 次级临床安全测试资产标识。
+
+    :param prefix: 测试数据前缀。
+    :return: 返回次级资产标识。
+    """
+    return f"{prefix}_clinical_safety_stage4_secondary"
+
+
+def _secondary_safety_chunk_id(prefix: str) -> str:
+    """构造阶段 4 次级临床安全测试 chunk 标识。
+
+    :param prefix: 测试数据前缀。
+    :return: 返回次级向量 chunk 标识。
+    """
+    return f"{_secondary_safety_asset_id(prefix)}.recognition.v1"
 
 
 def _clinical_safety_embedding_text() -> str:

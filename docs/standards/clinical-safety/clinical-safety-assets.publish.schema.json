@@ -360,7 +360,7 @@
     }
   },
   "additionalProperties": false,
-  "description": "表示发布态临床安全资产文档的严格契约。\n\n:param meta: 文档元信息，对应 JSON 中的 _meta 字段。\n:param assets: 发布态临床安全资产列表。\n:return: 无返回值。",
+  "description": "表示发布态临床安全资产文档的严格契约。\n\n:param meta: 文档元信息，对应 JSON 中的 _meta 字段。\n:param assets: 发布态临床安全资产列表。\n:raises ValueError: 急诊资产信号编码重复时抛出。\n:return: 无返回值。",
   "properties": {
     "_meta": {
       "$ref": "#/$defs/ClinicalSafetyDocumentMetaContract",

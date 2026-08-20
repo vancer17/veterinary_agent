@@ -46,6 +46,153 @@ def test_publish_contract_rejects_generated_fallback_code() -> None:
         validate_clinical_safety_publish_contract(asset_document, chunk_document)
 
 
+def test_publish_contract_rejects_generic_emergency_code() -> None:
+    """验证发布态契约拒绝急诊资产继续复用泛化总标签。
+
+    :return: 无返回值；断言通过表示不同急诊资产必须具备独立信号身份。
+    """
+    asset_document, chunk_document = _valid_publish_documents()
+    asset_document["assets"][0]["asset_type"] = "emergency_red_flag"
+    asset_document["assets"][0]["code"] = "EMERGENCY_RED_FLAG"
+    chunk_document["chunks"][0]["metadata"]["asset_type"] = "emergency_red_flag"
+    chunk_document["chunks"][0]["metadata"]["code"] = "EMERGENCY_RED_FLAG"
+
+    with pytest.raises(ClinicalSafetyAssetContractError):
+        validate_clinical_safety_publish_contract(asset_document, chunk_document)
+
+
+def test_publish_contract_requires_opaque_emergency_asset_code() -> None:
+    """验证急诊资产编码使用 opaque 资产级身份而非医学语义命名。
+
+    :return: 无返回值；断言通过表示阶段 4 不把自然语言准入条目枚举化。
+    """
+    asset_document, chunk_document = _valid_publish_documents()
+    asset_document["assets"][0]["asset_type"] = "emergency_red_flag"
+    asset_document["assets"][0]["code"] = "EMERGENCY_MODE_7K4Q9PXRAB"
+    asset_document["assets"][0]["metadata"]["code_governance"] = {
+        "strategy": "opaque_asset_identity_v1",
+        "legacy_code": "CONTRACT_TEST_RISK",
+    }
+    chunk_document["chunks"][0]["metadata"]["asset_type"] = "emergency_red_flag"
+    chunk_document["chunks"][0]["metadata"]["code"] = "EMERGENCY_MODE_7K4Q9PXRAB"
+
+    contract = validate_clinical_safety_publish_contract(
+        asset_document,
+        chunk_document,
+        require_embeddings=False,
+    )
+
+    assert contract.asset_document.assets[0].code == "EMERGENCY_MODE_7K4Q9PXRAB"
+
+
+def test_publish_contract_requires_emergency_code_governance() -> None:
+    """验证急诊资产发布时必须携带完整编码治理审计信息。
+
+    :return: 无返回值；断言通过表示重新生成资产不会丢失历史编码映射。
+    """
+    asset_document, chunk_document = _valid_publish_documents()
+    asset = asset_document["assets"][0]
+    asset["asset_type"] = "emergency_red_flag"
+    asset["code"] = "EMERGENCY_MODE_7K4Q9PXRAB"
+    chunk = chunk_document["chunks"][0]
+    chunk["metadata"]["asset_type"] = "emergency_red_flag"
+    chunk["metadata"]["code"] = asset["code"]
+
+    with pytest.raises(ClinicalSafetyAssetContractError):
+        validate_clinical_safety_publish_contract(
+            asset_document,
+            chunk_document,
+            require_embeddings=False,
+        )
+
+
+def test_publish_contract_rejects_incomplete_emergency_code_governance() -> None:
+    """验证不完整的急诊编码治理信息不能进入发布态。
+
+    :return: 无返回值；断言通过表示 legacy code 映射不会变成可选审计装饰。
+    """
+    asset_document, chunk_document = _valid_publish_documents()
+    asset = asset_document["assets"][0]
+    asset["asset_type"] = "emergency_red_flag"
+    asset["code"] = "EMERGENCY_MODE_7K4Q9PXRAB"
+    asset["metadata"]["code_governance"] = {
+        "strategy": "opaque_asset_identity_v1",
+        "legacy_code": "",
+    }
+    chunk = chunk_document["chunks"][0]
+    chunk["metadata"]["asset_type"] = "emergency_red_flag"
+    chunk["metadata"]["code"] = asset["code"]
+
+    with pytest.raises(ClinicalSafetyAssetContractError):
+        validate_clinical_safety_publish_contract(
+            asset_document,
+            chunk_document,
+            require_embeddings=False,
+        )
+
+
+def test_publish_contract_reserves_code_governance_for_emergency_assets() -> None:
+    """验证非急诊资产不得携带急诊编码治理字段。
+
+    :return: 无返回值；断言通过表示临床安全 metadata 不会形成第二套类型语义。
+    """
+    asset_document, chunk_document = _valid_publish_documents()
+    asset_document["assets"][0]["metadata"]["code_governance"] = {
+        "strategy": "opaque_asset_identity_v1",
+        "legacy_code": "CONTRACT_TEST_RISK",
+    }
+
+    with pytest.raises(ClinicalSafetyAssetContractError):
+        validate_clinical_safety_publish_contract(
+            asset_document,
+            chunk_document,
+            require_embeddings=False,
+        )
+
+
+def test_publish_contract_rejects_duplicate_emergency_asset_codes() -> None:
+    """验证同一发布批次内急诊资产不得复用信号编码。
+
+    :return: 无返回值；断言通过表示 evaluator 审计不会因 code 重复而误合并。
+    """
+    asset_document, chunk_document = _valid_publish_documents()
+    first_asset = asset_document["assets"][0]
+    first_asset["asset_type"] = "emergency_red_flag"
+    first_asset["code"] = "EMERGENCY_MODE_7K4Q9PXRAB"
+    first_asset["metadata"]["code_governance"] = {
+        "strategy": "opaque_asset_identity_v1",
+        "legacy_code": "CONTRACT_TEST_RISK",
+    }
+    second_asset = dict(first_asset)
+    second_asset["asset_id"] = "safety_contract_asset_002"
+    second_asset["source"] = dict(first_asset["source"])
+    second_asset["required_context"] = dict(first_asset["required_context"])
+    second_asset["decision_hints"] = dict(first_asset["decision_hints"])
+    second_asset["raw_text"] = dict(first_asset["raw_text"])
+    second_asset["metadata"] = dict(first_asset["metadata"])
+    asset_document["assets"].append(second_asset)
+    asset_document["_meta"]["asset_count"] = 2
+
+    first_chunk = chunk_document["chunks"][0]
+    first_chunk["metadata"]["asset_type"] = "emergency_red_flag"
+    first_chunk["metadata"]["code"] = "EMERGENCY_MODE_7K4Q9PXRAB"
+    second_chunk = dict(first_chunk)
+    second_chunk["chunk_id"] = "safety_contract_asset_002.recognition.v1"
+    second_chunk["asset_id"] = second_asset["asset_id"]
+    second_chunk["metadata"] = dict(first_chunk["metadata"])
+    second_chunk["metadata"]["asset_id"] = second_asset["asset_id"]
+    chunk_document["chunks"].append(second_chunk)
+    chunk_document["_meta"]["asset_count"] = 2
+    chunk_document["_meta"]["chunk_count"] = 2
+
+    with pytest.raises(ClinicalSafetyAssetContractError):
+        validate_clinical_safety_publish_contract(
+            asset_document,
+            chunk_document,
+            require_embeddings=False,
+        )
+
+
 @pytest.mark.parametrize(
     "generated_code",
     [
@@ -164,7 +311,10 @@ def _valid_publish_documents() -> tuple[dict[str, Any], dict[str, Any]]:
                 "user_expressions": [],
                 "symptoms": ["呼吸困难"],
                 "recognition_phrases": ["呼吸困难"],
-                "required_context": {"species": ["dog", "cat"], "symptoms": ["呼吸困难"]},
+                "required_context": {
+                    "species": ["dog", "cat"],
+                    "symptoms": ["呼吸困难"],
+                },
                 "decision_hints": {"active_symptom": "safety_escalated"},
                 "clinical_risk_summary": "契约测试风险摘要。",
                 "triage_message": "契约测试分诊口径。",

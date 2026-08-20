@@ -38,15 +38,22 @@
 
 1. `code` 必填、非空、稳定，并由资产治理域确认。
 2. `code` 不允许为 `CLINICAL_SAFETY_UNKNOWN`，也不允许为 `CLINICAL_SAFETY_2_3` 这类生成兜底编码。
-3. `asset_type`、`severity`、`action_class` 必须是受控枚举。
-4. `review_status` 必须为 `approved`。
-5. `enabled` 必须为 `true`。
-6. `published_at` 必须非空。
-7. `source` 必须包含 `source_file`、`source_path` 和 `source_text`。
-8. `recognition_phrases`、`clinical_risk_summary` 和 `triage_message` 必须非空。
-9. `decision_hints` 如存在，只能使用枚举化键和值，不得作为自由格式策略 DSL。
-10. `required_context` 如存在，只能使用受控上下文字段。
-11. `required_context.symptoms` 是条目级 `any_of` 自然语言准入描述集合；每个条目内部可表达组合语义，
+3. `asset_type=emergency_red_flag` 时，`code` 必须匹配 `^EMERGENCY_MODE_[A-Z0-9]{10}$`，
+    且同一发布文档内不得重复；该规则表示“一条 enabled 急诊资产一个 code”，
+    不表示已完成临床模式归一化。
+4. 急诊资产原始条目必须显式声明完整的 `code_governance.strategy` 与
+    `code_governance.legacy_code`，转换器不得推导历史映射。
+5. 非急诊资产不得占用 `EMERGENCY_MODE_` 命名空间，也不得声明
+    `metadata.code_governance`。
+6. `asset_type`、`severity`、`action_class` 必须是受控枚举。
+7. `review_status` 必须为 `approved`。
+8. `enabled` 必须为 `true`。
+9. `published_at` 必须非空。
+10. `source` 必须包含 `source_file`、`source_path` 和 `source_text`。
+11. `recognition_phrases`、`clinical_risk_summary` 和 `triage_message` 必须非空。
+12. `decision_hints` 如存在，只能使用枚举化键和值，不得作为自由格式策略 DSL。
+13. `required_context` 如存在，只能使用受控上下文字段。
+14. `required_context.symptoms` 是条目级 `any_of` 自然语言准入描述集合；每个条目内部可表达组合语义，
     但数组本身不展开为枚举或组合候选。
 
 `recognition_phrases` 和 `user_expressions` 仅用于离线生成 embedding 文本，不允许作为运行时关键词规则。
@@ -89,11 +96,13 @@ chunk metadata 只能作为审计冗余，不是第二个可信资产源。
 
 PostgreSQL 层应作为发布态资产的最终运行时可信源。数据库约束应保证：
 
-1. `clinical_safety_assets.code` 非空、稳定，且不允许生成兜底编码；是否唯一由后续资产治理策略另行定义，当前以 `asset_id` 作为单条资产的稳定定位标识。
-2. `clinical_safety_assets.review_status=approved` 时，必须同时满足 `enabled=true` 和 `published_at IS NOT NULL`。
-3. 非 approved 资产必须保持 `enabled=false` 且 `published_at IS NULL`。
-4. `clinical_safety_chunks.review_status=approved` 时，必须同时满足 `enabled=true`、`embedding IS NOT NULL`、`embedding_model IS NOT NULL`、`embedding_dimension IS NOT NULL` 和 `content_hash` 非空。
-5. 非 approved chunk 必须保持 `enabled=false`。
+1. `clinical_safety_assets.code` 非空、稳定，且不允许生成兜底编码。
+2. `review_status=approved` 且 `enabled=true` 的 `emergency_red_flag` 资产，
+   code 必须位于 `EMERGENCY_MODE_` opaque 命名空间内，并在数据库内保持唯一。
+3. `clinical_safety_assets.review_status=approved` 时，必须同时满足 `enabled=true` 和 `published_at IS NOT NULL`。
+4. 非 approved 资产必须保持 `enabled=false` 且 `published_at IS NULL`。
+5. `clinical_safety_chunks.review_status=approved` 时，必须同时满足 `enabled=true`、`embedding IS NOT NULL`、`embedding_model IS NOT NULL`、`embedding_dimension IS NOT NULL` 和 `content_hash` 非空。
+6. 非 approved chunk 必须保持 `enabled=false`。
 
 运行时召回只读取已发布、已启用、已向量化的 chunk，并通过仓储协议访问数据库；业务层不得直接操作数据表模型。
 

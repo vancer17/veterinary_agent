@@ -116,9 +116,11 @@
 ## 5. 审核要点
 
 1. `code` 必须稳定且非空，不允许兜底生成。
-2. `review_status` 必须为 `approved`。
-3. `enabled` 必须为 `true`。
-4. `published_at` 必须存在。
-5. chunk 必须包含 embedding 元信息。
-6. chunk metadata 不得与权威资产字段冲突。
-7. 每个资产必须至少有一个 `recognition` chunk。
+2. `emergency_red_flag` 资产必须使用唯一的 `EMERGENCY_MODE_[A-Z0-9]{10}` opaque code。
+3. 非急诊资产不得占用 `EMERGENCY_MODE_` 命名空间。
+4. `review_status` 必须为 `approved`。
+5. `enabled` 必须为 `true`。
+6. `published_at` 必须存在。
+7. chunk 必须包含 embedding 元信息。
+8. chunk metadata 不得与权威资产字段冲突。
+9. 每个资产必须至少有一个 `recognition` chunk。
