@@ -6,7 +6,6 @@
 说明：本文件遵循项目标准文件树编排；跨包引用应通过对应包的 __init__.py 暴露能力。
 """
 
-
 from __future__ import annotations
 
 import asyncio
@@ -32,13 +31,22 @@ from vet_agent import (
     TrustedIdentity,
     VetSegment,
 )
-from vet_agent.answer_rag import AnswerRagError, AnswerRagRequest, AnswerRagResult, AnswerRagServiceProtocol
-from vet_agent.background_tasks import BackgroundTaskServiceProtocol, make_memory_extraction_task_metadata
+from vet_agent.answer_rag import (
+    AnswerRagError,
+    AnswerRagRequest,
+    AnswerRagResult,
+    AnswerRagServiceProtocol,
+)
+from vet_agent.background_tasks import (
+    BackgroundTaskServiceProtocol,
+    make_memory_extraction_task_metadata,
+)
 from vet_agent.clinical_safety import (
     ClinicalSafetyEvaluator,
     ClinicalSafetyEvaluationResult,
     ClinicalSafetySemanticExtractorAgent,
     ClinicalSafetySemanticResult,
+    ClinicalSafetySignal,
 )
 from vet_agent.followup_rag import (
     FollowupRagDependencyError,
@@ -46,12 +54,25 @@ from vet_agent.followup_rag import (
     FollowupRagRequest,
     FollowupRagServiceProtocol,
 )
-from vet_agent.input_safety import InputSafetyDecision, InputSafetyRequestContext, InputSafetyService
-from vet_agent.memory import MemoryContextBuilder, MemoryPromptContext, MemoryReadBundle, MemoryReadService
+from vet_agent.input_safety import (
+    InputSafetyDecision,
+    InputSafetyRequestContext,
+    InputSafetyService,
+)
+from vet_agent.memory import (
+    MemoryContextBuilder,
+    MemoryPromptContext,
+    MemoryReadBundle,
+    MemoryReadService,
+)
 from vet_agent.memory_extraction import MemoryExtractionStrategy
 from vet_agent.observability import AgentPathNode, build_agent_path
 from vet_agent.output_safety import OutputSafetyService
-from vet_agent.rag_miss_governance import RagMissRecordRequest, RagMissRecorderProtocol, RagMissScope
+from vet_agent.rag_miss_governance import (
+    RagMissRecordRequest,
+    RagMissRecorderProtocol,
+    RagMissScope,
+)
 from vet_agent.response_generation import (
     ResponseGenerationRequest,
     ResponseGenerationServiceProtocol,
@@ -135,7 +156,9 @@ class VetOrchestrator:
         self.response_generation_service = response_generation_service
         self.clinical_safety = clinical_safety_evaluator
         self.clinical_safety_semantic_extractor = clinical_safety_semantic_extractor
-        self.semantic_extractor = ConsultationSemanticExtractorAgent(qwen_client, settings)
+        self.semantic_extractor = ConsultationSemanticExtractorAgent(
+            qwen_client, settings
+        )
         self.consultation = consultation_state_service
         self.task_router = task_router
         self.followup_rag_service = followup_rag_service
@@ -148,6 +171,7 @@ class VetOrchestrator:
         :param request: 请求对象。
         :return: 返回函数执行结果。
         """
+
         async def execute_turn() -> AgentTurnResponse:
             """在 turn execution 门禁放行后执行 Agent 主业务链路。
 
@@ -201,7 +225,9 @@ class VetOrchestrator:
             semantic_result=clinical_semantic,
         )
         clinical_signals = clinical_safety_result.signals
-        assessment = SafetyAssessment.merge(assessment, SafetyAssessment.from_signals(clinical_signals))
+        assessment = SafetyAssessment.merge(
+            assessment, SafetyAssessment.from_signals(clinical_signals)
+        )
         if assessment.blocked or assessment.escalated:
             return await self._safety_triage_response(
                 request=request,
@@ -295,7 +321,11 @@ class VetOrchestrator:
         )
 
         if not consultation_decision.ready:
-            followup_plan, knowledge_evidence, consultation_decision = await self._create_followup_rag_plan(
+            (
+                followup_plan,
+                knowledge_evidence,
+                consultation_decision,
+            ) = await self._create_followup_rag_plan(
                 request=request,
                 task=task,
                 user_text=user_text,
@@ -314,7 +344,9 @@ class VetOrchestrator:
                 consultation_decision,
                 question_reasons=followup_plan.reason_lines(),
             )
-            user_evidence = self.reasoning_display.user_answer_evidence(consultation_decision.state.to_dict())
+            user_evidence = self.reasoning_display.user_answer_evidence(
+                consultation_decision.state.to_dict()
+            )
             evidence = [*user_evidence, *pet_context.evidence, *knowledge_evidence]
             segment = VetSegment(
                 type="followup_consultation",
@@ -332,7 +364,9 @@ class VetOrchestrator:
                 safety_signals=assessment.signals,
             )
             segment.reasoning_display = reasoning_display
-            segment.references = self.reasoning_display.references_from_evidence(evidence)
+            segment.references = self.reasoning_display.references_from_evidence(
+                evidence
+            )
             response = AgentTurnResponse(
                 id=f"turn_{uuid4().hex}",
                 request_id=request.request_context.request_id,
@@ -405,8 +439,14 @@ class VetOrchestrator:
             model=model,
         )
         output_text = response_generation_result.text
-        user_evidence = self.reasoning_display.user_answer_evidence(consultation_decision.state.to_dict())
-        evidence = [*user_evidence, *response_generation_result.evidence, *answer_rag_evidence]
+        user_evidence = self.reasoning_display.user_answer_evidence(
+            consultation_decision.state.to_dict()
+        )
+        evidence = [
+            *user_evidence,
+            *response_generation_result.evidence,
+            *answer_rag_evidence,
+        ]
         segment = VetSegment(
             type="medical_consultation",
             title="症状判断与下一步",
@@ -454,10 +494,10 @@ class VetOrchestrator:
                     AgentPathNode.CONSULTATION_STATE_SERVICE,
                     AgentPathNode.CONSULTATION_ANSWERABILITY_POLICY_OPA,
                     AgentPathNode.ANSWER_RAG_SERVICE,
-                        AgentPathNode.ANSWER_RAG_RETRIEVER,
-                        AgentPathNode.RESPONSE_GENERATION_CONTEXT_BUILDER,
-                        AgentPathNode.QWEN_RESPONSE_AGENT,
-                    ),
+                    AgentPathNode.ANSWER_RAG_RETRIEVER,
+                    AgentPathNode.RESPONSE_GENERATION_CONTEXT_BUILDER,
+                    AgentPathNode.QWEN_RESPONSE_AGENT,
+                ),
                 "litellm_configured": self.settings.litellm_configured,
                 "consultation_phase": consultation_decision.state.phase,
                 "consultation_state": consultation_decision.state.to_dict(),
@@ -493,8 +533,8 @@ class VetOrchestrator:
         model: str,
         evidence: list[Evidence],
         agent_path: list[str],
+        clinical_safety_resolution: ClinicalSafetyEvaluationResult,
         clinical_safety_semantic: ClinicalSafetySemanticResult | None = None,
-        clinical_safety_resolution: ClinicalSafetyEvaluationResult | None = None,
         input_safety_decision: InputSafetyDecision | None = None,
     ) -> AgentTurnResponse:
         """根据安全评估构造并持久化安全分诊响应。
@@ -509,8 +549,11 @@ class VetOrchestrator:
         :param input_safety_decision: 已完成的基础输入安全策略裁决；为空时不写入审计字段。
         :return: 返回已持久化的安全分诊响应。
         """
-        text = self._safety_triage_response_text(assessment)
-        signals = assessment.signals
+        primary_signal = self._clinical_safety_primary_signal(
+            clinical_safety_resolution
+        )
+        text = self._safety_triage_response_text(primary_signal)
+        signals = list(assessment.signals)
         segment = VetSegment(
             type="safety_triage",
             title="安全分诊",
@@ -522,7 +565,7 @@ class VetOrchestrator:
             status="blocked" if assessment.blocked else "safety_escalated",
             segment_id=segment.segment_id,
             evidence=evidence,
-            safety_signals=signals,
+            safety_signals=[primary_signal],
         )
         segment.reasoning_display = reasoning_display
         segment.references = self.reasoning_display.references_from_evidence(evidence)
@@ -555,38 +598,37 @@ class VetOrchestrator:
         await self.memory_service.clear_consultation_state(request.trusted_identity)
         return response
 
-    def _safety_triage_response_text(self, assessment: SafetyAssessment) -> str:
-        """根据已裁决安全信号生成临床安全分诊响应文本。
+    def _safety_triage_response_text(self, primary_signal: ClinicalSafetySignal) -> str:
+        """根据策略裁定的主安全信号生成临床安全分诊响应文本。
 
-        :param assessment: 已完成的安全评估结果。
+        :param primary_signal: OPA 裁定并经 evaluator 投影的唯一主信号。
         :return: 返回面向用户的安全分诊文本。
         """
-        primary_signal = self._primary_triage_signal(assessment.signals)
-        if primary_signal is not None:
-            reasons = primary_signal.message
-            matched = "、".join(dict.fromkeys(term for term in primary_signal.matched_terms if term))
-            prefix = "你描述里有需要优先线下处理的高风险信号"
-            if reasons:
-                prefix = f"{prefix}：{reasons}"
-            if matched:
-                prefix = f"{prefix}，相关线索: {matched}"
-            return (
-                f"{prefix}。请尽快联系线下兽医医院，若症状正在发生或持续加重，请按急诊处理。\n\n"
-                "路上尽量保持宠物安静和保暖，不要自行喂人药或给不确定的药物。"
-            )
-        return "当前信息需要进一步确认。"
+        reasons = primary_signal.message
+        prefix = "你描述里有需要优先线下处理的高风险信号"
+        if reasons:
+            prefix = f"{prefix}：{reasons}"
+        return (
+            f"{prefix}。请尽快联系线下兽医医院，若症状正在发生或持续加重，请按急诊处理。\n\n"
+            "路上尽量保持宠物安静和保暖，不要自行喂人药或给不确定的药物。"
+        )
 
-    def _primary_triage_signal(self, signals: list[SafetySignal]) -> SafetySignal | None:
-        """选择面向用户展示的主临床安全分诊信号。
+    def _clinical_safety_primary_signal(
+        self,
+        clinical_safety_resolution: ClinicalSafetyEvaluationResult,
+    ) -> ClinicalSafetySignal:
+        """读取临床安全裁决输出的唯一用户主信号。
 
-        :param signals: 已由安全策略裁决后的全部安全信号。
-        :return: 返回最高优先级的 urgent 或 blocked 信号；没有升级信号时返回 None。
+        :param clinical_safety_resolution: 临床安全裁决与显式状态结果。
+        :return: 返回 OPA 裁定的主安全信号。
+        :raises RuntimeError: 升级响应缺少策略主信号时抛出，禁止响应层本地兜底选择。
         """
-        priority = {"blocked": 2, "urgent": 1}
-        triage_signals = [signal for signal in signals if signal.severity in priority]
-        if not triage_signals:
-            return None
-        return sorted(triage_signals, key=lambda item: priority[item.severity], reverse=True)[0]
+        primary_signal = clinical_safety_resolution.primary_signal
+        if primary_signal is None:
+            raise RuntimeError(
+                "clinical safety escalated response requires a policy primary signal"
+            )
+        return primary_signal
 
     async def _input_safety_response(
         self,
@@ -671,7 +713,9 @@ class VetOrchestrator:
             return f"{message}\n\n请调整问题或补充合规的文本、附件用途后重新提交。"
         return f"{message}\n\n如需继续，请补充与宠物健康咨询直接相关的必要信息。"
 
-    def _input_safety_metadata(self, decision: InputSafetyDecision | None) -> dict[str, Any]:
+    def _input_safety_metadata(
+        self, decision: InputSafetyDecision | None
+    ) -> dict[str, Any]:
         """构造基础输入安全策略裁决 metadata。
 
         :param decision: 基础输入安全策略裁决结果。
@@ -758,30 +802,37 @@ class VetOrchestrator:
                 clinical_safety_precondition_unknown=clinical_safety_resolution.requires_precondition_information,
                 max_questions=request.turn_options.max_followup_questions,
             )
-            user_evidence = self.reasoning_display.user_answer_evidence(consultation_decision.state.to_dict())
+            user_evidence = self.reasoning_display.user_answer_evidence(
+                consultation_decision.state.to_dict()
+            )
             followup_plan: FollowupRagPlan | None = None
             answer_rag_result: AnswerRagResult | None = None
             response_generation_metadata: dict[str, Any] | None = None
 
             if consultation_decision.ready:
-                answer_rag_result, answer_rag_evidence = await self._create_answer_rag_context(
+                (
+                    answer_rag_result,
+                    answer_rag_evidence,
+                ) = await self._create_answer_rag_context(
                     request=request,
                     task=task,
                     pet_context=pet_context,
                     consultation_decision=consultation_decision,
                     model=model,
                 )
-                response_generation_result = await self.response_generation_service.generate(
-                    ResponseGenerationRequest(
-                        task=task,
-                        pet_context=pet_context,
-                        memory_context=memory_context,
-                        consultation_decision=consultation_decision,
-                        answer_rag_result=answer_rag_result,
-                        clinical_safety_semantic=clinical_safety_semantic,
-                        clinical_safety_resolution=clinical_safety_resolution,
-                    ),
-                    model=model,
+                response_generation_result = (
+                    await self.response_generation_service.generate(
+                        ResponseGenerationRequest(
+                            task=task,
+                            pet_context=pet_context,
+                            memory_context=memory_context,
+                            consultation_decision=consultation_decision,
+                            answer_rag_result=answer_rag_result,
+                            clinical_safety_semantic=clinical_safety_semantic,
+                            clinical_safety_resolution=clinical_safety_resolution,
+                        ),
+                        model=model,
+                    )
                 )
                 output_text = response_generation_result.text
                 used_answer_rag_service = True
@@ -795,7 +846,11 @@ class VetOrchestrator:
                     *answer_rag_evidence,
                 ]
             else:
-                followup_plan, knowledge_evidence, consultation_decision = await self._create_followup_rag_plan(
+                (
+                    followup_plan,
+                    knowledge_evidence,
+                    consultation_decision,
+                ) = await self._create_followup_rag_plan(
                     request=request,
                     task=task,
                     user_text=task.text,
@@ -816,7 +871,9 @@ class VetOrchestrator:
             if consultation_decision.ready:
                 updated_task_states.pop(task.state_key, None)
             else:
-                updated_task_states[task.state_key] = consultation_decision.state.to_dict()
+                updated_task_states[task.state_key] = (
+                    consultation_decision.state.to_dict()
+                )
 
             all_evidence.extend(evidence)
 
@@ -837,7 +894,9 @@ class VetOrchestrator:
                 safety_signals=assessment.signals,
             )
             segment.reasoning_display = reasoning_display
-            segment.references = self.reasoning_display.references_from_evidence(evidence)
+            segment.references = self.reasoning_display.references_from_evidence(
+                evidence
+            )
             segments.append(segment)
             task_summaries.append(
                 {
@@ -853,8 +912,12 @@ class VetOrchestrator:
                     "consultation_state": consultation_decision.state.to_dict(),
                     "answerability": consultation_decision.answerability,
                     "semantic_extraction": consultation_decision.state.semantic_extraction,
-                    "followup_question_plan": followup_plan.to_metadata() if followup_plan else None,
-                    "answer_rag": answer_rag_result.to_metadata() if answer_rag_result else None,
+                    "followup_question_plan": followup_plan.to_metadata()
+                    if followup_plan
+                    else None,
+                    "answer_rag": answer_rag_result.to_metadata()
+                    if answer_rag_result
+                    else None,
                     "response_generation": response_generation_metadata,
                 }
             )
@@ -862,11 +925,20 @@ class VetOrchestrator:
         await self.memory_service.save_task_consultation_states(
             request.trusted_identity,
             updated_task_states,
-            clear_default_state=self._should_clear_default_state_after_multi_task(tasks),
+            clear_default_state=self._should_clear_default_state_after_multi_task(
+                tasks
+            ),
         )
 
-        status = "requires_followup" if any(item["status"] == "requires_followup" for item in task_summaries) else "completed"
-        output_text = "\n\n".join(f"{segment.title}\n{segment.output_text or segment.content}" for segment in segments)
+        status = (
+            "requires_followup"
+            if any(item["status"] == "requires_followup" for item in task_summaries)
+            else "completed"
+        )
+        output_text = "\n\n".join(
+            f"{segment.title}\n{segment.output_text or segment.content}"
+            for segment in segments
+        )
         turn_reasoning_display = self.reasoning_display.build_multi_task_display(
             task_summaries=task_summaries,
             evidence=all_evidence,
@@ -958,7 +1030,9 @@ class VetOrchestrator:
         """
         active: list[ActiveTaskState] = []
         if self._has_unfinished_consultation_state(default_state):
-            active.append(ActiveTaskState.from_state(DEFAULT_TASK_KEY, default_state or {}))
+            active.append(
+                ActiveTaskState.from_state(DEFAULT_TASK_KEY, default_state or {})
+            )
         for task_key, state in sorted(task_states.items()):
             if self._has_unfinished_consultation_state(state):
                 active.append(ActiveTaskState.from_state(task_key, state))
@@ -978,13 +1052,18 @@ class VetOrchestrator:
         :param task_states: 当前 session 非默认任务状态集合。
         :return: 返回与当前任务关联的未完成状态；不存在或已完成时返回 None。
         """
-        if task.existing_task_key == DEFAULT_TASK_KEY or task.state_key == DEFAULT_TASK_KEY:
+        if (
+            task.existing_task_key == DEFAULT_TASK_KEY
+            or task.state_key == DEFAULT_TASK_KEY
+        ):
             candidate = default_state
         else:
             candidate = task_states.get(task.state_key)
         return candidate if self._has_unfinished_consultation_state(candidate) else None
 
-    def _task_routing_context(self, request: AgentTurnRequest) -> TaskRoutingRequestContext:
+    def _task_routing_context(
+        self, request: AgentTurnRequest
+    ) -> TaskRoutingRequestContext:
         """从核心请求构造任务路由策略所需的可信范围摘要。
 
         :param request: 当前 Agent 回合请求。
@@ -1054,14 +1133,17 @@ class VetOrchestrator:
         remaining.pop(task.state_key, None)
         await self.memory_service.save_task_consultation_states(identity, remaining)
 
-    def _should_clear_default_state_after_multi_task(self, tasks: tuple[RoutedTask, ...]) -> bool:
+    def _should_clear_default_state_after_multi_task(
+        self, tasks: tuple[RoutedTask, ...]
+    ) -> bool:
         """判断多任务执行后是否需要清理默认问诊状态。
 
         :param tasks: 已通过任务路由策略准入的本轮任务集合。
         :return: 当本轮明确把 __default__ 活跃状态迁移为具体任务键时返回 True。
         """
         return any(
-            task.existing_task_key == DEFAULT_TASK_KEY and task.state_key != DEFAULT_TASK_KEY
+            task.existing_task_key == DEFAULT_TASK_KEY
+            and task.state_key != DEFAULT_TASK_KEY
             for task in tasks
         )
 
@@ -1079,9 +1161,13 @@ class VetOrchestrator:
         """
         metadata: dict[str, Any] = {}
         if clinical_safety_semantic is not None:
-            metadata["clinical_safety_semantic"] = clinical_safety_semantic.to_metadata()
+            metadata["clinical_safety_semantic"] = (
+                clinical_safety_semantic.to_metadata()
+            )
         if clinical_safety_resolution is not None:
-            metadata["clinical_safety_resolution"] = clinical_safety_resolution.to_metadata()
+            metadata["clinical_safety_resolution"] = (
+                clinical_safety_resolution.to_metadata()
+            )
         return metadata
 
     def _has_unfinished_consultation_state(self, state: dict[str, Any] | None) -> bool:
@@ -1184,7 +1270,9 @@ class VetOrchestrator:
                 consultation_state=dict(answer_request.consultation_state),
                 answerability=dict(answer_request.answerability),
                 semantic_extraction=dict(answer_request.semantic_extraction),
-                allowed_chunk_types=tuple(str(item) for item in details.get("allowed_chunk_types") or ()),
+                allowed_chunk_types=tuple(
+                    str(item) for item in details.get("allowed_chunk_types") or ()
+                ),
                 top_k=int(details.get("top_k") or 0),
                 min_score=float(details.get("min_score") or 0.0),
                 domain_filter=str(details.get("domain") or "") or None,
@@ -1293,11 +1381,18 @@ class VetOrchestrator:
                 structured_query=str(details.get("query") or ""),
                 consultation_state=consultation_state,
                 answerability=dict(followup_request.answerability),
-                semantic_extraction=dict(consultation_state.get("semantic_extraction") or {}),
-                allowed_chunk_types=tuple(str(item) for item in details.get("allowed_chunk_types") or ()),
+                semantic_extraction=dict(
+                    consultation_state.get("semantic_extraction") or {}
+                ),
+                allowed_chunk_types=tuple(
+                    str(item) for item in details.get("allowed_chunk_types") or ()
+                ),
                 top_k=int(details.get("top_k") or 0),
                 min_score=float(details.get("min_score") or 0.0),
-                domain_filter=str(details.get("domain") or consultation_state.get("domain") or "") or None,
+                domain_filter=str(
+                    details.get("domain") or consultation_state.get("domain") or ""
+                )
+                or None,
                 failure_reason=failure_reason,
                 error_type=type(error).__name__,
                 error_message=str(error),
@@ -1312,7 +1407,9 @@ class VetOrchestrator:
             )
         )
 
-    def _should_record_followup_rag_miss(self, error: FollowupRagDependencyError) -> bool:
+    def _should_record_followup_rag_miss(
+        self, error: FollowupRagDependencyError
+    ) -> bool:
         """判断追问相关 RAG 依赖异常是否应进入治理留痕。
 
         :param error: 追问 RAG 依赖异常。
@@ -1349,7 +1446,10 @@ class VetOrchestrator:
             for chunk in self._chunks(reasoning.text, size=64):
                 yield StreamEvent(
                     event="reasoning_display.delta",
-                    data={"projection_id": reasoning.projection_id, "text_delta": chunk},
+                    data={
+                        "projection_id": reasoning.projection_id,
+                        "text_delta": chunk,
+                    },
                 ).to_sse()
                 await asyncio.sleep(0)
             yield StreamEvent(
@@ -1370,7 +1470,10 @@ class VetOrchestrator:
                 for chunk in self._chunks(reasoning.text, size=64):
                     yield StreamEvent(
                         event="reasoning_display.delta",
-                        data={"projection_id": reasoning.projection_id, "text_delta": chunk},
+                        data={
+                            "projection_id": reasoning.projection_id,
+                            "text_delta": chunk,
+                        },
                     ).to_sse()
                     await asyncio.sleep(0)
                 yield StreamEvent(
@@ -1389,7 +1492,10 @@ class VetOrchestrator:
             for chunk in self._chunks(segment.output_text or segment.content, size=80):
                 yield StreamEvent(
                     event="segment.delta",
-                    data={"segment_id": segment.segment_id, "delta": {"type": "output_text_delta", "text": chunk}},
+                    data={
+                        "segment_id": segment.segment_id,
+                        "delta": {"type": "output_text_delta", "text": chunk},
+                    },
                 ).to_sse()
                 await asyncio.sleep(0)
             yield StreamEvent(
@@ -1417,7 +1523,9 @@ class VetOrchestrator:
         """
         response = await self.output_safety_service.review_response(response)
         if medical:
-            response.metadata["memory_extraction_sources"] = list(self._memory_extraction_sources(request, response))
+            response.metadata["memory_extraction_sources"] = list(
+                self._memory_extraction_sources(request, response)
+            )
             background_task = None
             disabled_reason = None
             if self.settings.enable_memory_extraction:
@@ -1429,10 +1537,12 @@ class VetOrchestrator:
                     disabled_reason = "background_task_service_disabled"
             else:
                 disabled_reason = "memory_extraction_disabled"
-            response.metadata["memory_extraction"] = make_memory_extraction_task_metadata(
-                background_task,
-                response_text=response.output_text,
-                disabled_reason=disabled_reason,
+            response.metadata["memory_extraction"] = (
+                make_memory_extraction_task_metadata(
+                    background_task,
+                    response_text=response.output_text,
+                    disabled_reason=disabled_reason,
+                )
             )
         else:
             response.metadata["memory_extraction"] = {
@@ -1472,10 +1582,18 @@ class VetOrchestrator:
                 return normalized
 
         task_summaries = response.metadata.get("tasks")
-        if isinstance(task_summaries, list) and len(task_summaries) == len(response.segments) and len(task_summaries) > 1:
+        if (
+            isinstance(task_summaries, list)
+            and len(task_summaries) == len(response.segments)
+            and len(task_summaries) > 1
+        ):
             sources: list[dict[str, Any]] = []
             for index, segment in enumerate(response.segments):
-                task_summary = task_summaries[index] if isinstance(task_summaries[index], dict) else {}
+                task_summary = (
+                    task_summaries[index]
+                    if isinstance(task_summaries[index], dict)
+                    else {}
+                )
                 sources.append(
                     self._memory_extraction_task_source(
                         request,
@@ -1504,7 +1622,11 @@ class VetOrchestrator:
         :param index: 任务在当前回合中的顺序编号。
         :return: 返回长期记忆候选来源字典。
         """
-        source_id = str(task_summary.get("task_id") or task_summary.get("task_key") or segment.segment_id)
+        source_id = str(
+            task_summary.get("task_id")
+            or task_summary.get("task_key")
+            or segment.segment_id
+        )
         user_text = str(task_summary.get("text") or "").strip() or request.joined_text()
         return {
             "source_id": source_id,
@@ -1542,14 +1664,18 @@ class VetOrchestrator:
             "assistant_text": response.output_text,
             "task_title": "当前回合",
             "task_domain": "",
-            "consultation_state": dict(response.metadata.get("consultation_state") or {}),
+            "consultation_state": dict(
+                response.metadata.get("consultation_state") or {}
+            ),
             "metadata": {
                 "segment_count": len(response.segments),
                 "response_status": response.status,
             },
         }
 
-    async def _persist(self, request: AgentTurnRequest, response: AgentTurnResponse, *, medical: bool) -> None:
+    async def _persist(
+        self, request: AgentTurnRequest, response: AgentTurnResponse, *, medical: bool
+    ) -> None:
         """执行 _persist 内部辅助逻辑。
 
         :param request: 请求对象。

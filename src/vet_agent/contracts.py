@@ -5,14 +5,20 @@
 说明：vet_context 仅保留非权威请求侧上下文；跨包引用应通过 vet_agent 一级包入口暴露。
 """
 
-
 from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import Any, Literal, Self
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    field_validator,
+    model_validator,
+)
 
 
 def now_utc() -> datetime:
@@ -95,10 +101,18 @@ class ScopeAssertionAuthorization(BaseModel):
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    ownership_verified: StrictBool = Field(description="BFF 已完成 owner_id 与 user_id 的归属校验。")
-    pet_active: StrictBool = Field(description="宠物档案当前是否允许进入 Agent 主链路。")
-    pet_status: str = Field(min_length=1, description="主服务 master_pet_info.status 原始状态。")
-    pet_deleted: StrictBool = Field(description="主服务 master_pet_info.deleted_at 是否非空。")
+    ownership_verified: StrictBool = Field(
+        description="BFF 已完成 owner_id 与 user_id 的归属校验。"
+    )
+    pet_active: StrictBool = Field(
+        description="宠物档案当前是否允许进入 Agent 主链路。"
+    )
+    pet_status: str = Field(
+        min_length=1, description="主服务 master_pet_info.status 原始状态。"
+    )
+    pet_deleted: StrictBool = Field(
+        description="主服务 master_pet_info.deleted_at 是否非空。"
+    )
 
 
 class ScopeAssertionProfile(BaseModel):
@@ -123,17 +137,27 @@ class ScopeAssertionProfile(BaseModel):
 
     model_config = ConfigDict(extra="allow", str_strip_whitespace=True)
 
-    species: str = Field(min_length=1, description="归一物种；当前作为临床最小画像字段。")
+    species: str = Field(
+        min_length=1, description="归一物种；当前作为临床最小画像字段。"
+    )
     pet_code: str | None = Field(default=None, description="主服务宠物业务编码。")
     name: str | None = Field(default=None, description="宠物名称。")
     sex: str | None = Field(default=None, description="归一性别。")
     birthday: str | None = Field(default=None, description="出生日期，建议 ISO date。")
     age_months: int | None = Field(default=None, ge=0, description="年龄月数。")
     age: str | None = Field(default=None, description="兼容当前 Agent 消费的年龄文本。")
-    breed: str | None = Field(default=None, description="归一品种，对应主服务 variety。")
-    weight_kg: float | None = Field(default=None, gt=0, description="千克体重，对应主服务 weight。")
-    neutered: bool | None = Field(default=None, description="是否绝育，对应主服务 sterilized。")
-    neutered_date: str | None = Field(default=None, description="绝育日期，建议 ISO date。")
+    breed: str | None = Field(
+        default=None, description="归一品种，对应主服务 variety。"
+    )
+    weight_kg: float | None = Field(
+        default=None, gt=0, description="千克体重，对应主服务 weight。"
+    )
+    neutered: bool | None = Field(
+        default=None, description="是否绝育，对应主服务 sterilized。"
+    )
+    neutered_date: str | None = Field(
+        default=None, description="绝育日期，建议 ISO date。"
+    )
     reproduction_status: str | None = Field(default=None, description="繁育状态。")
     activity_level: int | None = Field(default=None, description="活跃度。")
     region: str | None = Field(default=None, description="宠物所在地区。")
@@ -155,10 +179,14 @@ class ScopeAssertionSource(BaseModel):
 
     system: str = Field(min_length=1, description="签发声明的数据系统或服务名。")
     database: str | None = Field(default=None, description="来源数据库名。")
-    table: Literal["master_pet_info"] = Field(description="来源表名；当前范围声明只接受主服务 master_pet_info。")
+    table: Literal["master_pet_info"] = Field(
+        description="来源表名；当前范围声明只接受主服务 master_pet_info。"
+    )
     record_id: str = Field(min_length=1, description="来源记录 ID。")
     record_updated_at: datetime = Field(description="来源记录更新时间。")
-    data_source: str | None = Field(default=None, description="主服务宠物资料数据来源。")
+    data_source: str | None = Field(
+        default=None, description="主服务宠物资料数据来源。"
+    )
 
 
 class ScopeAssertionSessionPolicy(BaseModel):
@@ -202,7 +230,9 @@ class ScopeAssertion(BaseModel):
     user_id: str = Field(min_length=1, description="BFF 已认证用户标识。")
     pet_id: str = Field(min_length=1, description="BFF 已校验归属的宠物标识。")
     session_id: str = Field(min_length=1, description="BFF 发放或复用的会话标识。")
-    authorization: ScopeAssertionAuthorization = Field(description="BFF 宠物范围授权声明。")
+    authorization: ScopeAssertionAuthorization = Field(
+        description="BFF 宠物范围授权声明。"
+    )
     profile: ScopeAssertionProfile = Field(description="服务端已验证宠物基础画像。")
     source: ScopeAssertionSource = Field(description="画像来源数据记录。")
     session_policy: ScopeAssertionSessionPolicy = Field(
@@ -235,7 +265,9 @@ class ScopeAssertion(BaseModel):
 
         :return: 返回供记忆、幂等、trace 与会话绑定使用的内部身份。
         """
-        return TrustedIdentity(user_id=self.user_id, session_id=self.session_id, pet_id=self.pet_id)
+        return TrustedIdentity(
+            user_id=self.user_id, session_id=self.session_id, pet_id=self.pet_id
+        )
 
     def profile_projection(self) -> dict[str, Any]:
         """生成可写入 Agent 本地画像投影的字典。
@@ -243,7 +275,9 @@ class ScopeAssertion(BaseModel):
         :return: 返回去除空值后的服务端已验证宠物画像。
         """
         raw = self.profile.model_dump(mode="json", exclude_none=True)
-        return {str(key): value for key, value in raw.items() if value not in (None, "")}
+        return {
+            str(key): value for key, value in raw.items() if value not in (None, "")
+        }
 
 
 class AuthorizedScopeContext(BaseModel):
@@ -259,9 +293,15 @@ class AuthorizedScopeContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     identity: TrustedIdentity = Field(description="已通过范围授权的身份投影。")
-    verified_profile: dict[str, Any] = Field(default_factory=dict, description="已通过范围授权的宠物画像投影。")
-    reported_pet_info: dict[str, Any] = Field(default_factory=dict, description="请求侧未验证宠物资料审计副本。")
-    authorized_at: datetime = Field(default_factory=now_utc, description="入口授权完成时间。")
+    verified_profile: dict[str, Any] = Field(
+        default_factory=dict, description="已通过范围授权的宠物画像投影。"
+    )
+    reported_pet_info: dict[str, Any] = Field(
+        default_factory=dict, description="请求侧未验证宠物资料审计副本。"
+    )
+    authorized_at: datetime = Field(
+        default_factory=now_utc, description="入口授权完成时间。"
+    )
 
 
 class AttachmentRef(BaseModel):
@@ -377,8 +417,13 @@ class AgentTurnRequest(BaseModel):
         expected = self.scope_assertion.trusted_identity()
         if self.trusted_identity != expected:
             raise ValueError("trusted_identity must be derived from scope_assertion")
-        if self.authorized_scope_context is not None and self.authorized_scope_context.identity != expected:
-            raise ValueError("authorized_scope_context.identity must match scope_assertion")
+        if (
+            self.authorized_scope_context is not None
+            and self.authorized_scope_context.identity != expected
+        ):
+            raise ValueError(
+                "authorized_scope_context.identity must match scope_assertion"
+            )
         return self
 
     @classmethod
@@ -441,10 +486,53 @@ class VetSegment(BaseModel):
 
 
 class SafetySignal(BaseModel):
+    """表示跨安全域传递的结构化安全信号。
+
+    :param code: 安全信号稳定编码，用于审计和跨模块契约。
+    :param severity: 策略裁决后的安全级别。
+    :param message: 面向用户或主链路的安全说明。
+    :param matched_terms: 仅用于审计的召回线索，不作为临床事实依据。
+    :return: 无返回值；该对象不承载裁决逻辑。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
     code: str
     severity: Literal["info", "caution", "urgent", "blocked"]
     message: str
     matched_terms: list[str] = Field(default_factory=list)
+
+
+class ClinicalSafetySignal(SafetySignal):
+    """表示临床安全策略输出的资产级安全信号。
+
+    :param code: 临床安全资产稳定信号编码。
+    :param severity: OPA 裁决后的安全级别。
+    :param message: 来自受治理资产分诊口径的安全说明。
+    :param matched_terms: 仅用于审计的召回线索，不作为临床事实依据。
+    :param asset_id: 产生该信号的临床安全资产标识。
+    :param canonical_name: 临床安全资产规范名称，用于解释 opaque 编码。
+    :return: 无返回值；该对象只承载策略投影，不执行医学推理。
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    asset_id: str
+    canonical_name: str
+
+    @field_validator("code", "message", "asset_id", "canonical_name")
+    @classmethod
+    def validate_nonempty_text(cls, value: str) -> str:
+        """校验临床安全信号身份与说明字段非空。
+
+        :param value: 原始字符串字段值。
+        :return: 返回去除首尾空白后的非空字符串。
+        :raises ValueError: 字符串为空或仅包含空白时抛出。
+        """
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("clinical safety signal text fields must be non-empty")
+        return normalized
 
 
 class AgentTurnResponse(BaseModel):
@@ -459,7 +547,10 @@ class AgentTurnResponse(BaseModel):
     segments: list[VetSegment] = Field(default_factory=list)
     reasoning_display: ReasoningDisplay | None = None
     vet_result: dict[str, Any] = Field(default_factory=dict)
-    safety_signals: list[SafetySignal] = Field(default_factory=list)
+    safety_signals: list[ClinicalSafetySignal | SafetySignal] = Field(
+        default_factory=list,
+        description="结构化安全审计信号；不是用户展示列表，前端不得遍历拼接渲染。",
+    )
     evidence: list[Evidence] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
 

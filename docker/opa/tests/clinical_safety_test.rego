@@ -91,6 +91,70 @@ test_emergency_candidate_escalates if {
 	not "泰诺" in decision.signals[0].matched_terms
 }
 
+test_primary_signal_uses_structured_projection_without_score if {
+	high_score_same_day := object.union(toxic_candidate, {
+		"asset_id": "safety_same_day_high_score",
+		"code": "SAME_DAY_HIGH_SCORE_RISK",
+		"canonical_name": "高召回分当天就诊风险",
+		"action_class": "same_day_visit",
+		"score": 0.99,
+	})
+	low_score_emergency := object.union(toxic_candidate, {
+		"asset_id": "safety_emergency_low_score",
+		"code": "EMERGENCY_LOW_SCORE_RISK",
+		"canonical_name": "低召回分急诊风险",
+		"action_class": "emergency",
+		"score": 0.76,
+	})
+	decision := clinical_safety.decision with input as object.union(base_input, {
+		"candidates": [high_score_same_day, low_score_emergency],
+	})
+
+	decision.action == "escalate"
+	count(decision.signals) == 2
+	decision.primary_signal.asset_id == "safety_emergency_low_score"
+	decision.primary_signal.severity == "urgent"
+	decision.primary_signal.code == "EMERGENCY_LOW_SCORE_RISK"
+}
+
+test_observe_action_does_not_project_primary_signal if {
+	observable_candidate := object.union(toxic_candidate, {
+		"severity": "caution",
+		"action_class": "safety_warning",
+		"score": 0.66,
+	})
+	decision := clinical_safety.decision with input as object.union(base_input, {
+		"candidates": [observable_candidate],
+	})
+
+	decision.action == "observe"
+	count(decision.signals) == 1
+	decision.primary_signal == null
+}
+
+test_blocked_candidate_becomes_primary_signal if {
+	blocked_candidate := object.union(toxic_candidate, {
+		"asset_id": "safety_blocked_candidate",
+		"code": "BLOCKED_RISK",
+		"canonical_name": "阻断级风险",
+		"severity": "blocked",
+	})
+	urgent_candidate := object.union(toxic_candidate, {
+		"asset_id": "safety_urgent_candidate",
+		"code": "URGENT_RISK",
+		"canonical_name": "升级级风险",
+		"severity": "urgent",
+	})
+	decision := clinical_safety.decision with input as object.union(base_input, {
+		"candidates": [urgent_candidate, blocked_candidate],
+	})
+
+	decision.action == "block"
+	decision.allow == false
+	decision.primary_signal.asset_id == "safety_blocked_candidate"
+	decision.primary_signal.severity == "blocked"
+}
+
 test_triage_without_positive_evidence_does_not_escalate if {
 	triage_semantic := object.union(base_input.semantic, {
 		"exposure_state": "unknown",

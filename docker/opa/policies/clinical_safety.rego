@@ -335,6 +335,7 @@ decision := {
 	"message": message,
 	"reasons": reasons,
 	"signals": signals,
+	"primary_signal": primary_signal,
 }
 
 message := "临床安全策略未识别到需要中断主链路的风险。" if {
@@ -384,12 +385,73 @@ signals := [signal |
 	observable_candidate(candidate)
 	severity := signal_severity(candidate)
 	signal := {
+		"asset_id": candidate.asset_id,
 		"code": candidate.code,
+		"canonical_name": candidate.canonical_name,
 		"severity": severity,
 		"message": candidate.message,
 		"matched_terms": matched_terms(candidate),
 	}
 ]
+
+# 主信号只从有效信号对应的候选中选择；排序不读取用户原文、不匹配关键词、不判断具体疾病编码。
+default primary_signal := null
+
+primary_signal := signal if {
+	action in {"escalate", "block"}
+	candidate := primary_candidate
+	severity := signal_severity(candidate)
+	signal := {
+		"asset_id": candidate.asset_id,
+		"code": candidate.code,
+		"canonical_name": candidate.canonical_name,
+		"severity": severity,
+		"message": candidate.message,
+		"matched_terms": matched_terms(candidate),
+	}
+}
+
+primary_candidate := ordered_candidates[0][3]
+
+ordered_candidates := sort([ordering |
+	some candidate in input.candidates
+	primary_eligible_candidate(candidate)
+	ordering := [primary_severity_rank(candidate), primary_action_rank(candidate), candidate.asset_id, candidate]
+])
+
+primary_eligible_candidate(candidate) if {
+	action == "block"
+	urgent_candidate(candidate)
+	candidate.severity == "blocked"
+}
+
+primary_eligible_candidate(candidate) if {
+	action == "escalate"
+	urgent_candidate(candidate)
+	candidate.severity != "blocked"
+}
+
+primary_severity_rank(candidate) := 0 if {
+	candidate.severity == "blocked"
+}
+
+primary_severity_rank(candidate) := 1 if {
+	candidate.severity != "blocked"
+}
+
+primary_action_rank(candidate) := 0 if {
+	candidate.action_class == "emergency"
+}
+
+primary_action_rank(candidate) := 1 if {
+	candidate.action_class == "same_day_visit"
+}
+
+primary_action_rank(candidate) := 2 if {
+	candidate.action_class == "urgent_visit"
+}
+
+default primary_action_rank(_) := 3
 
 signal_severity(candidate) := "blocked" if {
 	action == "block"

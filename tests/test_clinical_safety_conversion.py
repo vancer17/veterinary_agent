@@ -4,7 +4,6 @@
 说明：测试聚焦数据治理格式，不依赖模型服务或数据库。
 """
 
-
 from __future__ import annotations
 
 from typing import Any
@@ -34,8 +33,14 @@ def test_safety_reference_converts_explicit_codes_to_standard_assets() -> None:
     assert asset_document["_meta"]["asset_count"] == 2
     assert chunk_document["_meta"]["chunk_count"] == 6
     assert len(chunks) == len(assets) * 3
-    assert all(asset["review_status"] == "pending" and asset["enabled"] is False for asset in assets)
-    assert all(chunk["review_status"] == "pending" and chunk["enabled"] is False for chunk in chunks)
+    assert all(
+        asset["review_status"] == "pending" and asset["enabled"] is False
+        for asset in assets
+    )
+    assert all(
+        chunk["review_status"] == "pending" and chunk["enabled"] is False
+        for chunk in chunks
+    )
     xylitol = _find_asset(assets, "木糖醇")
     assert xylitol["code"] == "TOXIC_XYLITOL"
     assert xylitol["asset_type"] == "toxin"
@@ -45,7 +50,7 @@ def test_safety_reference_converts_explicit_codes_to_standard_assets() -> None:
     assert xylitol["decision_hints"]["actual_exposure"] == "safety_escalated"
 
     cyanosis = _find_asset(assets, "舌/牙龈发绀发紫")
-    assert cyanosis["code"] == "CYANOSIS_RISK_PATTERN"
+    assert cyanosis["code"] == "EMERGENCY_MODE_7K4Q9PXRAB"
     assert {"舌/牙龈发绀发紫", "牙龈发绀发紫", "发绀", "发紫"}.issubset(
         set(cyanosis["recognition_phrases"])
     )
@@ -74,8 +79,14 @@ def test_safety_reference_can_pass_publish_contract() -> None:
 
     assert contract.asset_count == 2
     assert contract.chunk_count == 6
-    assert all(asset.review_status == "approved" and asset.enabled for asset in contract.asset_document.assets)
-    assert all(chunk.review_status == "approved" and chunk.enabled for chunk in contract.chunk_document.chunks)
+    assert all(
+        asset.review_status == "approved" and asset.enabled
+        for asset in contract.asset_document.assets
+    )
+    assert all(
+        chunk.review_status == "approved" and chunk.enabled
+        for chunk in contract.chunk_document.chunks
+    )
 
 
 def test_safety_reference_conversion_rejects_missing_explicit_code() -> None:
@@ -87,6 +98,70 @@ def test_safety_reference_conversion_rejects_missing_explicit_code() -> None:
     del payload["toxinsAndDrugs"][0]["code"]
 
     with pytest.raises(ValueError, match="clinical safety asset code is required"):
+        build_standard_safety_documents(
+            payload,
+            source_file="tests/fixtures/clinical_safety_reference.json",
+            version="v1",
+            review_status="pending",
+        )
+
+
+def test_safety_reference_preserves_explicit_code_governance() -> None:
+    """验证离线转换会稳定保留急诊 code 治理审计信息。
+
+    :return: 无返回值；断言通过表示重新生成资产不会丢失阶段 4 历史编码映射。
+    """
+    payload = _minimal_reference_payload()
+    payload["emergencyRedFlags"][0]["code_governance"] = {
+        "strategy": "opaque_asset_identity_v1",
+        "legacy_code": "CYANOSIS_RISK_PATTERN",
+    }
+
+    asset_document, _ = build_standard_safety_documents(
+        payload,
+        source_file="tests/fixtures/clinical_safety_reference.json",
+        version="v1",
+        review_status="pending",
+    )
+
+    asset = _find_asset(asset_document["assets"], "舌/牙龈发绀发紫")
+    assert asset["metadata"]["code_governance"] == {
+        "strategy": "opaque_asset_identity_v1",
+        "legacy_code": "CYANOSIS_RISK_PATTERN",
+    }
+
+
+def test_safety_reference_rejects_incomplete_code_governance() -> None:
+    """验证不完整的 code 治理信息在离线转换阶段快速失败。
+
+    :return: 无返回值；断言通过表示历史编码映射不会变成半结构化审计字段。
+    """
+    payload = _minimal_reference_payload()
+    payload["emergencyRedFlags"][0]["code_governance"] = {
+        "strategy": "opaque_asset_identity_v1",
+    }
+
+    with pytest.raises(
+        ValueError,
+        match="code governance requires strategy and legacy_code",
+    ):
+        build_standard_safety_documents(
+            payload,
+            source_file="tests/fixtures/clinical_safety_reference.json",
+            version="v1",
+            review_status="pending",
+        )
+
+
+def test_safety_reference_requires_emergency_code_governance() -> None:
+    """验证急诊资产缺少 code 治理信息时离线转换快速失败。
+
+    :return: 无返回值；断言通过表示新增急诊资产不能丢失历史编码审计边界。
+    """
+    payload = _minimal_reference_payload()
+    del payload["emergencyRedFlags"][0]["code_governance"]
+
+    with pytest.raises(ValueError, match="code governance is required"):
         build_standard_safety_documents(
             payload,
             source_file="tests/fixtures/clinical_safety_reference.json",
@@ -119,7 +194,11 @@ def _minimal_reference_payload() -> dict[str, Any]:
         ],
         "emergencyRedFlags": [
             {
-                "code": "CYANOSIS_RISK_PATTERN",
+                "code": "EMERGENCY_MODE_7K4Q9PXRAB",
+                "code_governance": {
+                    "strategy": "opaque_asset_identity_v1",
+                    "legacy_code": "CYANOSIS_RISK_PATTERN",
+                },
                 "category": "呼吸循环",
                 "item": "舌/牙龈发绀发紫",
                 "aliases": "牙龈发绀发紫、发绀、发紫",

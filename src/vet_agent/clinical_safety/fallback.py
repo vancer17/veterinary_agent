@@ -7,12 +7,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 
-from vet_agent import SafetySignal
-
-if TYPE_CHECKING:
-    from .models import ClinicalSafetyCandidate
+from .models import ClinicalSafetyCandidate, ClinicalSafetySignal
 
 
 ClinicalSafetyRetrievalStage = Literal[
@@ -103,7 +100,7 @@ class ClinicalSafetySemanticFallbackState:
         strategy: str,
         confidence: float,
         fallback_reason: str | None = None,
-    ) -> "ClinicalSafetySemanticFallbackState":
+    ) -> ClinicalSafetySemanticFallbackState:
         """根据语义抽取结果字段构造显式回退状态。
 
         :param strategy: 语义抽取策略标识。
@@ -346,13 +343,15 @@ class ClinicalSafetyEvaluationResult:
     """表示临床安全裁决信号与完整回退状态。
 
     :param signals: 临床安全裁决生成的安全信号。
+    :param primary_signal: OPA 裁定并透传给响应投影的唯一主安全信号。
     :param fallback_state: 临床安全链路的显式回退状态。
     :param policy_decision: 临床安全策略裁决摘要。
     :return: 无返回值。
     """
 
-    signals: list[SafetySignal]
+    signals: list[ClinicalSafetySignal]
     fallback_state: ClinicalSafetyFallbackState
+    primary_signal: ClinicalSafetySignal | None = None
     policy_decision: dict[str, Any] = field(default_factory=dict)
 
     def to_metadata(self) -> dict[str, Any]:
@@ -363,6 +362,11 @@ class ClinicalSafetyEvaluationResult:
         return {
             "agent": "ClinicalSafetyEvaluator",
             "signal_count": len(self.signals),
+            "primary_signal": (
+                self.primary_signal.model_dump(mode="json")
+                if self.primary_signal is not None
+                else None
+            ),
             "requires_precondition_information": self.requires_precondition_information,
             "fallback_state": self.fallback_state.to_dict(),
             "policy_decision": dict(self.policy_decision),

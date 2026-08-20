@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from vet_agent import SafetySignal
@@ -24,7 +25,7 @@ class SafetyAssessment:
 
     escalated: bool = False
     blocked: bool = False
-    signals: list[SafetySignal] = field(default_factory=list)
+    signals: Sequence[SafetySignal] = field(default_factory=list)
 
     @property
     def highest_status(self) -> str:
@@ -39,7 +40,7 @@ class SafetyAssessment:
         return "ok"
 
     @classmethod
-    def from_signals(cls, signals: list[SafetySignal]) -> "SafetyAssessment":
+    def from_signals(cls, signals: Sequence[SafetySignal]) -> "SafetyAssessment":
         """根据安全信号列表构造安全评估结果。
 
         :param signals: 安全信号列表。
@@ -48,7 +49,7 @@ class SafetyAssessment:
         return cls(
             escalated=any(signal.severity == "urgent" for signal in signals),
             blocked=any(signal.severity == "blocked" for signal in signals),
-            signals=signals,
+            signals=list(signals),
         )
 
     @classmethod

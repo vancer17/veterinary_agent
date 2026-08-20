@@ -83,7 +83,8 @@
 
 当前约定：
 
-1. `safety_signals` 仍可保留全部策略返回信号，供审计和 metadata 使用。
+1. `safety_signals` 仍可保留全部策略返回信号，供审计和 metadata 使用；
+   前端不得遍历该字段拼接用户安全建议。
 2. 用户可见安全分诊文本只展示一个主信号。
 3. 主信号之外的其他候选不得被简单字符串拼接到用户响应中。
 4. 当前主信号选择以 `blocked` 优先于 `urgent` 为最低稳定规则。
@@ -293,27 +294,28 @@ OPA 临床安全输入新增或强化了候选 `required_context` 字段。
 
 ### 6.4 急诊 code 拆分
 
-本次只阻止序号型默认 code 和用户响应多候选拼接，尚未完成全部急诊模式 code 治理。
+阶段 4 已完成急诊资产级 code 拆分；实现细节见
+[clinical-safety-emergency-code-response-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/clinical-safety-emergency-code-response-change-summary.md)。
 
-后续建议：
+已完成边界：
 
-1. 将历史泛化 `EMERGENCY_RED_FLAG` 拆分为具体稳定 code。
-2. 将 `asset_type`、`category`、`action_class` 与 `code` 的职责分离。
+1. 将历史泛化 `EMERGENCY_RED_FLAG` 拆分为 opaque 资产级稳定 code。
+2. 保留 `asset_type`、`category`、`action_class` 与 `code` 的职责分离。
 3. 不在 Python 中按 `candidate.code` 编写医学 if/else。
-4. 将候选优先级交给策略或统一投影器，而不是散落在响应字符串拼接中。
+4. 将主信号裁决收敛到 OPA，而不是散落在响应字符串拼接中。
 
 ### 6.5 主信号排序契约
 
-当前用户响应只展示一个主信号，并以 `blocked` 优先于 `urgent` 为最低稳定规则。
+阶段 4 已建立 OPA `primary_signal` 契约，用户响应只展示一个主信号。
 
-后续建议：
+已完成边界：
 
-1. 定义同级信号排序策略。
-2. 明确毒物、当前生命体征、时间持续性、证据充分性和候选分数之间的优先级关系。
-3. 将主信号和次级候选分别写入 metadata。
+1. 排序规则为 `blocked > urgent`、`emergency > same_day_visit > urgent_visit`、`asset_id` 字典序。
+2. 明确向量召回分数不参与主信号排序。
+3. 主信号和全部候选信号分别写入 metadata。
 4. 保持用户文本简洁，避免重新出现批量拼接。
 
-当前残留状态：主信号投影只有最低稳定优先级，尚未形成完整排序契约。后续应由策略或统一投影契约给出可审计排序依据，响应层只消费结果。
+当前残留状态：如需引入更强医学优先级模型，必须由独立临床审核契约另行治理。
 
 ### 6.6 真实服务集成基线
 

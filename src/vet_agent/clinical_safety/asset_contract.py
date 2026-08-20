@@ -13,11 +13,21 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any, Literal, Mapping, Self
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, ValidationInfo, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 
 
 CLINICAL_SAFETY_PUBLISH_SCHEMA_VERSION = "1.0.0"
-DISALLOWED_PUBLISH_CODES: frozenset[str] = frozenset({"CLINICAL_SAFETY_UNKNOWN"})
+DISALLOWED_PUBLISH_CODES: frozenset[str] = frozenset(
+    {"CLINICAL_SAFETY_UNKNOWN", "EMERGENCY_RED_FLAG"}
+)
 DISALLOWED_PUBLISH_CODE_PATTERN = re.compile(
     r"^(?:"
     r"CLINICAL_SAFETY_[0-9_]+|"
@@ -26,6 +36,7 @@ DISALLOWED_PUBLISH_CODE_PATTERN = re.compile(
     r"DANGER_PATTERN_[A-Z0-9_]+_[0-9]{3}"
     r")$"
 )
+EMERGENCY_ASSET_CODE_PATTERN = re.compile(r"^EMERGENCY_MODE_[A-Z0-9]{10}$")
 
 
 class ClinicalSafetyAssetContractError(ValueError):
@@ -137,19 +148,27 @@ class ClinicalSafetyDocumentMetaContract(BaseModel):
     :return: 无返回值。
     """
 
-    model_config = ConfigDict(extra="allow", populate_by_name=True, str_strip_whitespace=True)
+    model_config = ConfigDict(
+        extra="allow", populate_by_name=True, str_strip_whitespace=True
+    )
 
-    document_schema: Literal["clinical_safety_assets", "clinical_safety_chunks"] = Field(
-        alias="schema",
-        description="静态资产文档类型。",
+    document_schema: Literal["clinical_safety_assets", "clinical_safety_chunks"] = (
+        Field(
+            alias="schema",
+            description="静态资产文档类型。",
+        )
     )
     schema_version: Literal["1.0.0"] = Field(description="静态资产契约版本。")
     version: str = Field(min_length=1, description="本批资产或 chunk 的业务版本。")
     source_file: str = Field(min_length=1, description="原始来源文件路径。")
     asset_count: int = Field(ge=0, description="文档声明的资产数量。")
-    chunk_count: int | None = Field(default=None, ge=0, description="文档声明的 chunk 数量；资产文档可为空。")
+    chunk_count: int | None = Field(
+        default=None, ge=0, description="文档声明的 chunk 数量；资产文档可为空。"
+    )
     generated_at: datetime = Field(description="文档生成时间。")
-    source_meta: dict[str, Any] = Field(default_factory=dict, description="原始来源元信息。")
+    source_meta: dict[str, Any] = Field(
+        default_factory=dict, description="原始来源元信息。"
+    )
 
 
 class ClinicalSafetyAssetPublishContract(BaseModel):
@@ -187,37 +206,75 @@ class ClinicalSafetyAssetPublishContract(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     asset_id: str = Field(min_length=1, description="临床安全资产稳定标识。")
-    code: str = Field(min_length=1, max_length=128, description="已由资产治理域确认的对外安全信号编码。")
+    code: str = Field(
+        min_length=1,
+        max_length=128,
+        description="已由资产治理域确认的对外安全信号编码。",
+    )
     asset_type: ClinicalSafetyAssetTypeContract = Field(description="安全资产类型。")
-    canonical_name: str = Field(min_length=1, max_length=160, description="资产规范名称。")
-    category: str = Field(min_length=1, max_length=120, description="资产所属临床分类或原始资料分类。")
-    species_scope: tuple[str, ...] = Field(default_factory=tuple, description="资产适用物种范围。")
-    sex_scope: tuple[str, ...] = Field(default_factory=tuple, description="资产适用性别范围。")
-    age_scope: tuple[str, ...] = Field(default_factory=tuple, description="资产适用年龄阶段范围。")
-    severity: ClinicalSafetySeverityContract = Field(description="资产默认安全严重级别。")
-    action_class: ClinicalSafetyActionClassContract = Field(description="资产默认动作分类。")
-    aliases: tuple[str, ...] = Field(default_factory=tuple, description="资产别名、英文名、商品名或俗称。")
-    carriers: tuple[str, ...] = Field(default_factory=tuple, description="风险载体或暴露来源列表。")
-    user_expressions: tuple[str, ...] = Field(default_factory=tuple, description="用户常见表达列表，仅用于离线向量文本生成。")
-    symptoms: tuple[str, ...] = Field(default_factory=tuple, description="资产相关症状或风险线索。")
-    recognition_phrases: tuple[str, ...] = Field(min_length=1, description="离线生成 embedding 文本所需的召回短语集合。")
+    canonical_name: str = Field(
+        min_length=1, max_length=160, description="资产规范名称。"
+    )
+    category: str = Field(
+        min_length=1, max_length=120, description="资产所属临床分类或原始资料分类。"
+    )
+    species_scope: tuple[str, ...] = Field(
+        default_factory=tuple, description="资产适用物种范围。"
+    )
+    sex_scope: tuple[str, ...] = Field(
+        default_factory=tuple, description="资产适用性别范围。"
+    )
+    age_scope: tuple[str, ...] = Field(
+        default_factory=tuple, description="资产适用年龄阶段范围。"
+    )
+    severity: ClinicalSafetySeverityContract = Field(
+        description="资产默认安全严重级别。"
+    )
+    action_class: ClinicalSafetyActionClassContract = Field(
+        description="资产默认动作分类。"
+    )
+    aliases: tuple[str, ...] = Field(
+        default_factory=tuple, description="资产别名、英文名、商品名或俗称。"
+    )
+    carriers: tuple[str, ...] = Field(
+        default_factory=tuple, description="风险载体或暴露来源列表。"
+    )
+    user_expressions: tuple[str, ...] = Field(
+        default_factory=tuple, description="用户常见表达列表，仅用于离线向量文本生成。"
+    )
+    symptoms: tuple[str, ...] = Field(
+        default_factory=tuple, description="资产相关症状或风险线索。"
+    )
+    recognition_phrases: tuple[str, ...] = Field(
+        min_length=1, description="离线生成 embedding 文本所需的召回短语集合。"
+    )
     required_context: dict[ClinicalSafetyContextKeyContract, tuple[str, ...]] = Field(
         default_factory=dict,
         description="后续裁决域消费的结构化上下文提示。",
     )
-    decision_hints: dict[ClinicalSafetyDecisionHintKeyContract, ClinicalSafetyDecisionHintValueContract] = Field(
+    decision_hints: dict[
+        ClinicalSafetyDecisionHintKeyContract, ClinicalSafetyDecisionHintValueContract
+    ] = Field(
         default_factory=dict,
         description="后续裁决域消费的枚举化策略提示。",
     )
     clinical_risk_summary: str = Field(min_length=1, description="临床风险摘要。")
     triage_message: str = Field(min_length=1, description="对外分诊处置口径。")
     source: dict[str, str] = Field(description="资料来源追踪信息。")
-    review_status: Literal["approved"] = Field(description="审核状态；发布态严格契约只接受 approved。")
+    review_status: Literal["approved"] = Field(
+        description="审核状态；发布态严格契约只接受 approved。"
+    )
     version: str = Field(min_length=1, description="资产版本。")
-    enabled: Literal[True] = Field(description="是否允许进入运行时召回；发布态严格契约只接受 True。")
+    enabled: Literal[True] = Field(
+        description="是否允许进入运行时召回；发布态严格契约只接受 True。"
+    )
     published_at: datetime = Field(description="资产发布时间。")
-    raw_text: dict[str, str] = Field(default_factory=dict, description="原始临床安全文本字段备份。")
-    metadata: dict[str, Any] = Field(default_factory=dict, description="资产附加审计元数据。")
+    raw_text: dict[str, str] = Field(
+        default_factory=dict, description="原始临床安全文本字段备份。"
+    )
+    metadata: dict[str, Any] = Field(
+        default_factory=dict, description="资产附加审计元数据。"
+    )
 
     @field_validator("code")
     @classmethod
@@ -230,10 +287,64 @@ class ClinicalSafetyAssetPublishContract(BaseModel):
         """
         normalized = value.strip().upper()
         if not re.fullmatch(r"[A-Z][A-Z0-9_]{2,127}", normalized):
-            raise ValueError("clinical safety asset code must be an uppercase stable identifier")
-        if normalized in DISALLOWED_PUBLISH_CODES or DISALLOWED_PUBLISH_CODE_PATTERN.fullmatch(normalized):
-            raise ValueError("clinical safety asset code cannot be a generated fallback code")
+            raise ValueError(
+                "clinical safety asset code must be an uppercase stable identifier"
+            )
+        if (
+            normalized in DISALLOWED_PUBLISH_CODES
+            or DISALLOWED_PUBLISH_CODE_PATTERN.fullmatch(normalized)
+        ):
+            raise ValueError(
+                "clinical safety asset code cannot be a generated fallback code"
+            )
         return normalized
+
+    @model_validator(mode="after")
+    def validate_asset_code_namespace(self) -> Self:
+        """校验急诊资产使用 opaque 资产级信号身份。
+
+        :return: 返回通过阶段 4 编码命名空间校验的资产契约。
+        :raises ValueError: 急诊资产使用泛化标签或非急诊资产占用急诊命名空间时抛出。
+        """
+        is_emergency = (
+            self.asset_type == ClinicalSafetyAssetTypeContract.EMERGENCY_RED_FLAG
+        )
+        if is_emergency and not EMERGENCY_ASSET_CODE_PATTERN.fullmatch(self.code):
+            raise ValueError(
+                "emergency red flag asset code must use EMERGENCY_MODE_[A-Z0-9]{10}"
+            )
+        if not is_emergency and EMERGENCY_ASSET_CODE_PATTERN.fullmatch(self.code):
+            raise ValueError(
+                "emergency mode code namespace is reserved for emergency assets"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def validate_emergency_code_governance(self) -> Self:
+        """校验急诊资产的编码治理审计信息完整。
+
+        :return: 返回通过阶段 4 编码治理校验的资产契约。
+        :raises ValueError: 急诊资产缺少完整 code_governance 或非急诊资产占用该字段时抛出。
+        """
+        governance = self.metadata.get("code_governance")
+        is_emergency = (
+            self.asset_type == ClinicalSafetyAssetTypeContract.EMERGENCY_RED_FLAG
+        )
+        if not is_emergency:
+            if governance is not None:
+                raise ValueError(
+                    "clinical safety code_governance is reserved for emergency assets"
+                )
+            return self
+        if not isinstance(governance, dict):
+            raise ValueError("emergency clinical safety asset requires code_governance")
+        strategy = str(governance.get("strategy") or "").strip()
+        legacy_code = str(governance.get("legacy_code") or "").strip()
+        if not strategy or not legacy_code:
+            raise ValueError(
+                "emergency clinical safety code_governance requires strategy and legacy_code"
+            )
+        return self
 
     @field_validator("species_scope")
     @classmethod
@@ -244,7 +355,9 @@ class ClinicalSafetyAssetPublishContract(BaseModel):
         :return: 返回通过枚举校验的物种范围。
         :raises ValueError: 包含未知物种时抛出。
         """
-        return _validate_tuple_values(value, allowed={"dog", "cat"}, field_name="species_scope")
+        return _validate_tuple_values(
+            value, allowed={"dog", "cat"}, field_name="species_scope"
+        )
 
     @field_validator("sex_scope")
     @classmethod
@@ -255,7 +368,9 @@ class ClinicalSafetyAssetPublishContract(BaseModel):
         :return: 返回通过枚举校验的性别范围。
         :raises ValueError: 包含未知性别时抛出。
         """
-        return _validate_tuple_values(value, allowed={"male", "female"}, field_name="sex_scope")
+        return _validate_tuple_values(
+            value, allowed={"male", "female"}, field_name="sex_scope"
+        )
 
     @field_validator("age_scope")
     @classmethod
@@ -266,7 +381,9 @@ class ClinicalSafetyAssetPublishContract(BaseModel):
         :return: 返回通过枚举校验的年龄范围。
         :raises ValueError: 包含未知年龄阶段时抛出。
         """
-        return _validate_tuple_values(value, allowed={"juvenile", "adult", "senior"}, field_name="age_scope")
+        return _validate_tuple_values(
+            value, allowed={"juvenile", "adult", "senior"}, field_name="age_scope"
+        )
 
     @model_validator(mode="after")
     def validate_scope_required_context_alignment(self) -> Self:
@@ -275,7 +392,9 @@ class ClinicalSafetyAssetPublishContract(BaseModel):
         :return: 返回通过范围与前置上下文一致性校验的资产契约。
         :raises ValueError: 受限范围缺少等值 required_context 声明时抛出。
         """
-        expectations: tuple[tuple[ClinicalSafetyContextKeyContract, tuple[str, ...]], ...] = (
+        expectations: tuple[
+            tuple[ClinicalSafetyContextKeyContract, tuple[str, ...]], ...
+        ] = (
             (ClinicalSafetyContextKeyContract.SPECIES, self.species_scope),
             (ClinicalSafetyContextKeyContract.SEX, self.sex_scope),
             (ClinicalSafetyContextKeyContract.AGE, self.age_scope),
@@ -303,7 +422,9 @@ class ClinicalSafetyAssetPublishContract(BaseModel):
         required = {"source_file", "source_path", "source_text"}
         missing = sorted(key for key in required if not value.get(key, "").strip())
         if missing:
-            raise ValueError(f"clinical safety asset source missing required keys: {missing}")
+            raise ValueError(
+                f"clinical safety asset source missing required keys: {missing}"
+            )
         return value
 
 
@@ -332,12 +453,22 @@ class ClinicalSafetyChunkPublishContract(BaseModel):
     chunk_type: ClinicalSafetyChunkTypeContract = Field(description="chunk 用途类型。")
     title: str = Field(min_length=1, max_length=200, description="chunk 标题。")
     embedding_text: str = Field(min_length=1, description="生成向量使用的标准文本。")
-    metadata: dict[str, Any] = Field(default_factory=dict, description="chunk 附加审计元数据。")
-    review_status: Literal["approved"] = Field(description="审核状态；发布态严格契约只接受 approved。")
+    metadata: dict[str, Any] = Field(
+        default_factory=dict, description="chunk 附加审计元数据。"
+    )
+    review_status: Literal["approved"] = Field(
+        description="审核状态；发布态严格契约只接受 approved。"
+    )
     version: str = Field(min_length=1, description="chunk 版本。")
-    enabled: Literal[True] = Field(description="是否允许运行时召回；发布态严格契约只接受 True。")
-    embedding_model: str | None = Field(default=None, description="生成 embedding 使用的模型名称。")
-    embedding_dimension: int | None = Field(default=None, gt=0, description="embedding 向量维度。")
+    enabled: Literal[True] = Field(
+        description="是否允许运行时召回；发布态严格契约只接受 True。"
+    )
+    embedding_model: str | None = Field(
+        default=None, description="生成 embedding 使用的模型名称。"
+    )
+    embedding_dimension: int | None = Field(
+        default=None, gt=0, description="embedding 向量维度。"
+    )
     content_hash: str = Field(min_length=16, description="embedding_text 的内容哈希。")
 
     @model_validator(mode="after")
@@ -353,7 +484,9 @@ class ClinicalSafetyChunkPublishContract(BaseModel):
         if require_embeddings and not self.embedding_model:
             raise ValueError("published clinical safety chunk requires embedding_model")
         if require_embeddings and self.embedding_dimension is None:
-            raise ValueError("published clinical safety chunk requires embedding_dimension")
+            raise ValueError(
+                "published clinical safety chunk requires embedding_dimension"
+            )
         return self
 
 
@@ -362,25 +495,38 @@ class ClinicalSafetyAssetDocumentPublishContract(BaseModel):
 
     :param meta: 文档元信息，对应 JSON 中的 _meta 字段。
     :param assets: 发布态临床安全资产列表。
+    :raises ValueError: 急诊资产信号编码重复时抛出。
     :return: 无返回值。
     """
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    meta: ClinicalSafetyDocumentMetaContract = Field(alias="_meta", description="文档元信息。")
-    assets: tuple[ClinicalSafetyAssetPublishContract, ...] = Field(min_length=1, description="发布态临床安全资产列表。")
+    meta: ClinicalSafetyDocumentMetaContract = Field(
+        alias="_meta", description="文档元信息。"
+    )
+    assets: tuple[ClinicalSafetyAssetPublishContract, ...] = Field(
+        min_length=1, description="发布态临床安全资产列表。"
+    )
 
     @model_validator(mode="after")
     def validate_asset_document_count(self) -> Self:
         """校验资产文档声明数量与实际数量一致。
 
         :return: 返回通过数量一致性校验的资产文档。
-        :raises ValueError: 文档类型或资产数量不一致时抛出。
+        :raises ValueError: 文档类型、资产数量不一致或急诊编码重复时抛出。
         """
         if self.meta.document_schema != "clinical_safety_assets":
-            raise ValueError("clinical safety asset document schema must be clinical_safety_assets")
+            raise ValueError(
+                "clinical safety asset document schema must be clinical_safety_assets"
+            )
         if self.meta.asset_count != len(self.assets):
             raise ValueError("clinical safety asset document asset_count mismatch")
+        emergency_codes = [
+            asset.code
+            for asset in self.assets
+            if asset.asset_type == ClinicalSafetyAssetTypeContract.EMERGENCY_RED_FLAG
+        ]
+        _raise_on_duplicates(emergency_codes, field_name="emergency asset code")
         return self
 
 
@@ -394,8 +540,12 @@ class ClinicalSafetyChunkDocumentPublishContract(BaseModel):
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    meta: ClinicalSafetyDocumentMetaContract = Field(alias="_meta", description="文档元信息。")
-    chunks: tuple[ClinicalSafetyChunkPublishContract, ...] = Field(min_length=1, description="发布态临床安全向量 chunk 列表。")
+    meta: ClinicalSafetyDocumentMetaContract = Field(
+        alias="_meta", description="文档元信息。"
+    )
+    chunks: tuple[ClinicalSafetyChunkPublishContract, ...] = Field(
+        min_length=1, description="发布态临床安全向量 chunk 列表。"
+    )
 
     @model_validator(mode="after")
     def validate_chunk_document_count(self) -> Self:
@@ -405,7 +555,9 @@ class ClinicalSafetyChunkDocumentPublishContract(BaseModel):
         :raises ValueError: 文档类型、资产数量或 chunk 数量不一致时抛出。
         """
         if self.meta.document_schema != "clinical_safety_chunks":
-            raise ValueError("clinical safety chunk document schema must be clinical_safety_chunks")
+            raise ValueError(
+                "clinical safety chunk document schema must be clinical_safety_chunks"
+            )
         if self.meta.chunk_count != len(self.chunks):
             raise ValueError("clinical safety chunk document chunk_count mismatch")
         return self
@@ -421,8 +573,12 @@ class ClinicalSafetyPublishContract(BaseModel):
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    asset_document: ClinicalSafetyAssetDocumentPublishContract = Field(description="已通过严格校验的资产文档。")
-    chunk_document: ClinicalSafetyChunkDocumentPublishContract = Field(description="已通过严格校验的 chunk 文档。")
+    asset_document: ClinicalSafetyAssetDocumentPublishContract = Field(
+        description="已通过严格校验的资产文档。"
+    )
+    chunk_document: ClinicalSafetyChunkDocumentPublishContract = Field(
+        description="已通过严格校验的 chunk 文档。"
+    )
 
     @property
     def asset_count(self) -> int:
@@ -456,7 +612,9 @@ def validate_clinical_safety_publish_contract(
     :raises ClinicalSafetyAssetContractError: 任一资产、chunk 或跨文档引用不满足发布态契约时抛出。
     """
     try:
-        assets = ClinicalSafetyAssetDocumentPublishContract.model_validate(dict(asset_document))
+        assets = ClinicalSafetyAssetDocumentPublishContract.model_validate(
+            dict(asset_document)
+        )
         chunks = ClinicalSafetyChunkDocumentPublishContract.model_validate(
             dict(chunk_document),
             context={"require_embeddings": require_embeddings},
@@ -504,14 +662,18 @@ def _validate_publish_bundle(
     for chunk in chunks.chunks:
         asset = asset_by_id.get(chunk.asset_id)
         if asset is None:
-            raise ValueError(f"clinical safety chunk references an unknown asset_id: {chunk.asset_id}")
+            raise ValueError(
+                f"clinical safety chunk references an unknown asset_id: {chunk.asset_id}"
+            )
         if chunk.chunk_type == ClinicalSafetyChunkTypeContract.RECOGNITION:
             recognition_asset_ids.add(chunk.asset_id)
         _validate_chunk_metadata(chunk, asset)
 
     missing_recognition = sorted(set(asset_ids) - recognition_asset_ids)
     if missing_recognition:
-        raise ValueError(f"clinical safety assets missing recognition chunks: {missing_recognition[:10]}")
+        raise ValueError(
+            f"clinical safety assets missing recognition chunks: {missing_recognition[:10]}"
+        )
 
     if chunks.meta.asset_count != len(assets.assets):
         raise ValueError("clinical safety chunk document asset_count mismatch")
@@ -539,7 +701,9 @@ def _validate_chunk_metadata(
     }
     for key, value in expected.items():
         if key in metadata and metadata[key] != value:
-            raise ValueError(f"clinical safety chunk metadata {key} mismatch: {chunk.chunk_id}")
+            raise ValueError(
+                f"clinical safety chunk metadata {key} mismatch: {chunk.chunk_id}"
+            )
 
 
 def _validate_tuple_values(
@@ -574,4 +738,6 @@ def _raise_on_duplicates(values: list[str], *, field_name: str) -> None:
     """
     duplicates = sorted(value for value, count in Counter(values).items() if count > 1)
     if duplicates:
-        raise ValueError(f"clinical safety publish contract duplicate {field_name}: {duplicates[:10]}")
+        raise ValueError(
+            f"clinical safety publish contract duplicate {field_name}: {duplicates[:10]}"
+        )

@@ -15,7 +15,7 @@ import time
 import unicodedata
 from dataclasses import replace
 
-from vet_agent import AgentTurnRequest, SafetySignal
+from vet_agent import AgentTurnRequest
 
 from .fallback import (
     ClinicalSafetyEvaluationResult,
@@ -23,9 +23,11 @@ from .fallback import (
     ClinicalSafetyRetrievalState,
     ClinicalSafetySemanticFallbackState,
 )
-from .models import ClinicalSafetyCandidate
+from .models import ClinicalSafetyCandidate, ClinicalSafetySignal
 from .policy import (
+    ClinicalSafetyPolicyAction,
     ClinicalSafetyPolicyClient,
+    ClinicalSafetyPolicyDecision,
     ClinicalSafetyPolicyInput,
     ClinicalSafetyPolicyRequestContext,
 )
@@ -76,7 +78,7 @@ class ClinicalSafetyEvaluator:
         *,
         request: AgentTurnRequest | None = None,
         semantic_result: ClinicalSafetySemanticResult | None = None,
-    ) -> list[SafetySignal]:
+    ) -> list[ClinicalSafetySignal]:
         """根据当前文本与可信上下文执行临床安全策略裁决。
 
         :param text: 用户本轮主诉和补充信息。
@@ -161,9 +163,12 @@ class ClinicalSafetyEvaluator:
                 precondition_assessments=precondition_result.assessments,
             )
         )
+        signals = self._dedupe_signals(list(decision.signals))
+        primary_signal = self._project_primary_signal(decision, signals)
         return ClinicalSafetyEvaluationResult(
-            signals=self._dedupe_signals(list(decision.signals)),
+            signals=signals,
             fallback_state=fallback_state,
+            primary_signal=primary_signal,
             policy_decision=decision.to_metadata(),
         )
 
@@ -195,31 +200,115 @@ class ClinicalSafetyEvaluator:
             thresholds=self.thresholds,
         )
 
-    def _dedupe_signals(self, signals: list[SafetySignal]) -> list[SafetySignal]:
-        """按安全编码去重，并保留更高严重级别的信号。
+    def _dedupe_signals(
+        self, signals: list[ClinicalSafetySignal]
+    ) -> list[ClinicalSafetySignal]:
+        """按候选资产身份去重，并保留更高严重级别的信号。
 
         :param signals: 原始安全信号列表。
-        :return: 返回去重后的安全信号列表。
+        :return: 返回按资产身份去重后的安全信号列表。
         """
         severity_rank = {"info": 0, "caution": 1, "urgent": 2, "blocked": 3}
-        by_code: dict[str, SafetySignal] = {}
+        by_asset: dict[str, ClinicalSafetySignal] = {}
         for signal in signals:
-            existing = by_code.get(signal.code)
+            asset_id = signal.asset_id
+            if not asset_id:
+                raise RuntimeError(
+                    "clinical safety policy signal requires asset_id for audit projection"
+                )
+            existing = by_asset.get(asset_id)
             if existing is None:
-                by_code[signal.code] = signal
+                by_asset[asset_id] = signal
                 continue
             merged_terms = self._compact_matches(
                 [*existing.matched_terms, *signal.matched_terms]
             )
             if severity_rank[signal.severity] > severity_rank[existing.severity]:
                 signal.matched_terms[:] = merged_terms
-                by_code[signal.code] = signal
+                by_asset[asset_id] = signal
             else:
                 existing.matched_terms[:] = merged_terms
-        return sorted(
-            by_code.values(),
-            key=lambda item: severity_rank[item.severity],
-            reverse=True,
+
+        def severity_order(signal: ClinicalSafetySignal) -> int:
+            """构造资产信号的严重级别排序键。
+
+            :param signal: 待排序的临床安全信号。
+            :return: 返回严重级别数值排序键。
+            """
+            return severity_rank[signal.severity]
+
+        return sorted(by_asset.values(), key=severity_order, reverse=True)
+
+    def _project_primary_signal(
+        self,
+        decision: ClinicalSafetyPolicyDecision,
+        signals: list[ClinicalSafetySignal],
+    ) -> ClinicalSafetySignal | None:
+        """将策略主信号重新绑定到资产去重后的安全信号。
+
+        :param decision: 临床安全策略客户端返回的裁决对象。
+        :param signals: 已按资产身份去重后的安全信号列表。
+        :return: 返回资产去重后的主信号；非升级动作返回 None。
+        :raises RuntimeError: 主信号缺失、重复或与动作语义不一致时抛出。
+        """
+        policy_primary_signal = decision.primary_signal
+        requires_primary = decision.action.value in {"escalate", "block"}
+        if requires_primary:
+            if policy_primary_signal is None:
+                raise RuntimeError(
+                    "clinical safety escalated decision requires a primary signal"
+                )
+            matching_signals = [
+                signal
+                for signal in signals
+                if self._same_signal_identity(
+                    signal,
+                    policy_primary_signal,
+                )
+            ]
+            if len(matching_signals) != 1:
+                raise RuntimeError(
+                    "clinical safety primary signal was removed by signal projection"
+                )
+            projected_signal = matching_signals[0]
+            if (
+                decision.action == ClinicalSafetyPolicyAction.ESCALATE
+                and projected_signal.severity != "urgent"
+            ):
+                raise RuntimeError(
+                    "clinical safety escalate primary signal must be urgent"
+                )
+            if (
+                decision.action == ClinicalSafetyPolicyAction.BLOCK
+                and projected_signal.severity != "blocked"
+            ):
+                raise RuntimeError(
+                    "clinical safety block primary signal must be blocked"
+                )
+            return projected_signal
+        if policy_primary_signal is not None:
+            raise RuntimeError(
+                "clinical safety non-escalated decision cannot return a primary signal"
+            )
+        return None
+
+    def _same_signal_identity(
+        self,
+        left: ClinicalSafetySignal,
+        right: ClinicalSafetySignal,
+    ) -> bool:
+        """比较两个临床安全信号的策略身份字段。
+
+        :param left: 去重投影后的临床安全信号。
+        :param right: 策略决策返回的临床安全信号。
+        :return: 资产、编码、名称、级别和说明一致时返回 True。
+        """
+        return (
+            left.asset_id == right.asset_id
+            and left.code == right.code
+            and left.canonical_name == right.canonical_name
+            and left.severity == right.severity
+            and left.message == right.message
         )
 
     def _compact_matches(self, matches: list[str]) -> list[str]:

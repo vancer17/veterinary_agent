@@ -22,10 +22,11 @@ from urllib.parse import quote
 
 import httpx
 
-from vet_agent import AgentTurnRequest, SafetySignal
+from vet_agent import AgentTurnRequest
 
 from .fallback import ClinicalSafetyRetrievalState
 from .models import ClinicalSafetyCandidate
+from .models import ClinicalSafetySignal
 from .precondition import (
     ClinicalSafetyPreconditionAssessment,
     clinical_safety_required_context_hash,
@@ -67,7 +68,7 @@ class ClinicalSafetyPolicyRequestContext:
     @classmethod
     def from_request(
         cls, request: AgentTurnRequest
-    ) -> "ClinicalSafetyPolicyRequestContext":
+    ) -> ClinicalSafetyPolicyRequestContext:
         """从 Agent 回合请求构造临床安全策略范围摘要。
 
         :param request: 当前 Agent 回合请求对象。
@@ -150,6 +151,7 @@ class ClinicalSafetyPolicyDecision:
     :param message: 面向 Agent 主链路和安全响应的策略说明。
     :param reasons: OPA 返回的结构化策略原因。
     :param signals: OPA 返回的安全信号列表。
+    :param primary_signal: OPA 裁定的用户可见主安全信号。
     :param metadata: 策略后端、策略路径和调用审计摘要。
     :return: 无返回值。
     """
@@ -158,8 +160,51 @@ class ClinicalSafetyPolicyDecision:
     allow: bool
     message: str
     reasons: tuple[str, ...] = ()
-    signals: tuple[SafetySignal, ...] = ()
+    signals: tuple[ClinicalSafetySignal, ...] = ()
+    primary_signal: ClinicalSafetySignal | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        """校验策略决策对象的主信号与动作契约。
+
+        :return: 无返回值；对象构造阶段直接拒绝非法协议状态。
+        :raises ValueError: 动作、allow、信号或主信号关系不合法时抛出。
+        """
+        if self.action == ClinicalSafetyPolicyAction.BLOCK and self.allow:
+            raise ValueError(
+                "clinical safety block decision cannot allow the main chain"
+            )
+        if self.action != ClinicalSafetyPolicyAction.BLOCK and not self.allow:
+            raise ValueError(
+                "clinical safety non-block decision cannot deny the main chain"
+            )
+        if self.action == ClinicalSafetyPolicyAction.ALLOW and self.signals:
+            raise ValueError("clinical safety allow decision cannot return signals")
+        requires_primary = self.action in {
+            ClinicalSafetyPolicyAction.ESCALATE,
+            ClinicalSafetyPolicyAction.BLOCK,
+        }
+        if requires_primary:
+            if self.primary_signal is None:
+                raise ValueError(
+                    "clinical safety escalated decision requires a primary signal"
+                )
+            if self.signals.count(self.primary_signal) != 1:
+                raise ValueError(
+                    "clinical safety primary signal must match exactly one signal"
+                )
+        elif self.primary_signal is not None:
+            raise ValueError(
+                "clinical safety non-escalated decision cannot return a primary signal"
+            )
+        if self.action == ClinicalSafetyPolicyAction.ESCALATE and (
+            self.primary_signal is None or self.primary_signal.severity != "urgent"
+        ):
+            raise ValueError("clinical safety escalate primary signal must be urgent")
+        if self.action == ClinicalSafetyPolicyAction.BLOCK and (
+            self.primary_signal is None or self.primary_signal.severity != "blocked"
+        ):
+            raise ValueError("clinical safety block primary signal must be blocked")
 
     @property
     def blocked(self) -> bool:
@@ -188,6 +233,11 @@ class ClinicalSafetyPolicyDecision:
             "message": self.message,
             "reasons": list(self.reasons),
             "signals": [signal.model_dump(mode="json") for signal in self.signals],
+            "primary_signal": (
+                self.primary_signal.model_dump(mode="json")
+                if self.primary_signal is not None
+                else None
+            ),
             **dict(self.metadata),
         }
 
@@ -504,17 +554,18 @@ def _required_context_payload(
 
 
 def _candidate_message(candidate: ClinicalSafetyCandidate) -> str:
-    """选择候选的安全信号展示文案。
+    """读取候选资产已治理的分诊文案。
 
     :param candidate: 已由向量召回器按资产聚合的候选。
-    :return: 返回资产定义中的分诊文案、风险摘要或规范名称。
+    :return: 返回资产定义中的分诊文案。
+    :raises RuntimeError: 资产缺少非空 triage_message 时抛出。
     """
     asset = candidate.asset
     if asset.triage_message:
         return asset.triage_message
-    if asset.clinical_risk_summary:
-        return asset.clinical_risk_summary
-    return f"命中临床安全风险：{asset.canonical_name}"
+    raise RuntimeError(
+        f"clinical safety asset requires governed triage_message: {asset.asset_id}"
+    )
 
 
 def _decision_from_payload(
@@ -536,6 +587,9 @@ def _decision_from_payload(
     raw_message = payload.get("message")
     raw_reasons = payload.get("reasons")
     raw_signals = payload.get("signals")
+    if "primary_signal" not in payload:
+        raise RuntimeError("clinical safety policy primary_signal field is required")
+    raw_primary_signal = payload["primary_signal"]
     if not isinstance(raw_action, str):
         raise RuntimeError("clinical safety policy action is missing")
     if not isinstance(raw_allow, bool):
@@ -554,6 +608,20 @@ def _decision_from_payload(
         raise RuntimeError(
             f"invalid clinical safety policy action: {raw_action}"
         ) from exc
+    if (
+        action in {ClinicalSafetyPolicyAction.ALLOW, ClinicalSafetyPolicyAction.OBSERVE}
+        and raw_primary_signal is not None
+    ):
+        raise RuntimeError(
+            "clinical safety policy allow or observe action cannot return a primary signal"
+        )
+    if action in {
+        ClinicalSafetyPolicyAction.ESCALATE,
+        ClinicalSafetyPolicyAction.BLOCK,
+    } and not isinstance(raw_primary_signal, dict):
+        raise RuntimeError(
+            "clinical safety policy escalate or block action requires a primary signal"
+        )
     if action == ClinicalSafetyPolicyAction.BLOCK and raw_allow:
         raise RuntimeError(
             "clinical safety policy block action cannot allow the main chain"
@@ -563,6 +631,11 @@ def _decision_from_payload(
             "clinical safety non-block action cannot deny the main chain"
         )
     signals = tuple(_signal_from_payload(item) for item in raw_signals)
+    primary_signal = (
+        _signal_from_payload(raw_primary_signal)
+        if isinstance(raw_primary_signal, dict)
+        else None
+    )
     if action == ClinicalSafetyPolicyAction.ALLOW and signals:
         raise RuntimeError("clinical safety allow action cannot return signals")
     if action == ClinicalSafetyPolicyAction.OBSERVE and any(
@@ -579,12 +652,32 @@ def _decision_from_payload(
         signal.severity == "blocked" for signal in signals
     ):
         raise RuntimeError("clinical safety block action requires a blocked signal")
+    if primary_signal is not None:
+        if signals.count(primary_signal) != 1:
+            raise RuntimeError(
+                "clinical safety policy primary signal must match exactly one signal"
+            )
+        if (
+            action == ClinicalSafetyPolicyAction.ESCALATE
+            and primary_signal.severity != "urgent"
+        ):
+            raise RuntimeError(
+                "clinical safety policy escalate primary signal must be urgent"
+            )
+        if (
+            action == ClinicalSafetyPolicyAction.BLOCK
+            and primary_signal.severity != "blocked"
+        ):
+            raise RuntimeError(
+                "clinical safety policy block primary signal must be blocked"
+            )
     return ClinicalSafetyPolicyDecision(
         action=action,
         allow=raw_allow,
         message=raw_message.strip(),
         reasons=tuple(item.strip() for item in raw_reasons if item.strip()),
         signals=signals,
+        primary_signal=primary_signal,
         metadata={
             "policy_backend": policy_backend,
             "policy_path": policy_path,
@@ -592,7 +685,7 @@ def _decision_from_payload(
     )
 
 
-def _signal_from_payload(payload: Any) -> SafetySignal:
+def _signal_from_payload(payload: Any) -> ClinicalSafetySignal:
     """将单个策略安全信号转换为主响应安全信号模型。
 
     :param payload: 策略返回的安全信号对象。
@@ -602,6 +695,11 @@ def _signal_from_payload(payload: Any) -> SafetySignal:
     if not isinstance(payload, dict):
         raise RuntimeError("clinical safety policy signal must be an object")
     try:
-        return SafetySignal.model_validate(payload)
+        signal = ClinicalSafetySignal.model_validate(payload)
     except Exception as exc:
         raise RuntimeError("clinical safety policy returned an invalid signal") from exc
+    if not signal.asset_id.strip() or not signal.canonical_name.strip():
+        raise RuntimeError(
+            "clinical safety policy signal requires asset identity for audit projection"
+        )
+    return signal

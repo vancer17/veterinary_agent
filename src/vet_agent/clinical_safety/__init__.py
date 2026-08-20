@@ -44,6 +44,7 @@ from .models import (
     ClinicalSafetyChunkHit,
     ClinicalSafetyChunkType,
     ClinicalSafetyScoreType,
+    ClinicalSafetySignal,
     SafetySeverity,
 )
 from .policy import (
@@ -123,6 +124,7 @@ __all__ = [
     "ClinicalSafetyChunkHit",
     "ClinicalSafetyChunkPublishContract",
     "ClinicalSafetyChunkType",
+    "ClinicalSafetySignal",
     "ClinicalSafetyChunkTypeContract",
     "ClinicalSafetyContextKeyContract",
     "ClinicalSafetyDecisionHintKeyContract",
