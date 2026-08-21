@@ -94,6 +94,8 @@ make_entrypoints=(
     cd-sync-production
     cd-deploy-production
     cd-health-check
+    preprod-deploy-clinical-safety-stage5
+    preprod-rollback-clinical-safety-stage5
     docker-dev-config
     docker-prod-config
     dev-build
@@ -115,6 +117,7 @@ make_entrypoints=(
     request-business-all
     runtime-offline-check
     dev-offline-check
+    smoke-clinical-safety-stage5-preprod
     smoke-external-api
     mem0-build
     mem0-config

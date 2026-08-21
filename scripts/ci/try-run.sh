@@ -27,6 +27,9 @@ case "$scope" in
     clinical-safety-api)
         bash scripts/integration/run-external-api-smoke.sh
         ;;
+    clinical-safety-stage5-preprod)
+        bash scripts/integration/run-clinical-safety-stage5-preprod-smoke.sh
+        ;;
     memory-read-api)
         bash scripts/integration/run-memory-read-api-smoke.sh
         ;;
@@ -53,7 +56,7 @@ case "$scope" in
         ;;
     *)
         echo "不支持的 try-run scope: ${scope}" >&2
-        echo "可选值: dry-run, common, repository, clinical-safety-api, memory-read-api, task-routing-api, answer-rag-api, response-generation-api, external-api, full" >&2
+        echo "可选值: dry-run, common, repository, clinical-safety-api, clinical-safety-stage5-preprod, memory-read-api, task-routing-api, answer-rag-api, response-generation-api, external-api, full" >&2
         exit 1
         ;;
 esac

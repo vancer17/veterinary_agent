@@ -42,7 +42,11 @@ required_files=(
     docker/opa/application.yml
     docker/opa/entrypoint.sh
     docker/opa/policies/bootstrap.rego
+    docker/opa/policies/clinical_safety.rego
+    docker/opa/policies/consultation_answerability.rego
+    docker/opa/policies/input_safety.rego
     docker/opa/policies/system_log.rego
+    docker/opa/policies/task_routing.rego
     docker/opa/template/opa.dev.env.template
     docker/opa/template/opa.prod.env.template
     docker/opa/tests/bootstrap_test.rego

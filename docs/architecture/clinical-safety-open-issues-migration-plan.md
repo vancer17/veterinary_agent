@@ -309,6 +309,9 @@ OPA 必须同时消费：
 
 ### 阶段 5：回归验证与预发布观察
 
+> **迁移状态**：工程入口已实现，待 Release 发布、预发布执行与观察窗口完成后关闭；执行契约见
+> [clinical-safety-stage5-preprod-verification-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/clinical-safety-stage5-preprod-verification-change-summary.md)。
+
 **目标**
 
 在预发布环境验证迁移后的行为稳定性，避免引入新的回退路径。
