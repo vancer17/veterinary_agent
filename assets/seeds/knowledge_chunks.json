@@ -60,5 +60,20 @@
       "enabled": true,
       "chunk_type": "condition_overview"
     }
+  },
+  {
+    "content": "宠物状态不对但描述模糊时，应从系统提供的缺失槽位中选择追问项，例如症状开始和持续时间、精神状态、食欲饮水、呼吸、呕吐腹泻、排尿排便、疼痛或行动变化、体温环境以及是否可能接触毒物；本资料提及的其他维度只能作为背景，不能输出系统缺失槽位之外的追问槽位。这些信息用于区分可观察、尽快就诊和急诊处理。",
+    "copyright_risk": "low",
+    "domain": "general",
+    "public_citation": true,
+    "source": "公开兽医分诊问诊原则 / 内部问诊基线摘要",
+    "species": "dog_cat",
+    "title": "通用分诊追问",
+    "metadata": {
+      "source_bundle": "AGENT-20260821-STAGE5-PREPROD-BASELINE",
+      "review_status": "approved",
+      "enabled": true,
+      "chunk_type": "followup_questions"
+    }
   }
 ]

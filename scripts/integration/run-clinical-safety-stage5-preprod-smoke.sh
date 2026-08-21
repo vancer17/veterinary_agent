@@ -21,7 +21,7 @@ remote_app_port="${CLINICAL_SAFETY_STAGE5_REMOTE_APP_PORT:-18000}"
 local_host="${CLINICAL_SAFETY_STAGE5_TUNNEL_LOCAL_HOST:-127.0.0.1}"
 local_port="${CLINICAL_SAFETY_STAGE5_TUNNEL_LOCAL_PORT:-18080}"
 tunnel_ready_seconds="${CLINICAL_SAFETY_STAGE5_TUNNEL_READY_SECONDS:-2}"
-run_id="${CLINICAL_SAFETY_STAGE5_RUN_ID:-stage5-$(date +%Y%m%d%H%M%S)-$(uuidgen | cut -c1-8)}"
+run_id="${CLINICAL_SAFETY_STAGE5_RUN_ID:-stage5-$(date +%Y%m%d%H%M%S)-$(python3 -c 'import uuid; print(uuid.uuid4().hex[:8])')}"
 
 if [[ ! -f "$ssh_key" ]]; then
     echo "SSH 私钥不存在: ${ssh_key}" >&2

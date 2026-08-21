@@ -17,6 +17,22 @@ mem0_vector_database="${MEM0_POSTGRES_DB:-mem0_vector}"
 
 export PGPASSWORD="$admin_password"
 
+wait_for_postgres_host() {
+    # 与扩展初始化任务保持一致，先等待 Compose 服务 DNS 记录可用。
+    local attempt
+    for attempt in $(seq 1 30); do
+        if getent hosts "$postgres_host" >/dev/null 2>&1; then
+            return 0
+        fi
+        echo "Waiting for PostgreSQL host resolution: ${postgres_host} (${attempt}/30)" >&2
+        sleep 1
+    done
+    echo "PostgreSQL host cannot be resolved: ${postgres_host}" >&2
+    return 1
+}
+
+wait_for_postgres_host
+
 psql_scalar() {
     # 执行只返回单个标量值的 SQL。
     #

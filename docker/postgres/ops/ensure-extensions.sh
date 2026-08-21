@@ -18,6 +18,23 @@ mem0_vector_database="${MEM0_POSTGRES_DB:-mem0_vector}"
 
 export PGPASSWORD="$admin_password"
 
+wait_for_postgres_host() {
+    # Compose 重建 backend 网络后，嵌入式 DNS 的服务别名可能晚于容器启动。
+    # 这里等待主机名可解析，避免一次性扩展任务在首个解析窗口内误报失败。
+    local attempt
+    for attempt in $(seq 1 30); do
+        if getent hosts "$postgres_host" >/dev/null 2>&1; then
+            return 0
+        fi
+        echo "Waiting for PostgreSQL host resolution: ${postgres_host} (${attempt}/30)" >&2
+        sleep 1
+    done
+    echo "PostgreSQL host cannot be resolved: ${postgres_host}" >&2
+    return 1
+}
+
+wait_for_postgres_host
+
 create_extensions() {
     # 在目标逻辑库内安装指定扩展。
     #
