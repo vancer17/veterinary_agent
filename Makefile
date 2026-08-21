@@ -9,6 +9,7 @@ include make/common.mk
 include make/ci.mk
 include make/cd.mk
 include make/docker.mk
+include make/preprod.mk
 include make/runtime.mk
 include make/dev.mk
 include make/prod.mk

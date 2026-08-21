@@ -5,7 +5,7 @@
 # 说明: 开发样例仅作为手动验证入口，不作为 CI 静态资产门禁依据。
 # =============================================================================
 
-.PHONY: request-all request-curl request-health request-ready request-followup-first request-followup-second request-multitask request-safety-toxic request-idempotency request-profile-memory request-memory-read request-report-parse request-rag-stats request-rag-chunks request-business-all request-business-followup-first request-business-followup-second request-business-multitask request-business-memory request-business-safety-semantic request-business-stream smoke-clinical-safety-api smoke-memory-read-api smoke-task-routing-api smoke-answer-rag-api smoke-response-generation-api smoke-consultation-state-api smoke-external-api
+.PHONY: request-all request-curl request-health request-ready request-followup-first request-followup-second request-multitask request-safety-toxic request-idempotency request-profile-memory request-memory-read request-report-parse request-rag-stats request-rag-chunks request-business-all request-business-followup-first request-business-followup-second request-business-multitask request-business-memory request-business-safety-semantic request-business-stream smoke-clinical-safety-api smoke-clinical-safety-stage5-preprod smoke-memory-read-api smoke-task-routing-api smoke-answer-rag-api smoke-response-generation-api smoke-consultation-state-api smoke-external-api
 
 request-all: ## 执行开发请求样例聚合验证。
 	$(EXEC) python scripts/dev_request.py all
@@ -72,6 +72,9 @@ request-business-stream: ## 执行业务流式回复请求样例。
 
 smoke-clinical-safety-api: ## 执行临床安全真实依赖冒烟。
 	bash scripts/integration/run-external-api-smoke.sh
+
+smoke-clinical-safety-stage5-preprod: ## 执行临床安全阶段 5 预发布黑盒冒烟。
+	bash scripts/integration/run-clinical-safety-stage5-preprod-smoke.sh
 
 smoke-memory-read-api: ## 执行记忆读取真实依赖冒烟。
 	bash scripts/integration/run-memory-read-api-smoke.sh

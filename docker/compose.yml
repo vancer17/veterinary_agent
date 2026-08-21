@@ -161,7 +161,6 @@ services:
     volumes:
       - opa_persistence:/opa/persistence
       - ./opa/application.yml:/opa/config/application.yml:ro
-      - ./opa/policies:/opa/policies:ro
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8282/health >/dev/null"]
       interval: 15s
