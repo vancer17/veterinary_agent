@@ -74,7 +74,9 @@ services:
       timeout: ${POSTGRES_HEALTHCHECK_TIMEOUT:-5s}
       retries: ${POSTGRES_HEALTHCHECK_RETRIES:-30}
     networks:
-      - backend
+      backend:
+        aliases:
+          - postgres
     logging: *default-logging
 
   postgres-extensions:
@@ -90,7 +92,9 @@ services:
     # 显式通过 bash 调用挂载脚本，避免宿主机文件执行位异常导致一次性运维任务失败。
     command: ["bash", "-c", "bash /usr/local/bin/ensure-postgres-extensions && bash /usr/local/bin/postgres-vector-smoke-check"]
     networks:
-      - backend
+      backend:
+        aliases:
+          - postgres-extensions
     logging: *default-logging
 
   litellm:
@@ -113,7 +117,9 @@ services:
       timeout: 5s
       retries: 30
     networks:
-      - backend
+      backend:
+        aliases:
+          - litellm
     logging: *default-logging
 
   mem0:
@@ -131,7 +137,9 @@ services:
       - mem0_history:/app/history
       - ./mem0/application.yml:/app/config/application.yml:ro
     networks:
-      - backend
+      backend:
+        aliases:
+          - mem0
     logging: *default-logging
 
   mem0-dashboard:
@@ -147,7 +155,9 @@ services:
     volumes:
       - ./mem0-dashboard/application.yml:/app/config/application.yml:ro
     networks:
-      - backend
+      backend:
+        aliases:
+          - mem0-dashboard
     logging: *default-logging
 
   opa:
@@ -167,7 +177,9 @@ services:
       timeout: 5s
       retries: 30
     networks:
-      - backend
+      backend:
+        aliases:
+          - opa
     logging: *default-logging
 
   migrate:
@@ -213,6 +225,10 @@ services:
     ports:
       - "${APP_PORT:-8000}:8000"
     command: ["app"]
+    networks:
+      backend:
+        aliases:
+          - app
     healthcheck:
       test:
         [
@@ -232,6 +248,10 @@ services:
         condition: service_healthy
     # 后台 worker 复用正式应用镜像，只覆盖启动命令；生产环境不得现场构建第二套 worker 镜像。
     command: ["worker"]
+    networks:
+      backend:
+        aliases:
+          - worker
     healthcheck:
       # worker 不暴露 HTTP 端口，健康状态以 PostgreSQL 后台任务表可访问性为准。
       test: ["CMD-SHELL", "python -m vet_agent.background_tasks.healthcheck"]
@@ -241,6 +261,12 @@ services:
 
 networks:
   backend:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: ${COMPOSE_BACKEND_SUBNET:-192.168.254.0/24}
+          gateway: ${COMPOSE_BACKEND_GATEWAY:-192.168.254.1}
 
 volumes:
   postgres_data:

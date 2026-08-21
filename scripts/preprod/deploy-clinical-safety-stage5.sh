@@ -15,7 +15,7 @@ cd "$repo_root"
 action="${1:-deploy}"
 release_tag="${CLINICAL_SAFETY_STAGE5_RELEASE_TAG:-}"
 rollback_run_id="${CLINICAL_SAFETY_STAGE5_ROLLBACK_RUN_ID:-}"
-run_id="${CLINICAL_SAFETY_STAGE5_RUN_ID:-stage5-$(date +%Y%m%d%H%M%S)-$(uuidgen | cut -c1-8)}"
+run_id="${CLINICAL_SAFETY_STAGE5_RUN_ID:-stage5-$(date +%Y%m%d%H%M%S)-$(python3 -c 'import uuid; print(uuid.uuid4().hex[:8])')}"
 
 ssh_host="${CLINICAL_SAFETY_STAGE5_SSH_HOST:-121.41.58.20}"
 ssh_port="${CLINICAL_SAFETY_STAGE5_SSH_PORT:-22}"
@@ -53,8 +53,13 @@ if ! [[ "$database_name" =~ ^[A-Za-z0-9_]+$ ]]; then
     echo "预发布数据库名称只能包含字母、数字和下划线: ${database_name}" >&2
     exit 1
 fi
+if ! [[ "$run_id" =~ ^[A-Za-z0-9._-]+$ ]]; then
+    echo "阶段 5 运行标识只能包含字母、数字、点、下划线和连字符: ${run_id}" >&2
+    exit 1
+fi
 
 ssh_args=(
+    ssh
     -i "$ssh_key"
     -p "$ssh_port"
     -o BatchMode=yes
@@ -63,6 +68,27 @@ ssh_args=(
     -o ServerAliveCountMax=2
 )
 remote="${ssh_user}@${ssh_host}"
+
+run_remote_script_file() {
+    local prepared_script="$1"
+    local remote_script="/tmp/vet-agent-stage5-${run_id}-$$.sh"
+    local status=0
+
+    scp \
+        -i "$ssh_key" \
+        -P "$ssh_port" \
+        -o BatchMode=yes \
+        -o StrictHostKeyChecking=no \
+        "$prepared_script" \
+        "${remote}:${remote_script}" >/dev/null
+    if ! "${ssh_args[@]}" "$remote" \
+        "$(remote_env) bash $(printf '%q' "$remote_script")"; then
+        status=$?
+    fi
+    "${ssh_args[@]}" "$remote" "rm -f $(printf '%q' "$remote_script")" >/dev/null 2>&1 || true
+    rm -f "$prepared_script"
+    return "$status"
+}
 
 if [[ "$action" == "deploy" ]]; then
     if [[ -z "$release_tag" ]]; then
@@ -130,7 +156,9 @@ remote_env() {
 }
 
 preflight_remote() {
-    "${ssh_args[@]}" "$remote" "$(remote_env) bash -s" <<'REMOTE'
+    local local_script
+    local_script="$(mktemp)"
+    cat > "$local_script" <<'REMOTE'
 set -Eeuo pipefail
 
 cd "$DEPLOY_PATH"
@@ -156,25 +184,28 @@ for required_file in "${required_files[@]}"; do
     fi
 done
 
-compose_cmd=(
-    sudo docker compose
-    --project-name "$COMPOSE_PROJECT"
-    --env-file docker/compose.prod.env
-    --env-file docker/compose.stage5-release.env
-    -f docker/compose.yml
-)
 if [[ -f docker/compose.stage5-release.env ]]; then
-    "${compose_cmd[@]}" config --quiet
+    compose_cmd=(
+        sudo docker compose
+        --project-name "$COMPOSE_PROJECT"
+        --env-file docker/compose.prod.env
+        --env-file docker/compose.stage5-release.env
+        -f docker/compose.yml
+    )
 else
-    sudo docker compose \
-        --project-name "$COMPOSE_PROJECT" \
-        --env-file docker/compose.prod.env \
-        -f docker/compose.yml config --quiet
+    compose_cmd=(
+        sudo docker compose
+        --project-name "$COMPOSE_PROJECT"
+        --env-file docker/compose.prod.env
+        -f docker/compose.yml
+    )
 fi
+"${compose_cmd[@]}" config --quiet
 
 database_exists="$(
     "${compose_cmd[@]}" exec -T postgres sh -c \
         "psql -U \"\$POSTGRES_USER\" -d postgres -Atc \"SELECT 1 FROM pg_database WHERE datname = '$DATABASE_NAME'\""
+        </dev/null
 )"
 if [[ "$database_exists" != "1" ]]; then
     echo "预发布 PostgreSQL 中不存在目标数据库: ${DATABASE_NAME}" >&2
@@ -183,10 +214,13 @@ fi
 
 echo "预发布配置解析与数据库连通性检查通过。"
 REMOTE
+    run_remote_script_file "$local_script"
 }
 
 create_backup_remote() {
-    "${ssh_args[@]}" "$remote" "$(remote_env) bash -s" <<'REMOTE'
+    local local_script
+    local_script="$(mktemp)"
+    cat > "$local_script" <<'REMOTE'
 set -Eeuo pipefail
 
 cd "$DEPLOY_PATH"
@@ -194,13 +228,6 @@ backup_dir="${DEPLOY_PATH}/stage5-backups/${RUN_ID}"
 mkdir -p "$backup_dir"
 chmod 0700 "$backup_dir"
 
-compose_cmd=(
-    sudo docker compose
-    --project-name "$COMPOSE_PROJECT"
-    --env-file docker/compose.prod.env
-    --env-file docker/compose.stage5-release.env
-    -f docker/compose.yml
-)
 if [[ ! -f docker/compose.stage5-release.env ]]; then
     compose_cmd=(
         sudo docker compose
@@ -208,10 +235,18 @@ if [[ ! -f docker/compose.stage5-release.env ]]; then
         --env-file docker/compose.prod.env
         -f docker/compose.yml
     )
+else
+    compose_cmd=(
+        sudo docker compose
+        --project-name "$COMPOSE_PROJECT"
+        --env-file docker/compose.prod.env
+        --env-file docker/compose.stage5-release.env
+        -f docker/compose.yml
+    )
 fi
 
-app_container="$("${compose_cmd[@]}" ps -q app)"
-opa_container="$("${compose_cmd[@]}" ps -q opa)"
+app_container="$("${compose_cmd[@]}" ps --all --quiet app)"
+opa_container="$("${compose_cmd[@]}" ps --all --quiet opa)"
 if [[ -z "$app_container" ]] || [[ -z "$opa_container" ]]; then
     echo "无法备份镜像版本：app 或 OPA 容器未运行。" >&2
     exit 1
@@ -225,15 +260,21 @@ printf 'PREVIOUS_OPA_IMAGE=%q\n' "$previous_opa_image" >> "$backup_dir/previous-
 alembic_version="$(
     "${compose_cmd[@]}" exec -T postgres sh -c \
         "psql -U \"\$POSTGRES_USER\" -d \"$DATABASE_NAME\" -Atc 'SELECT version_num FROM alembic_version'"
+        </dev/null
 )"
 printf '%s\n' "$alembic_version" > "$backup_dir/alembic_version.txt"
 
 "${compose_cmd[@]}" exec -T postgres sh -c \
-    "pg_dump -U \"\$POSTGRES_USER\" \"$DATABASE_NAME\"" | gzip > "$backup_dir/${DATABASE_NAME}.sql.gz"
+    "pg_dump -U \"\$POSTGRES_USER\" \"$DATABASE_NAME\"" \
+    </dev/null | gzip > "$backup_dir/${DATABASE_NAME}.sql.gz"
 "${compose_cmd[@]}" ps > "$backup_dir/compose-ps-before.txt"
+[[ -s "$backup_dir/alembic_version.txt" ]]
+[[ -s "$backup_dir/${DATABASE_NAME}.sql.gz" ]]
+[[ -s "$backup_dir/compose-ps-before.txt" ]]
 
 echo "$backup_dir"
 REMOTE
+    run_remote_script_file "$local_script"
 }
 
 if [[ "$action" == "deploy" ]]; then
@@ -251,6 +292,10 @@ if [[ "$action" == "deploy" ]]; then
 
     echo "创建阶段 5 部署前备份..."
     backup_dir="$(create_backup_remote)"
+    if [[ -z "$backup_dir" ]]; then
+        echo "阶段 5 备份脚本未返回备份目录，拒绝继续部署。" >&2
+        exit 1
+    fi
     echo "备份目录: ${backup_dir}"
 
     echo "同步预发布编排包..."
@@ -262,7 +307,8 @@ if [[ "$action" == "deploy" ]]; then
         bash scripts/cd/repository/sync-production-bundle.sh
 
     echo "部署 core 应用镜像与 OPA 策略镜像..."
-    "${ssh_args[@]}" "$remote" "$(remote_env) bash -s" <<'REMOTE'
+    deploy_script="$(mktemp)"
+    cat > "$deploy_script" <<'REMOTE'
 set -Eeuo pipefail
 
 cd "$DEPLOY_PATH"
@@ -303,8 +349,9 @@ if [[ "$app_revision" != "$CD_RELEASE_SHA" ]] || [[ "$opa_revision" != "$CD_RELE
 fi
 
 # 预发布没有双 OPA 热切换拓扑。先停止旧 app / worker，避免旧应用 payload
-# 在 seed 和迁移窗口内调用阶段 4 OPA，形成跨版本策略契约。
-"${compose_cmd[@]}" stop app worker
+# 在 seed 和迁移窗口内调用阶段 4 OPA，形成跨版本策略契约。Dashboard 也可能
+# 持有 backend network endpoint；一并停止，避免 Compose 重建网络时失败。
+"${compose_cmd[@]}" stop app worker mem0-dashboard
 
 "${compose_cmd[@]}" up \
     -d \
@@ -314,15 +361,16 @@ fi
     postgres \
     litellm \
     mem0 \
+    mem0-dashboard \
     opa
 
 # 当前预发布库仍可能处于 0019 并携带旧 EMERGENCY_RED_FLAG。
 # 0021 迁移按设计拒绝修复存量数据，因此必须先用 Release 镜像导入已审核资产。
 echo "执行发布态资产 seed..."
-"${compose_cmd[@]}" run --rm --pull never seed
+"${compose_cmd[@]}" run --rm --pull never seed </dev/null
 
 echo "执行 Alembic 迁移..."
-"${compose_cmd[@]}" run --rm --pull never migrate
+"${compose_cmd[@]}" run --rm --pull never migrate </dev/null
 
 echo "校验阶段 4 数据库契约..."
 asset_result="$(
@@ -354,7 +402,8 @@ asset_result="$(
             FROM clinical_safety_assets
             WHERE asset_type = 'emergency_red_flag'
               AND review_status = 'approved'
-              AND enabled IS TRUE;\""
+              AND enabled IS TRUE;\"" \
+        </dev/null
 )"
 IFS='|' read -r asset_count distinct_code_count invalid_code_count governance_missing_count duplicate_code_count <<< "$asset_result"
 
@@ -377,13 +426,15 @@ chunk_result="$(
               AND asset.review_status = 'approved'
               AND asset.enabled IS TRUE
               AND chunk.review_status = 'approved'
-              AND chunk.enabled IS TRUE;\""
+              AND chunk.enabled IS TRUE;\"" \
+        </dev/null
 )"
 IFS='|' read -r chunk_code_mismatch_count invalid_embedding_count <<< "$chunk_result"
 
 alembic_version="$(
     "${compose_cmd[@]}" exec -T postgres sh -c \
         "psql -U \"\$POSTGRES_USER\" -d \"$DATABASE_NAME\" -Atc 'SELECT version_num FROM alembic_version'"
+        </dev/null
 )"
 
 if [[ "$alembic_version" != "0021_clinical_safety_emergency_asset_codes" ]]; then
@@ -406,6 +457,7 @@ fi
 
 remote_policy_hash="$(
     "${compose_cmd[@]}" exec -T opa sha256sum /opa/policies/clinical_safety.rego \
+        </dev/null \
         | awk '{print $1}'
 )"
 if [[ "$remote_policy_hash" != "$LOCAL_POLICY_HASH" ]]; then
@@ -429,7 +481,7 @@ fi
     test "${ENABLE_OUTPUT_SAFETY_GUARDRAILS:-false}" = "false"
     test "${ENABLE_OUTPUT_SAFETY:-true}" = "true"
     test "${OUTPUT_SAFETY_MODE:-observe}" = "observe"
-'
+' </dev/null
 
 ready=false
 for _ in $(seq 1 60); do
@@ -460,9 +512,11 @@ chmod 0600 "$backup_dir/deployment-summary.env"
 
 echo "阶段 5 预发布部署完成。"
 REMOTE
+    run_remote_script_file "$deploy_script"
 else
     echo "回滚阶段 5 app / worker / OPA 运行时镜像..."
-    "${ssh_args[@]}" "$remote" "$(remote_env) bash -s" <<'REMOTE'
+    rollback_script="$(mktemp)"
+    cat > "$rollback_script" <<'REMOTE'
 set -Eeuo pipefail
 
 cd "$DEPLOY_PATH"
@@ -500,7 +554,7 @@ compose_cmd=(
 )
 "${compose_cmd[@]}" config --quiet
 "${compose_cmd[@]}" pull app worker opa
-"${compose_cmd[@]}" stop app worker
+"${compose_cmd[@]}" stop app worker mem0-dashboard
 "${compose_cmd[@]}" up \
     -d \
     --no-build \
@@ -509,6 +563,7 @@ compose_cmd=(
     postgres \
     litellm \
     mem0 \
+    mem0-dashboard \
     opa
 "${compose_cmd[@]}" up \
     -d \
@@ -535,4 +590,5 @@ fi
 
 echo "运行时镜像已回滚；数据库未自动降级。如需恢复数据，请单独评估备份 ${backup_dir}。"
 REMOTE
+    run_remote_script_file "$rollback_script"
 fi

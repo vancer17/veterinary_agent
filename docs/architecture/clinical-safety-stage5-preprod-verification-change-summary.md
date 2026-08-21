@@ -99,7 +99,7 @@ veterinary_agent-opa:<release-tag>
 → /health 与 /ready 验证
 ```
 
-该过程会显式停止旧 app 与 worker，形成短暂维护窗口。预发布不以旧应用持续在线为优先目标；
+该过程会显式停止旧 app、worker 与 Mem0 Dashboard，形成短暂维护窗口。预发布不以旧应用持续在线为优先目标；
 避免“旧 app + 新 OPA”或“新 app + 旧数据库契约”的跨版本组合更重要。
 
 不允许：
@@ -108,6 +108,23 @@ veterinary_agent-opa:<release-tag>
 2. 修改 `0021` 迁移自动修复存量资产。
 3. 在 seed 失败后继续迁移。
 4. 在数据库契约失败后启动新 app。
+
+### 2.4 Compose backend 网段必须显式避让云上网络
+
+生产与预发布 Compose 不使用 Docker 自动分配的默认 `172.16.0.0/12` 网段。backend 网络固定为：
+
+```text
+COMPOSE_BACKEND_SUBNET=192.168.254.0/24
+COMPOSE_BACKEND_GATEWAY=192.168.254.1
+```
+
+同时为 `postgres`、`litellm`、`mem0`、`mem0-dashboard` 与 `opa` 显式声明服务别名，避免网络重建后的 DNS 别名漂移。PostgreSQL 扩展一次性任务会等待 Compose DNS 记录就绪，但不会回退为跳过扩展检查。
+
+### 2.5 模糊分诊冒烟依赖已审核追问向量
+
+阶段 5 的模糊分诊用例会进入问诊追问链路，因此 seed 中保留一条已审核 `followup_questions` 向量资产。该资产只作为 RAG 规划证据，不引入本地默认追问模板，也不允许 planner 输出 `missing_slots` 之外的槽位。
+
+真实模型偶尔会返回非法追问槽位或低置信结果；阶段 5 黑盒工具对每个场景最多执行 3 次有界尝试，并把失败尝试完整写入报告。连续失败仍按 Fail Fast 处理，不会在 Python 中修补模型输出。
 
 ## 3. 部署入口
 
@@ -129,7 +146,7 @@ veterinary_agent-opa:<release-tag>
 
 ```bash
 make preprod-deploy-clinical-safety-stage5 \
-  CLINICAL_SAFETY_STAGE5_RELEASE_TAG=v0.1.0-rc.3
+  CLINICAL_SAFETY_STAGE5_RELEASE_TAG=<release-tag>
 ```
 
 如需显式注入私有仓库凭据：
@@ -138,7 +155,7 @@ make preprod-deploy-clinical-safety-stage5 \
 CLINICAL_SAFETY_STAGE5_REGISTRY_USERNAME=... \
 CLINICAL_SAFETY_STAGE5_REGISTRY_PASSWORD=... \
 make preprod-deploy-clinical-safety-stage5 \
-  CLINICAL_SAFETY_STAGE5_RELEASE_TAG=v0.1.0-rc.3
+  CLINICAL_SAFETY_STAGE5_RELEASE_TAG=<release-tag>
 ```
 
 若预发布 Docker 已保存 Registry 登录态，可以不注入凭据。
@@ -264,10 +281,10 @@ code_governance.legacy_code 非空
 输入形态：
 
 ```text
-狗狗最近尿频尿少，一趟一趟往砂盆跑。
+狗狗突然拉大量血水，同时最近尿频尿少，一趟一趟往砂盆跑。
 ```
 
-该输入与猫专属泌尿急诊表达相似，但可信宠物范围是犬。验收：
+该输入同时包含犬侧急诊表达和猫专属泌尿急诊相似表达，但可信宠物范围是犬。验收：
 
 1. Release manifest 中的猫专属急诊 code 不进入 OPA signals。
 2. 猫专属 code 不进入响应 `safety_signals`。
