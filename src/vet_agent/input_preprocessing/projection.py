@@ -97,6 +97,26 @@ def project_consultation(
                     },
                 )
             )
+            if term.canonical_type == "symptom" and observation.temporal_observations:
+                temporal = observation.temporal_observations[0]
+                facts.append(
+                    SemanticFact(
+                        key=ConsultationFactKey.ONSET,
+                        value=temporal.source_text[:160],
+                        status=ConsultationFactStatus.CONFIRMED,
+                        confidence=temporal.confidence,
+                        source_text=temporal.source_text,
+                        category=ConsultationFactCategory.TIME_COURSE,
+                        metadata={
+                            "derived_from": "structured_temporal_observation",
+                            "canonical_id": observation.canonical_id,
+                            "evidence_id": observation.evidence_id,
+                            "temporal_id": temporal.temporal_id,
+                            "temporal_status": temporal.status.value,
+                            "precision": temporal.precision.value,
+                        },
+                    )
+                )
         else:
             observations.append(
                 SemanticObservation(
