@@ -230,7 +230,11 @@ class InputPreprocessingAnalyzer:
             "canonical_catalog": self.vocabulary.to_prompt_payload(),
             "recall_candidates": prompt_candidates,
             "turn_context": _prompt_context(turn_context),
-            "segments": [segment.model_dump() for segment in segmentation.segments],
+            "segments": [
+                segment.model_dump()
+                for segment in segmentation.segments
+                if segment.requires_evidence_analysis
+            ],
             "user_text": user_text,
         }
         try:

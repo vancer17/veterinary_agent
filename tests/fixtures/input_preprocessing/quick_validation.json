@@ -298,8 +298,24 @@
             {"source_text": "我不确定是哪一只", "discourse_role": "uncertain_statement", "requires_evidence_analysis": false}
           ],
           "observations": [
-            {"segment_index": 0, "source_text": "好像呕吐", "canonical_id": "vomiting", "assertion": "possible", "subject_reference": "subject_ambiguous", "subject_type": "unknown", "resolution_method": "subject_ambiguous"},
-            {"segment_index": 1, "source_text": "另一只精神正常", "canonical_id": "mental_status", "assertion": "normal", "subject_reference": "subject_ambiguous", "subject_type": "unknown", "resolution_method": "subject_ambiguous"}
+            {
+              "segment_index": 0,
+              "source_text": "好像呕吐",
+              "canonical_id": "vomiting",
+              "assertion": "possible",
+              "subject_reference": "subject_ambiguous",
+              "subject_type": "unknown",
+              "resolution_method": "subject_ambiguous"
+            },
+            {
+              "segment_index": 1,
+              "source_text": "另一只精神正常",
+              "canonical_id": "mental_status",
+              "assertion": "normal",
+              "subject_reference": "other_cat",
+              "subject_type": "other_pet",
+              "resolution_method": "explicit_coreference"
+            }
           ],
           "expected_behavior": {
             "simulate": true,
@@ -315,10 +331,11 @@
           "intent": {"answer_now": false, "wants_triage": false, "correction": false, "raw_intent": "历史与假设"},
           "segments": [
             {"source_text": "去年它呕吐过。", "discourse_role": "historical_statement"},
-            {"source_text": "如果它现在呕吐了，我该怎么办？", "discourse_role": "hypothetical_statement", "requires_evidence_analysis": false}
+            {"source_text": "如果它现在呕吐了，我该怎么办？", "discourse_role": "hypothetical_statement", "requires_evidence_analysis": true}
           ],
           "observations": [
-            {"segment_index": 0, "source_text": "去年它呕吐过", "canonical_id": "vomiting", "assertion": "historical", "subject_reference": "current_pet"}
+            {"segment_index": 0, "source_text": "去年它呕吐过", "canonical_id": "vomiting", "assertion": "historical", "subject_reference": "current_pet"},
+            {"segment_index": 1, "source_text": "如果它现在呕吐了", "canonical_id": "vomiting", "assertion": "hypothetical", "subject_reference": "current_pet"}
           ],
           "expected_behavior": {
             "simulate": true,
