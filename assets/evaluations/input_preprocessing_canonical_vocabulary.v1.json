@@ -2,20 +2,6 @@
   "version": "input-preprocessing-dev-v1",
   "terms": [
     {
-      "canonical_id": "problem_onset",
-      "canonical_type": "measurement",
-      "allowed_subject_types": ["current_pet", "other_pet"],
-      "aliases": ["开始时间", "这两天", "前天", "症状开始", "onset"],
-      "consultation_projection": {
-        "kind": "fact",
-        "key": "onset",
-        "assertion_values": {
-          "present": "近两天开始"
-        }
-      },
-      "clinical_safety_projection": "none"
-    },
-    {
       "canonical_id": "diet_change",
       "canonical_type": "intervention",
       "allowed_subject_types": ["current_pet", "other_pet", "user", "caregiver"],
