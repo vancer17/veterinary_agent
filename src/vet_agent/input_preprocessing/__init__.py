@@ -1,0 +1,61 @@
+"""Input preprocessing shadow contracts and evaluation tooling."""
+
+from .analyzer import InputPreprocessingAnalyzer
+from .contracts import (
+    AssertionState,
+    CanonicalCandidate,
+    CanonicalStatus,
+    CanonicalTerm,
+    DiscourseRole,
+    EvidenceAnalysisOutput,
+    EvidenceObservation,
+    InputAnalysisResult,
+    InputContentProfile,
+    MeasurementObservation,
+    PreprocessingIntent,
+    QualityGateAction,
+    QualityGateResult,
+    QualityGateStatus,
+    SegmentationOutput,
+    SubjectBinding,
+    SubjectReference,
+    SubjectResolutionMethod,
+    TemporalObservation,
+    TurnContext,
+)
+from .projection import (
+    ClinicalSafetyShadowProjection,
+    ConsultationShadowProjection,
+    project_clinical_safety,
+    project_consultation,
+)
+from .vocabulary import CanonicalVocabulary
+
+__all__ = [
+    "AssertionState",
+    "CanonicalCandidate",
+    "CanonicalStatus",
+    "CanonicalTerm",
+    "CanonicalVocabulary",
+    "ClinicalSafetyShadowProjection",
+    "ConsultationShadowProjection",
+    "DiscourseRole",
+    "EvidenceAnalysisOutput",
+    "EvidenceObservation",
+    "InputAnalysisResult",
+    "InputContentProfile",
+    "InputPreprocessingAnalyzer",
+    "MeasurementObservation",
+    "PreprocessingIntent",
+    "QualityGateAction",
+    "QualityGateResult",
+    "QualityGateStatus",
+    "SegmentationOutput",
+    "SubjectBinding",
+    "SubjectReference",
+    "SubjectResolutionMethod",
+    "TemporalObservation",
+    "TurnContext",
+    "project_clinical_safety",
+    "project_consultation",
+]
