@@ -1,0 +1,204 @@
+{
+  "version": "input-preprocessing-dev-v1",
+  "terms": [
+    {
+      "canonical_id": "problem_onset",
+      "canonical_type": "measurement",
+      "allowed_subject_types": ["current_pet", "other_pet"],
+      "aliases": ["开始时间", "这两天", "前天", "症状开始", "onset"],
+      "consultation_projection": {
+        "kind": "fact",
+        "key": "onset",
+        "assertion_values": {
+          "present": "近两天开始"
+        }
+      },
+      "clinical_safety_projection": "none"
+    },
+    {
+      "canonical_id": "diet_change",
+      "canonical_type": "intervention",
+      "allowed_subject_types": ["current_pet", "other_pet", "user", "caregiver"],
+      "aliases": ["更换猫粮", "换新粮", "换粮", "更换食物", "switching food"],
+      "consultation_projection": {
+        "kind": "fact",
+        "key": "current_food",
+        "assertion_values": {
+          "present": "近期更换新粮",
+          "historical": "既往更换新粮"
+        }
+      },
+      "clinical_safety_projection": "none"
+    },
+    {
+      "canonical_id": "soft_stool",
+      "canonical_type": "symptom",
+      "allowed_subject_types": ["current_pet", "other_pet"],
+      "aliases": ["大便软", "软便", "排便偏软", "粪便变软", "soft stool"],
+      "consultation_projection": {
+        "kind": "fact",
+        "key": "stool",
+        "assertion_values": {
+          "abnormal": "大便偏软",
+          "normal": "大便正常",
+          "resolved": "大便已恢复"
+        }
+      },
+      "clinical_safety_projection": "symptom"
+    },
+    {
+      "canonical_id": "bloody_stool",
+      "canonical_type": "symptom",
+      "allowed_subject_types": ["current_pet", "other_pet"],
+      "aliases": ["血便", "便血", "大便带血", "blood in stool"],
+      "consultation_projection": {
+        "kind": "observation",
+        "category": "stool",
+        "label": "血便"
+      },
+      "clinical_safety_projection": "symptom"
+    },
+    {
+      "canonical_id": "vomiting",
+      "canonical_type": "symptom",
+      "allowed_subject_types": ["current_pet", "other_pet"],
+      "aliases": ["呕吐", "吐了", "呕吐物", "vomiting"],
+      "consultation_projection": {
+        "kind": "fact",
+        "key": "vomiting",
+        "assertion_values": {
+          "present": "有呕吐",
+          "denied": "无呕吐",
+          "historical": "既往呕吐"
+        }
+      },
+      "clinical_safety_projection": "symptom"
+    },
+    {
+      "canonical_id": "retching",
+      "canonical_type": "symptom",
+      "allowed_subject_types": ["current_pet", "other_pet"],
+      "aliases": ["干呕", "干呕吐", "retching"],
+      "consultation_projection": {
+        "kind": "observation",
+        "category": "gi_symptom",
+        "label": "干呕"
+      },
+      "clinical_safety_projection": "symptom"
+    },
+    {
+      "canonical_id": "regurgitation",
+      "canonical_type": "symptom",
+      "allowed_subject_types": ["current_pet", "other_pet"],
+      "aliases": ["反流", "食物反流", "regurgitation"],
+      "consultation_projection": {
+        "kind": "observation",
+        "category": "gi_symptom",
+        "label": "反流"
+      },
+      "clinical_safety_projection": "symptom"
+    },
+    {
+      "canonical_id": "drooling",
+      "canonical_type": "symptom",
+      "allowed_subject_types": ["current_pet", "other_pet"],
+      "aliases": ["流涎", "流口水", "drooling"],
+      "consultation_projection": {
+        "kind": "observation",
+        "category": "oral_sign",
+        "label": "流涎"
+      },
+      "clinical_safety_projection": "symptom"
+    },
+    {
+      "canonical_id": "lip_smacking",
+      "canonical_type": "symptom",
+      "allowed_subject_types": ["current_pet", "other_pet"],
+      "aliases": ["舔唇", "反复舔嘴", "lip smacking"],
+      "consultation_projection": {
+        "kind": "observation",
+        "category": "oral_sign",
+        "label": "舔唇"
+      },
+      "clinical_safety_projection": "symptom"
+    },
+    {
+      "canonical_id": "mental_status",
+      "canonical_type": "status",
+      "allowed_subject_types": ["current_pet", "other_pet"],
+      "aliases": ["精神状态", "精神", "活力", "mental status"],
+      "consultation_projection": {
+        "kind": "fact",
+        "key": "mental_status",
+        "assertion_values": {
+          "normal": "精神正常",
+          "abnormal": "精神异常"
+        }
+      },
+      "clinical_safety_projection": "status"
+    },
+    {
+      "canonical_id": "appetite",
+      "canonical_type": "intake_output",
+      "allowed_subject_types": ["current_pet", "other_pet"],
+      "aliases": ["食欲", "进食量", "吃饭情况", "appetite"],
+      "consultation_projection": {
+        "kind": "fact",
+        "key": "appetite",
+        "assertion_values": {
+          "normal": "食欲正常",
+          "abnormal": "食欲异常"
+        }
+      },
+      "clinical_safety_projection": "status"
+    },
+    {
+      "canonical_id": "water_intake",
+      "canonical_type": "intake_output",
+      "allowed_subject_types": ["current_pet", "other_pet"],
+      "aliases": ["饮水", "喝水量", "喝水频率", "water intake"],
+      "consultation_projection": {
+        "kind": "observation",
+        "category": "intake_output",
+        "label": "饮水状态"
+      },
+      "clinical_safety_projection": "status"
+    },
+    {
+      "canonical_id": "stool_frequency",
+      "canonical_type": "measurement",
+      "allowed_subject_types": ["current_pet", "other_pet"],
+      "aliases": ["排便频率", "一天一次", "大便次数", "stool frequency"],
+      "consultation_projection": {
+        "kind": "observation",
+        "category": "intake_output",
+        "label": "排便频率"
+      },
+      "clinical_safety_projection": "none"
+    },
+    {
+      "canonical_id": "play_behavior",
+      "canonical_type": "behavior",
+      "allowed_subject_types": ["current_pet", "other_pet"],
+      "aliases": ["主动玩", "玩耍行为", "会玩", "play behavior"],
+      "consultation_projection": {
+        "kind": "observation",
+        "category": "behavior",
+        "label": "玩耍行为"
+      },
+      "clinical_safety_projection": "status"
+    },
+    {
+      "canonical_id": "response_to_call",
+      "canonical_type": "behavior",
+      "allowed_subject_types": ["current_pet", "other_pet"],
+      "aliases": ["对呼唤有反应", "叫它有反应", "response to call"],
+      "consultation_projection": {
+        "kind": "observation",
+        "category": "behavior",
+        "label": "呼唤反应"
+      },
+      "clinical_safety_projection": "status"
+    }
+  ]
+}
