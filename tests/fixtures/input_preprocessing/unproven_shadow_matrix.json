@@ -1,0 +1,319 @@
+{
+  "schema_version": "v1",
+  "suite": {
+    "schema_version": "v1",
+    "reference_time": "2026-08-24T10:00:00+08:00",
+    "pet_profile": {
+      "species": "猫",
+      "breed": "英国短毛猫",
+      "age": "2岁",
+      "weight_kg": 4.2,
+      "sex": "未知"
+    },
+    "cases": [
+      {
+        "sample_id": "D_parallel_negation_compound",
+        "task_domain": "gastrointestinal",
+        "turns": [
+          {
+            "user_text": "没有呕吐、干呕、反流、流涎或舔唇；大便偏软但没有血，一天一次。",
+            "intent": {"answer_now": false, "wants_triage": false, "correction": false, "raw_intent": ""},
+            "segments": [
+              {
+                "source_text": "没有呕吐、干呕、反流、流涎或舔唇",
+                "discourse_role": "fact_statement",
+                "expected_evidence_count": 5
+              },
+              {
+                "source_text": "大便偏软但没有血，一天一次",
+                "discourse_role": "fact_statement",
+                "expected_evidence_count": 3
+              }
+            ],
+            "observations": [
+              {"segment_index": 0, "source_text": "没有呕吐", "canonical_id": "vomiting", "assertion": "denied", "subject_reference": "current_pet"},
+              {"segment_index": 0, "source_text": "干呕", "canonical_id": "retching", "assertion": "denied", "subject_reference": "current_pet"},
+              {"segment_index": 0, "source_text": "反流", "canonical_id": "regurgitation", "assertion": "denied", "subject_reference": "current_pet"},
+              {"segment_index": 0, "source_text": "流涎", "canonical_id": "drooling", "assertion": "denied", "subject_reference": "current_pet"},
+              {"segment_index": 0, "source_text": "舔唇", "canonical_id": "lip_smacking", "assertion": "denied", "subject_reference": "current_pet"},
+              {"segment_index": 1, "source_text": "大便偏软", "canonical_id": "soft_stool", "assertion": "abnormal", "subject_reference": "current_pet"},
+              {"segment_index": 1, "source_text": "没有血", "canonical_id": "bloody_stool", "assertion": "denied", "subject_reference": "current_pet"},
+              {"segment_index": 1, "source_text": "一天一次", "canonical_id": "stool_frequency", "assertion": "present", "subject_reference": "current_pet"}
+            ],
+            "expected_behavior": {"simulate": true, "action": "ask"}
+          }
+        ]
+      },
+      {
+        "sample_id": "C_answer_now_branch_control",
+        "task_domain": "gastrointestinal",
+        "turns": [
+          {
+            "user_text": "前天开始换新猫粮，这两天大便软，精神正常，食欲正常，饮水正常，没有呕吐，也没有血便。请先根据现有信息给阶段建议，不要继续追问。",
+            "intent": {"answer_now": true, "wants_triage": false, "correction": false, "raw_intent": "要求先给阶段建议"},
+            "segments": [
+              {"source_text": "前天开始换新猫粮", "discourse_role": "fact_statement"},
+              {"source_text": "这两天大便软", "discourse_role": "fact_statement"},
+              {"source_text": "精神正常", "discourse_role": "fact_statement"},
+              {"source_text": "食欲正常", "discourse_role": "fact_statement"},
+              {"source_text": "饮水正常", "discourse_role": "fact_statement"},
+              {"source_text": "没有呕吐", "discourse_role": "fact_statement"},
+              {"source_text": "也没有血便", "discourse_role": "fact_statement"},
+              {"source_text": "请先根据现有信息给阶段建议，不要继续追问。", "discourse_role": "control_intent", "requires_evidence_analysis": false}
+            ],
+            "observations": [
+              {"segment_index": 0, "source_text": "前天开始换新猫粮", "canonical_id": "diet_change", "assertion": "present", "subject_reference": "current_pet"},
+              {"segment_index": 1, "source_text": "大便软", "canonical_id": "soft_stool", "assertion": "abnormal", "subject_reference": "current_pet", "temporal": [{"source_text": "这两天", "relation": "duration", "precision": "approximate_duration", "status": "imprecise"}]},
+              {"segment_index": 2, "source_text": "精神正常", "canonical_id": "mental_status", "assertion": "normal", "subject_reference": "current_pet"},
+              {"segment_index": 3, "source_text": "食欲正常", "canonical_id": "appetite", "assertion": "normal", "subject_reference": "current_pet"},
+              {"segment_index": 4, "source_text": "饮水正常", "canonical_id": "water_intake", "assertion": "normal", "subject_reference": "current_pet"},
+              {"segment_index": 5, "source_text": "没有呕吐", "canonical_id": "vomiting", "assertion": "denied", "subject_reference": "current_pet"},
+              {"segment_index": 6, "source_text": "也没有血便", "canonical_id": "bloody_stool", "assertion": "denied", "subject_reference": "current_pet"}
+            ],
+            "expected_behavior": {"simulate": true, "action": "answer", "answer_now_recognized": true, "answer_now_respected": true}
+          }
+        ]
+      },
+      {
+        "sample_id": "E1_single_pet_omitted_subject",
+        "task_domain": "general",
+        "turns": [
+          {
+            "user_text": "今天没有呕吐。",
+            "intent": {"answer_now": false, "wants_triage": false, "correction": false, "raw_intent": ""},
+            "segments": [{"source_text": "今天没有呕吐。", "discourse_role": "fact_statement"}],
+            "observations": [{"segment_index": 0, "source_text": "没有呕吐", "canonical_id": "vomiting", "assertion": "denied", "subject_reference": "current_pet", "resolution_method": "trusted_current_pet"}],
+            "expected_behavior": {"simulate": false, "action": "ask"}
+          }
+        ]
+      },
+      {
+        "sample_id": "E2_other_pet_explicit_subject",
+        "task_domain": "general",
+        "other_subjects": [{"reference_id": "other_cat", "subject_type": "other_pet", "display_name": "另一只猫"}],
+        "turns": [
+          {
+            "user_text": "家里另一只猫精神正常。",
+            "intent": {"answer_now": false, "wants_triage": false, "correction": false, "raw_intent": ""},
+            "segments": [{"source_text": "家里另一只猫精神正常。", "discourse_role": "fact_statement"}],
+            "observations": [{"segment_index": 0, "source_text": "另一只猫精神正常", "canonical_id": "mental_status", "assertion": "normal", "subject_reference": "other_cat", "subject_type": "other_pet", "resolution_method": "explicit_coreference"}],
+            "expected_behavior": {"simulate": false, "action": "ask", "allow_empty_evidence": true}
+          }
+        ]
+      },
+      {
+        "sample_id": "E3_multi_pet_ambiguity_possible",
+        "task_domain": "general",
+        "other_subjects": [{"reference_id": "other_cat", "subject_type": "other_pet", "display_name": "另一只猫"}],
+        "turns": [
+          {
+            "user_text": "家里两只猫，其中一只好像呕吐，另一只精神正常；我不确定是哪一只。",
+            "intent": {"answer_now": false, "wants_triage": false, "correction": false, "raw_intent": "主体不确定"},
+            "segments": [
+              {"source_text": "其中一只好像呕吐", "discourse_role": "uncertain_statement"},
+              {"source_text": "另一只精神正常", "discourse_role": "fact_statement"},
+              {"source_text": "我不确定是哪一只", "discourse_role": "uncertain_statement", "requires_evidence_analysis": false}
+            ],
+            "observations": [
+              {"segment_index": 0, "source_text": "好像呕吐", "canonical_id": "vomiting", "assertion": "possible", "subject_reference": "subject_ambiguous", "subject_type": "unknown", "resolution_method": "subject_ambiguous", "subject_candidates": ["current_pet", "other_cat"]},
+              {"segment_index": 1, "source_text": "另一只精神正常", "canonical_id": "mental_status", "assertion": "normal", "subject_reference": "other_cat", "subject_type": "other_pet", "resolution_method": "explicit_coreference"}
+            ],
+            "expected_behavior": {"simulate": false, "action": "ask", "allow_empty_evidence": true, "subject_ambiguous_expected": true}
+          }
+        ]
+      },
+      {
+      "sample_id": "E4_user_action_not_pet_fact",
+      "task_domain": "feeding",
+      "other_subjects": [{"reference_id": "user", "subject_type": "user", "display_name": "当前用户"}],
+        "turns": [
+          {
+            "user_text": "我前天开始给它换了新猫粮。",
+            "intent": {"answer_now": false, "wants_triage": false, "correction": false, "raw_intent": ""},
+            "segments": [{"source_text": "我前天开始给它换了新猫粮。", "discourse_role": "fact_statement"}],
+            "observations": [{"segment_index": 0, "source_text": "我前天开始给它换了新猫粮", "canonical_id": "diet_change", "assertion": "present", "subject_reference": "user", "subject_type": "user", "resolution_method": "explicit_coreference"}],
+            "expected_behavior": {"simulate": false, "action": "ask"}
+          }
+        ]
+      },
+      {
+        "sample_id": "E5_historical_and_hypothetical",
+        "task_domain": "general",
+        "turns": [
+          {
+            "user_text": "去年它呕吐过。如果它现在呕吐了，我该怎么办？",
+            "intent": {"answer_now": false, "wants_triage": false, "correction": false, "raw_intent": ""},
+            "segments": [
+              {"source_text": "去年它呕吐过。", "discourse_role": "historical_statement"},
+              {"source_text": "如果它现在呕吐了，我该怎么办？", "discourse_role": "hypothetical_statement"}
+            ],
+            "observations": [
+              {"segment_index": 0, "source_text": "去年它呕吐过", "canonical_id": "vomiting", "assertion": "historical", "subject_reference": "current_pet"},
+              {"segment_index": 1, "source_text": "如果它现在呕吐了", "canonical_id": "vomiting", "assertion": "hypothetical", "subject_reference": "current_pet"}
+            ],
+            "expected_behavior": {"simulate": false, "action": "ask"}
+          }
+        ]
+      },
+      {
+        "sample_id": "N1_not_found_as_canonical",
+        "task_domain": "general",
+        "turns": [
+          {
+            "user_text": "它最近毛色变浅。",
+            "intent": {"answer_now": false, "wants_triage": false, "correction": false, "raw_intent": ""},
+            "segments": [{"source_text": "它最近毛色变浅。", "discourse_role": "fact_statement"}],
+            "observations": [{"segment_index": 0, "source_text": "毛色变浅", "canonical_id": "not_found", "assertion": "present", "subject_reference": "current_pet"}],
+            "expected_behavior": {"simulate": false, "action": "ask", "expect_gate_block": true, "expected_gate_ids": ["evidence_contract"]}
+          }
+        ]
+      },
+      {
+        "sample_id": "N2_invented_problem_onset",
+        "task_domain": "general",
+        "turns": [
+          {
+            "user_text": "它这两天不太舒服。",
+            "intent": {"answer_now": false, "wants_triage": false, "correction": false, "raw_intent": ""},
+            "segments": [{"source_text": "它这两天不太舒服。", "discourse_role": "fact_statement"}],
+            "observations": [{"segment_index": 0, "source_text": "不太舒服", "canonical_id": "problem_onset", "assertion": "present", "subject_reference": "current_pet"}],
+            "expected_behavior": {"simulate": false, "action": "ask", "expect_gate_block": true, "expected_gate_ids": ["evidence_contract"]}
+          }
+        ]
+      },
+      {
+        "sample_id": "N3_invented_multi_pet_context",
+        "task_domain": "general",
+        "turns": [
+          {
+            "user_text": "家里有两只猫。",
+            "intent": {"answer_now": false, "wants_triage": false, "correction": false, "raw_intent": ""},
+            "segments": [{"source_text": "家里有两只猫。", "discourse_role": "fact_statement"}],
+            "observations": [{"segment_index": 0, "source_text": "家里有两只猫", "canonical_id": "multi_pet_context", "assertion": "present", "subject_reference": "current_pet"}],
+            "expected_behavior": {"simulate": false, "action": "ask", "expect_gate_block": true, "expected_gate_ids": ["evidence_contract"]}
+          }
+        ]
+      },
+      {
+        "sample_id": "N4_explicit_unmapped_mention",
+        "task_domain": "general",
+        "turns": [
+          {
+            "user_text": "它最近毛色变浅。",
+            "intent": {"answer_now": false, "wants_triage": false, "correction": false, "raw_intent": ""},
+            "segments": [{"source_text": "它最近毛色变浅。", "discourse_role": "fact_statement"}],
+            "observations": [],
+            "unmapped_mentions": [{"segment_index": 0, "source_text": "毛色变浅", "mapping_status": "not_found", "reason_code": "canonical_concept_not_in_vocabulary"}],
+            "expected_behavior": {"simulate": false, "action": "ask", "expect_gate_block": true, "expected_gate_ids": ["suspicious_empty"]}
+          }
+        ]
+      },
+      {
+        "sample_id": "CS1_low_risk_structural_compare",
+        "task_domain": "gastrointestinal",
+        "turns": [
+          {
+            "user_text": "这两天大便偏软，没有呕吐，也没有血便，精神正常。",
+            "intent": {"answer_now": false, "wants_triage": false, "correction": false, "raw_intent": ""},
+            "segments": [
+              {"source_text": "这两天大便偏软", "discourse_role": "fact_statement"},
+              {"source_text": "没有呕吐", "discourse_role": "fact_statement"},
+              {"source_text": "也没有血便", "discourse_role": "fact_statement"},
+              {"source_text": "精神正常", "discourse_role": "fact_statement"}
+            ],
+            "observations": [
+              {"segment_index": 0, "source_text": "大便偏软", "canonical_id": "soft_stool", "assertion": "abnormal", "subject_reference": "current_pet"},
+              {"segment_index": 1, "source_text": "没有呕吐", "canonical_id": "vomiting", "assertion": "denied", "subject_reference": "current_pet"},
+              {"segment_index": 2, "source_text": "也没有血便", "canonical_id": "bloody_stool", "assertion": "denied", "subject_reference": "current_pet"},
+              {"segment_index": 3, "source_text": "精神正常", "canonical_id": "mental_status", "assertion": "normal", "subject_reference": "current_pet"}
+            ],
+            "expected_behavior": {"simulate": false, "action": "ask"}
+          }
+        ]
+      }
+    ]
+  },
+  "experiments": [
+    {
+      "experiment_id": "D_parallel_negation_baseline",
+      "kind": "d_parallel_negation",
+      "hypothesis": "当前 Stage 1 + Stage 2 能覆盖共享否定范围内的每个项目",
+      "sample_ids": ["D_parallel_negation_compound"],
+      "repeat_count": 3,
+      "segmentation_variant": "model",
+      "expected_outcome": "semantic_exact_match"
+    },
+    {
+      "experiment_id": "D_parallel_negation_golden_stage1",
+      "kind": "d_parallel_negation",
+      "hypothesis": "给定单事实化 Stage 1 视图后，Stage 2 能逐项输出 denied evidence",
+      "sample_ids": ["D_parallel_negation_compound"],
+      "repeat_count": 3,
+      "segmentation_variant": "expected",
+      "expected_outcome": "semantic_exact_match"
+    },
+    {
+      "experiment_id": "E_subject_binding_and_possible",
+      "kind": "e_subject_ambiguity",
+      "hypothesis": "多宠物主体、用户行为、历史与假设表达可显式绑定且不默认当前宠物",
+      "sample_ids": ["E1_single_pet_omitted_subject", "E2_other_pet_explicit_subject", "E3_multi_pet_ambiguity_possible", "E4_user_action_not_pet_fact", "E5_historical_and_hypothetical"],
+      "repeat_count": 3,
+      "segmentation_variant": "model",
+      "expected_outcome": "semantic_exact_match"
+    },
+    {
+      "experiment_id": "E_subject_binding_golden_stage1",
+      "kind": "e_subject_ambiguity",
+      "hypothesis": "给定正确 Stage 1 主体视图后，Stage 2 能保留主体、possible、历史与假设语义",
+      "sample_ids": ["E1_single_pet_omitted_subject", "E2_other_pet_explicit_subject", "E3_multi_pet_ambiguity_possible", "E4_user_action_not_pet_fact", "E5_historical_and_hypothetical"],
+      "repeat_count": 3,
+      "segmentation_variant": "expected",
+      "expected_outcome": "semantic_exact_match"
+    },
+    {
+      "experiment_id": "N_invalid_canonical_fail_fast",
+      "kind": "negative_mapping",
+      "hypothesis": "not_found 占位、词表外 canonical 和显式 unmapped mention 会被阻断且不进入投影",
+      "sample_ids": ["N1_not_found_as_canonical", "N2_invented_problem_onset", "N3_invented_multi_pet_context", "N4_explicit_unmapped_mention"],
+      "repeat_count": 1,
+      "segmentation_variant": "model",
+      "expected_outcome": "gate_blocked_as_expected"
+    },
+    {
+      "experiment_id": "R_repeat_stability",
+      "kind": "repeat_stability",
+      "hypothesis": "D/E/N 样本重复运行输出稳定且漂移可归因",
+      "sample_ids": ["D_parallel_negation_compound", "E3_multi_pet_ambiguity_possible", "E5_historical_and_hypothetical"],
+      "repeat_count": 3,
+      "segmentation_variant": "model",
+      "expected_outcome": "stable_output"
+    },
+    {
+      "experiment_id": "B_consultation_decision_branches",
+      "kind": "consultation_branch",
+      "hypothesis": "answer_now-only 与 full projection 分支能复现理想下游行为",
+      "sample_ids": ["C_answer_now_branch_control", "D_parallel_negation_compound"],
+      "repeat_count": 1,
+      "segmentation_variant": "expected",
+      "expected_outcome": "branch_behavior_match"
+    },
+    {
+      "experiment_id": "CS_clinical_safety_structural_compare",
+      "kind": "clinical_safety_shadow",
+      "hypothesis": "新临床安全投影与既有临床安全语义的结构化覆盖差异可观察",
+      "sample_ids": ["CS1_low_risk_structural_compare"],
+      "repeat_count": 1,
+      "segmentation_variant": "model",
+      "expected_outcome": "comparison_report_only"
+    },
+    {
+      "experiment_id": "V_canonical_alias_recall_and_collisions",
+      "kind": "canonical_governance",
+      "hypothesis": "评估词表 alias 可被候选召回且冲突进入人工审核",
+      "sample_ids": [],
+      "repeat_count": 1,
+      "segmentation_variant": "model",
+      "expected_outcome": "governance_report_only"
+    }
+  ]
+}
