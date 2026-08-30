@@ -1,0 +1,1566 @@
+{
+  "schema_version": "v6",
+  "dataset_type": "development",
+  "reference_time": "2026-08-26T10:00:00+08:00",
+  "pet_profile": {
+    "species": "cat",
+    "lifestage": "adult"
+  },
+  "cases": [
+    {
+      "sample_id": "D5_shared_scope_dev",
+      "user_text": "没有呕吐、干呕、反流、流涎或舔唇；精神、食欲和饮水都正常；没有血便和黑便。",
+      "other_subjects": [],
+      "previous_question_target": null,
+      "expected_intent": {
+        "answer_now": false,
+        "wants_triage": false,
+        "correction": false,
+        "clarification_request": false,
+        "fact_statement_present": true,
+        "question_present": false,
+        "report_context_present": false
+      },
+      "expected_claims": [
+        {
+          "claim_id": "claim-1",
+          "evidence_quote": "没有呕吐、干呕、反流、流涎或舔唇",
+          "target_quote": "呕吐",
+          "user_statement_type": "denies",
+          "coarse_type": "symptom",
+          "subject_reference": "current_pet",
+          "subject_candidates": [],
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "normalized",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "participants": [],
+          "canonical_id": "vomiting",
+          "mapping_status": "confirmed",
+          "review_required": false,
+          "confidence": 0.98,
+          "relation": "absolute_status",
+          "relation_quote": "",
+          "subject_evidence_quote": "没有呕吐、干呕、反流、流涎或舔唇"
+        },
+        {
+          "claim_id": "claim-2",
+          "evidence_quote": "没有呕吐、干呕、反流、流涎或舔唇",
+          "target_quote": "干呕",
+          "user_statement_type": "denies",
+          "coarse_type": "symptom",
+          "subject_reference": "current_pet",
+          "subject_candidates": [],
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "normalized",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "participants": [],
+          "canonical_id": "retching",
+          "mapping_status": "confirmed",
+          "review_required": false,
+          "confidence": 0.98,
+          "relation": "absolute_status",
+          "relation_quote": "",
+          "subject_evidence_quote": "没有呕吐、干呕、反流、流涎或舔唇"
+        },
+        {
+          "claim_id": "claim-3",
+          "evidence_quote": "没有呕吐、干呕、反流、流涎或舔唇",
+          "target_quote": "反流",
+          "user_statement_type": "denies",
+          "coarse_type": "symptom",
+          "subject_reference": "current_pet",
+          "subject_candidates": [],
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "normalized",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "participants": [],
+          "canonical_id": "regurgitation",
+          "mapping_status": "confirmed",
+          "review_required": false,
+          "confidence": 0.98,
+          "relation": "absolute_status",
+          "relation_quote": "",
+          "subject_evidence_quote": "没有呕吐、干呕、反流、流涎或舔唇"
+        },
+        {
+          "claim_id": "claim-4",
+          "evidence_quote": "没有呕吐、干呕、反流、流涎或舔唇",
+          "target_quote": "流涎",
+          "user_statement_type": "denies",
+          "coarse_type": "symptom",
+          "subject_reference": "current_pet",
+          "subject_candidates": [],
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "normalized",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "participants": [],
+          "canonical_id": "drooling",
+          "mapping_status": "confirmed",
+          "review_required": false,
+          "confidence": 0.98,
+          "relation": "absolute_status",
+          "relation_quote": "",
+          "subject_evidence_quote": "没有呕吐、干呕、反流、流涎或舔唇"
+        },
+        {
+          "claim_id": "claim-5",
+          "evidence_quote": "没有呕吐、干呕、反流、流涎或舔唇",
+          "target_quote": "舔唇",
+          "user_statement_type": "denies",
+          "coarse_type": "symptom",
+          "subject_reference": "current_pet",
+          "subject_candidates": [],
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "normalized",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "participants": [],
+          "canonical_id": "lip_smacking",
+          "mapping_status": "confirmed",
+          "review_required": false,
+          "confidence": 0.98,
+          "relation": "absolute_status",
+          "relation_quote": "",
+          "subject_evidence_quote": "没有呕吐、干呕、反流、流涎或舔唇"
+        },
+        {
+          "claim_id": "claim-6",
+          "evidence_quote": "精神、食欲和饮水都正常",
+          "target_quote": "精神",
+          "user_statement_type": "reports_normal",
+          "coarse_type": "state",
+          "subject_reference": "current_pet",
+          "subject_candidates": [],
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "normalized",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "participants": [],
+          "canonical_id": "mental_status",
+          "mapping_status": "confirmed",
+          "review_required": false,
+          "confidence": 0.98,
+          "relation": "absolute_status",
+          "relation_quote": "",
+          "subject_evidence_quote": "精神、食欲和饮水都正常"
+        },
+        {
+          "claim_id": "claim-7",
+          "evidence_quote": "精神、食欲和饮水都正常",
+          "target_quote": "食欲",
+          "user_statement_type": "reports_normal",
+          "coarse_type": "state",
+          "subject_reference": "current_pet",
+          "subject_candidates": [],
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "normalized",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "participants": [],
+          "canonical_id": "appetite",
+          "mapping_status": "confirmed",
+          "review_required": false,
+          "confidence": 0.98,
+          "relation": "absolute_status",
+          "relation_quote": "",
+          "subject_evidence_quote": "精神、食欲和饮水都正常"
+        },
+        {
+          "claim_id": "claim-8",
+          "evidence_quote": "精神、食欲和饮水都正常",
+          "target_quote": "饮水",
+          "user_statement_type": "reports_normal",
+          "coarse_type": "state",
+          "subject_reference": "current_pet",
+          "subject_candidates": [],
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "normalized",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "participants": [],
+          "canonical_id": "water_intake",
+          "mapping_status": "confirmed",
+          "review_required": false,
+          "confidence": 0.98,
+          "relation": "absolute_status",
+          "relation_quote": "",
+          "subject_evidence_quote": "精神、食欲和饮水都正常"
+        },
+        {
+          "claim_id": "claim-9",
+          "evidence_quote": "没有血便和黑便",
+          "target_quote": "血便",
+          "user_statement_type": "denies",
+          "coarse_type": "symptom",
+          "subject_reference": "current_pet",
+          "subject_candidates": [],
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "normalized",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "participants": [],
+          "canonical_id": "bloody_stool",
+          "mapping_status": "confirmed",
+          "review_required": false,
+          "confidence": 0.98,
+          "relation": "absolute_status",
+          "relation_quote": "",
+          "subject_evidence_quote": "没有血便和黑便"
+        },
+        {
+          "claim_id": "claim-10",
+          "evidence_quote": "没有血便和黑便",
+          "target_quote": "黑便",
+          "user_statement_type": "denies",
+          "coarse_type": "symptom",
+          "subject_reference": "current_pet",
+          "subject_candidates": [],
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "normalized",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "participants": [],
+          "canonical_id": "bloody_stool",
+          "mapping_status": "confirmed",
+          "review_required": false,
+          "confidence": 0.98,
+          "relation": "absolute_status",
+          "relation_quote": "",
+          "subject_evidence_quote": "没有血便和黑便"
+        }
+      ]
+    },
+    {
+      "sample_id": "E5_event_roles_dev",
+      "user_text": "我前天开始给它换新猫粮。医生给它开了药。主人昨天喂了罐头。另一只猫也在呕吐。它没有呕吐。如果它呕吐了怎么办。",
+      "other_subjects": [
+        {
+          "reference_id": "user",
+          "entity_type": "user"
+        },
+        {
+          "reference_id": "doctor",
+          "entity_type": "medical_actor"
+        },
+        {
+          "reference_id": "caregiver",
+          "entity_type": "caregiver"
+        },
+        {
+          "reference_id": "other_pet",
+          "entity_type": "other_pet"
+        }
+      ],
+      "previous_question_target": null,
+      "expected_intent": {
+        "answer_now": false,
+        "wants_triage": false,
+        "correction": false,
+        "clarification_request": false,
+        "fact_statement_present": true,
+        "question_present": false,
+        "report_context_present": false
+      },
+      "expected_claims": [
+        {
+          "claim_id": "claim-1",
+          "evidence_quote": "我前天开始给它换新猫粮",
+          "target_quote": "换新猫粮",
+          "user_statement_type": "reports",
+          "coarse_type": "action",
+          "subject_reference": "current_pet",
+          "subject_candidates": [],
+          "temporal_quote": "前天",
+          "temporal_relation": "started_at",
+          "temporal_value": "day-2",
+          "temporal_precision": "day",
+          "temporal_status": "normalized",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "participants": [
+            {
+              "role": "action_agent",
+              "reference_id": "user"
+            },
+            {
+              "role": "action_recipient",
+              "reference_id": "current_pet"
+            },
+            {
+              "role": "action_object",
+              "reference_id": "current_pet",
+              "object_mention": "新猫粮"
+            }
+          ],
+          "canonical_id": "diet_change",
+          "mapping_status": "confirmed",
+          "review_required": false,
+          "confidence": 0.98,
+          "relation": "unclear",
+          "relation_quote": "",
+          "subject_evidence_quote": "我前天开始给它换新猫粮"
+        },
+        {
+          "claim_id": "claim-2",
+          "evidence_quote": "医生给它开了药",
+          "target_quote": "开了药",
+          "user_statement_type": "reports",
+          "coarse_type": "medication",
+          "subject_reference": "current_pet",
+          "subject_candidates": [],
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "normalized",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "participants": [
+            {
+              "role": "action_agent",
+              "reference_id": "doctor"
+            },
+            {
+              "role": "action_recipient",
+              "reference_id": "current_pet"
+            },
+            {
+              "role": "action_object",
+              "reference_id": "current_pet",
+              "object_mention": "药"
+            }
+          ],
+          "canonical_id": null,
+          "mapping_status": "not_found",
+          "review_required": true,
+          "confidence": 0.98,
+          "relation": "unclear",
+          "relation_quote": "",
+          "subject_evidence_quote": "医生给它开了药"
+        },
+        {
+          "claim_id": "claim-3",
+          "evidence_quote": "主人昨天喂了罐头",
+          "target_quote": "喂了罐头",
+          "user_statement_type": "reports",
+          "coarse_type": "food",
+          "subject_reference": "current_pet",
+          "subject_candidates": [],
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "normalized",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "participants": [
+            {
+              "role": "action_agent",
+              "reference_id": "caregiver"
+            },
+            {
+              "role": "action_recipient",
+              "reference_id": "current_pet"
+            },
+            {
+              "role": "action_object",
+              "reference_id": "current_pet",
+              "object_mention": "罐头"
+            }
+          ],
+          "canonical_id": null,
+          "mapping_status": "not_found",
+          "review_required": true,
+          "confidence": 0.98,
+          "relation": "unclear",
+          "relation_quote": "",
+          "subject_evidence_quote": "主人昨天喂了罐头"
+        },
+        {
+          "claim_id": "claim-4",
+          "evidence_quote": "另一只猫也在呕吐",
+          "target_quote": "呕吐",
+          "user_statement_type": "reports",
+          "coarse_type": "symptom",
+          "subject_reference": "other_pet",
+          "subject_candidates": [],
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "normalized",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "participants": [
+            {
+              "role": "experiencer",
+              "reference_id": "other_pet"
+            }
+          ],
+          "canonical_id": "vomiting",
+          "mapping_status": "confirmed",
+          "review_required": false,
+          "confidence": 0.98,
+          "relation": "unclear",
+          "relation_quote": "",
+          "subject_evidence_quote": "另一只猫也在呕吐"
+        },
+        {
+          "claim_id": "claim-5",
+          "evidence_quote": "它没有呕吐",
+          "target_quote": "呕吐",
+          "user_statement_type": "denies",
+          "coarse_type": "symptom",
+          "subject_reference": "current_pet",
+          "subject_candidates": [],
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "normalized",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "participants": [],
+          "canonical_id": "vomiting",
+          "mapping_status": "confirmed",
+          "review_required": false,
+          "confidence": 0.98,
+          "relation": "absolute_status",
+          "relation_quote": "",
+          "subject_evidence_quote": "它没有呕吐"
+        },
+        {
+          "claim_id": "claim-6",
+          "evidence_quote": "如果它呕吐了怎么办",
+          "target_quote": "呕吐",
+          "user_statement_type": "hypothetical",
+          "coarse_type": "symptom",
+          "subject_reference": "current_pet",
+          "subject_candidates": [],
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "normalized",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "participants": [],
+          "canonical_id": "vomiting",
+          "mapping_status": "confirmed",
+          "review_required": true,
+          "confidence": 0.98,
+          "relation": "unclear",
+          "relation_quote": "",
+          "subject_evidence_quote": "如果它呕吐了怎么办"
+        }
+      ]
+    },
+    {
+      "sample_id": "C5_answer_now_dev",
+      "user_text": "精神正常。请先根据现有信息给阶段建议，不要继续追问。",
+      "other_subjects": [],
+      "previous_question_target": null,
+      "expected_intent": {
+        "answer_now": false,
+        "wants_triage": false,
+        "correction": false,
+        "clarification_request": false,
+        "fact_statement_present": true,
+        "question_present": false,
+        "report_context_present": false
+      },
+      "expected_claims": [
+        {
+          "claim_id": "claim-1",
+          "evidence_quote": "精神正常",
+          "target_quote": "精神",
+          "user_statement_type": "reports_normal",
+          "coarse_type": "state",
+          "subject_reference": "current_pet",
+          "subject_candidates": [],
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "normalized",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "participants": [],
+          "canonical_id": "mental_status",
+          "mapping_status": "confirmed",
+          "review_required": false,
+          "confidence": 0.98,
+          "relation": "absolute_status",
+          "relation_quote": "",
+          "subject_evidence_quote": "精神正常"
+        }
+      ]
+    },
+    {
+      "sample_id": "M5_multi_turn_dev",
+      "user_text": "没有",
+      "other_subjects": [],
+      "previous_question_target": {
+        "reference_id": "current_pet",
+        "target_surface": "呕吐",
+        "assertion_context": "denies"
+      },
+      "expected_intent": {
+        "answer_now": false,
+        "wants_triage": false,
+        "correction": false,
+        "clarification_request": false,
+        "fact_statement_present": true,
+        "question_present": false,
+        "report_context_present": false
+      },
+      "expected_claims": [
+        {
+          "claim_id": "claim-1",
+          "evidence_quote": "没有",
+          "target_quote": "没有",
+          "user_statement_type": "denies",
+          "coarse_type": "symptom",
+          "subject_reference": "current_pet",
+          "subject_candidates": [],
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "normalized",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "participants": [],
+          "canonical_id": "vomiting",
+          "mapping_status": "confirmed",
+          "review_required": false,
+          "confidence": 0.98,
+          "relation": "absolute_status",
+          "relation_quote": "",
+          "subject_evidence_quote": "没有"
+        }
+      ]
+    },
+    {
+      "sample_id": "L5_long_mixed_dev",
+      "user_text": "我家狗最近整体精神还行，吃喝也没有明显变化。前天开始换新狗粮，这两天大便偏软，一天一次。请先根据现有信息给阶段建议。",
+      "other_subjects": [
+        {
+          "reference_id": "user",
+          "entity_type": "user"
+        }
+      ],
+      "previous_question_target": null,
+      "expected_intent": {
+        "answer_now": false,
+        "wants_triage": false,
+        "correction": false,
+        "clarification_request": false,
+        "fact_statement_present": true,
+        "question_present": false,
+        "report_context_present": false
+      },
+      "expected_claims": [
+        {
+          "claim_id": "claim-1",
+          "evidence_quote": "吃喝也没有明显变化",
+          "target_quote": "吃喝",
+          "user_statement_type": "reports",
+          "coarse_type": "state",
+          "subject_reference": "current_pet",
+          "subject_candidates": [],
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "not_applicable",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "participants": [],
+          "canonical_id": "water_intake",
+          "mapping_status": "confirmed",
+          "review_required": false,
+          "confidence": 0.98,
+          "relation": "no_change",
+          "relation_quote": "没有明显变化",
+          "subject_evidence_quote": "吃喝也没有明显变化"
+        },
+        {
+          "claim_id": "claim-2",
+          "evidence_quote": "精神还行",
+          "target_quote": "精神",
+          "user_statement_type": "reports_normal",
+          "coarse_type": "state",
+          "subject_reference": "current_pet",
+          "subject_candidates": [],
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "normalized",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "participants": [],
+          "canonical_id": "mental_status",
+          "mapping_status": "confirmed",
+          "review_required": false,
+          "confidence": 0.98,
+          "relation": "absolute_status",
+          "relation_quote": "",
+          "subject_evidence_quote": "精神还行"
+        },
+        {
+          "claim_id": "claim-3",
+          "evidence_quote": "前天开始换新狗粮",
+          "target_quote": "换新狗粮",
+          "user_statement_type": "reports",
+          "coarse_type": "action",
+          "subject_reference": "current_pet",
+          "subject_candidates": [],
+          "temporal_quote": "前天",
+          "temporal_relation": "started_at",
+          "temporal_value": "day-2",
+          "temporal_precision": "day",
+          "temporal_status": "normalized",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "participants": [
+            {
+              "role": "action_agent",
+              "reference_id": "user"
+            },
+            {
+              "role": "action_recipient",
+              "reference_id": "current_pet"
+            },
+            {
+              "role": "action_object",
+              "reference_id": "current_pet",
+              "object_mention": "新狗粮"
+            }
+          ],
+          "canonical_id": "diet_change",
+          "mapping_status": "confirmed",
+          "review_required": false,
+          "confidence": 0.98,
+          "relation": "unclear",
+          "relation_quote": "",
+          "subject_evidence_quote": "前天开始换新狗粮"
+        },
+        {
+          "claim_id": "claim-4",
+          "evidence_quote": "这两天大便偏软",
+          "target_quote": "大便偏软",
+          "user_statement_type": "reports_abnormal",
+          "coarse_type": "symptom",
+          "subject_reference": "current_pet",
+          "subject_candidates": [],
+          "temporal_quote": "这两天",
+          "temporal_relation": "duration",
+          "temporal_value": "recent-2-days-approximate",
+          "temporal_precision": "approximate_duration",
+          "temporal_status": "normalized",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "participants": [],
+          "canonical_id": "soft_stool",
+          "mapping_status": "confirmed",
+          "review_required": false,
+          "confidence": 0.98,
+          "relation": "absolute_status",
+          "relation_quote": "",
+          "subject_evidence_quote": "这两天大便偏软"
+        },
+        {
+          "claim_id": "claim-5",
+          "evidence_quote": "一天一次",
+          "target_quote": "一天一次",
+          "user_statement_type": "reports",
+          "coarse_type": "measurement",
+          "subject_reference": "current_pet",
+          "subject_candidates": [],
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "normalized",
+          "measurement_quote": "一天一次",
+          "measurement_value": "1/day",
+          "measurement_unit": "day",
+          "measurement_status": "normalized",
+          "participants": [],
+          "canonical_id": "stool_frequency",
+          "mapping_status": "confirmed",
+          "review_required": false,
+          "confidence": 0.98,
+          "relation": "unclear",
+          "relation_quote": "",
+          "subject_evidence_quote": "一天一次"
+        }
+      ]
+    },
+    {
+      "sample_id": "X5_dirty_dev",
+      "user_text": "就是有点血便 精神还好 吃饭喝水都正常 好像没有吐过",
+      "other_subjects": [],
+      "previous_question_target": null,
+      "expected_intent": {
+        "answer_now": false,
+        "wants_triage": false,
+        "correction": false,
+        "clarification_request": false,
+        "fact_statement_present": true,
+        "question_present": false,
+        "report_context_present": false
+      },
+      "expected_claims": [
+        {
+          "claim_id": "claim-1",
+          "evidence_quote": "有点血便",
+          "target_quote": "血便",
+          "user_statement_type": "reports_abnormal",
+          "coarse_type": "symptom",
+          "subject_reference": "current_pet",
+          "subject_candidates": [],
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "normalized",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "participants": [],
+          "canonical_id": "bloody_stool",
+          "mapping_status": "confirmed",
+          "review_required": false,
+          "confidence": 0.98,
+          "relation": "absolute_status",
+          "relation_quote": "",
+          "subject_evidence_quote": "有点血便"
+        },
+        {
+          "claim_id": "claim-2",
+          "evidence_quote": "精神还好",
+          "target_quote": "精神",
+          "user_statement_type": "reports_normal",
+          "coarse_type": "state",
+          "subject_reference": "current_pet",
+          "subject_candidates": [],
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "normalized",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "participants": [],
+          "canonical_id": "mental_status",
+          "mapping_status": "confirmed",
+          "review_required": false,
+          "confidence": 0.98,
+          "relation": "absolute_status",
+          "relation_quote": "",
+          "subject_evidence_quote": "精神还好"
+        },
+        {
+          "claim_id": "claim-3",
+          "evidence_quote": "吃饭喝水都正常",
+          "target_quote": "吃饭",
+          "user_statement_type": "reports_normal",
+          "coarse_type": "state",
+          "subject_reference": "current_pet",
+          "subject_candidates": [],
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "normalized",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "participants": [],
+          "canonical_id": "appetite",
+          "mapping_status": "confirmed",
+          "review_required": false,
+          "confidence": 0.98,
+          "relation": "absolute_status",
+          "relation_quote": "",
+          "subject_evidence_quote": "吃饭喝水都正常"
+        },
+        {
+          "claim_id": "claim-4",
+          "evidence_quote": "吃饭喝水都正常",
+          "target_quote": "喝水",
+          "user_statement_type": "reports_normal",
+          "coarse_type": "state",
+          "subject_reference": "current_pet",
+          "subject_candidates": [],
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "normalized",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "participants": [],
+          "canonical_id": "water_intake",
+          "mapping_status": "confirmed",
+          "review_required": false,
+          "confidence": 0.98,
+          "relation": "absolute_status",
+          "relation_quote": "",
+          "subject_evidence_quote": "吃饭喝水都正常"
+        },
+        {
+          "claim_id": "claim-5",
+          "evidence_quote": "好像没有吐过",
+          "target_quote": "吐过",
+          "user_statement_type": "denies",
+          "coarse_type": "symptom",
+          "subject_reference": "current_pet",
+          "subject_candidates": [],
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "normalized",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "participants": [],
+          "canonical_id": "vomiting",
+          "mapping_status": "confirmed",
+          "review_required": false,
+          "confidence": 0.75,
+          "relation": "absolute_status",
+          "relation_quote": "",
+          "subject_evidence_quote": "好像没有吐过"
+        }
+      ]
+    },
+    {
+      "sample_id": "V5_unmapped_dev",
+      "user_text": "它最近出现ZZZ表现",
+      "other_subjects": [],
+      "previous_question_target": null,
+      "expected_intent": {
+        "answer_now": false,
+        "wants_triage": false,
+        "correction": false,
+        "clarification_request": false,
+        "fact_statement_present": true,
+        "question_present": false,
+        "report_context_present": false
+      },
+      "expected_claims": [
+        {
+          "claim_id": "claim-1",
+          "evidence_quote": "它最近出现ZZZ表现",
+          "target_quote": "ZZZ表现",
+          "user_statement_type": "reports",
+          "coarse_type": "symptom",
+          "subject_reference": "current_pet",
+          "subject_candidates": [],
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "normalized",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "participants": [],
+          "canonical_id": null,
+          "mapping_status": "not_found",
+          "review_required": true,
+          "confidence": 0.98,
+          "relation": "unclear",
+          "relation_quote": "",
+          "subject_evidence_quote": "它最近出现ZZZ表现"
+        }
+      ]
+    },
+    {
+      "sample_id": "B5_empty_dev",
+      "user_text": "先给我一句概述就好。",
+      "other_subjects": [],
+      "previous_question_target": null,
+      "expected_intent": {
+        "answer_now": false,
+        "wants_triage": false,
+        "correction": false,
+        "clarification_request": false,
+        "fact_statement_present": false,
+        "question_present": false,
+        "report_context_present": false
+      },
+      "expected_claims": []
+    },
+    {
+      "sample_id": "A6_ambiguous_subject_dev",
+      "user_text": "它没有呕吐",
+      "other_subjects": [
+        {
+          "reference_id": "other_pet_1",
+          "entity_type": "other_pet"
+        },
+        {
+          "reference_id": "other_pet_2",
+          "entity_type": "other_pet"
+        }
+      ],
+      "previous_question_target": null,
+      "expected_intent": {
+        "answer_now": false,
+        "wants_triage": false,
+        "correction": false,
+        "clarification_request": false,
+        "fact_statement_present": true,
+        "question_present": false,
+        "report_context_present": false
+      },
+      "expected_claims": [
+        {
+          "claim_id": "claim-1",
+          "evidence_quote": "它没有呕吐",
+          "target_quote": "呕吐",
+          "user_statement_type": "denies",
+          "coarse_type": "symptom",
+          "subject_reference": null,
+          "subject_candidates": [
+            "other_pet_1",
+            "other_pet_2"
+          ],
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "normalized",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "participants": [],
+          "canonical_id": "vomiting",
+          "mapping_status": "confirmed",
+          "review_required": true,
+          "confidence": 0.98,
+          "relation": "absolute_status",
+          "relation_quote": "",
+          "subject_evidence_quote": "它没有呕吐"
+        }
+      ]
+    },
+    {
+      "sample_id": "G6_aggregate_no_change_dev",
+      "user_text": "它吃饭喝水都没有明显变化。",
+      "other_subjects": [],
+      "previous_question_target": null,
+      "expected_intent": {
+        "answer_now": false,
+        "wants_triage": false,
+        "correction": false,
+        "clarification_request": false,
+        "fact_statement_present": true,
+        "question_present": false,
+        "report_context_present": false
+      },
+      "expected_claims": [
+        {
+          "claim_id": "claim-1",
+          "evidence_quote": "吃饭喝水都没有明显变化",
+          "target_quote": "吃饭",
+          "user_statement_type": "reports",
+          "coarse_type": "state",
+          "subject_reference": "current_pet",
+          "subject_candidates": [],
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "not_applicable",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "participants": [],
+          "canonical_id": "appetite",
+          "mapping_status": "confirmed",
+          "review_required": false,
+          "confidence": 0.98,
+          "relation": "no_change",
+          "relation_quote": "没有明显变化",
+          "subject_evidence_quote": "吃饭喝水都没有明显变化"
+        },
+        {
+          "claim_id": "claim-2",
+          "evidence_quote": "吃饭喝水都没有明显变化",
+          "target_quote": "喝水",
+          "user_statement_type": "reports",
+          "coarse_type": "state",
+          "subject_reference": "current_pet",
+          "subject_candidates": [],
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "not_applicable",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "participants": [],
+          "canonical_id": "water_intake",
+          "mapping_status": "confirmed",
+          "review_required": false,
+          "confidence": 0.98,
+          "relation": "no_change",
+          "relation_quote": "没有明显变化",
+          "subject_evidence_quote": "吃饭喝水都没有明显变化"
+        }
+      ]
+    }
+  ],
+  "experiments": [
+    {
+      "experiment_id": "INTENT-V6",
+      "kind": "intent",
+      "architecture_question": "INTENT-V6 V6 architecture hypothesis",
+      "control_group": "V5-T1",
+      "experimental_group": "V6-T1",
+      "sample_ids": [
+        "C5_answer_now_dev",
+        "L5_long_mixed_dev",
+        "B5_empty_dev"
+      ],
+      "repeat_count": 1,
+      "variant": "v6_t1",
+      "primary_metrics": [
+        "schema_valid",
+        "claim_precision",
+        "claim_recall"
+      ],
+      "expected_outcome": "architecture_match"
+    },
+    {
+      "experiment_id": "THIN-QUOTE-V6",
+      "kind": "thin_quote",
+      "architecture_question": "THIN-QUOTE-V6 V6 architecture hypothesis",
+      "control_group": "V5-T1",
+      "experimental_group": "V6-T1",
+      "sample_ids": [
+        "D5_shared_scope_dev",
+        "E5_event_roles_dev"
+      ],
+      "repeat_count": 1,
+      "variant": "v6_t1",
+      "primary_metrics": [
+        "schema_valid",
+        "claim_precision",
+        "claim_recall"
+      ],
+      "expected_outcome": "architecture_match"
+    },
+    {
+      "experiment_id": "THIN-SCHEMA-V6",
+      "kind": "thin_schema",
+      "architecture_question": "THIN-SCHEMA-V6 V6 architecture hypothesis",
+      "control_group": "V5-T1",
+      "experimental_group": "V6-T1",
+      "sample_ids": [
+        "D5_shared_scope_dev",
+        "E5_event_roles_dev",
+        "L5_long_mixed_dev"
+      ],
+      "repeat_count": 1,
+      "variant": "v6_t1",
+      "primary_metrics": [
+        "schema_valid",
+        "claim_precision",
+        "claim_recall"
+      ],
+      "expected_outcome": "architecture_match"
+    },
+    {
+      "experiment_id": "STATEMENT-RELATION-V6",
+      "kind": "statement_relation",
+      "architecture_question": "STATEMENT-RELATION-V6 V6 architecture hypothesis",
+      "control_group": "V5-T1",
+      "experimental_group": "V6-T1",
+      "sample_ids": [
+        "G6_aggregate_no_change_dev",
+        "L5_long_mixed_dev"
+      ],
+      "repeat_count": 1,
+      "variant": "v6_t1",
+      "primary_metrics": [
+        "schema_valid",
+        "claim_precision",
+        "claim_recall"
+      ],
+      "expected_outcome": "architecture_match"
+    },
+    {
+      "experiment_id": "SUBJECT-STAGE-V6",
+      "kind": "subject_stage",
+      "architecture_question": "SUBJECT-STAGE-V6 V6 architecture hypothesis",
+      "control_group": "V5-T1",
+      "experimental_group": "V6-T1",
+      "sample_ids": [
+        "E5_event_roles_dev",
+        "A6_ambiguous_subject_dev"
+      ],
+      "repeat_count": 1,
+      "variant": "v6_t1",
+      "primary_metrics": [
+        "schema_valid",
+        "claim_precision",
+        "claim_recall"
+      ],
+      "expected_outcome": "architecture_match"
+    },
+    {
+      "experiment_id": "PARTICIPANT-BATCH-V6",
+      "kind": "participant_batch",
+      "architecture_question": "PARTICIPANT-BATCH-V6 V6 architecture hypothesis",
+      "control_group": "V5-T1",
+      "experimental_group": "V6-T1",
+      "sample_ids": [
+        "E5_event_roles_dev"
+      ],
+      "repeat_count": 1,
+      "variant": "v6_t1",
+      "primary_metrics": [
+        "schema_valid",
+        "claim_precision",
+        "claim_recall"
+      ],
+      "expected_outcome": "architecture_match"
+    },
+    {
+      "experiment_id": "AGGREGATE-DECOMP-V6",
+      "kind": "aggregate_decomposition",
+      "architecture_question": "AGGREGATE-DECOMP-V6 V6 architecture hypothesis",
+      "control_group": "V5-T1",
+      "experimental_group": "V6-T1",
+      "sample_ids": [
+        "G6_aggregate_no_change_dev",
+        "L5_long_mixed_dev"
+      ],
+      "repeat_count": 1,
+      "variant": "v6_t1",
+      "primary_metrics": [
+        "schema_valid",
+        "claim_precision",
+        "claim_recall"
+      ],
+      "expected_outcome": "architecture_match"
+    },
+    {
+      "experiment_id": "CAN-DIAG-V6",
+      "kind": "canonical_diagnostic",
+      "architecture_question": "CAN-DIAG-V6 V6 architecture hypothesis",
+      "control_group": "V5-T1",
+      "experimental_group": "V6-T1",
+      "sample_ids": [
+        "V5_unmapped_dev",
+        "L5_long_mixed_dev",
+        "E5_event_roles_dev"
+      ],
+      "repeat_count": 1,
+      "variant": "v6_t1",
+      "primary_metrics": [
+        "schema_valid",
+        "claim_precision",
+        "claim_recall"
+      ],
+      "expected_outcome": "architecture_match"
+    },
+    {
+      "experiment_id": "CAN-SELECT-V6",
+      "kind": "canonical_select",
+      "architecture_question": "CAN-SELECT-V6 V6 architecture hypothesis",
+      "control_group": "V5-T1",
+      "experimental_group": "V6-T1",
+      "sample_ids": [
+        "D5_shared_scope_dev",
+        "X5_dirty_dev"
+      ],
+      "repeat_count": 1,
+      "variant": "v6_t1",
+      "primary_metrics": [
+        "schema_valid",
+        "claim_precision",
+        "claim_recall"
+      ],
+      "expected_outcome": "architecture_match"
+    },
+    {
+      "experiment_id": "TEMPORAL-BATCH-V6",
+      "kind": "temporal_batch",
+      "architecture_question": "TEMPORAL-BATCH-V6 V6 architecture hypothesis",
+      "control_group": "V5-T1",
+      "experimental_group": "V6-T1",
+      "sample_ids": [
+        "E5_event_roles_dev",
+        "L5_long_mixed_dev"
+      ],
+      "repeat_count": 1,
+      "variant": "v6_t1",
+      "primary_metrics": [
+        "schema_valid",
+        "claim_precision",
+        "claim_recall"
+      ],
+      "expected_outcome": "architecture_match"
+    },
+    {
+      "experiment_id": "MEASUREMENT-BATCH-V6",
+      "kind": "measurement_batch",
+      "architecture_question": "MEASUREMENT-BATCH-V6 V6 architecture hypothesis",
+      "control_group": "V5-T1",
+      "experimental_group": "V6-T1",
+      "sample_ids": [
+        "L5_long_mixed_dev"
+      ],
+      "repeat_count": 1,
+      "variant": "v6_t1",
+      "primary_metrics": [
+        "schema_valid",
+        "claim_precision",
+        "claim_recall"
+      ],
+      "expected_outcome": "architecture_match"
+    },
+    {
+      "experiment_id": "ENRICH-PLANNER-V6",
+      "kind": "enrichment_planner",
+      "architecture_question": "ENRICH-PLANNER-V6 V6 architecture hypothesis",
+      "control_group": "V5-T1",
+      "experimental_group": "V6-T1",
+      "sample_ids": [
+        "D5_shared_scope_dev",
+        "E5_event_roles_dev"
+      ],
+      "repeat_count": 1,
+      "variant": "v6_t1",
+      "primary_metrics": [
+        "schema_valid",
+        "claim_precision",
+        "claim_recall"
+      ],
+      "expected_outcome": "architecture_match"
+    },
+    {
+      "experiment_id": "POLICY-ENRICH-T0",
+      "kind": "policy_t0",
+      "architecture_question": "POLICY-ENRICH-T0 V6 architecture hypothesis",
+      "control_group": "V6-T2",
+      "experimental_group": "V6-T0",
+      "sample_ids": [
+        "D5_shared_scope_dev",
+        "E5_event_roles_dev"
+      ],
+      "repeat_count": 1,
+      "variant": "v6_t0",
+      "primary_metrics": [
+        "schema_valid",
+        "claim_precision",
+        "claim_recall"
+      ],
+      "expected_outcome": "architecture_match"
+    },
+    {
+      "experiment_id": "POLICY-ENRICH-T2",
+      "kind": "policy_t2",
+      "architecture_question": "POLICY-ENRICH-T2 V6 architecture hypothesis",
+      "control_group": "V6-T0",
+      "experimental_group": "V6-T2",
+      "sample_ids": [
+        "D5_shared_scope_dev",
+        "E5_event_roles_dev"
+      ],
+      "repeat_count": 1,
+      "variant": "v6_t2",
+      "primary_metrics": [
+        "schema_valid",
+        "claim_precision",
+        "claim_recall"
+      ],
+      "expected_outcome": "architecture_match"
+    },
+    {
+      "experiment_id": "GRAPH-V6",
+      "kind": "graph_state",
+      "architecture_question": "GRAPH-V6 V6 architecture hypothesis",
+      "control_group": "V5-T1",
+      "experimental_group": "V6-T1",
+      "sample_ids": [
+        "A6_ambiguous_subject_dev",
+        "V5_unmapped_dev"
+      ],
+      "repeat_count": 1,
+      "variant": "v6_t1",
+      "primary_metrics": [
+        "schema_valid",
+        "claim_precision",
+        "claim_recall"
+      ],
+      "expected_outcome": "architecture_match"
+    },
+    {
+      "experiment_id": "DEDUP-MERGE-V6",
+      "kind": "dedup_merge",
+      "architecture_question": "DEDUP-MERGE-V6 V6 architecture hypothesis",
+      "control_group": "V5-T1",
+      "experimental_group": "V6-T1",
+      "sample_ids": [
+        "D5_shared_scope_dev"
+      ],
+      "repeat_count": 1,
+      "variant": "v6_t1",
+      "primary_metrics": [
+        "schema_valid",
+        "claim_precision",
+        "claim_recall"
+      ],
+      "expected_outcome": "architecture_match"
+    },
+    {
+      "experiment_id": "MULTI-TURN-V6",
+      "kind": "multi_turn",
+      "architecture_question": "MULTI-TURN-V6 V6 architecture hypothesis",
+      "control_group": "V5-T1",
+      "experimental_group": "V6-T1",
+      "sample_ids": [
+        "M5_multi_turn_dev"
+      ],
+      "repeat_count": 1,
+      "variant": "v6_t1",
+      "primary_metrics": [
+        "schema_valid",
+        "claim_precision",
+        "claim_recall"
+      ],
+      "expected_outcome": "architecture_match"
+    },
+    {
+      "experiment_id": "DOMAIN-PROJECTION-V6",
+      "kind": "domain_projection",
+      "architecture_question": "DOMAIN-PROJECTION-V6 V6 architecture hypothesis",
+      "control_group": "V5-T1",
+      "experimental_group": "V6-T1",
+      "sample_ids": [
+        "D5_shared_scope_dev",
+        "E5_event_roles_dev"
+      ],
+      "repeat_count": 1,
+      "variant": "v6_t1",
+      "primary_metrics": [
+        "schema_valid",
+        "claim_precision",
+        "claim_recall"
+      ],
+      "expected_outcome": "architecture_match"
+    },
+    {
+      "experiment_id": "CS-REPORT-ONLY-V6",
+      "kind": "cs_report_only",
+      "architecture_question": "CS-REPORT-ONLY-V6 V6 architecture hypothesis",
+      "control_group": "V5-T1",
+      "experimental_group": "V6-T1",
+      "sample_ids": [
+        "D5_shared_scope_dev",
+        "E5_event_roles_dev"
+      ],
+      "repeat_count": 1,
+      "variant": "v6_t1",
+      "primary_metrics": [
+        "schema_valid",
+        "claim_precision",
+        "claim_recall"
+      ],
+      "expected_outcome": "architecture_match"
+    },
+    {
+      "experiment_id": "NEG-V6",
+      "kind": "neg",
+      "architecture_question": "NEG-V6 V6 architecture hypothesis",
+      "control_group": "无 mutation",
+      "experimental_group": "deterministic mutations",
+      "sample_ids": [
+        "D5_shared_scope_dev"
+      ],
+      "repeat_count": 1,
+      "variant": "v6_t1",
+      "primary_metrics": [
+        "schema_valid",
+        "claim_precision",
+        "claim_recall"
+      ],
+      "expected_outcome": "architecture_match"
+    },
+    {
+      "experiment_id": "REP-V6",
+      "kind": "repeat_stability",
+      "architecture_question": "REP-V6 V6 architecture hypothesis",
+      "control_group": "V5-T1",
+      "experimental_group": "V6-T1",
+      "sample_ids": [
+        "D5_shared_scope_dev",
+        "E5_event_roles_dev",
+        "G6_aggregate_no_change_dev"
+      ],
+      "repeat_count": 3,
+      "variant": "v6_t1",
+      "primary_metrics": [
+        "schema_valid",
+        "claim_precision",
+        "claim_recall"
+      ],
+      "expected_outcome": "architecture_match"
+    },
+    {
+      "experiment_id": "ASYNC-V6",
+      "kind": "async",
+      "architecture_question": "ASYNC-V6 V6 architecture hypothesis",
+      "control_group": "V5 file queue",
+      "experimental_group": "V6 batched claim worker",
+      "sample_ids": [
+        "D5_shared_scope_dev"
+      ],
+      "repeat_count": 1,
+      "variant": "v6_t1",
+      "primary_metrics": [
+        "schema_valid",
+        "claim_precision",
+        "claim_recall"
+      ],
+      "expected_outcome": "architecture_match"
+    },
+    {
+      "experiment_id": "COST-QUALITY-V6",
+      "kind": "cost_quality",
+      "architecture_question": "COST-QUALITY-V6 V6 architecture hypothesis",
+      "control_group": "V3/V4/V5",
+      "experimental_group": "V6-T0/T1/T2",
+      "sample_ids": [
+        "D5_shared_scope_dev",
+        "E5_event_roles_dev"
+      ],
+      "repeat_count": 1,
+      "variant": "v6_t1",
+      "primary_metrics": [
+        "schema_valid",
+        "claim_precision",
+        "claim_recall"
+      ],
+      "expected_outcome": "architecture_match"
+    },
+    {
+      "experiment_id": "TOOL-ADAPTER-V6",
+      "kind": "tool_adapter",
+      "architecture_question": "TOOL-ADAPTER-V6 V6 architecture hypothesis",
+      "control_group": "Pydantic response_format",
+      "experimental_group": "same-contract tool adapters",
+      "sample_ids": [
+        "D5_shared_scope_dev"
+      ],
+      "repeat_count": 1,
+      "variant": "v6_t1",
+      "primary_metrics": [
+        "schema_valid",
+        "claim_precision",
+        "claim_recall"
+      ],
+      "expected_outcome": "architecture_match"
+    }
+  ]
+}

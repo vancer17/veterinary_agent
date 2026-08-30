@@ -1,0 +1,476 @@
+{
+  "schema_version": "v7-attribution-1",
+  "dataset_type": "development",
+  "intent_units": [
+    {
+      "unit_id": "ans-simple-1",
+      "intent_experiment": "INTENT-ANSWER-NOW",
+      "user_text": "请先根据现有信息给阶段建议，不要继续追问。",
+      "expected_detected": true,
+      "expected_evidence_quote": "请先根据现有信息给阶段建议，不要继续追问",
+      "tags": ["simple"]
+    },
+    {
+      "unit_id": "ans-long-1",
+      "intent_experiment": "INTENT-ANSWER-NOW",
+      "user_text": "它前天开始换新猫粮，这两天大便有一点软，没有呕吐，精神正常。请先根据现有信息给阶段建议，不要继续追问。",
+      "expected_detected": true,
+      "expected_evidence_quote": "请先根据现有信息给阶段建议，不要继续追问",
+      "tags": ["long_input", "facts_present"]
+    },
+    {
+      "unit_id": "ans-summary-1",
+      "intent_experiment": "INTENT-ANSWER-NOW",
+      "user_text": "先给我一句概述就好。",
+      "expected_detected": true,
+      "expected_evidence_quote": "先给我一句概述就好",
+      "tags": ["colloquial"]
+    },
+    {
+      "unit_id": "ans-fact-only-1",
+      "intent_experiment": "INTENT-ANSWER-NOW",
+      "user_text": "它没有呕吐，精神正常，食欲和饮水都正常。",
+      "expected_detected": false,
+      "tags": ["fact_only"]
+    },
+    {
+      "unit_id": "ans-question-only-1",
+      "intent_experiment": "INTENT-ANSWER-NOW",
+      "user_text": "它要不要去医院？",
+      "expected_detected": false,
+      "tags": ["question_only"]
+    },
+    {
+      "unit_id": "fact-explicit-1",
+      "intent_experiment": "INTENT-FACT-DETECT",
+      "user_text": "它没有呕吐，精神正常，食欲和饮水都正常。",
+      "expected_detected": true,
+      "expected_evidence_quote": "它没有呕吐，精神正常，食欲和饮水都正常",
+      "tags": ["explicit_facts"]
+    },
+    {
+      "unit_id": "fact-long-1",
+      "intent_experiment": "INTENT-FACT-DETECT",
+      "user_text": "前天开始换新猫粮，这两天大便有一点软，一天一次，吃喝也没有明显变化。",
+      "expected_detected": true,
+      "expected_evidence_quote": "前天开始换新猫粮，这两天大便有一点软，一天一次，吃喝也没有明显变化",
+      "tags": ["long_input"]
+    },
+    {
+      "unit_id": "fact-answer-now-1",
+      "intent_experiment": "INTENT-FACT-DETECT",
+      "user_text": "它大便偏软，没有呕吐。请先根据现有信息给阶段建议，不要继续追问。",
+      "expected_detected": true,
+      "expected_evidence_quote": "它大便偏软，没有呕吐",
+      "tags": ["parallel_intent"]
+    },
+    {
+      "unit_id": "fact-clarification-1",
+      "intent_experiment": "INTENT-FACT-DETECT",
+      "user_text": "你刚才问的是哪一项？",
+      "expected_detected": false,
+      "tags": ["clarification"]
+    },
+    {
+      "unit_id": "fact-question-only-1",
+      "intent_experiment": "INTENT-FACT-DETECT",
+      "user_text": "要不要先把粮换回去？",
+      "expected_detected": false,
+      "tags": ["question_only"]
+    },
+    {
+      "unit_id": "question-triage-1",
+      "intent_experiment": "INTENT-QUESTION",
+      "user_text": "它要不要去医院？",
+      "expected_detected": true,
+      "expected_evidence_quote": "它要不要去医院",
+      "tags": ["triage"]
+    },
+    {
+      "unit_id": "question-food-1",
+      "intent_experiment": "INTENT-QUESTION",
+      "user_text": "要不要先把粮换回去？",
+      "expected_detected": true,
+      "expected_evidence_quote": "要不要先把粮换回去",
+      "tags": ["user_question"]
+    },
+    {
+      "unit_id": "question-with-fact-1",
+      "intent_experiment": "INTENT-QUESTION",
+      "user_text": "它大便偏软，要不要换回旧粮？",
+      "expected_detected": true,
+      "expected_evidence_quote": "要不要换回旧粮",
+      "tags": ["parallel_fact"]
+    },
+    {
+      "unit_id": "question-answer-now-1",
+      "intent_experiment": "INTENT-QUESTION",
+      "user_text": "请先根据现有信息给阶段建议，不要继续追问。",
+      "expected_detected": false,
+      "tags": ["answer_now"]
+    },
+    {
+      "unit_id": "question-fact-only-1",
+      "intent_experiment": "INTENT-QUESTION",
+      "user_text": "它没有呕吐，精神正常。",
+      "expected_detected": false,
+      "tags": ["fact_only"]
+    }
+  ],
+  "quote_units": [
+    {
+      "unit_id": "quote-denial-1",
+      "user_text": "没有呕吐、干呕、反流、流涎或舔唇。",
+      "claim_hint": "用户否认呕吐",
+      "evidence_quote": "没有呕吐、干呕、反流、流涎或舔唇",
+      "expected_target_quote": "呕吐",
+      "expected_relation_quote": "",
+      "expected_subject_evidence_quote": "没有呕吐、干呕、反流、流涎或舔唇",
+      "expected_temporal_quote": "",
+      "expected_measurement_quote": ""
+    },
+    {
+      "unit_id": "quote-action-1",
+      "user_text": "我前天开始给它换新猫粮。",
+      "claim_hint": "用户开始给当前宠物换新猫粮",
+      "evidence_quote": "我前天开始给它换新猫粮",
+      "expected_target_quote": "换新猫粮",
+      "expected_relation_quote": "前天开始",
+      "expected_subject_evidence_quote": "我前天开始给它换新猫粮",
+      "expected_temporal_quote": "前天开始",
+      "expected_measurement_quote": ""
+    },
+    {
+      "unit_id": "quote-soft-stool-1",
+      "user_text": "这两天大便有一点软，一天一次。",
+      "claim_hint": "用户报告大便偏软",
+      "evidence_quote": "这两天大便有一点软，一天一次",
+      "expected_target_quote": "大便有一点软",
+      "expected_relation_quote": "这两天",
+      "expected_subject_evidence_quote": "这两天大便有一点软，一天一次",
+      "expected_temporal_quote": "这两天",
+      "expected_measurement_quote": "一天一次"
+    },
+    {
+      "unit_id": "quote-normal-1",
+      "user_text": "精神、食欲和饮水都正常。",
+      "claim_hint": "用户报告精神状态正常",
+      "evidence_quote": "精神、食欲和饮水都正常",
+      "expected_target_quote": "精神",
+      "expected_relation_quote": "",
+      "expected_subject_evidence_quote": "精神、食欲和饮水都正常",
+      "expected_temporal_quote": "",
+      "expected_measurement_quote": ""
+    },
+    {
+      "unit_id": "quote-other-pet-1",
+      "user_text": "另一只猫也在呕吐。",
+      "claim_hint": "用户报告另一只猫存在呕吐",
+      "evidence_quote": "另一只猫也在呕吐",
+      "expected_target_quote": "呕吐",
+      "expected_relation_quote": "",
+      "expected_subject_evidence_quote": "另一只猫",
+      "expected_temporal_quote": "",
+      "expected_measurement_quote": ""
+    }
+  ],
+  "thin_units": [
+    {
+      "unit_id": "thin-shared-1",
+      "user_text": "没有呕吐、干呕、反流、流涎或舔唇；精神、食欲和饮水都正常；没有血便和黑便。",
+      "expected_claims": [
+        {
+          "claim_id": "claim-1",
+          "evidence_quote": "没有呕吐、干呕、反流、流涎或舔唇",
+          "target_quote": "呕吐",
+          "user_statement_type": "denies",
+          "coarse_type": "symptom",
+          "subject_evidence_quote": "没有呕吐、干呕、反流、流涎或舔唇"
+        },
+        {
+          "claim_id": "claim-2",
+          "evidence_quote": "没有呕吐、干呕、反流、流涎或舔唇",
+          "target_quote": "干呕",
+          "user_statement_type": "denies",
+          "coarse_type": "symptom",
+          "subject_evidence_quote": "没有呕吐、干呕、反流、流涎或舔唇"
+        },
+        {
+          "claim_id": "claim-3",
+          "evidence_quote": "没有呕吐、干呕、反流、流涎或舔唇",
+          "target_quote": "反流",
+          "user_statement_type": "denies",
+          "coarse_type": "symptom",
+          "subject_evidence_quote": "没有呕吐、干呕、反流、流涎或舔唇"
+        },
+        {
+          "claim_id": "claim-4",
+          "evidence_quote": "没有呕吐、干呕、反流、流涎或舔唇",
+          "target_quote": "流涎",
+          "user_statement_type": "denies",
+          "coarse_type": "symptom",
+          "subject_evidence_quote": "没有呕吐、干呕、反流、流涎或舔唇"
+        },
+        {
+          "claim_id": "claim-5",
+          "evidence_quote": "没有呕吐、干呕、反流、流涎或舔唇",
+          "target_quote": "舔唇",
+          "user_statement_type": "denies",
+          "coarse_type": "symptom",
+          "subject_evidence_quote": "没有呕吐、干呕、反流、流涎或舔唇"
+        },
+        {
+          "claim_id": "claim-6",
+          "evidence_quote": "精神、食欲和饮水都正常",
+          "target_quote": "精神",
+          "user_statement_type": "reports_normal",
+          "coarse_type": "state",
+          "subject_evidence_quote": "精神、食欲和饮水都正常"
+        },
+        {
+          "claim_id": "claim-7",
+          "evidence_quote": "精神、食欲和饮水都正常",
+          "target_quote": "食欲",
+          "user_statement_type": "reports_normal",
+          "coarse_type": "state",
+          "subject_evidence_quote": "精神、食欲和饮水都正常"
+        },
+        {
+          "claim_id": "claim-8",
+          "evidence_quote": "精神、食欲和饮水都正常",
+          "target_quote": "饮水",
+          "user_statement_type": "reports_normal",
+          "coarse_type": "state",
+          "subject_evidence_quote": "精神、食欲和饮水都正常"
+        },
+        {
+          "claim_id": "claim-9",
+          "evidence_quote": "没有血便和黑便",
+          "target_quote": "血便",
+          "user_statement_type": "denies",
+          "coarse_type": "symptom",
+          "subject_evidence_quote": "没有血便和黑便"
+        },
+        {
+          "claim_id": "claim-10",
+          "evidence_quote": "没有血便和黑便",
+          "target_quote": "黑便",
+          "user_statement_type": "denies",
+          "coarse_type": "symptom",
+          "subject_evidence_quote": "没有血便和黑便"
+        }
+      ]
+    },
+    {
+      "unit_id": "thin-long-1",
+      "user_text": "我前天开始给它换新狗粮，这两天大便有一点软，一天一次，吃喝也没有明显变化。",
+      "expected_claims": [
+        {
+          "claim_id": "claim-1",
+          "evidence_quote": "我前天开始给它换新狗粮",
+          "target_quote": "换新狗粮",
+          "user_statement_type": "reports",
+          "coarse_type": "action",
+          "subject_evidence_quote": "我前天开始给它换新狗粮",
+          "temporal_quote": "前天开始",
+          "relation_quote": "前天开始",
+          "relation_quote_required": true
+        },
+        {
+          "claim_id": "claim-2",
+          "evidence_quote": "这两天大便有一点软",
+          "target_quote": "大便有一点软",
+          "user_statement_type": "reports_abnormal",
+          "coarse_type": "symptom",
+          "subject_evidence_quote": "这两天大便有一点软",
+          "temporal_quote": "这两天",
+          "relation_quote": "这两天",
+          "relation_quote_required": true
+        },
+        {
+          "claim_id": "claim-3",
+          "evidence_quote": "一天一次",
+          "target_quote": "一天一次",
+          "user_statement_type": "reports",
+          "coarse_type": "measurement",
+          "subject_evidence_quote": "一天一次",
+          "measurement_quote": "一天一次",
+          "relation_quote": "一天一次",
+          "relation_quote_required": true
+        },
+        {
+          "claim_id": "claim-4",
+          "evidence_quote": "吃喝也没有明显变化",
+          "target_quote": "吃喝",
+          "user_statement_type": "reports",
+          "coarse_type": "state",
+          "subject_evidence_quote": "吃喝也没有明显变化",
+          "relation_quote": "没有明显变化",
+          "relation_quote_required": true
+        }
+      ]
+    }
+  ],
+  "relation_units": [
+    {
+      "unit_id": "relation-absolute-normal",
+      "user_text": "精神正常",
+      "target_quote": "精神",
+      "relation_quote": "精神正常",
+      "expected_relation": "absolute_status"
+    },
+    {
+      "unit_id": "relation-absolute-denied",
+      "user_text": "没有呕吐",
+      "target_quote": "呕吐",
+      "relation_quote": "没有呕吐",
+      "expected_relation": "absolute_status"
+    },
+    {
+      "unit_id": "relation-no-change-1",
+      "user_text": "吃饭喝水都没有明显变化",
+      "target_quote": "吃饭喝水",
+      "relation_quote": "没有明显变化",
+      "expected_relation": "no_change"
+    },
+    {
+      "unit_id": "relation-no-change-2",
+      "user_text": "吃喝也没有明显变化",
+      "target_quote": "吃喝",
+      "relation_quote": "没有明显变化",
+      "expected_relation": "no_change"
+    },
+    {
+      "unit_id": "relation-change-1",
+      "user_text": "大便比平时软",
+      "target_quote": "大便",
+      "relation_quote": "比平时软",
+      "expected_relation": "change"
+    },
+    {
+      "unit_id": "relation-change-2",
+      "user_text": "吃得比以前少",
+      "target_quote": "吃",
+      "relation_quote": "比以前少",
+      "expected_relation": "change"
+    },
+    {
+      "unit_id": "relation-unclear-1",
+      "user_text": "时好时坏",
+      "target_quote": "情况",
+      "relation_quote": "时好时坏",
+      "expected_relation": "unclear"
+    },
+    {
+      "unit_id": "relation-unclear-2",
+      "user_text": "说不好有没有变化",
+      "target_quote": "变化",
+      "relation_quote": "说不好有没有变化",
+      "expected_relation": "unclear"
+    }
+  ],
+  "canonical_units": [
+    {
+      "unit_id": "can-vomiting",
+      "target_quote": "呕吐",
+      "coarse_type": "symptom",
+      "expected_canonical_ids": ["vomiting"]
+    },
+    {
+      "unit_id": "can-black-stool",
+      "target_quote": "黑便",
+      "coarse_type": "symptom",
+      "expected_canonical_ids": ["bloody_stool"]
+    },
+    {
+      "unit_id": "can-soft-stool",
+      "target_quote": "软便",
+      "coarse_type": "symptom",
+      "expected_canonical_ids": ["soft_stool"]
+    },
+    {
+      "unit_id": "can-mental",
+      "target_quote": "整体精神还行",
+      "coarse_type": "state",
+      "expected_canonical_ids": ["mental_status"]
+    },
+    {
+      "unit_id": "can-appetite",
+      "target_quote": "吃饭",
+      "coarse_type": "state",
+      "expected_canonical_ids": ["appetite"]
+    },
+    {
+      "unit_id": "can-water",
+      "target_quote": "喝水",
+      "coarse_type": "state",
+      "expected_canonical_ids": ["water_intake"]
+    },
+    {
+      "unit_id": "can-diet-change",
+      "target_quote": "换新狗粮",
+      "coarse_type": "action",
+      "expected_canonical_ids": ["diet_change"]
+    },
+    {
+      "unit_id": "can-frequency",
+      "target_quote": "一天一次",
+      "coarse_type": "measurement",
+      "expected_canonical_ids": ["stool_frequency"]
+    }
+  ],
+  "participant_units": [
+    {
+      "unit_id": "part-user-food-1",
+      "user_text": "我前天开始给它换新猫粮。",
+      "entity_candidates": [
+        {"reference_id": "current_pet", "entity_type": "current_pet", "display_name": "当前猫"},
+        {"reference_id": "other_pet", "entity_type": "other_pet", "display_name": "另一只猫"},
+        {"reference_id": "user", "entity_type": "user", "display_name": "主人"},
+        {"reference_id": "cat_food", "entity_type": "food", "display_name": "猫粮"}
+      ],
+      "expected_action_agent": "user",
+      "expected_action_recipient": "current_pet",
+      "expected_object_mention": "新猫粮"
+    },
+    {
+      "unit_id": "part-medical-actor-1",
+      "user_text": "医生给它开了药。",
+      "entity_candidates": [
+        {"reference_id": "current_pet", "entity_type": "current_pet", "display_name": "当前宠物"},
+        {"reference_id": "other_pet", "entity_type": "other_pet", "display_name": "另一只宠物"},
+        {"reference_id": "user", "entity_type": "user", "display_name": "主人"},
+        {"reference_id": "medical_actor", "entity_type": "medical_actor", "display_name": "医生"}
+      ],
+      "expected_action_agent": "medical_actor",
+      "expected_action_recipient": "current_pet",
+      "expected_object_mention": "药"
+    },
+    {
+      "unit_id": "part-caregiver-1",
+      "user_text": "家人昨天喂了罐头。",
+      "entity_candidates": [
+        {"reference_id": "current_pet", "entity_type": "current_pet", "display_name": "当前宠物"},
+        {"reference_id": "other_pet", "entity_type": "other_pet", "display_name": "另一只宠物"},
+        {"reference_id": "caregiver", "entity_type": "caregiver", "display_name": "家人"},
+        {"reference_id": "food", "entity_type": "food", "display_name": "罐头"}
+      ],
+      "expected_action_agent": "caregiver",
+      "expected_action_recipient": "current_pet",
+      "expected_object_mention": "罐头"
+    },
+    {
+      "unit_id": "part-other-recipient-1",
+      "user_text": "我给另一只狗喂了罐头。",
+      "entity_candidates": [
+        {"reference_id": "current_pet", "entity_type": "current_pet", "display_name": "当前猫"},
+        {"reference_id": "other_pet", "entity_type": "other_pet", "display_name": "另一只狗"},
+        {"reference_id": "user", "entity_type": "user", "display_name": "主人"},
+        {"reference_id": "food", "entity_type": "food", "display_name": "罐头"}
+      ],
+      "expected_action_agent": "user",
+      "expected_action_recipient": "other_pet",
+      "expected_object_mention": "罐头"
+    }
+  ]
+}

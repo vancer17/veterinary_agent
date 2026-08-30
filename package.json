@@ -1,0 +1,28 @@
+{
+  "name": "veterinary_agent",
+  "version": "1.0.0",
+  "description": "这是一个面向宠物主人的 FastAPI 兽医 Agent 原型，按需求文档实现第一阶段能力:",
+  "main": "index.js",
+  "engines": {
+    "node": ">=22 <23"
+  },
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "baml:check": "baml-cli check --from ./baml_src",
+    "baml:generate": "baml-cli generate --from ./baml_src --no-version-check --no-tests",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://gh-proxy.org/https://github.com/vancer17/veterinary_agent.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@boundaryml/baml": "0.226.1"
+  }
+}

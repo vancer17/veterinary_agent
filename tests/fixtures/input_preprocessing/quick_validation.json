@@ -1,0 +1,351 @@
+{
+  "schema_version": "v1",
+  "reference_time": "2026-08-24T10:00:00+08:00",
+  "pet_profile": {
+    "species": "猫",
+    "breed": "英国短毛猫",
+    "age": "2岁",
+    "weight_kg": 4.2,
+    "sex": "未知"
+  },
+  "cases": [
+    {
+      "sample_id": "A_original_low_risk_soft_stool",
+      "task_domain": "gastrointestinal",
+      "turns": [
+        {
+          "user_text": "我家英短前天开始换新猫粮，这两天大便有一点软，但精神挺好，饭和水都正常，没有呕吐，也没有血便。我要不要先把粮换回去？",
+          "intent": {
+            "answer_now": false,
+            "wants_triage": true,
+            "correction": false,
+            "raw_intent": "询问是否换回旧粮"
+          },
+          "segments": [
+            {"source_text": "前天开始换新猫粮", "discourse_role": "fact_statement"},
+            {"source_text": "这两天大便有一点软", "discourse_role": "fact_statement"},
+            {"source_text": "精神挺好", "discourse_role": "fact_statement"},
+            {"source_text": "饭和水都正常", "discourse_role": "fact_statement"},
+            {"source_text": "没有呕吐", "discourse_role": "fact_statement"},
+            {"source_text": "也没有血便", "discourse_role": "fact_statement"},
+            {"source_text": "我要不要先把粮换回去？", "discourse_role": "user_question", "requires_evidence_analysis": false}
+          ],
+          "observations": [
+            {
+              "segment_index": 0,
+              "source_text": "前天开始换新猫粮",
+              "canonical_id": "diet_change",
+              "assertion": "present",
+              "subject_reference": "current_pet",
+              "temporal": [
+                {"source_text": "前天", "relation": "started_at", "precision": "day", "status": "confirmed"}
+              ]
+            },
+            {
+              "segment_index": 1,
+              "source_text": "大便有一点软",
+              "canonical_id": "soft_stool",
+              "assertion": "abnormal",
+              "subject_reference": "current_pet",
+              "temporal": [
+                {"source_text": "这两天", "relation": "duration", "precision": "approximate_duration", "status": "imprecise"}
+              ]
+            },
+            {
+              "segment_index": 2,
+              "source_text": "精神挺好",
+              "canonical_id": "mental_status",
+              "assertion": "normal",
+              "subject_reference": "current_pet"
+            },
+            {
+              "segment_index": 3,
+              "source_text": "饭和水都正常",
+              "canonical_id": "appetite",
+              "assertion": "normal",
+              "subject_reference": "current_pet"
+            },
+            {
+              "segment_index": 3,
+              "source_text": "饭和水都正常",
+              "canonical_id": "water_intake",
+              "assertion": "normal",
+              "subject_reference": "current_pet"
+            },
+            {
+              "segment_index": 4,
+              "source_text": "没有呕吐",
+              "canonical_id": "vomiting",
+              "assertion": "denied",
+              "subject_reference": "current_pet"
+            },
+            {
+              "segment_index": 5,
+              "source_text": "也没有血便",
+              "canonical_id": "bloody_stool",
+              "assertion": "denied",
+              "subject_reference": "current_pet"
+            }
+          ],
+          "expected_behavior": {
+            "simulate": true,
+            "action": "answer",
+            "answer_now_recognized": false,
+            "answer_now_respected": true
+          }
+        }
+      ]
+    },
+    {
+      "sample_id": "B_normalized_low_risk_soft_stool",
+      "task_domain": "gastrointestinal",
+      "turns": [
+        {
+          "user_text": "猫前天开始更换新猫粮。近两天大便偏软。精神正常。食欲正常。饮水正常。没有呕吐。没有血便。请判断是否需要换回原猫粮。",
+          "intent": {
+            "answer_now": false,
+            "wants_triage": true,
+            "correction": false,
+            "raw_intent": "判断是否换回原粮"
+          },
+          "segments": [
+            {"source_text": "猫前天开始更换新猫粮。", "discourse_role": "fact_statement"},
+            {"source_text": "近两天大便偏软。", "discourse_role": "fact_statement"},
+            {"source_text": "精神正常。", "discourse_role": "fact_statement"},
+            {"source_text": "食欲正常。", "discourse_role": "fact_statement"},
+            {"source_text": "饮水正常。", "discourse_role": "fact_statement"},
+            {"source_text": "没有呕吐。", "discourse_role": "fact_statement"},
+            {"source_text": "没有血便。", "discourse_role": "fact_statement"},
+            {"source_text": "请判断是否需要换回原猫粮。", "discourse_role": "user_question", "requires_evidence_analysis": false}
+          ],
+          "observations": [
+            {"segment_index": 0, "source_text": "前天开始更换新猫粮", "canonical_id": "diet_change", "assertion": "present", "subject_reference": "current_pet"},
+            {
+              "segment_index": 1,
+              "source_text": "大便偏软",
+              "canonical_id": "soft_stool",
+              "assertion": "abnormal",
+              "subject_reference": "current_pet",
+              "temporal": [
+                {"source_text": "近两天", "relation": "duration", "precision": "approximate_duration", "status": "imprecise"}
+              ]
+            },
+            {"segment_index": 2, "source_text": "精神正常", "canonical_id": "mental_status", "assertion": "normal", "subject_reference": "current_pet"},
+            {"segment_index": 3, "source_text": "食欲正常", "canonical_id": "appetite", "assertion": "normal", "subject_reference": "current_pet"},
+            {"segment_index": 4, "source_text": "饮水正常", "canonical_id": "water_intake", "assertion": "normal", "subject_reference": "current_pet"},
+            {"segment_index": 5, "source_text": "没有呕吐", "canonical_id": "vomiting", "assertion": "denied", "subject_reference": "current_pet"},
+            {"segment_index": 6, "source_text": "没有血便", "canonical_id": "bloody_stool", "assertion": "denied", "subject_reference": "current_pet"}
+          ],
+          "expected_behavior": {
+            "simulate": true,
+            "action": "answer",
+            "answer_now_recognized": false,
+            "answer_now_respected": true
+          }
+        }
+      ]
+    },
+    {
+      "sample_id": "C_answer_now",
+      "task_domain": "gastrointestinal",
+      "turns": [
+        {
+          "user_text": "前天开始换新猫粮，这两天大便软，精神正常，食欲正常，饮水正常，没有呕吐，也没有血便。请先根据现有信息给阶段建议，不要继续追问。",
+          "intent": {
+            "answer_now": true,
+            "wants_triage": false,
+            "correction": false,
+            "raw_intent": "要求先给阶段建议"
+          },
+          "segments": [
+            {"source_text": "前天开始换新猫粮", "discourse_role": "fact_statement"},
+            {"source_text": "这两天大便软", "discourse_role": "fact_statement"},
+            {"source_text": "精神正常", "discourse_role": "fact_statement"},
+            {"source_text": "食欲正常", "discourse_role": "fact_statement"},
+            {"source_text": "饮水正常", "discourse_role": "fact_statement"},
+            {"source_text": "没有呕吐", "discourse_role": "fact_statement"},
+            {"source_text": "也没有血便", "discourse_role": "fact_statement"},
+            {"source_text": "请先根据现有信息给阶段建议，不要继续追问。", "discourse_role": "control_intent", "requires_evidence_analysis": false}
+          ],
+          "observations": [
+            {"segment_index": 0, "source_text": "前天开始换新猫粮", "canonical_id": "diet_change", "assertion": "present", "subject_reference": "current_pet"},
+            {
+              "segment_index": 1,
+              "source_text": "大便软",
+              "canonical_id": "soft_stool",
+              "assertion": "abnormal",
+              "subject_reference": "current_pet",
+              "temporal": [
+                {"source_text": "这两天", "relation": "duration", "precision": "approximate_duration", "status": "imprecise"}
+              ]
+            },
+            {"segment_index": 2, "source_text": "精神正常", "canonical_id": "mental_status", "assertion": "normal", "subject_reference": "current_pet"},
+            {"segment_index": 3, "source_text": "食欲正常", "canonical_id": "appetite", "assertion": "normal", "subject_reference": "current_pet"},
+            {"segment_index": 4, "source_text": "饮水正常", "canonical_id": "water_intake", "assertion": "normal", "subject_reference": "current_pet"},
+            {"segment_index": 5, "source_text": "没有呕吐", "canonical_id": "vomiting", "assertion": "denied", "subject_reference": "current_pet"},
+            {"segment_index": 6, "source_text": "没有血便", "canonical_id": "bloody_stool", "assertion": "denied", "subject_reference": "current_pet"}
+          ],
+          "expected_behavior": {
+            "simulate": true,
+            "action": "answer",
+            "answer_now_recognized": true,
+            "answer_now_respected": true
+          }
+        }
+      ]
+    },
+    {
+      "sample_id": "D_second_round_recovery",
+      "task_domain": "gastrointestinal",
+      "turns": [
+        {
+          "user_text": "前天开始换新猫粮，这两天大便有一点软。",
+          "intent": {"answer_now": false, "wants_triage": false, "correction": false, "raw_intent": ""},
+          "segments": [
+            {"source_text": "前天开始换新猫粮", "discourse_role": "fact_statement"},
+            {"source_text": "这两天大便有一点软", "discourse_role": "fact_statement"}
+          ],
+          "observations": [
+            {
+              "segment_index": 0,
+              "source_text": "前天开始换新猫粮",
+              "canonical_id": "diet_change",
+              "assertion": "present",
+              "subject_reference": "current_pet"
+            },
+            {
+              "segment_index": 1,
+              "source_text": "大便有一点软",
+              "canonical_id": "soft_stool",
+              "assertion": "abnormal",
+              "subject_reference": "current_pet",
+              "temporal": [
+                {"source_text": "这两天", "relation": "duration", "precision": "approximate_duration", "status": "imprecise"}
+              ]
+            }
+          ],
+          "expected_behavior": {
+            "simulate": true,
+            "action": "ask",
+            "answer_now_recognized": false,
+            "answer_now_respected": true
+          }
+        },
+        {
+          "user_text": "精神正常，会主动玩，对呼唤有反应；进食量和平常一样，饮水频率和总量没变；没有呕吐、干呕、反流、流涎或舔唇；大便偏软但没有血，一天一次；前天开始换新猫粮。",
+          "intent": {"answer_now": false, "wants_triage": false, "correction": false, "raw_intent": ""},
+          "segments": [
+            {"source_text": "精神正常，会主动玩，对呼唤有反应", "discourse_role": "fact_statement"},
+            {"source_text": "进食量和平常一样，饮水频率和总量没变", "discourse_role": "fact_statement"},
+            {"source_text": "没有呕吐、干呕、反流、流涎或舔唇", "discourse_role": "fact_statement"},
+            {"source_text": "大便偏软但没有血，一天一次", "discourse_role": "fact_statement"},
+            {"source_text": "前天开始换新猫粮", "discourse_role": "fact_statement"}
+          ],
+          "observations": [
+            {"segment_index": 0, "source_text": "精神正常", "canonical_id": "mental_status", "assertion": "normal", "subject_reference": "current_pet"},
+            {"segment_index": 0, "source_text": "会主动玩", "canonical_id": "play_behavior", "assertion": "present", "subject_reference": "current_pet"},
+            {"segment_index": 0, "source_text": "对呼唤有反应", "canonical_id": "response_to_call", "assertion": "present", "subject_reference": "current_pet"},
+            {"segment_index": 1, "source_text": "进食量和平常一样", "canonical_id": "appetite", "assertion": "normal", "subject_reference": "current_pet"},
+            {"segment_index": 1, "source_text": "饮水频率和总量没变", "canonical_id": "water_intake", "assertion": "normal", "subject_reference": "current_pet"},
+            {"segment_index": 2, "source_text": "没有呕吐", "canonical_id": "vomiting", "assertion": "denied", "subject_reference": "current_pet"},
+            {"segment_index": 2, "source_text": "干呕", "canonical_id": "retching", "assertion": "denied", "subject_reference": "current_pet"},
+            {"segment_index": 2, "source_text": "反流", "canonical_id": "regurgitation", "assertion": "denied", "subject_reference": "current_pet"},
+            {"segment_index": 2, "source_text": "流涎", "canonical_id": "drooling", "assertion": "denied", "subject_reference": "current_pet"},
+            {"segment_index": 2, "source_text": "舔唇", "canonical_id": "lip_smacking", "assertion": "denied", "subject_reference": "current_pet"},
+            {"segment_index": 3, "source_text": "大便偏软", "canonical_id": "soft_stool", "assertion": "abnormal", "subject_reference": "current_pet"},
+            {"segment_index": 3, "source_text": "没有血", "canonical_id": "bloody_stool", "assertion": "denied", "subject_reference": "current_pet"},
+            {"segment_index": 3, "source_text": "一天一次", "canonical_id": "stool_frequency", "assertion": "present", "subject_reference": "current_pet"},
+            {"segment_index": 4, "source_text": "前天开始换新猫粮", "canonical_id": "diet_change", "assertion": "present", "subject_reference": "current_pet"}
+          ],
+          "expected_behavior": {
+            "simulate": true,
+            "action": "answer",
+            "answer_now_recognized": false,
+            "answer_now_respected": true,
+            "unknown_slot_count_should_decrease": true
+          }
+        }
+      ]
+    },
+    {
+      "sample_id": "E_negative_controls",
+      "task_domain": "general",
+      "other_subjects": [
+        {"reference_id": "other_cat", "subject_type": "other_pet", "display_name": "另一只猫"}
+      ],
+      "turns": [
+        {
+          "user_text": "我家猫要不要看医生？",
+          "intent": {"answer_now": false, "wants_triage": true, "correction": false, "raw_intent": "模糊分诊"},
+          "segments": [
+            {"source_text": "我家猫要不要看医生？", "discourse_role": "user_question", "requires_evidence_analysis": false}
+          ],
+          "observations": [],
+          "expected_behavior": {
+            "simulate": true,
+            "action": "ask",
+            "answer_now_recognized": false,
+            "answer_now_respected": true,
+            "allow_empty_evidence": true
+          }
+        },
+        {
+          "user_text": "家里两只猫，其中一只好像呕吐，另一只精神正常；我不确定是哪一只。",
+          "intent": {"answer_now": false, "wants_triage": false, "correction": false, "raw_intent": "主体歧义"},
+          "segments": [
+            {"source_text": "其中一只好像呕吐", "discourse_role": "uncertain_statement"},
+            {"source_text": "另一只精神正常", "discourse_role": "fact_statement"},
+            {"source_text": "我不确定是哪一只", "discourse_role": "uncertain_statement", "requires_evidence_analysis": false}
+          ],
+          "observations": [
+            {
+              "segment_index": 0,
+              "source_text": "好像呕吐",
+              "canonical_id": "vomiting",
+              "assertion": "possible",
+              "subject_reference": "subject_ambiguous",
+              "subject_type": "unknown",
+              "resolution_method": "subject_ambiguous",
+              "subject_candidates": ["current_pet", "other_cat"]
+            },
+            {
+              "segment_index": 1,
+              "source_text": "另一只精神正常",
+              "canonical_id": "mental_status",
+              "assertion": "normal",
+              "subject_reference": "other_cat",
+              "subject_type": "other_pet",
+              "resolution_method": "explicit_coreference"
+            }
+          ],
+          "expected_behavior": {
+            "simulate": true,
+            "action": "ask",
+            "answer_now_recognized": false,
+            "answer_now_respected": true,
+            "subject_ambiguous_expected": true,
+            "allow_empty_evidence": true
+          }
+        },
+        {
+          "user_text": "去年它呕吐过。如果它现在呕吐了，我该怎么办？",
+          "intent": {"answer_now": false, "wants_triage": false, "correction": false, "raw_intent": "历史与假设"},
+          "segments": [
+            {"source_text": "去年它呕吐过。", "discourse_role": "historical_statement"},
+            {"source_text": "如果它现在呕吐了，我该怎么办？", "discourse_role": "hypothetical_statement", "requires_evidence_analysis": true}
+          ],
+          "observations": [
+            {"segment_index": 0, "source_text": "去年它呕吐过", "canonical_id": "vomiting", "assertion": "historical", "subject_reference": "current_pet"},
+            {"segment_index": 1, "source_text": "如果它现在呕吐了", "canonical_id": "vomiting", "assertion": "hypothetical", "subject_reference": "current_pet"}
+          ],
+          "expected_behavior": {
+            "simulate": true,
+            "action": "ask",
+            "answer_now_recognized": false,
+            "answer_now_respected": true
+          }
+        }
+      ]
+    }
+  ]
+}
