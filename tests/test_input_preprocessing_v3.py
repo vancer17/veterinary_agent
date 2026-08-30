@@ -8,6 +8,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
 
+import pytest
+
 from vet_agent.input_preprocessing.v3_analyzer import InputPreprocessingV3Analyzer
 from vet_agent.input_preprocessing.v3_candidate_linker import V3CandidateRetriever
 from vet_agent.input_preprocessing.v3_contracts import (
@@ -56,6 +58,8 @@ def test_third_round_development_ideal_control_passes() -> None:
 def test_third_round_held_out_confirmatory_control_passes() -> None:
     """Validate held-out samples with the required three-repeat stability rule."""
 
+    if not HELD_OUT_MATRIX.is_file():
+        pytest.skip("restricted held-out fixture is not published")
     runner = V3ArchitectureValidationRunner(
         document=load_v3_experiment_document(HELD_OUT_MATRIX),
         vocabulary=CanonicalVocabulary.load(VOCABULARY_PATH),

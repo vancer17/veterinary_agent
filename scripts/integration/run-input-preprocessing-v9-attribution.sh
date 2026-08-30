@@ -8,11 +8,16 @@
 
 set -euo pipefail
 
-ssh_host="${INPUT_PREPROCESSING_SSH_HOST:-47.97.19.58}"
+ssh_host="${INPUT_PREPROCESSING_SSH_HOST:-}"
 ssh_port="${INPUT_PREPROCESSING_SSH_PORT:-22}"
-ssh_user="${INPUT_PREPROCESSING_SSH_USER:-devlop}"
-ssh_key="${INPUT_PREPROCESSING_SSH_KEY:-/home/vancer17/.ssh/AlibabaCloudLinux}"
-remote_root="${INPUT_PREPROCESSING_V8_REMOTE_ROOT:-/home/devlop/veterinary_agent}"
+ssh_user="${INPUT_PREPROCESSING_SSH_USER}"
+ssh_key="${INPUT_PREPROCESSING_SSH_KEY}"
+remote_root="${INPUT_PREPROCESSING_V8_REMOTE_ROOT}"
+
+if [[ -z "${ssh_host}" || -z "${ssh_user}" || -z "${ssh_key}" ]]; then
+    echo "缺少远程实验主机配置：请设置 INPUT_PREPROCESSING_SSH_HOST / SSH_USER / SSH_KEY。" >&2
+    exit 1
+fi
 
 if [[ ! -f "${ssh_key}" ]]; then
     echo "SSH key not found: ${ssh_key}" >&2

@@ -6,6 +6,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
 
+import pytest
+
 from vet_agent.input_preprocessing.v7_contracts import (
     V7ExperimentId,
     V7IntentBatchRawOutput,
@@ -41,10 +43,13 @@ def test_v7_development_core_microbench_ideal_control_passes() -> None:
 
 
 def test_v7_held_out_core_microbench_ideal_control_passes() -> None:
+    held_out = Path(
+        "tests/fixtures/input_preprocessing/seventh_round_attribution_held_out.json"
+    )
+    if not held_out.is_file():
+        pytest.skip("restricted held-out fixture is not published")
     document = load_v7_experiment_document(
-        Path(
-            "tests/fixtures/input_preprocessing/seventh_round_attribution_held_out.json"
-        )
+        held_out
     )
     runner = V7AttributionRunner(document=document, vocabulary=VOCABULARY)
     reports = runner.run_for_test(mode="ideal")

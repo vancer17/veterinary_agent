@@ -12,9 +12,9 @@
 # Input preprocessing V9 专项归因实验计划
 
 > **文档状态**：历史实验计划；V9 已完成并由
-> [input-preprocessing-v9-attribution-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/input-preprocessing-v9-attribution-change-summary.md)
+> [input-preprocessing-v9-attribution-change-summary.md](input-preprocessing-v9-attribution-change-summary.md)
 > 记录权威结果。当前执行方向见
-> [input-preprocessing-v10-boundary-calibration-and-early-exit-experiment-plan.md](/home/vancer17/veterinary_agent/docs/architecture/input-preprocessing-v10-boundary-calibration-and-early-exit-experiment-plan.md)。
+> [input-preprocessing-v10-boundary-calibration-and-early-exit-experiment-plan.md](input-preprocessing-v10-boundary-calibration-and-early-exit-experiment-plan.md)。
 >
 > **历史定位**：V9 是 V8 blocker 的专项归因轮次，不是新的运行时架构，也不是生产消费准入。
 >

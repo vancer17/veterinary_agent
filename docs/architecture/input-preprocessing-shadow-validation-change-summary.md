@@ -12,7 +12,7 @@
 
 > **文档状态**：快速验证链路已实现；真实模型 shadow 结果仍需迭代，不进入生产消费
 >
-> **架构结论入口**：[agent-input-preprocessing-shadow-experiment-architecture-guidance.md](/home/vancer17/veterinary_agent/docs/architecture/agent-input-preprocessing-shadow-experiment-architecture-guidance.md)
+> **架构结论入口**：[agent-input-preprocessing-shadow-experiment-architecture-guidance.md](agent-input-preprocessing-shadow-experiment-architecture-guidance.md)
 
 ## 1. 验证定位
 

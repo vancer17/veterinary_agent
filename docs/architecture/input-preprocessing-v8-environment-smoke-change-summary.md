@@ -15,14 +15,14 @@
 > **结论**：远程开发服务器已具备第八轮实验的基础环境。Python/Torch CPU、GLiNER 本地模型、LiteLLM `qwen-plus`、Instructor、`text-embedding-v4`、BAML schema/runtime/CLI、V8 base / Instructor / BAML adapter 和 deterministic quote resolution 均已通过基础冒烟。初始冒烟暴露的 claim gate、bounded retry、BAML 项目定义与 V8 runner 缺口已修复；环境脚本 `--strict-v8-gates` 已通过。
 >
 > **限制**：本文是环境与工具链记录，不是 V8 质量结论。当前 GLiNER `staged` profile 在 development fixture 上的 required field coverage 仍为 `0.075`，SPAN-GOLDEN 未达标。该质量问题不能用关键词、正则或宽松匹配补齐。
-> 后续全阶段 runner、live stage gate、quick ideal control 与 held-out / DSPy 防护见 [input-preprocessing-v8-shadow-runner-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/input-preprocessing-v8-shadow-runner-change-summary.md)。
+> 后续全阶段 runner、live stage gate、quick ideal control 与 held-out / DSPy 防护见 [input-preprocessing-v8-shadow-runner-change-summary.md](input-preprocessing-v8-shadow-runner-change-summary.md)。
 
 ## 1. 环境基线
 
 远程开发服务器使用独立虚拟环境：
 
 ```text
-/home/devlop/veterinary_agent/.venv-v8
+$VET_AGENT_ROOT/.venv-v8
 ```
 
 | 组件 | 版本 / 状态 |
@@ -61,7 +61,7 @@ no_proxy=127.0.0.1,localhost
 远程环境文件：
 
 ```text
-/home/devlop/veterinary_agent/.env.v8.local
+$VET_AGENT_ROOT/.env.v8.local
 ```
 
 该文件包含 LiteLLM virtual key，必须保持 `600`，不得提交仓库或复制到正式文档。
@@ -73,7 +73,7 @@ GLiNER snapshot：
 ```text
 repo=gliner-community/gliner_small-v2.5
 revision=f227d3cd637bd4e6757ae143935316d062393341
-local_path=/home/devlop/.cache/v8-models/gliner-community__gliner_small-v2.5
+local_path=$VET_MODEL_CACHE/v8-models/gliner-community__gliner_small-v2.5
 weight_sha256=f3aa07b0bbd2c7d551e935fe998ceaaaa1d387f7d92f05ec70396c1264f41d22
 ```
 
@@ -239,8 +239,8 @@ STRUCT adapter 初始化或调用失败时，runner 输出 `status=failed`、`fa
 远程环境 strict 冒烟：
 
 ```bash
-ssh -i /home/vancer17/.ssh/AlibabaCloudLinux devlop@47.97.19.58 \
-  "cd /home/devlop/veterinary_agent && scripts/integration/verify-input-preprocessing-v8-environment.sh --strict-v8-gates"
+ssh -i $INPUT_PREPROCESSING_SSH_KEY $INPUT_PREPROCESSING_SSH_USER@$INPUT_PREPROCESSING_SSH_HOST \
+  "cd $VET_AGENT_ROOT && scripts/integration/verify-input-preprocessing-v8-environment.sh --strict-v8-gates"
 ```
 
 远程 Phase 0 quick validation：

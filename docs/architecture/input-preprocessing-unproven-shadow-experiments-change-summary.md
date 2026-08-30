@@ -13,7 +13,7 @@
 
 > **文档状态**：实验框架已实现；D/E 已完成远程真实模型初跑，仍未达到生产消费条件
 >
-> **架构结论入口**：[agent-input-preprocessing-shadow-experiment-architecture-guidance.md](/home/vancer17/veterinary_agent/docs/architecture/agent-input-preprocessing-shadow-experiment-architecture-guidance.md)
+> **架构结论入口**：[agent-input-preprocessing-shadow-experiment-architecture-guidance.md](agent-input-preprocessing-shadow-experiment-architecture-guidance.md)
 
 ## 1. 实验目标
 

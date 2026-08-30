@@ -22,7 +22,7 @@
 V10 使用独立虚拟环境，避免 SpanMarker 训练依赖污染已验证的 V8 环境：
 
 ```text
-/home/devlop/veterinary_agent/.venv-v10
+$VET_AGENT_ROOT/.venv-v10
 ```
 
 当前版本：
@@ -59,7 +59,7 @@ uv sync --extra v8 --extra v10-refine
 V10 环境文件：
 
 ```text
-/home/devlop/veterinary_agent/.env.v10.local
+$VET_AGENT_ROOT/.env.v10.local
 ```
 
 该文件包含 LiteLLM virtual key，当前权限为 `600`，不得提交仓库或复制到正式文档。
@@ -76,7 +76,7 @@ no_proxy=127.0.0.1,localhost
 模型根目录：
 
 ```text
-/home/devlop/.cache/v10-models
+$VET_MODEL_CACHE/v10-models
 ```
 
 目录约 `2.3GiB`。现有 V8 GLiNER small 以 symlink 复用，未重复占用存储。
@@ -131,7 +131,7 @@ gliner_config.json
 离线配置仅做两处部署级修改：
 
 ```text
-model_name -> /home/devlop/.cache/v10-models/tokenizers/microsoft__mdeberta-v3-base
+model_name -> $VET_MODEL_CACHE/v10-models/tokenizers/microsoft__mdeberta-v3-base
 vocab_size -> 250105
 ```
 
@@ -198,7 +198,7 @@ tests/test_input_preprocessing_v9.py
 使用 `.venv-v10` 执行 V8 strict environment smoke：
 
 ```text
-INPUT_PREPROCESSING_V8_PYTHON=/home/devlop/veterinary_agent/.venv-v10/bin/python
+INPUT_PREPROCESSING_V8_PYTHON=$VET_AGENT_ROOT/.venv-v10/bin/python
 scripts/integration/verify-input-preprocessing-v8-environment.sh --strict-v8-gates
 ```
 
@@ -261,7 +261,7 @@ uv sync --extra v8 --extra v10-refine
 基础环境检查：
 
 ```bash
-cd /home/devlop/veterinary_agent
+cd $VET_AGENT_ROOT
 set -a
 source .env.v10.local
 set +a
@@ -286,7 +286,7 @@ Tokenizer offset 检查：
 .venv-v10/bin/python - <<'PY'
 from transformers import AutoTokenizer
 
-path = "/home/devlop/.cache/v10-models/tokenizers/bert-base-chinese"
+path = "$VET_MODEL_CACHE/v10-models/tokenizers/bert-base-chinese"
 text = "猫前天开始呕吐，一天两次，吐未消化的猫粮。"
 tokenizer = AutoTokenizer.from_pretrained(path, local_files_only=True)
 encoded = tokenizer(text, return_offsets_mapping=True, add_special_tokens=False)
@@ -302,7 +302,7 @@ Multilingual GLiNER offline 检查：
 .venv-v10/bin/python - <<'PY'
 from gliner import GLiNER
 
-path = "/home/devlop/.cache/v10-models/gliner/urchade__gliner_multi-v2.1"
+path = "$VET_MODEL_CACHE/v10-models/gliner/urchade__gliner_multi-v2.1"
 model = GLiNER.from_pretrained(
     path,
     map_location="cpu",

@@ -8,10 +8,10 @@
 
 set -euo pipefail
 
-ssh_host="${INPUT_PREPROCESSING_SSH_HOST:-47.97.19.58}"
+ssh_host="${INPUT_PREPROCESSING_SSH_HOST:-}"
 ssh_port="${INPUT_PREPROCESSING_SSH_PORT:-22}"
-ssh_user="${INPUT_PREPROCESSING_SSH_USER:-devlop}"
-ssh_key="${INPUT_PREPROCESSING_SSH_KEY:-/home/vancer17/.ssh/AlibabaCloudLinux}"
+ssh_user="${INPUT_PREPROCESSING_SSH_USER}"
+ssh_key="${INPUT_PREPROCESSING_SSH_KEY}"
 litellm_local_port="${INPUT_PREPROCESSING_LITELLM_TUNNEL_PORT:-54003}"
 opa_local_port="${INPUT_PREPROCESSING_OPA_TUNNEL_PORT:-58184}"
 repeat="${INPUT_PREPROCESSING_REPEAT:-1}"
@@ -19,6 +19,11 @@ mode="${INPUT_PREPROCESSING_MODE:-both}"
 
 if [[ -z "${INPUT_PREPROCESSING_LITELLM_API_KEY:-}" && -z "${LITELLM_API_KEY:-}" ]]; then
     echo "缺少 LiteLLM API Key：请设置 INPUT_PREPROCESSING_LITELLM_API_KEY。" >&2
+    exit 1
+fi
+
+if [[ -z "${ssh_host}" || -z "${ssh_user}" || -z "${ssh_key}" ]]; then
+    echo "缺少远程实验主机配置：请设置 INPUT_PREPROCESSING_SSH_HOST / SSH_USER / SSH_KEY。" >&2
     exit 1
 fi
 

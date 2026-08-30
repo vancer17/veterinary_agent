@@ -70,6 +70,9 @@ htmlcov/
 *.sqlite
 *.sqlite3
 
+# 受控确认性实验 fixture，不得进入公共开发分支
+tests/fixtures/input_preprocessing/*held_out*.json
+
 # 临时目录
 tmp/
 .tmp/

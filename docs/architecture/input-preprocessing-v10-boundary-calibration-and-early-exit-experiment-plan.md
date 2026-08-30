@@ -26,7 +26,7 @@
 > 7. held-out 与 DSPy 默认冻结。
 
 > 环境基线与基础冒烟见：
-> [input-preprocessing-v10-environment-smoke-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/input-preprocessing-v10-environment-smoke-change-summary.md)。
+> [input-preprocessing-v10-environment-smoke-change-summary.md](input-preprocessing-v10-environment-smoke-change-summary.md)。
 > 环境可用不改变本计划的阶段顺序，也不解除 V8 live phase admission。
 
 ## 1. V10 问题分解

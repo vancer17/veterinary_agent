@@ -29,11 +29,11 @@
 | 材料 | 当前职责 |
 |---|---|
 | 本文 | 当前实验原则、边界、V10 对照矩阵、准入条件和防漂移规则 |
-| [agent-input-preprocessing-domain-extraction-migration-plan.md](/home/vancer17/veterinary_agent/docs/architecture/agent-input-preprocessing-domain-extraction-migration-plan.md) | 当前候选目标架构、稳定契约、早退机制和迁移阶段 |
-| [input-preprocessing-v10-boundary-calibration-and-early-exit-experiment-plan.md](/home/vancer17/veterinary_agent/docs/architecture/input-preprocessing-v10-boundary-calibration-and-early-exit-experiment-plan.md) | V10 可执行实验矩阵、指标和退出条件 |
-| [input-preprocessing-v9-attribution-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/input-preprocessing-v9-attribution-change-summary.md) | V9 根因排序、接口审计、span / macro / relation 归因和权威报告 |
-| [input-preprocessing-v8-shadow-runner-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/input-preprocessing-v8-shadow-runner-change-summary.md) | V8 全阶段 runner、live stage gate 和 phase 阻断记录 |
-| [input-preprocessing-v7-core-attribution-microbench-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/input-preprocessing-v7-core-attribution-microbench-change-summary.md) | relation classifier、canonical direct recall 和 participant resolver 的 golden winner 证据 |
+| [agent-input-preprocessing-domain-extraction-migration-plan.md](agent-input-preprocessing-domain-extraction-migration-plan.md) | 当前候选目标架构、稳定契约、早退机制和迁移阶段 |
+| [input-preprocessing-v10-boundary-calibration-and-early-exit-experiment-plan.md](input-preprocessing-v10-boundary-calibration-and-early-exit-experiment-plan.md) | V10 可执行实验矩阵、指标和退出条件 |
+| [input-preprocessing-v9-attribution-change-summary.md](input-preprocessing-v9-attribution-change-summary.md) | V9 根因排序、接口审计、span / macro / relation 归因和权威报告 |
+| [input-preprocessing-v8-shadow-runner-change-summary.md](input-preprocessing-v8-shadow-runner-change-summary.md) | V8 全阶段 runner、live stage gate 和 phase 阻断记录 |
+| [input-preprocessing-v7-core-attribution-microbench-change-summary.md](input-preprocessing-v7-core-attribution-microbench-change-summary.md) | relation classifier、canonical direct recall 和 participant resolver 的 golden winner 证据 |
 | `docs/architecture/input-preprocessing-v2-*` 至 `input-preprocessing-v8-*` | 历史实验过程记录，不再作为当前实现方向权威 |
 | `tests/fixtures/input_preprocessing/*.json` | 样本、expected signature、golden control 和 negative mutation 的工程权威 |
 
@@ -260,7 +260,7 @@ upstream_failed
 ## 4. V10 对照实验矩阵
 
 详细实验定义见
-[input-preprocessing-v10-boundary-calibration-and-early-exit-experiment-plan.md](/home/vancer17/veterinary_agent/docs/architecture/input-preprocessing-v10-boundary-calibration-and-early-exit-experiment-plan.md)。
+[input-preprocessing-v10-boundary-calibration-and-early-exit-experiment-plan.md](input-preprocessing-v10-boundary-calibration-and-early-exit-experiment-plan.md)。
 
 | Phase | 实验 | 目标 | 退出条件 |
 |---|---|---|---|
