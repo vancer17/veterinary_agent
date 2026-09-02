@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import random
 import time
+from dataclasses import dataclass
 from typing import Any, TypeVar
 
 import httpx
@@ -19,6 +20,18 @@ from vet_agent import Settings
 
 
 StructuredOutputT = TypeVar("StructuredOutputT", bound=BaseModel)
+
+
+@dataclass(frozen=True)
+class QwenStructuredResponse:
+    """A validated structured output plus provider response metadata."""
+
+    output: BaseModel
+    usage: dict[str, Any] | None = None
+    finish_reason: str = ""
+    response_id: str = ""
+    provider_model: str = ""
+    raw_response: dict[str, Any] | None = None
 
 
 class QwenClient:
@@ -126,6 +139,91 @@ class QwenClient:
                         raise
             self._record_failure()
         raise RuntimeError("Qwen structured chat request failed") from last_error
+
+    async def chat_structured_with_details(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        response_model: type[StructuredOutputT],
+        model: str | None = None,
+        temperature: float = 0.0,
+        top_p: float | None = None,
+        seed: int | None = None,
+        frequency_penalty: float | None = None,
+        presence_penalty: float | None = None,
+        max_tokens: int | None = None,
+    ) -> QwenStructuredResponse:
+        """Run one structured request and expose provider response metadata.
+
+        This path is used by diagnostic runners that must distinguish model
+        output from token usage and response metadata. Transport-level retry is
+        intentionally left to the caller; the client circuit breaker is still
+        respected.
+        """
+        if not self.available:
+            raise RuntimeError("LiteLLM proxy is not configured")
+        if self._circuit_open():
+            raise RuntimeError("Qwen circuit breaker is open")
+
+        selected_model = self._model_candidates(model)[0]
+        payload: dict[str, Any] = {
+            "model": selected_model,
+            "messages": messages,
+            "temperature": temperature,
+            "timeout": self.settings.request_timeout_seconds,
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": response_model.__name__,
+                    "schema": response_model.model_json_schema(),
+                    "strict": True,
+                },
+            },
+        }
+        optional_parameters: dict[str, Any] = {
+            "top_p": top_p,
+            "seed": seed,
+            "frequency_penalty": frequency_penalty,
+            "presence_penalty": presence_penalty,
+            "max_tokens": max_tokens,
+        }
+        payload.update(
+            {key: value for key, value in optional_parameters.items() if value is not None}
+        )
+        headers = {
+            "Authorization": f"Bearer {self.settings.litellm_api_key}",
+            "Content-Type": "application/json",
+        }
+        try:
+            await self._pace()
+            async with httpx.AsyncClient(
+                timeout=self.settings.request_timeout_seconds
+            ) as client:
+                response = await client.post(
+                    f"{self.settings.litellm_base_url}/chat/completions",
+                    headers=headers,
+                    json=payload,
+                )
+                response.raise_for_status()
+                data = response.json()
+            content = data["choices"][0]["message"]["content"]
+            output = (
+                response_model.model_validate(content)
+                if isinstance(content, dict)
+                else response_model.model_validate_json(content)
+            )
+            self._record_success()
+            return QwenStructuredResponse(
+                output=output,
+                usage=data.get("usage") if isinstance(data.get("usage"), dict) else None,
+                finish_reason=str(data.get("choices", [{}])[0].get("finish_reason", "")),
+                response_id=str(data.get("id", "")),
+                provider_model=str(data.get("model", selected_model)),
+                raw_response=data,
+            )
+        except Exception:
+            self._record_failure()
+            raise
 
     async def chat_with_images(
         self,
@@ -248,6 +346,9 @@ class QwenClient:
             "model": model,
             "messages": messages,
             "temperature": temperature,
+            # LiteLLM otherwise applies its proxy-side default timeout before
+            # the caller's httpx timeout can take effect.
+            "timeout": self.settings.request_timeout_seconds,
         }
         headers = {
             "Authorization": f"Bearer {self.settings.litellm_api_key}",
@@ -284,6 +385,9 @@ class QwenClient:
             "model": model,
             "messages": messages,
             "temperature": temperature,
+            # Propagate the caller timeout to LiteLLM; httpx timeout alone only
+            # controls the client side and cannot extend the proxy request.
+            "timeout": self.settings.request_timeout_seconds,
             "response_format": {
                 "type": "json_schema",
                 "json_schema": {
