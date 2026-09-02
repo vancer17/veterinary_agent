@@ -19,6 +19,7 @@ dependencies = [
     "llama-index-core>=0.14.23",
     "llama-index-vector-stores-postgres>=0.8.1",
     "pgvector>=0.4.2",
+    "pydantic>=2.13.4,<3",
     "psycopg[binary]>=3.3.2",
     "pytest>=9.0.2",
     "sqlalchemy>=2.0.45",
