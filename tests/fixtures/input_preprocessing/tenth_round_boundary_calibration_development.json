@@ -1,0 +1,1875 @@
+{
+  "schema_version": "v10-explicit-offset-1",
+  "dataset_type": "development",
+  "structure_unit_ids": [
+    "macro-answer-fact",
+    "macro-action-roles"
+  ],
+  "span_units": [
+    {
+      "unit_id": "span-shared-scope",
+      "user_text": "没有呕吐、干呕、反流、流涎或舔唇，精神、食欲和饮水都正常，没有血便和黑便。"
+    },
+    {
+      "unit_id": "span-action-roles",
+      "user_text": "医生昨天给它开了药，我前天开始给它换新猫粮，主人今天给它喂了罐头。"
+    },
+    {
+      "unit_id": "span-long-input",
+      "user_text": "我前天开始给它换新狗粮，这两天大便有一点软，一天一次，吃喝也没有明显变化。"
+    }
+  ],
+  "macro_units": [
+    {
+      "unit_id": "macro-answer-fact",
+      "user_text": "它前天开始换新猫粮，这两天大便有一点软，没有呕吐。请先根据现有信息给阶段建议，不要继续追问。",
+      "entity_candidates": [
+        {
+          "reference_id": "pet-current",
+          "entity_type": "current_pet",
+          "display_name": "当前宠物",
+          "mention_aliases": [
+            "它"
+          ]
+        },
+        {
+          "reference_id": "user-current",
+          "entity_type": "user",
+          "display_name": "我",
+          "mention_aliases": [
+            "本人"
+          ]
+        }
+      ],
+      "expected_acts": [
+        {
+          "act_type": "answer_now",
+          "evidence_quote": "请先根据现有信息给阶段建议，不要继续追问"
+        },
+        {
+          "act_type": "fact_statement",
+          "evidence_quote": "它前天开始换新猫粮"
+        }
+      ],
+      "expected_claims": [
+        {
+          "claim_id": "claim-diet-change",
+          "statement_type": "reports",
+          "coarse_type": "action",
+          "support_quote": "它前天开始换新猫粮",
+          "target_quote": "换新猫粮",
+          "subject_quote": "它",
+          "expected_subject_reference": "pet-current",
+          "temporal_quote": "前天开始"
+        },
+        {
+          "claim_id": "claim-soft-stool",
+          "statement_type": "reports_abnormal",
+          "coarse_type": "symptom",
+          "support_quote": "这两天大便有一点软",
+          "target_quote": "大便有一点软",
+          "subject_quote": "它",
+          "expected_subject_reference": "pet-current",
+          "temporal_quote": "这两天"
+        },
+        {
+          "claim_id": "claim-vomiting-denied",
+          "statement_type": "denies",
+          "coarse_type": "symptom",
+          "support_quote": "没有呕吐",
+          "target_quote": "呕吐",
+          "subject_quote": "它",
+          "expected_subject_reference": "pet-current"
+        }
+      ],
+      "expected_offset_fields": [
+        {
+          "claim_owner": "act-0",
+          "field_role": "evidence_quote",
+          "start": 25,
+          "end": 45,
+          "text": "请先根据现有信息给阶段建议，不要继续追问",
+          "expected_label_candidates": [
+            "control_intent_expression"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-answer-fact",
+            "source_block_id": "block-001",
+            "support_start": 25,
+            "support_end": 45,
+            "global_first_start": 25
+          },
+          "act_type": "answer_now"
+        },
+        {
+          "claim_owner": "act-1",
+          "field_role": "evidence_quote",
+          "start": 0,
+          "end": 9,
+          "text": "它前天开始换新猫粮",
+          "expected_label_candidates": [
+            "state_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-answer-fact",
+            "source_block_id": "block-001",
+            "support_start": 0,
+            "support_end": 9,
+            "global_first_start": 0
+          },
+          "act_type": "fact_statement"
+        },
+        {
+          "claim_owner": "claim-diet-change",
+          "field_role": "support_quote",
+          "start": 0,
+          "end": 9,
+          "text": "它前天开始换新猫粮",
+          "expected_label_candidates": [
+            "action_event"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-answer-fact",
+            "source_block_id": "block-001",
+            "support_start": 0,
+            "support_end": 9,
+            "global_first_start": 0
+          },
+          "coarse_type": "action"
+        },
+        {
+          "claim_owner": "claim-diet-change",
+          "field_role": "target_quote",
+          "start": 5,
+          "end": 9,
+          "text": "换新猫粮",
+          "expected_label_candidates": [
+            "target_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-answer-fact",
+            "source_block_id": "block-001",
+            "support_start": 0,
+            "support_end": 9,
+            "global_first_start": 5
+          },
+          "coarse_type": "action"
+        },
+        {
+          "claim_owner": "claim-diet-change",
+          "field_role": "subject_quote",
+          "start": 0,
+          "end": 1,
+          "text": "它",
+          "expected_label_candidates": [
+            "subject_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-answer-fact",
+            "source_block_id": "block-001",
+            "support_start": 0,
+            "support_end": 9,
+            "global_first_start": 0
+          },
+          "coarse_type": "action"
+        },
+        {
+          "claim_owner": "claim-diet-change",
+          "field_role": "temporal_quote",
+          "start": 1,
+          "end": 5,
+          "text": "前天开始",
+          "expected_label_candidates": [
+            "temporal_expression"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-answer-fact",
+            "source_block_id": "block-001",
+            "support_start": 0,
+            "support_end": 9,
+            "global_first_start": 1
+          },
+          "coarse_type": "action"
+        },
+        {
+          "claim_owner": "claim-soft-stool",
+          "field_role": "support_quote",
+          "start": 10,
+          "end": 19,
+          "text": "这两天大便有一点软",
+          "expected_label_candidates": [
+            "state_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-answer-fact",
+            "source_block_id": "block-001",
+            "support_start": 10,
+            "support_end": 19,
+            "global_first_start": 10
+          },
+          "coarse_type": "symptom"
+        },
+        {
+          "claim_owner": "claim-soft-stool",
+          "field_role": "target_quote",
+          "start": 13,
+          "end": 19,
+          "text": "大便有一点软",
+          "expected_label_candidates": [
+            "target_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-answer-fact",
+            "source_block_id": "block-001",
+            "support_start": 10,
+            "support_end": 19,
+            "global_first_start": 13
+          },
+          "coarse_type": "symptom"
+        },
+        {
+          "claim_owner": "claim-soft-stool",
+          "field_role": "subject_quote",
+          "start": 0,
+          "end": 1,
+          "text": "它",
+          "expected_label_candidates": [
+            "subject_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-answer-fact",
+            "source_block_id": "block-001",
+            "support_start": 10,
+            "support_end": 19,
+            "global_first_start": 0
+          },
+          "coarse_type": "symptom"
+        },
+        {
+          "claim_owner": "claim-soft-stool",
+          "field_role": "temporal_quote",
+          "start": 10,
+          "end": 13,
+          "text": "这两天",
+          "expected_label_candidates": [
+            "temporal_expression"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-answer-fact",
+            "source_block_id": "block-001",
+            "support_start": 10,
+            "support_end": 19,
+            "global_first_start": 10
+          },
+          "coarse_type": "symptom"
+        },
+        {
+          "claim_owner": "claim-vomiting-denied",
+          "field_role": "support_quote",
+          "start": 20,
+          "end": 24,
+          "text": "没有呕吐",
+          "expected_label_candidates": [
+            "state_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-answer-fact",
+            "source_block_id": "block-001",
+            "support_start": 20,
+            "support_end": 24,
+            "global_first_start": 20
+          },
+          "coarse_type": "symptom"
+        },
+        {
+          "claim_owner": "claim-vomiting-denied",
+          "field_role": "target_quote",
+          "start": 22,
+          "end": 24,
+          "text": "呕吐",
+          "expected_label_candidates": [
+            "target_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-answer-fact",
+            "source_block_id": "block-001",
+            "support_start": 20,
+            "support_end": 24,
+            "global_first_start": 22
+          },
+          "coarse_type": "symptom"
+        },
+        {
+          "claim_owner": "claim-vomiting-denied",
+          "field_role": "subject_quote",
+          "start": 0,
+          "end": 1,
+          "text": "它",
+          "expected_label_candidates": [
+            "subject_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-answer-fact",
+            "source_block_id": "block-001",
+            "support_start": 20,
+            "support_end": 24,
+            "global_first_start": 0
+          },
+          "coarse_type": "symptom"
+        }
+      ]
+    },
+    {
+      "unit_id": "macro-shared-scope",
+      "user_text": "没有呕吐、干呕、反流、流涎或舔唇，精神、食欲和饮水都正常，没有血便和黑便。",
+      "entity_candidates": [
+        {
+          "reference_id": "pet-current",
+          "entity_type": "current_pet",
+          "display_name": "当前宠物",
+          "mention_aliases": [
+            "它"
+          ]
+        }
+      ],
+      "expected_acts": [
+        {
+          "act_type": "fact_statement",
+          "evidence_quote": "没有呕吐、干呕、反流、流涎或舔唇"
+        }
+      ],
+      "expected_claims": [
+        {
+          "claim_id": "claim-vomiting",
+          "statement_type": "denies",
+          "coarse_type": "symptom",
+          "support_quote": "没有呕吐、干呕、反流、流涎或舔唇",
+          "target_quote": "呕吐"
+        },
+        {
+          "claim_id": "claim-retching",
+          "statement_type": "denies",
+          "coarse_type": "symptom",
+          "support_quote": "没有呕吐、干呕、反流、流涎或舔唇",
+          "target_quote": "干呕"
+        },
+        {
+          "claim_id": "claim-regurgitation",
+          "statement_type": "denies",
+          "coarse_type": "symptom",
+          "support_quote": "没有呕吐、干呕、反流、流涎或舔唇",
+          "target_quote": "反流"
+        },
+        {
+          "claim_id": "claim-drooling",
+          "statement_type": "denies",
+          "coarse_type": "symptom",
+          "support_quote": "没有呕吐、干呕、反流、流涎或舔唇",
+          "target_quote": "流涎"
+        },
+        {
+          "claim_id": "claim-lip-smacking",
+          "statement_type": "denies",
+          "coarse_type": "symptom",
+          "support_quote": "没有呕吐、干呕、反流、流涎或舔唇",
+          "target_quote": "舔唇"
+        },
+        {
+          "claim_id": "claim-mental",
+          "statement_type": "reports_normal",
+          "coarse_type": "state",
+          "support_quote": "精神、食欲和饮水都正常",
+          "target_quote": "精神",
+          "relation_quote": "正常",
+          "expected_relation": "absolute_status"
+        },
+        {
+          "claim_id": "claim-appetite",
+          "statement_type": "reports_normal",
+          "coarse_type": "state",
+          "support_quote": "精神、食欲和饮水都正常",
+          "target_quote": "食欲",
+          "relation_quote": "正常",
+          "expected_relation": "absolute_status"
+        },
+        {
+          "claim_id": "claim-water",
+          "statement_type": "reports_normal",
+          "coarse_type": "state",
+          "support_quote": "精神、食欲和饮水都正常",
+          "target_quote": "饮水",
+          "relation_quote": "正常",
+          "expected_relation": "absolute_status"
+        },
+        {
+          "claim_id": "claim-bloody-stool",
+          "statement_type": "denies",
+          "coarse_type": "symptom",
+          "support_quote": "没有血便和黑便",
+          "target_quote": "血便"
+        },
+        {
+          "claim_id": "claim-melena",
+          "statement_type": "denies",
+          "coarse_type": "symptom",
+          "support_quote": "没有血便和黑便",
+          "target_quote": "黑便"
+        }
+      ],
+      "expected_offset_fields": [
+        {
+          "claim_owner": "act-0",
+          "field_role": "evidence_quote",
+          "start": 0,
+          "end": 16,
+          "text": "没有呕吐、干呕、反流、流涎或舔唇",
+          "expected_label_candidates": [
+            "state_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-shared-scope",
+            "source_block_id": "block-001",
+            "support_start": 0,
+            "support_end": 16,
+            "global_first_start": 0
+          },
+          "act_type": "fact_statement"
+        },
+        {
+          "claim_owner": "claim-vomiting",
+          "field_role": "support_quote",
+          "start": 0,
+          "end": 16,
+          "text": "没有呕吐、干呕、反流、流涎或舔唇",
+          "expected_label_candidates": [
+            "state_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-shared-scope",
+            "source_block_id": "block-001",
+            "support_start": 0,
+            "support_end": 16,
+            "global_first_start": 0
+          },
+          "coarse_type": "symptom"
+        },
+        {
+          "claim_owner": "claim-vomiting",
+          "field_role": "target_quote",
+          "start": 2,
+          "end": 4,
+          "text": "呕吐",
+          "expected_label_candidates": [
+            "target_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-shared-scope",
+            "source_block_id": "block-001",
+            "support_start": 0,
+            "support_end": 16,
+            "global_first_start": 2
+          },
+          "coarse_type": "symptom"
+        },
+        {
+          "claim_owner": "claim-retching",
+          "field_role": "support_quote",
+          "start": 0,
+          "end": 16,
+          "text": "没有呕吐、干呕、反流、流涎或舔唇",
+          "expected_label_candidates": [
+            "state_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-shared-scope",
+            "source_block_id": "block-001",
+            "support_start": 0,
+            "support_end": 16,
+            "global_first_start": 0
+          },
+          "coarse_type": "symptom"
+        },
+        {
+          "claim_owner": "claim-retching",
+          "field_role": "target_quote",
+          "start": 5,
+          "end": 7,
+          "text": "干呕",
+          "expected_label_candidates": [
+            "target_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-shared-scope",
+            "source_block_id": "block-001",
+            "support_start": 0,
+            "support_end": 16,
+            "global_first_start": 5
+          },
+          "coarse_type": "symptom"
+        },
+        {
+          "claim_owner": "claim-regurgitation",
+          "field_role": "support_quote",
+          "start": 0,
+          "end": 16,
+          "text": "没有呕吐、干呕、反流、流涎或舔唇",
+          "expected_label_candidates": [
+            "state_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-shared-scope",
+            "source_block_id": "block-001",
+            "support_start": 0,
+            "support_end": 16,
+            "global_first_start": 0
+          },
+          "coarse_type": "symptom"
+        },
+        {
+          "claim_owner": "claim-regurgitation",
+          "field_role": "target_quote",
+          "start": 8,
+          "end": 10,
+          "text": "反流",
+          "expected_label_candidates": [
+            "target_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-shared-scope",
+            "source_block_id": "block-001",
+            "support_start": 0,
+            "support_end": 16,
+            "global_first_start": 8
+          },
+          "coarse_type": "symptom"
+        },
+        {
+          "claim_owner": "claim-drooling",
+          "field_role": "support_quote",
+          "start": 0,
+          "end": 16,
+          "text": "没有呕吐、干呕、反流、流涎或舔唇",
+          "expected_label_candidates": [
+            "state_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-shared-scope",
+            "source_block_id": "block-001",
+            "support_start": 0,
+            "support_end": 16,
+            "global_first_start": 0
+          },
+          "coarse_type": "symptom"
+        },
+        {
+          "claim_owner": "claim-drooling",
+          "field_role": "target_quote",
+          "start": 11,
+          "end": 13,
+          "text": "流涎",
+          "expected_label_candidates": [
+            "target_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-shared-scope",
+            "source_block_id": "block-001",
+            "support_start": 0,
+            "support_end": 16,
+            "global_first_start": 11
+          },
+          "coarse_type": "symptom"
+        },
+        {
+          "claim_owner": "claim-lip-smacking",
+          "field_role": "support_quote",
+          "start": 0,
+          "end": 16,
+          "text": "没有呕吐、干呕、反流、流涎或舔唇",
+          "expected_label_candidates": [
+            "state_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-shared-scope",
+            "source_block_id": "block-001",
+            "support_start": 0,
+            "support_end": 16,
+            "global_first_start": 0
+          },
+          "coarse_type": "symptom"
+        },
+        {
+          "claim_owner": "claim-lip-smacking",
+          "field_role": "target_quote",
+          "start": 14,
+          "end": 16,
+          "text": "舔唇",
+          "expected_label_candidates": [
+            "target_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-shared-scope",
+            "source_block_id": "block-001",
+            "support_start": 0,
+            "support_end": 16,
+            "global_first_start": 14
+          },
+          "coarse_type": "symptom"
+        },
+        {
+          "claim_owner": "claim-mental",
+          "field_role": "support_quote",
+          "start": 17,
+          "end": 28,
+          "text": "精神、食欲和饮水都正常",
+          "expected_label_candidates": [
+            "state_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-shared-scope",
+            "source_block_id": "block-001",
+            "support_start": 17,
+            "support_end": 28,
+            "global_first_start": 17
+          },
+          "coarse_type": "state"
+        },
+        {
+          "claim_owner": "claim-mental",
+          "field_role": "target_quote",
+          "start": 17,
+          "end": 19,
+          "text": "精神",
+          "expected_label_candidates": [
+            "target_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-shared-scope",
+            "source_block_id": "block-001",
+            "support_start": 17,
+            "support_end": 28,
+            "global_first_start": 17
+          },
+          "coarse_type": "state"
+        },
+        {
+          "claim_owner": "claim-mental",
+          "field_role": "relation_quote",
+          "start": 26,
+          "end": 28,
+          "text": "正常",
+          "expected_label_candidates": [
+            "relation_expression"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-shared-scope",
+            "source_block_id": "block-001",
+            "support_start": 17,
+            "support_end": 28,
+            "global_first_start": 26
+          },
+          "coarse_type": "state"
+        },
+        {
+          "claim_owner": "claim-appetite",
+          "field_role": "support_quote",
+          "start": 17,
+          "end": 28,
+          "text": "精神、食欲和饮水都正常",
+          "expected_label_candidates": [
+            "state_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-shared-scope",
+            "source_block_id": "block-001",
+            "support_start": 17,
+            "support_end": 28,
+            "global_first_start": 17
+          },
+          "coarse_type": "state"
+        },
+        {
+          "claim_owner": "claim-appetite",
+          "field_role": "target_quote",
+          "start": 20,
+          "end": 22,
+          "text": "食欲",
+          "expected_label_candidates": [
+            "target_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-shared-scope",
+            "source_block_id": "block-001",
+            "support_start": 17,
+            "support_end": 28,
+            "global_first_start": 20
+          },
+          "coarse_type": "state"
+        },
+        {
+          "claim_owner": "claim-appetite",
+          "field_role": "relation_quote",
+          "start": 26,
+          "end": 28,
+          "text": "正常",
+          "expected_label_candidates": [
+            "relation_expression"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-shared-scope",
+            "source_block_id": "block-001",
+            "support_start": 17,
+            "support_end": 28,
+            "global_first_start": 26
+          },
+          "coarse_type": "state"
+        },
+        {
+          "claim_owner": "claim-water",
+          "field_role": "support_quote",
+          "start": 17,
+          "end": 28,
+          "text": "精神、食欲和饮水都正常",
+          "expected_label_candidates": [
+            "state_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-shared-scope",
+            "source_block_id": "block-001",
+            "support_start": 17,
+            "support_end": 28,
+            "global_first_start": 17
+          },
+          "coarse_type": "state"
+        },
+        {
+          "claim_owner": "claim-water",
+          "field_role": "target_quote",
+          "start": 23,
+          "end": 25,
+          "text": "饮水",
+          "expected_label_candidates": [
+            "target_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-shared-scope",
+            "source_block_id": "block-001",
+            "support_start": 17,
+            "support_end": 28,
+            "global_first_start": 23
+          },
+          "coarse_type": "state"
+        },
+        {
+          "claim_owner": "claim-water",
+          "field_role": "relation_quote",
+          "start": 26,
+          "end": 28,
+          "text": "正常",
+          "expected_label_candidates": [
+            "relation_expression"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-shared-scope",
+            "source_block_id": "block-001",
+            "support_start": 17,
+            "support_end": 28,
+            "global_first_start": 26
+          },
+          "coarse_type": "state"
+        },
+        {
+          "claim_owner": "claim-bloody-stool",
+          "field_role": "support_quote",
+          "start": 29,
+          "end": 36,
+          "text": "没有血便和黑便",
+          "expected_label_candidates": [
+            "state_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-shared-scope",
+            "source_block_id": "block-001",
+            "support_start": 29,
+            "support_end": 36,
+            "global_first_start": 29
+          },
+          "coarse_type": "symptom"
+        },
+        {
+          "claim_owner": "claim-bloody-stool",
+          "field_role": "target_quote",
+          "start": 31,
+          "end": 33,
+          "text": "血便",
+          "expected_label_candidates": [
+            "target_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-shared-scope",
+            "source_block_id": "block-001",
+            "support_start": 29,
+            "support_end": 36,
+            "global_first_start": 31
+          },
+          "coarse_type": "symptom"
+        },
+        {
+          "claim_owner": "claim-melena",
+          "field_role": "support_quote",
+          "start": 29,
+          "end": 36,
+          "text": "没有血便和黑便",
+          "expected_label_candidates": [
+            "state_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-shared-scope",
+            "source_block_id": "block-001",
+            "support_start": 29,
+            "support_end": 36,
+            "global_first_start": 29
+          },
+          "coarse_type": "symptom"
+        },
+        {
+          "claim_owner": "claim-melena",
+          "field_role": "target_quote",
+          "start": 34,
+          "end": 36,
+          "text": "黑便",
+          "expected_label_candidates": [
+            "target_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-shared-scope",
+            "source_block_id": "block-001",
+            "support_start": 29,
+            "support_end": 36,
+            "global_first_start": 34
+          },
+          "coarse_type": "symptom"
+        }
+      ]
+    },
+    {
+      "unit_id": "macro-action-roles",
+      "user_text": "医生昨天给它开了药，我前天开始给它换新猫粮，主人今天给它喂了罐头。",
+      "entity_candidates": [
+        {
+          "reference_id": "pet-current",
+          "entity_type": "current_pet",
+          "display_name": "当前宠物",
+          "mention_aliases": [
+            "它"
+          ]
+        },
+        {
+          "reference_id": "user-current",
+          "entity_type": "user",
+          "display_name": "我"
+        },
+        {
+          "reference_id": "actor-medical",
+          "entity_type": "medical_actor",
+          "display_name": "医生"
+        },
+        {
+          "reference_id": "actor-caregiver",
+          "entity_type": "caregiver",
+          "display_name": "主人"
+        }
+      ],
+      "expected_acts": [
+        {
+          "act_type": "fact_statement",
+          "evidence_quote": "医生昨天给它开了药"
+        }
+      ],
+      "expected_claims": [
+        {
+          "claim_id": "claim-medication",
+          "statement_type": "reports",
+          "coarse_type": "medication",
+          "support_quote": "医生昨天给它开了药",
+          "target_quote": "开了药",
+          "action_agent_quote": "医生",
+          "expected_action_agent_reference": "actor-medical",
+          "action_recipient_quote": "它",
+          "expected_action_recipient_reference": "pet-current",
+          "object_quote": "药",
+          "temporal_quote": "昨天"
+        },
+        {
+          "claim_id": "claim-diet-change",
+          "statement_type": "reports",
+          "coarse_type": "action",
+          "support_quote": "我前天开始给它换新猫粮",
+          "target_quote": "换新猫粮",
+          "action_agent_quote": "我",
+          "expected_action_agent_reference": "user-current",
+          "action_recipient_quote": "它",
+          "expected_action_recipient_reference": "pet-current",
+          "object_quote": "新猫粮",
+          "temporal_quote": "前天开始"
+        },
+        {
+          "claim_id": "claim-feeding",
+          "statement_type": "reports",
+          "coarse_type": "food",
+          "support_quote": "主人今天给它喂了罐头",
+          "target_quote": "喂了罐头",
+          "action_agent_quote": "主人",
+          "expected_action_agent_reference": "actor-caregiver",
+          "action_recipient_quote": "它",
+          "expected_action_recipient_reference": "pet-current",
+          "object_quote": "罐头",
+          "temporal_quote": "今天"
+        }
+      ],
+      "expected_offset_fields": [
+        {
+          "claim_owner": "act-0",
+          "field_role": "evidence_quote",
+          "start": 0,
+          "end": 9,
+          "text": "医生昨天给它开了药",
+          "expected_label_candidates": [
+            "state_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-action-roles",
+            "source_block_id": "block-001",
+            "support_start": 0,
+            "support_end": 9,
+            "global_first_start": 0
+          },
+          "act_type": "fact_statement"
+        },
+        {
+          "claim_owner": "claim-medication",
+          "field_role": "support_quote",
+          "start": 0,
+          "end": 9,
+          "text": "医生昨天给它开了药",
+          "expected_label_candidates": [
+            "action_event"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-action-roles",
+            "source_block_id": "block-001",
+            "support_start": 0,
+            "support_end": 9,
+            "global_first_start": 0
+          },
+          "coarse_type": "medication"
+        },
+        {
+          "claim_owner": "claim-medication",
+          "field_role": "target_quote",
+          "start": 6,
+          "end": 9,
+          "text": "开了药",
+          "expected_label_candidates": [
+            "target_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-action-roles",
+            "source_block_id": "block-001",
+            "support_start": 0,
+            "support_end": 9,
+            "global_first_start": 6
+          },
+          "coarse_type": "medication"
+        },
+        {
+          "claim_owner": "claim-medication",
+          "field_role": "action_agent_quote",
+          "start": 0,
+          "end": 2,
+          "text": "医生",
+          "expected_label_candidates": [
+            "agent_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-action-roles",
+            "source_block_id": "block-001",
+            "support_start": 0,
+            "support_end": 9,
+            "global_first_start": 0
+          },
+          "coarse_type": "medication"
+        },
+        {
+          "claim_owner": "claim-medication",
+          "field_role": "action_recipient_quote",
+          "start": 5,
+          "end": 6,
+          "text": "它",
+          "expected_label_candidates": [
+            "recipient_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-action-roles",
+            "source_block_id": "block-001",
+            "support_start": 0,
+            "support_end": 9,
+            "global_first_start": 5
+          },
+          "coarse_type": "medication"
+        },
+        {
+          "claim_owner": "claim-medication",
+          "field_role": "object_quote",
+          "start": 8,
+          "end": 9,
+          "text": "药",
+          "expected_label_candidates": [
+            "object_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-action-roles",
+            "source_block_id": "block-001",
+            "support_start": 0,
+            "support_end": 9,
+            "global_first_start": 8
+          },
+          "coarse_type": "medication"
+        },
+        {
+          "claim_owner": "claim-medication",
+          "field_role": "temporal_quote",
+          "start": 2,
+          "end": 4,
+          "text": "昨天",
+          "expected_label_candidates": [
+            "temporal_expression"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-action-roles",
+            "source_block_id": "block-001",
+            "support_start": 0,
+            "support_end": 9,
+            "global_first_start": 2
+          },
+          "coarse_type": "medication"
+        },
+        {
+          "claim_owner": "claim-diet-change",
+          "field_role": "support_quote",
+          "start": 10,
+          "end": 21,
+          "text": "我前天开始给它换新猫粮",
+          "expected_label_candidates": [
+            "action_event"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-action-roles",
+            "source_block_id": "block-001",
+            "support_start": 10,
+            "support_end": 21,
+            "global_first_start": 10
+          },
+          "coarse_type": "action"
+        },
+        {
+          "claim_owner": "claim-diet-change",
+          "field_role": "target_quote",
+          "start": 17,
+          "end": 21,
+          "text": "换新猫粮",
+          "expected_label_candidates": [
+            "target_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-action-roles",
+            "source_block_id": "block-001",
+            "support_start": 10,
+            "support_end": 21,
+            "global_first_start": 17
+          },
+          "coarse_type": "action"
+        },
+        {
+          "claim_owner": "claim-diet-change",
+          "field_role": "action_agent_quote",
+          "start": 10,
+          "end": 11,
+          "text": "我",
+          "expected_label_candidates": [
+            "agent_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-action-roles",
+            "source_block_id": "block-001",
+            "support_start": 10,
+            "support_end": 21,
+            "global_first_start": 10
+          },
+          "coarse_type": "action"
+        },
+        {
+          "claim_owner": "claim-diet-change",
+          "field_role": "action_recipient_quote",
+          "start": 16,
+          "end": 17,
+          "text": "它",
+          "expected_label_candidates": [
+            "recipient_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-action-roles",
+            "source_block_id": "block-001",
+            "support_start": 10,
+            "support_end": 21,
+            "global_first_start": 5
+          },
+          "coarse_type": "action"
+        },
+        {
+          "claim_owner": "claim-diet-change",
+          "field_role": "object_quote",
+          "start": 18,
+          "end": 21,
+          "text": "新猫粮",
+          "expected_label_candidates": [
+            "object_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-action-roles",
+            "source_block_id": "block-001",
+            "support_start": 10,
+            "support_end": 21,
+            "global_first_start": 18
+          },
+          "coarse_type": "action"
+        },
+        {
+          "claim_owner": "claim-diet-change",
+          "field_role": "temporal_quote",
+          "start": 11,
+          "end": 15,
+          "text": "前天开始",
+          "expected_label_candidates": [
+            "temporal_expression"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-action-roles",
+            "source_block_id": "block-001",
+            "support_start": 10,
+            "support_end": 21,
+            "global_first_start": 11
+          },
+          "coarse_type": "action"
+        },
+        {
+          "claim_owner": "claim-feeding",
+          "field_role": "support_quote",
+          "start": 22,
+          "end": 32,
+          "text": "主人今天给它喂了罐头",
+          "expected_label_candidates": [
+            "action_event"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-action-roles",
+            "source_block_id": "block-001",
+            "support_start": 22,
+            "support_end": 32,
+            "global_first_start": 22
+          },
+          "coarse_type": "food"
+        },
+        {
+          "claim_owner": "claim-feeding",
+          "field_role": "target_quote",
+          "start": 28,
+          "end": 32,
+          "text": "喂了罐头",
+          "expected_label_candidates": [
+            "target_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-action-roles",
+            "source_block_id": "block-001",
+            "support_start": 22,
+            "support_end": 32,
+            "global_first_start": 28
+          },
+          "coarse_type": "food"
+        },
+        {
+          "claim_owner": "claim-feeding",
+          "field_role": "action_agent_quote",
+          "start": 22,
+          "end": 24,
+          "text": "主人",
+          "expected_label_candidates": [
+            "agent_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-action-roles",
+            "source_block_id": "block-001",
+            "support_start": 22,
+            "support_end": 32,
+            "global_first_start": 22
+          },
+          "coarse_type": "food"
+        },
+        {
+          "claim_owner": "claim-feeding",
+          "field_role": "action_recipient_quote",
+          "start": 27,
+          "end": 28,
+          "text": "它",
+          "expected_label_candidates": [
+            "recipient_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-action-roles",
+            "source_block_id": "block-001",
+            "support_start": 22,
+            "support_end": 32,
+            "global_first_start": 5
+          },
+          "coarse_type": "food"
+        },
+        {
+          "claim_owner": "claim-feeding",
+          "field_role": "object_quote",
+          "start": 30,
+          "end": 32,
+          "text": "罐头",
+          "expected_label_candidates": [
+            "object_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-action-roles",
+            "source_block_id": "block-001",
+            "support_start": 22,
+            "support_end": 32,
+            "global_first_start": 30
+          },
+          "coarse_type": "food"
+        },
+        {
+          "claim_owner": "claim-feeding",
+          "field_role": "temporal_quote",
+          "start": 24,
+          "end": 26,
+          "text": "今天",
+          "expected_label_candidates": [
+            "temporal_expression"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-action-roles",
+            "source_block_id": "block-001",
+            "support_start": 22,
+            "support_end": 32,
+            "global_first_start": 24
+          },
+          "coarse_type": "food"
+        }
+      ]
+    },
+    {
+      "unit_id": "macro-other-pet",
+      "user_text": "另一只猫也在呕吐，它没有腹泻。",
+      "entity_candidates": [
+        {
+          "reference_id": "pet-current",
+          "entity_type": "current_pet",
+          "display_name": "当前宠物",
+          "mention_aliases": [
+            "它"
+          ]
+        },
+        {
+          "reference_id": "pet-other",
+          "entity_type": "other_pet",
+          "display_name": "另一只猫",
+          "mention_aliases": [
+            "它",
+            "别的猫"
+          ]
+        }
+      ],
+      "expected_acts": [
+        {
+          "act_type": "fact_statement",
+          "evidence_quote": "另一只猫也在呕吐"
+        }
+      ],
+      "expected_claims": [
+        {
+          "claim_id": "claim-other-vomiting",
+          "statement_type": "reports",
+          "coarse_type": "symptom",
+          "support_quote": "另一只猫也在呕吐",
+          "target_quote": "呕吐",
+          "experiencer_quote": "另一只猫",
+          "expected_experiencer_reference": "pet-other",
+          "expected_canonical_ids": [
+            "vomiting"
+          ]
+        },
+        {
+          "claim_id": "claim-current-diarrhea-denied",
+          "statement_type": "denies",
+          "coarse_type": "symptom",
+          "support_quote": "它没有腹泻",
+          "target_quote": "腹泻",
+          "experiencer_quote": "它",
+          "expected_experiencer_resolution": "ambiguous"
+        }
+      ],
+      "expected_offset_fields": [
+        {
+          "claim_owner": "act-0",
+          "field_role": "evidence_quote",
+          "start": 0,
+          "end": 8,
+          "text": "另一只猫也在呕吐",
+          "expected_label_candidates": [
+            "state_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-other-pet",
+            "source_block_id": "block-001",
+            "support_start": 0,
+            "support_end": 8,
+            "global_first_start": 0
+          },
+          "act_type": "fact_statement"
+        },
+        {
+          "claim_owner": "claim-other-vomiting",
+          "field_role": "support_quote",
+          "start": 0,
+          "end": 8,
+          "text": "另一只猫也在呕吐",
+          "expected_label_candidates": [
+            "state_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-other-pet",
+            "source_block_id": "block-001",
+            "support_start": 0,
+            "support_end": 8,
+            "global_first_start": 0
+          },
+          "coarse_type": "symptom"
+        },
+        {
+          "claim_owner": "claim-other-vomiting",
+          "field_role": "target_quote",
+          "start": 6,
+          "end": 8,
+          "text": "呕吐",
+          "expected_label_candidates": [
+            "target_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-other-pet",
+            "source_block_id": "block-001",
+            "support_start": 0,
+            "support_end": 8,
+            "global_first_start": 6
+          },
+          "coarse_type": "symptom"
+        },
+        {
+          "claim_owner": "claim-other-vomiting",
+          "field_role": "experiencer_quote",
+          "start": 0,
+          "end": 4,
+          "text": "另一只猫",
+          "expected_label_candidates": [
+            "subject_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-other-pet",
+            "source_block_id": "block-001",
+            "support_start": 0,
+            "support_end": 8,
+            "global_first_start": 0
+          },
+          "coarse_type": "symptom"
+        },
+        {
+          "claim_owner": "claim-current-diarrhea-denied",
+          "field_role": "support_quote",
+          "start": 9,
+          "end": 14,
+          "text": "它没有腹泻",
+          "expected_label_candidates": [
+            "state_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-other-pet",
+            "source_block_id": "block-001",
+            "support_start": 9,
+            "support_end": 14,
+            "global_first_start": 9
+          },
+          "coarse_type": "symptom"
+        },
+        {
+          "claim_owner": "claim-current-diarrhea-denied",
+          "field_role": "target_quote",
+          "start": 12,
+          "end": 14,
+          "text": "腹泻",
+          "expected_label_candidates": [
+            "target_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-other-pet",
+            "source_block_id": "block-001",
+            "support_start": 9,
+            "support_end": 14,
+            "global_first_start": 12
+          },
+          "coarse_type": "symptom"
+        },
+        {
+          "claim_owner": "claim-current-diarrhea-denied",
+          "field_role": "experiencer_quote",
+          "start": 9,
+          "end": 10,
+          "text": "它",
+          "expected_label_candidates": [
+            "subject_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-other-pet",
+            "source_block_id": "block-001",
+            "support_start": 9,
+            "support_end": 14,
+            "global_first_start": 9
+          },
+          "coarse_type": "symptom"
+        }
+      ]
+    },
+    {
+      "unit_id": "macro-long-input",
+      "user_text": "我前天开始给它换新狗粮，这两天大便有一点软，一天一次，吃喝也没有明显变化。",
+      "entity_candidates": [
+        {
+          "reference_id": "pet-current",
+          "entity_type": "current_pet",
+          "display_name": "当前宠物",
+          "mention_aliases": [
+            "它"
+          ]
+        },
+        {
+          "reference_id": "user-current",
+          "entity_type": "user",
+          "display_name": "我"
+        }
+      ],
+      "expected_acts": [
+        {
+          "act_type": "fact_statement",
+          "evidence_quote": "我前天开始给它换新狗粮"
+        }
+      ],
+      "expected_claims": [
+        {
+          "claim_id": "claim-diet-change",
+          "statement_type": "reports",
+          "coarse_type": "action",
+          "support_quote": "我前天开始给它换新狗粮",
+          "target_quote": "换新狗粮",
+          "action_agent_quote": "我",
+          "expected_action_agent_reference": "user-current",
+          "action_recipient_quote": "它",
+          "expected_action_recipient_reference": "pet-current",
+          "object_quote": "新狗粮",
+          "temporal_quote": "前天开始",
+          "expected_relation": "change",
+          "relation_quote": "开始"
+        },
+        {
+          "claim_id": "claim-soft-stool",
+          "statement_type": "reports_abnormal",
+          "coarse_type": "symptom",
+          "support_quote": "这两天大便有一点软",
+          "target_quote": "大便有一点软",
+          "subject_quote": "它",
+          "expected_subject_reference": "pet-current",
+          "temporal_quote": "这两天",
+          "expected_relation": "change",
+          "expected_canonical_ids": [
+            "soft_stool"
+          ],
+          "relation_quote": "有一点软"
+        },
+        {
+          "claim_id": "claim-frequency",
+          "statement_type": "reports",
+          "coarse_type": "measurement",
+          "support_quote": "一天一次",
+          "target_quote": "一天一次",
+          "measurement_quote": "一天一次"
+        },
+        {
+          "claim_id": "claim-intake-no-change",
+          "statement_type": "reports",
+          "coarse_type": "state",
+          "support_quote": "吃喝也没有明显变化",
+          "target_quote": "吃喝",
+          "relation_quote": "没有明显变化",
+          "expected_relation": "no_change"
+        }
+      ],
+      "expected_offset_fields": [
+        {
+          "claim_owner": "act-0",
+          "field_role": "evidence_quote",
+          "start": 0,
+          "end": 11,
+          "text": "我前天开始给它换新狗粮",
+          "expected_label_candidates": [
+            "state_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-long-input",
+            "source_block_id": "block-001",
+            "support_start": 0,
+            "support_end": 11,
+            "global_first_start": 0
+          },
+          "act_type": "fact_statement"
+        },
+        {
+          "claim_owner": "claim-diet-change",
+          "field_role": "support_quote",
+          "start": 0,
+          "end": 11,
+          "text": "我前天开始给它换新狗粮",
+          "expected_label_candidates": [
+            "action_event"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-long-input",
+            "source_block_id": "block-001",
+            "support_start": 0,
+            "support_end": 11,
+            "global_first_start": 0
+          },
+          "coarse_type": "action"
+        },
+        {
+          "claim_owner": "claim-diet-change",
+          "field_role": "target_quote",
+          "start": 7,
+          "end": 11,
+          "text": "换新狗粮",
+          "expected_label_candidates": [
+            "target_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-long-input",
+            "source_block_id": "block-001",
+            "support_start": 0,
+            "support_end": 11,
+            "global_first_start": 7
+          },
+          "coarse_type": "action"
+        },
+        {
+          "claim_owner": "claim-diet-change",
+          "field_role": "relation_quote",
+          "start": 3,
+          "end": 5,
+          "text": "开始",
+          "expected_label_candidates": [
+            "relation_expression"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-long-input",
+            "source_block_id": "block-001",
+            "support_start": 0,
+            "support_end": 11,
+            "global_first_start": 3
+          },
+          "coarse_type": "action"
+        },
+        {
+          "claim_owner": "claim-diet-change",
+          "field_role": "action_agent_quote",
+          "start": 0,
+          "end": 1,
+          "text": "我",
+          "expected_label_candidates": [
+            "agent_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-long-input",
+            "source_block_id": "block-001",
+            "support_start": 0,
+            "support_end": 11,
+            "global_first_start": 0
+          },
+          "coarse_type": "action"
+        },
+        {
+          "claim_owner": "claim-diet-change",
+          "field_role": "action_recipient_quote",
+          "start": 6,
+          "end": 7,
+          "text": "它",
+          "expected_label_candidates": [
+            "recipient_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-long-input",
+            "source_block_id": "block-001",
+            "support_start": 0,
+            "support_end": 11,
+            "global_first_start": 6
+          },
+          "coarse_type": "action"
+        },
+        {
+          "claim_owner": "claim-diet-change",
+          "field_role": "object_quote",
+          "start": 8,
+          "end": 11,
+          "text": "新狗粮",
+          "expected_label_candidates": [
+            "object_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-long-input",
+            "source_block_id": "block-001",
+            "support_start": 0,
+            "support_end": 11,
+            "global_first_start": 8
+          },
+          "coarse_type": "action"
+        },
+        {
+          "claim_owner": "claim-diet-change",
+          "field_role": "temporal_quote",
+          "start": 1,
+          "end": 5,
+          "text": "前天开始",
+          "expected_label_candidates": [
+            "temporal_expression"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-long-input",
+            "source_block_id": "block-001",
+            "support_start": 0,
+            "support_end": 11,
+            "global_first_start": 1
+          },
+          "coarse_type": "action"
+        },
+        {
+          "claim_owner": "claim-soft-stool",
+          "field_role": "support_quote",
+          "start": 12,
+          "end": 21,
+          "text": "这两天大便有一点软",
+          "expected_label_candidates": [
+            "state_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-long-input",
+            "source_block_id": "block-001",
+            "support_start": 12,
+            "support_end": 21,
+            "global_first_start": 12
+          },
+          "coarse_type": "symptom"
+        },
+        {
+          "claim_owner": "claim-soft-stool",
+          "field_role": "target_quote",
+          "start": 15,
+          "end": 21,
+          "text": "大便有一点软",
+          "expected_label_candidates": [
+            "target_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-long-input",
+            "source_block_id": "block-001",
+            "support_start": 12,
+            "support_end": 21,
+            "global_first_start": 15
+          },
+          "coarse_type": "symptom"
+        },
+        {
+          "claim_owner": "claim-soft-stool",
+          "field_role": "relation_quote",
+          "start": 17,
+          "end": 21,
+          "text": "有一点软",
+          "expected_label_candidates": [
+            "relation_expression"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-long-input",
+            "source_block_id": "block-001",
+            "support_start": 12,
+            "support_end": 21,
+            "global_first_start": 17
+          },
+          "coarse_type": "symptom"
+        },
+        {
+          "claim_owner": "claim-soft-stool",
+          "field_role": "subject_quote",
+          "start": 6,
+          "end": 7,
+          "text": "它",
+          "expected_label_candidates": [
+            "subject_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-long-input",
+            "source_block_id": "block-001",
+            "support_start": 12,
+            "support_end": 21,
+            "global_first_start": 6
+          },
+          "coarse_type": "symptom"
+        },
+        {
+          "claim_owner": "claim-soft-stool",
+          "field_role": "temporal_quote",
+          "start": 12,
+          "end": 15,
+          "text": "这两天",
+          "expected_label_candidates": [
+            "temporal_expression"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-long-input",
+            "source_block_id": "block-001",
+            "support_start": 12,
+            "support_end": 21,
+            "global_first_start": 12
+          },
+          "coarse_type": "symptom"
+        },
+        {
+          "claim_owner": "claim-frequency",
+          "field_role": "support_quote",
+          "start": 22,
+          "end": 26,
+          "text": "一天一次",
+          "expected_label_candidates": [
+            "measurement_expression"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-long-input",
+            "source_block_id": "block-001",
+            "support_start": 22,
+            "support_end": 26,
+            "global_first_start": 22
+          },
+          "coarse_type": "measurement"
+        },
+        {
+          "claim_owner": "claim-frequency",
+          "field_role": "target_quote",
+          "start": 22,
+          "end": 26,
+          "text": "一天一次",
+          "expected_label_candidates": [
+            "target_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-long-input",
+            "source_block_id": "block-001",
+            "support_start": 22,
+            "support_end": 26,
+            "global_first_start": 22
+          },
+          "coarse_type": "measurement"
+        },
+        {
+          "claim_owner": "claim-frequency",
+          "field_role": "measurement_quote",
+          "start": 22,
+          "end": 26,
+          "text": "一天一次",
+          "expected_label_candidates": [
+            "measurement_expression"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-long-input",
+            "source_block_id": "block-001",
+            "support_start": 22,
+            "support_end": 26,
+            "global_first_start": 22
+          },
+          "coarse_type": "measurement"
+        },
+        {
+          "claim_owner": "claim-intake-no-change",
+          "field_role": "support_quote",
+          "start": 27,
+          "end": 36,
+          "text": "吃喝也没有明显变化",
+          "expected_label_candidates": [
+            "state_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-long-input",
+            "source_block_id": "block-001",
+            "support_start": 27,
+            "support_end": 36,
+            "global_first_start": 27
+          },
+          "coarse_type": "state"
+        },
+        {
+          "claim_owner": "claim-intake-no-change",
+          "field_role": "target_quote",
+          "start": 27,
+          "end": 29,
+          "text": "吃喝",
+          "expected_label_candidates": [
+            "target_mention"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-long-input",
+            "source_block_id": "block-001",
+            "support_start": 27,
+            "support_end": 36,
+            "global_first_start": 27
+          },
+          "coarse_type": "state"
+        },
+        {
+          "claim_owner": "claim-intake-no-change",
+          "field_role": "relation_quote",
+          "start": 30,
+          "end": 36,
+          "text": "没有明显变化",
+          "expected_label_candidates": [
+            "relation_expression"
+          ],
+          "occurrence_locator": {
+            "source_id": "macro-long-input",
+            "source_block_id": "block-001",
+            "support_start": 27,
+            "support_end": 36,
+            "global_first_start": 30
+          },
+          "coarse_type": "state"
+        }
+      ]
+    }
+  ],
+  "source_matrix": "tests/fixtures/input_preprocessing/eighth_round_span_macro_matrix.json",
+  "source_matrix_sha256": "be7e388f625b3c4095998a742265f09202c2e21e8fe0652cfb058cadd54728ba"
+}
