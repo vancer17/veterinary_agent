@@ -18,7 +18,6 @@ from pydantic import BaseModel
 
 from vet_agent import Settings
 
-
 StructuredOutputT = TypeVar("StructuredOutputT", bound=BaseModel)
 
 
@@ -90,7 +89,7 @@ class QwenClient:
                     )
                     self._record_success()
                     return result
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001
                     last_error = exc
                     if not self._retryable_exception(exc):
                         break
@@ -264,7 +263,7 @@ class QwenClient:
                     )
                     self._record_success()
                     return result
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001
                     last_error = exc
                     if not self._retryable_exception(exc):
                         break

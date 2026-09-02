@@ -101,6 +101,10 @@ extend-exclude = [
     "src/vet_agent/input_preprocessing/baml_client",
 ]
 
+[tool.mypy]
+# Generated BAML Python is intentionally excluded from source typing gates.
+exclude = "^src/vet_agent/input_preprocessing/baml_client/"
+
 [tool.pytest.ini_options]
 # pytest 仅收集本仓库测试，避免把 vendor 子模块的上游测试作为业务门禁。
 pythonpath = ["src", "."]
