@@ -1,0 +1,91 @@
+{
+  "schema_version": "v8-span-macro-1",
+  "dataset_type": "development",
+  "structure_unit_ids": ["macro-answer-fact", "macro-action-roles"],
+  "span_units": [
+    {"unit_id": "span-shared-scope", "user_text": "没有呕吐、干呕、反流、流涎或舔唇，精神、食欲和饮水都正常，没有血便和黑便。"},
+    {"unit_id": "span-action-roles", "user_text": "医生昨天给它开了药，我前天开始给它换新猫粮，主人今天给它喂了罐头。"},
+    {"unit_id": "span-long-input", "user_text": "我前天开始给它换新狗粮，这两天大便有一点软，一天一次，吃喝也没有明显变化。"}
+  ],
+  "macro_units": [
+    {
+      "unit_id": "macro-answer-fact",
+      "user_text": "它前天开始换新猫粮，这两天大便有一点软，没有呕吐。请先根据现有信息给阶段建议，不要继续追问。",
+      "entity_candidates": [
+        {"reference_id": "pet-current", "entity_type": "current_pet", "display_name": "当前宠物", "mention_aliases": ["它"]},
+        {"reference_id": "user-current", "entity_type": "user", "display_name": "我", "mention_aliases": ["本人"]}
+      ],
+      "expected_acts": [
+        {"act_type": "answer_now", "evidence_quote": "请先根据现有信息给阶段建议，不要继续追问"},
+        {"act_type": "fact_statement", "evidence_quote": "它前天开始换新猫粮"}
+      ],
+      "expected_claims": [
+        {"claim_id": "claim-diet-change", "statement_type": "reports", "coarse_type": "action", "support_quote": "它前天开始换新猫粮", "target_quote": "换新猫粮", "subject_quote": "它", "expected_subject_reference": "pet-current", "temporal_quote": "前天开始"},
+        {"claim_id": "claim-soft-stool", "statement_type": "reports_abnormal", "coarse_type": "symptom", "support_quote": "这两天大便有一点软", "target_quote": "大便有一点软", "subject_quote": "它", "expected_subject_reference": "pet-current", "temporal_quote": "这两天"},
+        {"claim_id": "claim-vomiting-denied", "statement_type": "denies", "coarse_type": "symptom", "support_quote": "没有呕吐", "target_quote": "呕吐", "subject_quote": "它", "expected_subject_reference": "pet-current"}
+      ]
+    },
+    {
+      "unit_id": "macro-shared-scope",
+      "user_text": "没有呕吐、干呕、反流、流涎或舔唇，精神、食欲和饮水都正常，没有血便和黑便。",
+      "entity_candidates": [{"reference_id": "pet-current", "entity_type": "current_pet", "display_name": "当前宠物", "mention_aliases": ["它"]}],
+      "expected_acts": [{"act_type": "fact_statement", "evidence_quote": "没有呕吐、干呕、反流、流涎或舔唇"}],
+      "expected_claims": [
+        {"claim_id": "claim-vomiting", "statement_type": "denies", "coarse_type": "symptom", "support_quote": "没有呕吐、干呕、反流、流涎或舔唇", "target_quote": "呕吐"},
+        {"claim_id": "claim-retching", "statement_type": "denies", "coarse_type": "symptom", "support_quote": "没有呕吐、干呕、反流、流涎或舔唇", "target_quote": "干呕"},
+        {"claim_id": "claim-regurgitation", "statement_type": "denies", "coarse_type": "symptom", "support_quote": "没有呕吐、干呕、反流、流涎或舔唇", "target_quote": "反流"},
+        {"claim_id": "claim-drooling", "statement_type": "denies", "coarse_type": "symptom", "support_quote": "没有呕吐、干呕、反流、流涎或舔唇", "target_quote": "流涎"},
+        {"claim_id": "claim-lip-smacking", "statement_type": "denies", "coarse_type": "symptom", "support_quote": "没有呕吐、干呕、反流、流涎或舔唇", "target_quote": "舔唇"},
+        {"claim_id": "claim-mental", "statement_type": "reports_normal", "coarse_type": "state", "support_quote": "精神、食欲和饮水都正常", "target_quote": "精神", "relation_quote": "正常", "expected_relation": "absolute_status"},
+        {"claim_id": "claim-appetite", "statement_type": "reports_normal", "coarse_type": "state", "support_quote": "精神、食欲和饮水都正常", "target_quote": "食欲", "relation_quote": "正常", "expected_relation": "absolute_status"},
+        {"claim_id": "claim-water", "statement_type": "reports_normal", "coarse_type": "state", "support_quote": "精神、食欲和饮水都正常", "target_quote": "饮水", "relation_quote": "正常", "expected_relation": "absolute_status"},
+        {"claim_id": "claim-bloody-stool", "statement_type": "denies", "coarse_type": "symptom", "support_quote": "没有血便和黑便", "target_quote": "血便"},
+        {"claim_id": "claim-melena", "statement_type": "denies", "coarse_type": "symptom", "support_quote": "没有血便和黑便", "target_quote": "黑便"}
+      ]
+    },
+    {
+      "unit_id": "macro-action-roles",
+      "user_text": "医生昨天给它开了药，我前天开始给它换新猫粮，主人今天给它喂了罐头。",
+      "entity_candidates": [
+        {"reference_id": "pet-current", "entity_type": "current_pet", "display_name": "当前宠物", "mention_aliases": ["它"]},
+        {"reference_id": "user-current", "entity_type": "user", "display_name": "我"},
+        {"reference_id": "actor-medical", "entity_type": "medical_actor", "display_name": "医生"},
+        {"reference_id": "actor-caregiver", "entity_type": "caregiver", "display_name": "主人"}
+      ],
+      "expected_acts": [{"act_type": "fact_statement", "evidence_quote": "医生昨天给它开了药"}],
+      "expected_claims": [
+        {"claim_id": "claim-medication", "statement_type": "reports", "coarse_type": "medication", "support_quote": "医生昨天给它开了药", "target_quote": "开了药", "action_agent_quote": "医生", "expected_action_agent_reference": "actor-medical", "action_recipient_quote": "它", "expected_action_recipient_reference": "pet-current", "object_quote": "药", "temporal_quote": "昨天"},
+        {"claim_id": "claim-diet-change", "statement_type": "reports", "coarse_type": "action", "support_quote": "我前天开始给它换新猫粮", "target_quote": "换新猫粮", "action_agent_quote": "我", "expected_action_agent_reference": "user-current", "action_recipient_quote": "它", "expected_action_recipient_reference": "pet-current", "object_quote": "新猫粮", "temporal_quote": "前天开始"},
+        {"claim_id": "claim-feeding", "statement_type": "reports", "coarse_type": "food", "support_quote": "主人今天给它喂了罐头", "target_quote": "喂了罐头", "action_agent_quote": "主人", "expected_action_agent_reference": "actor-caregiver", "action_recipient_quote": "它", "expected_action_recipient_reference": "pet-current", "object_quote": "罐头", "temporal_quote": "今天"}
+      ]
+    },
+    {
+      "unit_id": "macro-other-pet",
+      "user_text": "另一只猫也在呕吐，它没有腹泻。",
+      "entity_candidates": [
+        {"reference_id": "pet-current", "entity_type": "current_pet", "display_name": "当前宠物", "mention_aliases": ["它"]},
+        {"reference_id": "pet-other", "entity_type": "other_pet", "display_name": "另一只猫", "mention_aliases": ["它", "别的猫"]}
+      ],
+      "expected_acts": [{"act_type": "fact_statement", "evidence_quote": "另一只猫也在呕吐"}],
+      "expected_claims": [
+        {"claim_id": "claim-other-vomiting", "statement_type": "reports", "coarse_type": "symptom", "support_quote": "另一只猫也在呕吐", "target_quote": "呕吐", "experiencer_quote": "另一只猫", "expected_experiencer_reference": "pet-other", "expected_canonical_ids": ["vomiting"]},
+        {"claim_id": "claim-current-diarrhea-denied", "statement_type": "denies", "coarse_type": "symptom", "support_quote": "它没有腹泻", "target_quote": "腹泻", "experiencer_quote": "它", "expected_experiencer_resolution": "ambiguous"}
+      ]
+    },
+    {
+      "unit_id": "macro-long-input",
+      "user_text": "我前天开始给它换新狗粮，这两天大便有一点软，一天一次，吃喝也没有明显变化。",
+      "entity_candidates": [
+        {"reference_id": "pet-current", "entity_type": "current_pet", "display_name": "当前宠物", "mention_aliases": ["它"]},
+        {"reference_id": "user-current", "entity_type": "user", "display_name": "我"}
+      ],
+      "expected_acts": [{"act_type": "fact_statement", "evidence_quote": "我前天开始给它换新狗粮"}],
+      "expected_claims": [
+        {"claim_id": "claim-diet-change", "statement_type": "reports", "coarse_type": "action", "support_quote": "我前天开始给它换新狗粮", "target_quote": "换新狗粮", "action_agent_quote": "我", "expected_action_agent_reference": "user-current", "action_recipient_quote": "它", "expected_action_recipient_reference": "pet-current", "object_quote": "新狗粮", "temporal_quote": "前天开始", "expected_relation": "change"},
+        {"claim_id": "claim-soft-stool", "statement_type": "reports_abnormal", "coarse_type": "symptom", "support_quote": "这两天大便有一点软", "target_quote": "大便有一点软", "subject_quote": "它", "expected_subject_reference": "pet-current", "temporal_quote": "这两天", "expected_relation": "change", "expected_canonical_ids": ["soft_stool"]},
+        {"claim_id": "claim-frequency", "statement_type": "reports", "coarse_type": "measurement", "support_quote": "一天一次", "target_quote": "一天一次", "measurement_quote": "一天一次"},
+        {"claim_id": "claim-intake-no-change", "statement_type": "reports", "coarse_type": "state", "support_quote": "吃喝也没有明显变化", "target_quote": "吃喝", "relation_quote": "没有明显变化", "expected_relation": "no_change"}
+      ]
+    }
+  ]
+}

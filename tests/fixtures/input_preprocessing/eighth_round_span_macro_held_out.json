@@ -1,0 +1,56 @@
+{
+  "schema_version": "v8-span-macro-1",
+  "dataset_type": "held_out",
+  "structure_unit_ids": ["macro-held-answer-fact", "macro-held-action"],
+  "span_units": [
+    {"unit_id": "span-held-shared-scope", "user_text": "没有咳嗽、打喷嚏或流鼻涕，精神、食欲和饮水都正常。"},
+    {"unit_id": "span-held-action", "user_text": "护士刚才给这只狗打了针，我又给它喂了新的鸡肉粮。"}
+  ],
+  "macro_units": [
+    {
+      "unit_id": "macro-held-answer-fact",
+      "user_text": "这只狗前天开始吃新的鸡肉粮，这两天大便偏软，没有咳嗽。先按现在的情况给阶段建议，别再问了。",
+      "entity_candidates": [
+        {"reference_id": "dog-current", "entity_type": "current_pet", "display_name": "这只狗", "mention_aliases": ["它"]},
+        {"reference_id": "user-current", "entity_type": "user", "display_name": "我"}
+      ],
+      "expected_acts": [
+        {"act_type": "answer_now", "evidence_quote": "先按现在的情况给阶段建议，别再问了"},
+        {"act_type": "fact_statement", "evidence_quote": "这只狗前天开始吃新的鸡肉粮"}
+      ],
+      "expected_claims": [
+        {"claim_id": "claim-diet-change", "statement_type": "reports", "coarse_type": "action", "support_quote": "这只狗前天开始吃新的鸡肉粮", "target_quote": "吃新的鸡肉粮", "subject_quote": "这只狗", "expected_subject_reference": "dog-current", "temporal_quote": "前天开始"},
+        {"claim_id": "claim-soft-stool", "statement_type": "reports_abnormal", "coarse_type": "symptom", "support_quote": "这两天大便偏软", "target_quote": "大便偏软", "subject_quote": "这只狗", "expected_subject_reference": "dog-current", "temporal_quote": "这两天"},
+        {"claim_id": "claim-cough-denied", "statement_type": "denies", "coarse_type": "symptom", "support_quote": "没有咳嗽", "target_quote": "咳嗽", "subject_quote": "这只狗", "expected_subject_reference": "dog-current"}
+      ]
+    },
+    {
+      "unit_id": "macro-held-shared-scope",
+      "user_text": "没有咳嗽、打喷嚏或流鼻涕，精神、食欲和饮水都正常。",
+      "entity_candidates": [{"reference_id": "dog-current", "entity_type": "current_pet", "display_name": "这只狗", "mention_aliases": ["它"]}],
+      "expected_acts": [{"act_type": "fact_statement", "evidence_quote": "没有咳嗽、打喷嚏或流鼻涕"}],
+      "expected_claims": [
+        {"claim_id": "claim-cough", "statement_type": "denies", "coarse_type": "symptom", "support_quote": "没有咳嗽、打喷嚏或流鼻涕", "target_quote": "咳嗽"},
+        {"claim_id": "claim-sneezing", "statement_type": "denies", "coarse_type": "symptom", "support_quote": "没有咳嗽、打喷嚏或流鼻涕", "target_quote": "打喷嚏"},
+        {"claim_id": "claim-nasal-discharge", "statement_type": "denies", "coarse_type": "symptom", "support_quote": "没有咳嗽、打喷嚏或流鼻涕", "target_quote": "流鼻涕"},
+        {"claim_id": "claim-mental", "statement_type": "reports_normal", "coarse_type": "state", "support_quote": "精神、食欲和饮水都正常", "target_quote": "精神", "relation_quote": "正常", "expected_relation": "absolute_status"},
+        {"claim_id": "claim-appetite", "statement_type": "reports_normal", "coarse_type": "state", "support_quote": "精神、食欲和饮水都正常", "target_quote": "食欲", "relation_quote": "正常", "expected_relation": "absolute_status"},
+        {"claim_id": "claim-water", "statement_type": "reports_normal", "coarse_type": "state", "support_quote": "精神、食欲和饮水都正常", "target_quote": "饮水", "relation_quote": "正常", "expected_relation": "absolute_status"}
+      ]
+    },
+    {
+      "unit_id": "macro-held-action",
+      "user_text": "护士刚才给这只狗打了针，我又给它喂了新的鸡肉粮。",
+      "entity_candidates": [
+        {"reference_id": "dog-current", "entity_type": "current_pet", "display_name": "这只狗", "mention_aliases": ["它"]},
+        {"reference_id": "user-current", "entity_type": "user", "display_name": "我"},
+        {"reference_id": "actor-medical", "entity_type": "medical_actor", "display_name": "护士"}
+      ],
+      "expected_acts": [{"act_type": "fact_statement", "evidence_quote": "护士刚才给这只狗打了针"}],
+      "expected_claims": [
+        {"claim_id": "claim-injection", "statement_type": "reports", "coarse_type": "medication", "support_quote": "护士刚才给这只狗打了针", "target_quote": "打了针", "action_agent_quote": "护士", "expected_action_agent_reference": "actor-medical", "action_recipient_quote": "这只狗", "expected_action_recipient_reference": "dog-current", "temporal_quote": "刚才"},
+        {"claim_id": "claim-feeding", "statement_type": "reports", "coarse_type": "food", "support_quote": "我又给它喂了新的鸡肉粮", "target_quote": "喂了新的鸡肉粮", "action_agent_quote": "我", "expected_action_agent_reference": "user-current", "action_recipient_quote": "它", "expected_action_recipient_reference": "dog-current", "object_quote": "新的鸡肉粮"}
+      ]
+    }
+  ]
+}
