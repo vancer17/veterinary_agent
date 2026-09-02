@@ -1,0 +1,1191 @@
+{
+  "schema_version": "v3",
+  "dataset_type": "development",
+  "reference_time": "2026-08-25T10:00:00+08:00",
+  "pet_profile": {
+    "species": "cat",
+    "lifestage": "adult"
+  },
+  "cases": [
+    {
+      "sample_id": "D3_shared_scope_dev",
+      "user_text": "没有呕吐、干呕、反流、流涎或舔唇；精神、食欲和饮水都正常；没有血便和黑便。",
+      "other_subjects": [],
+      "golden_stage1": {
+        "schema_version": "v3",
+        "intent": {
+          "answer_now": false,
+          "wants_triage": false,
+          "correction": false,
+          "confidence": 0.9,
+          "rationale": ""
+        },
+        "profile": {
+          "expected_fact_candidate_count": 10,
+          "has_fact_statement": true,
+          "has_user_question": false,
+          "has_control_intent": false,
+          "has_uncertainty": false,
+          "has_historical_statement": false,
+          "has_hypothetical_statement": false
+        },
+        "segments": [
+          {
+            "kind": "shared_assertion_scope",
+            "segment_id": "s-1",
+            "source_text": "没有呕吐、干呕、反流、流涎或舔唇",
+            "analysis_text": "没有呕吐、干呕、反流、流涎或舔唇",
+            "discourse_role": "fact_statement",
+            "requires_evidence_analysis": true,
+            "subject": {
+              "reference_id": "current_pet",
+              "entity_type": "current_pet",
+              "resolution_method": "trusted_current_pet",
+              "resolution_status": "resolved",
+              "subject_candidates": [],
+              "confidence": 0.99
+            },
+            "participants": [],
+            "confidence": 0.99,
+            "scope_assertion": "denied",
+            "items": [
+              {
+                "item_id": "item-1",
+                "source_text": "呕吐",
+                "analysis_text": "呕吐",
+                "subject": {
+                  "reference_id": "current_pet",
+                  "entity_type": "current_pet",
+                  "resolution_method": "trusted_current_pet",
+                  "resolution_status": "resolved",
+                  "subject_candidates": [],
+                  "confidence": 0.99
+                },
+                "participants": [],
+                "confidence": 0.99
+              },
+              {
+                "item_id": "item-2",
+                "source_text": "干呕",
+                "analysis_text": "干呕",
+                "subject": {
+                  "reference_id": "current_pet",
+                  "entity_type": "current_pet",
+                  "resolution_method": "trusted_current_pet",
+                  "resolution_status": "resolved",
+                  "subject_candidates": [],
+                  "confidence": 0.99
+                },
+                "participants": [],
+                "confidence": 0.99
+              },
+              {
+                "item_id": "item-3",
+                "source_text": "反流",
+                "analysis_text": "反流",
+                "subject": {
+                  "reference_id": "current_pet",
+                  "entity_type": "current_pet",
+                  "resolution_method": "trusted_current_pet",
+                  "resolution_status": "resolved",
+                  "subject_candidates": [],
+                  "confidence": 0.99
+                },
+                "participants": [],
+                "confidence": 0.99
+              },
+              {
+                "item_id": "item-4",
+                "source_text": "流涎",
+                "analysis_text": "流涎",
+                "subject": {
+                  "reference_id": "current_pet",
+                  "entity_type": "current_pet",
+                  "resolution_method": "trusted_current_pet",
+                  "resolution_status": "resolved",
+                  "subject_candidates": [],
+                  "confidence": 0.99
+                },
+                "participants": [],
+                "confidence": 0.99
+              },
+              {
+                "item_id": "item-5",
+                "source_text": "舔唇",
+                "analysis_text": "舔唇",
+                "subject": {
+                  "reference_id": "current_pet",
+                  "entity_type": "current_pet",
+                  "resolution_method": "trusted_current_pet",
+                  "resolution_status": "resolved",
+                  "subject_candidates": [],
+                  "confidence": 0.99
+                },
+                "participants": [],
+                "confidence": 0.99
+              }
+            ],
+            "expected_evidence_count": 5
+          },
+          {
+            "kind": "shared_assertion_scope",
+            "segment_id": "s-2",
+            "source_text": "精神、食欲和饮水都正常",
+            "analysis_text": "精神、食欲和饮水都正常",
+            "discourse_role": "fact_statement",
+            "requires_evidence_analysis": true,
+            "subject": {
+              "reference_id": "current_pet",
+              "entity_type": "current_pet",
+              "resolution_method": "trusted_current_pet",
+              "resolution_status": "resolved",
+              "subject_candidates": [],
+              "confidence": 0.99
+            },
+            "participants": [],
+            "confidence": 0.99,
+            "scope_assertion": "normal",
+            "items": [
+              {
+                "item_id": "item-1",
+                "source_text": "精神",
+                "analysis_text": "精神",
+                "subject": {
+                  "reference_id": "current_pet",
+                  "entity_type": "current_pet",
+                  "resolution_method": "trusted_current_pet",
+                  "resolution_status": "resolved",
+                  "subject_candidates": [],
+                  "confidence": 0.99
+                },
+                "participants": [],
+                "confidence": 0.99
+              },
+              {
+                "item_id": "item-2",
+                "source_text": "食欲",
+                "analysis_text": "食欲",
+                "subject": {
+                  "reference_id": "current_pet",
+                  "entity_type": "current_pet",
+                  "resolution_method": "trusted_current_pet",
+                  "resolution_status": "resolved",
+                  "subject_candidates": [],
+                  "confidence": 0.99
+                },
+                "participants": [],
+                "confidence": 0.99
+              },
+              {
+                "item_id": "item-3",
+                "source_text": "饮水",
+                "analysis_text": "饮水",
+                "subject": {
+                  "reference_id": "current_pet",
+                  "entity_type": "current_pet",
+                  "resolution_method": "trusted_current_pet",
+                  "resolution_status": "resolved",
+                  "subject_candidates": [],
+                  "confidence": 0.99
+                },
+                "participants": [],
+                "confidence": 0.99
+              }
+            ],
+            "expected_evidence_count": 3
+          },
+          {
+            "kind": "shared_assertion_scope",
+            "segment_id": "s-3",
+            "source_text": "没有血便和黑便",
+            "analysis_text": "没有血便和黑便",
+            "discourse_role": "fact_statement",
+            "requires_evidence_analysis": true,
+            "subject": {
+              "reference_id": "current_pet",
+              "entity_type": "current_pet",
+              "resolution_method": "trusted_current_pet",
+              "resolution_status": "resolved",
+              "subject_candidates": [],
+              "confidence": 0.99
+            },
+            "participants": [],
+            "confidence": 0.99,
+            "scope_assertion": "denied",
+            "items": [
+              {
+                "item_id": "item-1",
+                "source_text": "血便",
+                "analysis_text": "血便",
+                "subject": {
+                  "reference_id": "current_pet",
+                  "entity_type": "current_pet",
+                  "resolution_method": "trusted_current_pet",
+                  "resolution_status": "resolved",
+                  "subject_candidates": [],
+                  "confidence": 0.99
+                },
+                "participants": [],
+                "confidence": 0.99
+              },
+              {
+                "item_id": "item-2",
+                "source_text": "黑便",
+                "analysis_text": "黑便",
+                "subject": {
+                  "reference_id": "current_pet",
+                  "entity_type": "current_pet",
+                  "resolution_method": "trusted_current_pet",
+                  "resolution_status": "resolved",
+                  "subject_candidates": [],
+                  "confidence": 0.99
+                },
+                "participants": [],
+                "confidence": 0.99
+              }
+            ],
+            "expected_evidence_count": 2
+          }
+        ]
+      },
+      "expected_intent": {
+        "answer_now": false
+      },
+      "expected_evidence": [
+        {
+          "surface_text": "呕吐",
+          "assertion": "denied",
+          "mapping_status": "confirmed",
+          "canonical_id": "vomiting",
+          "subject_reference": "current_pet",
+          "subject_type": "current_pet",
+          "participants": [],
+          "review_required": false
+        },
+        {
+          "surface_text": "干呕",
+          "assertion": "denied",
+          "mapping_status": "confirmed",
+          "canonical_id": "retching",
+          "subject_reference": "current_pet",
+          "subject_type": "current_pet",
+          "participants": [],
+          "review_required": false
+        },
+        {
+          "surface_text": "反流",
+          "assertion": "denied",
+          "mapping_status": "confirmed",
+          "canonical_id": "regurgitation",
+          "subject_reference": "current_pet",
+          "subject_type": "current_pet",
+          "participants": [],
+          "review_required": false
+        },
+        {
+          "surface_text": "流涎",
+          "assertion": "denied",
+          "mapping_status": "confirmed",
+          "canonical_id": "drooling",
+          "subject_reference": "current_pet",
+          "subject_type": "current_pet",
+          "participants": [],
+          "review_required": false
+        },
+        {
+          "surface_text": "舔唇",
+          "assertion": "denied",
+          "mapping_status": "confirmed",
+          "canonical_id": "lip_smacking",
+          "subject_reference": "current_pet",
+          "subject_type": "current_pet",
+          "participants": [],
+          "review_required": false
+        },
+        {
+          "surface_text": "精神",
+          "assertion": "normal",
+          "mapping_status": "confirmed",
+          "canonical_id": "mental_status",
+          "subject_reference": "current_pet",
+          "subject_type": "current_pet",
+          "participants": [],
+          "review_required": false
+        },
+        {
+          "surface_text": "食欲",
+          "assertion": "normal",
+          "mapping_status": "confirmed",
+          "canonical_id": "appetite",
+          "subject_reference": "current_pet",
+          "subject_type": "current_pet",
+          "participants": [],
+          "review_required": false
+        },
+        {
+          "surface_text": "饮水",
+          "assertion": "normal",
+          "mapping_status": "confirmed",
+          "canonical_id": "water_intake",
+          "subject_reference": "current_pet",
+          "subject_type": "current_pet",
+          "participants": [],
+          "review_required": false
+        },
+        {
+          "surface_text": "血便",
+          "assertion": "denied",
+          "mapping_status": "confirmed",
+          "canonical_id": "bloody_stool",
+          "subject_reference": "current_pet",
+          "subject_type": "current_pet",
+          "participants": [],
+          "review_required": false
+        },
+        {
+          "surface_text": "黑便",
+          "assertion": "denied",
+          "mapping_status": "confirmed",
+          "canonical_id": "bloody_stool",
+          "subject_reference": "current_pet",
+          "subject_type": "current_pet",
+          "participants": [],
+          "review_required": false
+        }
+      ]
+    },
+    {
+      "sample_id": "E3_event_roles_dev",
+      "user_text": "我前天开始给它换新猫粮。医生给它开了药。主人昨天喂了罐头。另一只猫也在呕吐。它没有呕吐。如果它呕吐了怎么办。",
+      "other_subjects": [
+        {
+          "reference_id": "user",
+          "entity_type": "user",
+          "display_name": "用户"
+        },
+        {
+          "reference_id": "doctor",
+          "entity_type": "medical_actor",
+          "display_name": "医生"
+        },
+        {
+          "reference_id": "other_pet",
+          "entity_type": "other_pet",
+          "display_name": "另一只宠物"
+        }
+      ],
+      "golden_stage1": {
+        "schema_version": "v3",
+        "intent": {
+          "answer_now": false,
+          "wants_triage": false,
+          "correction": false,
+          "confidence": 0.9,
+          "rationale": ""
+        },
+        "profile": {
+          "expected_fact_candidate_count": 6,
+          "has_fact_statement": true,
+          "has_user_question": false,
+          "has_control_intent": false,
+          "has_uncertainty": false,
+          "has_historical_statement": false,
+          "has_hypothetical_statement": true
+        },
+        "segments": [
+          {
+            "kind": "atomic_claim",
+            "segment_id": "s-1",
+            "source_text": "我前天开始给它换新猫粮",
+            "analysis_text": "我前天开始给它换新猫粮",
+            "discourse_role": "fact_statement",
+            "requires_evidence_analysis": true,
+            "subject": {
+              "reference_id": "user",
+              "entity_type": "user",
+              "resolution_method": "explicit_coreference",
+              "resolution_status": "resolved",
+              "subject_candidates": [],
+              "confidence": 0.99
+            },
+            "participants": [
+              {
+                "role": "action_agent",
+                "entity": {
+                  "reference_id": "user",
+                  "entity_type": "user",
+                  "resolution_method": "trusted_current_pet",
+                  "resolution_status": "resolved",
+                  "subject_candidates": [],
+                  "confidence": 0.99
+                }
+              },
+              {
+                "role": "action_recipient",
+                "entity": {
+                  "reference_id": "current_pet",
+                  "entity_type": "current_pet",
+                  "resolution_method": "trusted_current_pet",
+                  "resolution_status": "resolved",
+                  "subject_candidates": [],
+                  "confidence": 0.99
+                }
+              },
+              {
+                "role": "action_object",
+                "entity": {
+                  "reference_id": null,
+                  "entity_type": "unknown",
+                  "resolution_method": "subject_missing",
+                  "resolution_status": "missing",
+                  "subject_candidates": [],
+                  "confidence": 0.99
+                }
+              }
+            ],
+            "confidence": 0.99,
+            "expected_evidence_count": 1,
+            "item_id": "item-1",
+            "initial_assertion": "present"
+          },
+          {
+            "kind": "atomic_claim",
+            "segment_id": "s-2",
+            "source_text": "医生给它开了药",
+            "analysis_text": "医生给它开了药",
+            "discourse_role": "fact_statement",
+            "requires_evidence_analysis": true,
+            "subject": {
+              "reference_id": "doctor",
+              "entity_type": "medical_actor",
+              "resolution_method": "explicit_coreference",
+              "resolution_status": "resolved",
+              "subject_candidates": [],
+              "confidence": 0.99
+            },
+            "participants": [
+              {
+                "role": "action_agent",
+                "entity": {
+                  "reference_id": "doctor",
+                  "entity_type": "medical_actor",
+                  "resolution_method": "trusted_current_pet",
+                  "resolution_status": "resolved",
+                  "subject_candidates": [],
+                  "confidence": 0.99
+                }
+              },
+              {
+                "role": "action_recipient",
+                "entity": {
+                  "reference_id": "current_pet",
+                  "entity_type": "current_pet",
+                  "resolution_method": "trusted_current_pet",
+                  "resolution_status": "resolved",
+                  "subject_candidates": [],
+                  "confidence": 0.99
+                }
+              },
+              {
+                "role": "action_object",
+                "entity": {
+                  "reference_id": null,
+                  "entity_type": "unknown",
+                  "resolution_method": "subject_missing",
+                  "resolution_status": "missing",
+                  "subject_candidates": [],
+                  "confidence": 0.99
+                }
+              }
+            ],
+            "confidence": 0.99,
+            "expected_evidence_count": 1,
+            "item_id": "item-1",
+            "initial_assertion": "present"
+          },
+          {
+            "kind": "atomic_claim",
+            "segment_id": "s-3",
+            "source_text": "主人昨天喂了罐头",
+            "analysis_text": "主人昨天喂了罐头",
+            "discourse_role": "fact_statement",
+            "requires_evidence_analysis": true,
+            "subject": {
+              "reference_id": "user",
+              "entity_type": "user",
+              "resolution_method": "explicit_coreference",
+              "resolution_status": "resolved",
+              "subject_candidates": [],
+              "confidence": 0.99
+            },
+            "participants": [
+              {
+                "role": "action_agent",
+                "entity": {
+                  "reference_id": "user",
+                  "entity_type": "user",
+                  "resolution_method": "trusted_current_pet",
+                  "resolution_status": "resolved",
+                  "subject_candidates": [],
+                  "confidence": 0.99
+                }
+              },
+              {
+                "role": "action_recipient",
+                "entity": {
+                  "reference_id": "current_pet",
+                  "entity_type": "current_pet",
+                  "resolution_method": "trusted_current_pet",
+                  "resolution_status": "resolved",
+                  "subject_candidates": [],
+                  "confidence": 0.99
+                }
+              },
+              {
+                "role": "action_object",
+                "entity": {
+                  "reference_id": null,
+                  "entity_type": "unknown",
+                  "resolution_method": "subject_missing",
+                  "resolution_status": "missing",
+                  "subject_candidates": [],
+                  "confidence": 0.99
+                }
+              }
+            ],
+            "confidence": 0.99,
+            "expected_evidence_count": 1,
+            "item_id": "item-1",
+            "initial_assertion": "present"
+          },
+          {
+            "kind": "atomic_claim",
+            "segment_id": "s-4",
+            "source_text": "另一只猫也在呕吐",
+            "analysis_text": "另一只猫也在呕吐",
+            "discourse_role": "fact_statement",
+            "requires_evidence_analysis": true,
+            "subject": {
+              "reference_id": "other_pet",
+              "entity_type": "other_pet",
+              "resolution_method": "explicit_coreference",
+              "resolution_status": "resolved",
+              "subject_candidates": [],
+              "confidence": 0.99
+            },
+            "participants": [
+              {
+                "role": "experiencer",
+                "entity": {
+                  "reference_id": "other_pet",
+                  "entity_type": "other_pet",
+                  "resolution_method": "trusted_current_pet",
+                  "resolution_status": "resolved",
+                  "subject_candidates": [],
+                  "confidence": 0.99
+                }
+              }
+            ],
+            "confidence": 0.99,
+            "expected_evidence_count": 1,
+            "item_id": "item-1",
+            "initial_assertion": "present"
+          },
+          {
+            "kind": "atomic_claim",
+            "segment_id": "s-5",
+            "source_text": "它没有呕吐",
+            "analysis_text": "它没有呕吐",
+            "discourse_role": "fact_statement",
+            "requires_evidence_analysis": true,
+            "subject": {
+              "reference_id": "current_pet",
+              "entity_type": "current_pet",
+              "resolution_method": "trusted_current_pet",
+              "resolution_status": "resolved",
+              "subject_candidates": [],
+              "confidence": 0.99
+            },
+            "participants": [
+              {
+                "role": "experiencer",
+                "entity": {
+                  "reference_id": "current_pet",
+                  "entity_type": "current_pet",
+                  "resolution_method": "trusted_current_pet",
+                  "resolution_status": "resolved",
+                  "subject_candidates": [],
+                  "confidence": 0.99
+                }
+              }
+            ],
+            "confidence": 0.99,
+            "expected_evidence_count": 1,
+            "item_id": "item-1",
+            "initial_assertion": "denied"
+          },
+          {
+            "kind": "atomic_claim",
+            "segment_id": "s-6",
+            "source_text": "如果它呕吐了怎么办",
+            "analysis_text": "如果它呕吐了怎么办",
+            "discourse_role": "hypothetical_statement",
+            "requires_evidence_analysis": true,
+            "subject": {
+              "reference_id": "current_pet",
+              "entity_type": "current_pet",
+              "resolution_method": "trusted_current_pet",
+              "resolution_status": "resolved",
+              "subject_candidates": [],
+              "confidence": 0.99
+            },
+            "participants": [
+              {
+                "role": "experiencer",
+                "entity": {
+                  "reference_id": "current_pet",
+                  "entity_type": "current_pet",
+                  "resolution_method": "trusted_current_pet",
+                  "resolution_status": "resolved",
+                  "subject_candidates": [],
+                  "confidence": 0.99
+                }
+              }
+            ],
+            "confidence": 0.99,
+            "expected_evidence_count": 1,
+            "item_id": "item-1",
+            "initial_assertion": "hypothetical"
+          }
+        ]
+      },
+      "expected_intent": {
+        "answer_now": false
+      },
+      "expected_evidence": [
+        {
+          "surface_text": "我前天开始给它换新猫粮",
+          "assertion": "present",
+          "mapping_status": "confirmed",
+          "canonical_id": "diet_change",
+          "subject_reference": "user",
+          "subject_type": "user",
+          "participants": [
+            {
+              "role": "action_agent",
+              "entity": {
+                "reference_id": "user",
+                "entity_type": "user",
+                "resolution_method": "trusted_current_pet",
+                "resolution_status": "resolved",
+                "subject_candidates": [],
+                "confidence": 0.99
+              }
+            },
+            {
+              "role": "action_recipient",
+              "entity": {
+                "reference_id": "current_pet",
+                "entity_type": "current_pet",
+                "resolution_method": "trusted_current_pet",
+                "resolution_status": "resolved",
+                "subject_candidates": [],
+                "confidence": 0.99
+              }
+            },
+            {
+              "role": "action_object",
+              "entity": {
+                "reference_id": null,
+                "entity_type": "unknown",
+                "resolution_method": "subject_missing",
+                "resolution_status": "missing",
+                "subject_candidates": [],
+                "confidence": 0.99
+              }
+            }
+          ],
+          "review_required": false
+        },
+        {
+          "surface_text": "医生给它开了药",
+          "assertion": "present",
+          "mapping_status": "unmapped_mention",
+          "canonical_id": null,
+          "subject_reference": "doctor",
+          "subject_type": "medical_actor",
+          "participants": [
+            {
+              "role": "action_agent",
+              "entity": {
+                "reference_id": "doctor",
+                "entity_type": "medical_actor",
+                "resolution_method": "trusted_current_pet",
+                "resolution_status": "resolved",
+                "subject_candidates": [],
+                "confidence": 0.99
+              }
+            },
+            {
+              "role": "action_recipient",
+              "entity": {
+                "reference_id": "current_pet",
+                "entity_type": "current_pet",
+                "resolution_method": "trusted_current_pet",
+                "resolution_status": "resolved",
+                "subject_candidates": [],
+                "confidence": 0.99
+              }
+            },
+            {
+              "role": "action_object",
+              "entity": {
+                "reference_id": null,
+                "entity_type": "unknown",
+                "resolution_method": "subject_missing",
+                "resolution_status": "missing",
+                "subject_candidates": [],
+                "confidence": 0.99
+              }
+            }
+          ],
+          "review_required": true
+        },
+        {
+          "surface_text": "主人昨天喂了罐头",
+          "assertion": "present",
+          "mapping_status": "unmapped_mention",
+          "canonical_id": null,
+          "subject_reference": "user",
+          "subject_type": "user",
+          "participants": [
+            {
+              "role": "action_agent",
+              "entity": {
+                "reference_id": "user",
+                "entity_type": "user",
+                "resolution_method": "trusted_current_pet",
+                "resolution_status": "resolved",
+                "subject_candidates": [],
+                "confidence": 0.99
+              }
+            },
+            {
+              "role": "action_recipient",
+              "entity": {
+                "reference_id": "current_pet",
+                "entity_type": "current_pet",
+                "resolution_method": "trusted_current_pet",
+                "resolution_status": "resolved",
+                "subject_candidates": [],
+                "confidence": 0.99
+              }
+            },
+            {
+              "role": "action_object",
+              "entity": {
+                "reference_id": null,
+                "entity_type": "unknown",
+                "resolution_method": "subject_missing",
+                "resolution_status": "missing",
+                "subject_candidates": [],
+                "confidence": 0.99
+              }
+            }
+          ],
+          "review_required": true
+        },
+        {
+          "surface_text": "另一只猫也在呕吐",
+          "assertion": "present",
+          "mapping_status": "confirmed",
+          "canonical_id": "vomiting",
+          "subject_reference": "other_pet",
+          "subject_type": "other_pet",
+          "participants": [
+            {
+              "role": "experiencer",
+              "entity": {
+                "reference_id": "other_pet",
+                "entity_type": "other_pet",
+                "resolution_method": "trusted_current_pet",
+                "resolution_status": "resolved",
+                "subject_candidates": [],
+                "confidence": 0.99
+              }
+            }
+          ],
+          "review_required": false
+        },
+        {
+          "surface_text": "它没有呕吐",
+          "assertion": "denied",
+          "mapping_status": "confirmed",
+          "canonical_id": "vomiting",
+          "subject_reference": "current_pet",
+          "subject_type": "current_pet",
+          "participants": [
+            {
+              "role": "experiencer",
+              "entity": {
+                "reference_id": "current_pet",
+                "entity_type": "current_pet",
+                "resolution_method": "trusted_current_pet",
+                "resolution_status": "resolved",
+                "subject_candidates": [],
+                "confidence": 0.99
+              }
+            }
+          ],
+          "review_required": false
+        },
+        {
+          "surface_text": "如果它呕吐了怎么办",
+          "assertion": "hypothetical",
+          "mapping_status": "unmapped_mention",
+          "canonical_id": null,
+          "subject_reference": "current_pet",
+          "subject_type": "current_pet",
+          "participants": [
+            {
+              "role": "experiencer",
+              "entity": {
+                "reference_id": "current_pet",
+                "entity_type": "current_pet",
+                "resolution_method": "trusted_current_pet",
+                "resolution_status": "resolved",
+                "subject_candidates": [],
+                "confidence": 0.99
+              }
+            }
+          ],
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "sample_id": "C3_answer_now_dev",
+      "user_text": "请先根据现有信息给阶段建议，不要继续追问。",
+      "other_subjects": [],
+      "golden_stage1": {
+        "schema_version": "v3",
+        "intent": {
+          "answer_now": true,
+          "wants_triage": false,
+          "correction": false,
+          "confidence": 0.99,
+          "rationale": "用户明确要求先回答。"
+        },
+        "profile": {
+          "expected_fact_candidate_count": 0,
+          "has_fact_statement": false,
+          "has_user_question": false,
+          "has_control_intent": true,
+          "has_uncertainty": false,
+          "has_historical_statement": false,
+          "has_hypothetical_statement": false
+        },
+        "segments": []
+      },
+      "expected_intent": {
+        "answer_now": true
+      },
+      "expected_evidence": []
+    },
+    {
+      "sample_id": "V3_unmapped_dev",
+      "user_text": "它最近出现ZZZ表现，请帮忙看看。",
+      "other_subjects": [],
+      "golden_stage1": {
+        "schema_version": "v3",
+        "intent": {
+          "answer_now": false,
+          "wants_triage": false,
+          "correction": false,
+          "confidence": 0.9,
+          "rationale": ""
+        },
+        "profile": {
+          "expected_fact_candidate_count": 1,
+          "has_fact_statement": true,
+          "has_user_question": false,
+          "has_control_intent": false,
+          "has_uncertainty": false,
+          "has_historical_statement": false,
+          "has_hypothetical_statement": false
+        },
+        "segments": [
+          {
+            "kind": "atomic_claim",
+            "segment_id": "s-1",
+            "source_text": "它最近出现ZZZ表现",
+            "analysis_text": "它最近出现ZZZ表现",
+            "discourse_role": "fact_statement",
+            "requires_evidence_analysis": true,
+            "subject": {
+              "reference_id": "current_pet",
+              "entity_type": "current_pet",
+              "resolution_method": "trusted_current_pet",
+              "resolution_status": "resolved",
+              "subject_candidates": [],
+              "confidence": 0.99
+            },
+            "participants": [],
+            "confidence": 0.99,
+            "expected_evidence_count": 1,
+            "item_id": "item-1",
+            "initial_assertion": "present"
+          }
+        ]
+      },
+      "expected_intent": {
+        "answer_now": false
+      },
+      "expected_evidence": [
+        {
+          "surface_text": "它最近出现ZZZ表现",
+          "assertion": "present",
+          "mapping_status": "not_found",
+          "canonical_id": null,
+          "subject_reference": "current_pet",
+          "subject_type": "current_pet",
+          "participants": [],
+          "review_required": true
+        }
+      ]
+    }
+  ],
+  "experiments": [
+    {
+      "experiment_id": "S1_COUNT_D3",
+      "kind": "s1_count",
+      "architecture_question": "count 漂移是否来自模型重复维护可推导字段",
+      "control_group": "V2 baseline",
+      "experimental_group": "strict schema + derived count",
+      "sample_ids": [
+        "D3_shared_scope_dev"
+      ],
+      "repeat_count": 3,
+      "primary_metrics": [],
+      "gate_expectation": "blocking_gates_prevent_false_consumption",
+      "decision_rule": "development exploration only; no production admission",
+      "expected_outcome": "architecture_match",
+      "stage1_variant": "model"
+    },
+    {
+      "experiment_id": "S1_SCOPE_D3",
+      "kind": "s1_scope",
+      "architecture_question": "Stage 1 能否稳定区分 atomic 与 shared scope",
+      "control_group": "V2 baseline",
+      "experimental_group": "scope 专项拆分",
+      "sample_ids": [
+        "D3_shared_scope_dev"
+      ],
+      "repeat_count": 3,
+      "primary_metrics": [],
+      "gate_expectation": "blocking_gates_prevent_false_consumption",
+      "decision_rule": "development exploration only; no production admission",
+      "expected_outcome": "architecture_match",
+      "stage1_variant": "model"
+    },
+    {
+      "experiment_id": "S1_ROLE_D3",
+      "kind": "s1_role",
+      "architecture_question": "Stage 1 能否稳定绑定主体和事件角色",
+      "control_group": "V2 baseline",
+      "experimental_group": "participant binding 专项拆分",
+      "sample_ids": [
+        "E3_event_roles_dev"
+      ],
+      "repeat_count": 3,
+      "primary_metrics": [],
+      "gate_expectation": "blocking_gates_prevent_false_consumption",
+      "decision_rule": "development exploration only; no production admission",
+      "expected_outcome": "architecture_match",
+      "stage1_variant": "model"
+    },
+    {
+      "experiment_id": "S1_INTENT_D3",
+      "kind": "s1_intent",
+      "architecture_question": "control intent 是否独立于事实片段",
+      "control_group": "V2 baseline",
+      "experimental_group": "独立 Turn Intent Analyzer",
+      "sample_ids": [
+        "C3_answer_now_dev"
+      ],
+      "repeat_count": 3,
+      "primary_metrics": [],
+      "gate_expectation": "blocking_gates_prevent_false_consumption",
+      "decision_rule": "development exploration only; no production admission",
+      "expected_outcome": "architecture_match",
+      "stage1_variant": "model"
+    },
+    {
+      "experiment_id": "S2_ITEM_D3",
+      "kind": "s2_item",
+      "architecture_question": "Stage 2 是否严格逐 item 验证",
+      "control_group": "V2 baseline",
+      "experimental_group": "item-keyed verifier",
+      "sample_ids": [
+        "D3_shared_scope_dev",
+        "E3_event_roles_dev"
+      ],
+      "repeat_count": 3,
+      "primary_metrics": [],
+      "gate_expectation": "blocking_gates_prevent_false_consumption",
+      "decision_rule": "development exploration only; no production admission",
+      "expected_outcome": "architecture_match",
+      "stage1_variant": "golden"
+    },
+    {
+      "experiment_id": "S2_PARTICIPANT_D3",
+      "kind": "s2_participant",
+      "architecture_question": "participants 是否应由确定性代码继承",
+      "control_group": "V2 baseline",
+      "experimental_group": "deterministic inheritance + verification",
+      "sample_ids": [
+        "E3_event_roles_dev"
+      ],
+      "repeat_count": 3,
+      "primary_metrics": [],
+      "gate_expectation": "blocking_gates_prevent_false_consumption",
+      "decision_rule": "development exploration only; no production admission",
+      "expected_outcome": "architecture_match",
+      "stage1_variant": "golden"
+    },
+    {
+      "experiment_id": "CAN_LINK_D3",
+      "kind": "can_link",
+      "architecture_question": "selected candidate 引用能否消除假确认",
+      "control_group": "V2 baseline",
+      "experimental_group": "candidate retriever + selected_candidate_id",
+      "sample_ids": [
+        "V3_unmapped_dev"
+      ],
+      "repeat_count": 3,
+      "primary_metrics": [],
+      "gate_expectation": "blocking_gates_prevent_false_consumption",
+      "decision_rule": "development exploration only; no production admission",
+      "expected_outcome": "architecture_match",
+      "stage1_variant": "model"
+    },
+    {
+      "experiment_id": "CAN_TYPE_D3",
+      "kind": "can_type",
+      "architecture_question": "粗粒度类型约束能否阻止事件状态错配",
+      "control_group": "V2 baseline",
+      "experimental_group": "coarse compatibility matrix",
+      "sample_ids": [
+        "E3_event_roles_dev"
+      ],
+      "repeat_count": 3,
+      "primary_metrics": [],
+      "gate_expectation": "blocking_gates_prevent_false_consumption",
+      "decision_rule": "development exploration only; no production admission",
+      "expected_outcome": "architecture_match",
+      "stage1_variant": "golden"
+    },
+    {
+      "experiment_id": "REP_D3",
+      "kind": "rep",
+      "architecture_question": "候选架构是否稳定而非偶发通过",
+      "control_group": "V2 baseline",
+      "experimental_group": "frozen V3 candidate",
+      "sample_ids": [
+        "D3_shared_scope_dev",
+        "E3_event_roles_dev",
+        "V3_unmapped_dev"
+      ],
+      "repeat_count": 3,
+      "primary_metrics": [],
+      "gate_expectation": "blocking_gates_prevent_false_consumption",
+      "decision_rule": "development exploration only; no production admission",
+      "expected_outcome": "stable_output",
+      "stage1_variant": "model"
+    },
+    {
+      "experiment_id": "NEG_D3",
+      "kind": "neg",
+      "architecture_question": "gate 是否稳定阻断非法结构",
+      "control_group": "无 mutation 对照",
+      "experimental_group": "deterministic negative mutations",
+      "sample_ids": [
+        "D3_shared_scope_dev",
+        "E3_event_roles_dev"
+      ],
+      "repeat_count": 3,
+      "primary_metrics": [],
+      "gate_expectation": "blocking_gates_prevent_false_consumption",
+      "decision_rule": "development exploration only; no production admission",
+      "expected_outcome": "gate_blocked_as_expected",
+      "stage1_variant": "model"
+    },
+    {
+      "experiment_id": "ASYNC_D3",
+      "kind": "async",
+      "architecture_question": "异步 worker 是否具备 API shadow 接入条件",
+      "control_group": "in-memory V2 实验队列",
+      "experimental_group": "持久化有界队列 + worker",
+      "sample_ids": [
+        "C3_answer_now_dev",
+        "D3_shared_scope_dev"
+      ],
+      "repeat_count": 3,
+      "primary_metrics": [],
+      "gate_expectation": "blocking_gates_prevent_false_consumption",
+      "decision_rule": "development exploration only; no production admission",
+      "expected_outcome": "async_isolation_report_only",
+      "stage1_variant": "model"
+    },
+    {
+      "experiment_id": "CS_D3",
+      "kind": "cs",
+      "architecture_question": "新证据图与既有临床安全结构差异是否可解释",
+      "control_group": "既有 clinical baseline",
+      "experimental_group": "V3 report-only projection",
+      "sample_ids": [
+        "D3_shared_scope_dev"
+      ],
+      "repeat_count": 3,
+      "primary_metrics": [],
+      "gate_expectation": "blocking_gates_prevent_false_consumption",
+      "decision_rule": "development exploration only; no production admission",
+      "expected_outcome": "comparison_report_only",
+      "stage1_variant": "model"
+    }
+  ],
+  "negative_mutations": [
+    {
+      "mutation_id": "selected_candidate_not_in_candidate_set",
+      "base_sample_id": "D3_shared_scope_dev"
+    },
+    {
+      "mutation_id": "confirmed_without_candidates",
+      "base_sample_id": "D3_shared_scope_dev"
+    },
+    {
+      "mutation_id": "invented_canonical",
+      "base_sample_id": "D3_shared_scope_dev"
+    },
+    {
+      "mutation_id": "expected_item_missing",
+      "base_sample_id": "D3_shared_scope_dev"
+    },
+    {
+      "mutation_id": "stage2_items_merged",
+      "base_sample_id": "D3_shared_scope_dev"
+    },
+    {
+      "mutation_id": "participants_replaced",
+      "base_sample_id": "E3_event_roles_dev"
+    },
+    {
+      "mutation_id": "stage2_assertion_not_verified",
+      "base_sample_id": "D3_shared_scope_dev"
+    },
+    {
+      "mutation_id": "unmapped_review_missing",
+      "base_sample_id": "V3_unmapped_dev"
+    }
+  ]
+}
