@@ -2,9 +2,9 @@
 =============================================================================
 文件：src/vet_agent/semantic_collaboration/__init__.py
 作用：作为受限语义协作 DAG 的稳定包入口。
-范围：只暴露 M01 Skill 契约、目录、投影、生产组合根、M02 TurnSnapshot 与
-      M03 PlanSelection / Plan IR / Plan Validator 相关的公开 API。
-说明：跨包调用不得深入内部模块；后续 M03 之后的能力必须继续通过本入口
+范围：暴露 M01 Skill 契约、目录、投影、生产组合根、M02 TurnSnapshot、
+      M03 Plan IR 与 M04 Temporal-first DAG 调度相关公开 API。
+说明：跨包调用不得深入内部模块；后续能力必须继续通过本入口
       显式暴露，避免形成隐式跨包依赖。
 =============================================================================
 """
@@ -39,11 +39,14 @@ from .contracts import (
     VerifierBinding,
 )
 from .errors import (
+    DAGProjectionRepositoryError,
     PlanCompilationError,
     PlanError,
     PlanModelClientError,
     PlanSelectionSchemaError,
+    SchedulerError,
     SemanticCollaborationError,
+    SemanticTaskExecutionError,
     SkillCatalogError,
     SkillContractError,
     SkillProjectionError,
@@ -110,6 +113,34 @@ from .projection import (
     render_skill_projection,
     render_skill_projection_from_metadata,
 )
+from .scheduler_contracts import (
+    DAG_SCHEDULER_CONTRACT_VERSION,
+    DAGExecutionPolicy,
+    DAGRunProjectionInitializeRequest,
+    DAGRunProjectionRecord,
+    DAGRunStatus,
+    DAGTaskExecutionResult,
+    DAGTaskPolicy,
+    DAGTaskProjectionRecord,
+    DAGTaskTerminalState,
+    SemanticTaskExecutionRequest,
+    semantic_dag_run_id,
+)
+from .scheduler_graph import (
+    DAGDependencyFailure,
+    DAGFrontier,
+    evaluate_dag_frontier,
+    execution_layers,
+)
+from .scheduler_ports import (
+    SemanticDAGProjectionRepository,
+    SemanticTaskExecutor,
+    TODOSemanticTaskExecutor,
+)
+from .scheduler_repository import (
+    InMemorySemanticDAGProjectionRepository,
+    PostgresSemanticDAGProjectionRepository,
+)
 from .snapshot import (
     BoundedConversationHistoryReader,
     TrustedPetContextReader,
@@ -142,10 +173,24 @@ from .snapshot_contracts import (
     canonical_turn_snapshot_json,
     compute_turn_snapshot_digest,
 )
+from .temporal_scheduler import (
+    SemanticDAGWorkflow,
+    TemporalDAGActivityRuntime,
+    TemporalDAGRunHandle,
+    TemporalDAGWorkflowInput,
+    TemporalDependencyFailureInput,
+    TemporalFinishRunInput,
+    TemporalSemanticDAGScheduler,
+    TemporalTaskActivityInput,
+    TemporalTaskResultInput,
+    build_dag_task_policies,
+    build_temporal_semantic_dag_worker,
+)
 
 __all__ = [
     "CANONICAL_DESCRIPTOR_SPEC",
     "CLAIM_INVENTORY_SPEC",
+    "DAG_SCHEDULER_CONTRACT_VERSION",
     "DOMAIN_ISOLATED_CONTEXT_RESOURCES",
     "MEASUREMENT_PHRASE_SPEC",
     "PARTICIPANT_PHRASE_SPEC",
@@ -167,9 +212,21 @@ __all__ = [
     "BoundedHistoryReadResult",
     "BoundedHistoryReadStatus",
     "ContextContract",
+    "DAGDependencyFailure",
+    "DAGExecutionPolicy",
+    "DAGFrontier",
+    "DAGProjectionRepositoryError",
+    "DAGRunProjectionInitializeRequest",
+    "DAGRunProjectionRecord",
+    "DAGRunStatus",
+    "DAGTaskExecutionResult",
+    "DAGTaskPolicy",
+    "DAGTaskProjectionRecord",
+    "DAGTaskTerminalState",
     "DeterministicPlanCompiler",
     "FailurePolicy",
     "FieldOwnershipPath",
+    "InMemorySemanticDAGProjectionRepository",
     "LLMPlanSelector",
     "OriginalTextExtractionPolicy",
     "OriginalUserText",
@@ -193,10 +250,17 @@ __all__ = [
     "PlanValidationFailureCode",
     "PlanValidationResult",
     "PlanValidator",
+    "PostgresSemanticDAGProjectionRepository",
     "RepairMapping",
+    "SchedulerError",
     "SchemaContract",
     "SchemaContractReference",
     "SemanticCollaborationError",
+    "SemanticDAGProjectionRepository",
+    "SemanticDAGWorkflow",
+    "SemanticTaskExecutionError",
+    "SemanticTaskExecutionRequest",
+    "SemanticTaskExecutor",
     "SkillCatalog",
     "SkillCatalogError",
     "SkillContextResource",
@@ -216,6 +280,15 @@ __all__ = [
     "SkillTaskKind",
     "SkillTraceKind",
     "StructuredPlanModelClient",
+    "TODOSemanticTaskExecutor",
+    "TemporalDAGActivityRuntime",
+    "TemporalDAGRunHandle",
+    "TemporalDAGWorkflowInput",
+    "TemporalDependencyFailureInput",
+    "TemporalFinishRunInput",
+    "TemporalSemanticDAGScheduler",
+    "TemporalTaskActivityInput",
+    "TemporalTaskResultInput",
     "TrustedPetContext",
     "TrustedPetContextReader",
     "TrustedPetContextSource",
@@ -244,15 +317,20 @@ __all__ = [
     "VerifiedPriorFactSummary",
     "VerifiedPriorFactSummaryStatus",
     "VerifierBinding",
+    "build_dag_task_policies",
     "build_production_plan_policy",
     "build_production_skill_catalog",
+    "build_temporal_semantic_dag_worker",
     "canonical_plan_json",
     "canonical_turn_snapshot_json",
     "compute_plan_digest",
     "compute_plan_policy_digest",
     "compute_turn_snapshot_digest",
+    "evaluate_dag_frontier",
+    "execution_layers",
     "projection_metadata_from_spec",
     "render_skill_projection",
     "render_skill_projection_from_metadata",
     "schema_reference_matches",
+    "semantic_dag_run_id",
 ]

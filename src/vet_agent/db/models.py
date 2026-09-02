@@ -18,6 +18,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     Text,
@@ -26,7 +27,7 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 class Base(DeclarativeBase):
@@ -1720,4 +1721,182 @@ class IdempotencyRecordModel(Base):
         nullable=False,
         server_default=func.now(),
         comment="幂等记录最近更新时间。",
+    )
+
+
+class SemanticDAGRunProjectionModel(Base):
+    """表示受限语义协作 DAG workflow 的只读状态投影。"""
+
+    __tablename__ = "semantic_dag_run_projections"
+    __table_args__ = (
+        UniqueConstraint(
+            "workflow_id",
+            name="uq_semantic_dag_run_projections_workflow_id",
+        ),
+        CheckConstraint(
+            "status IN ('running', 'completed', 'completed_with_failures', 'canceled', 'timed_out', 'failed')",
+            name="ck_semantic_dag_run_projections_status",
+        ),
+        Index(
+            "idx_semantic_dag_run_projections_turn_status",
+            "turn_id",
+            "status",
+        ),
+        {
+            "comment": "受限语义协作 DAG workflow 只读投影表；执行历史与恢复权威在 Temporal，本表不参与任务队列或租约调度。",
+        },
+    )
+
+    run_id: Mapped[str] = mapped_column(
+        Text,
+        primary_key=True,
+        comment="由权威 Plan IR digest 派生的语义 DAG workflow 稳定标识。",
+    )
+    contract_version: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="DAG 调度契约版本，用于投影兼容审计。",
+    )
+    workflow_id: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="对应的 Temporal workflow 标识。",
+    )
+    plan_id: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="当前 DAG workflow 绑定的 Plan IR canonical digest。",
+    )
+    turn_id: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="当前 DAG workflow 绑定的 TurnSnapshot 回合标识。",
+    )
+    snapshot_digest: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="当前 DAG workflow 全部任务共享的 TurnSnapshot digest。",
+    )
+    skill_catalog_digest: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="创建计划时冻结的 SkillCatalog 契约 digest。",
+    )
+    plan_policy_digest: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="创建计划时冻结的 PlanPolicy 契约 digest。",
+    )
+    status: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="workflow 业务状态投影，不是执行队列状态。",
+    )
+    policy: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        comment="workflow 启动时固化的并发、超时与重试策略。",
+    )
+    task_policies: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB,
+        nullable=False,
+        comment="由 SkillCatalog 失败策略投影出的任务语义重试策略集合。",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        comment="run 投影创建时间。",
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+        comment="run 投影最近更新时间。",
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        comment="workflow 业务终态投影时间。",
+    )
+    tasks: Mapped[list[SemanticDAGTaskProjectionModel]] = relationship(
+        cascade="all, delete-orphan",
+        order_by="SemanticDAGTaskProjectionModel.task_id",
+        doc="当前 run 下的任务终态投影，仅由仓储读取。",
+    )
+
+
+class SemanticDAGTaskProjectionModel(Base):
+    """表示受限语义协作 DAG 单个任务的只读终态投影。"""
+
+    __tablename__ = "semantic_dag_task_projections"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["run_id"],
+            ["semantic_dag_run_projections.run_id"],
+            name="fk_semantic_dag_task_projections_run_id",
+            ondelete="CASCADE",
+        ),
+        CheckConstraint(
+            "terminal_state IN ('verified', 'repair_verified', 'not_applicable', 'blocked', 'disagreement', 'repair_exhausted', 'repair_failed', 'dependency_failed', 'review_failed', 'context_budget_exceeded', 'timeout')",
+            name="ck_semantic_dag_task_projections_terminal_state",
+        ),
+        {
+            "comment": "受限语义协作 DAG 任务终态投影表；不保存 ready/running/attempt 或租约等执行队列状态。",
+        },
+    )
+
+    run_id: Mapped[str] = mapped_column(
+        Text,
+        primary_key=True,
+        comment="任务投影所属 DAG workflow 稳定标识。",
+    )
+    task_id: Mapped[str] = mapped_column(
+        Text,
+        primary_key=True,
+        comment="权威 PlanTask 稳定标识。",
+    )
+    skill_id: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="任务绑定的 SKILL 稳定标识。",
+    )
+    skill_version: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="任务绑定的精确 SKILL 版本。",
+    )
+    target_envelope_id: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="任务绑定的 turn 或 claim envelope 标识。",
+    )
+    terminal_state: Mapped[str | None] = mapped_column(
+        Text,
+        comment="任务业务终态；workflow 未完成时可以为空。",
+    )
+    artifact_reference: Mapped[str | None] = mapped_column(
+        Text,
+        comment="成功终态绑定的已验证 artifact 引用。",
+    )
+    failure_code: Mapped[str | None] = mapped_column(
+        Text,
+        comment="失败终态对应的稳定 SKILL 失败码。",
+    )
+    failure_message: Mapped[str | None] = mapped_column(
+        Text,
+        comment="失败终态对应的工程排障说明。",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        comment="任务投影创建时间。",
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+        comment="任务投影最近更新时间。",
     )

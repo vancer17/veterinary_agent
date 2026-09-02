@@ -7,20 +7,20 @@
 
 
 from .models import (
+    BackgroundTaskModel,
     Base,
+    ClinicalConditionCardModel,
     ClinicalSafetyAssetModel,
     ClinicalSafetyChunkModel,
-    ClinicalConditionCardModel,
     ConsultationDomainModel,
     ConsultationSlotModel,
     ConsultationStateModel,
     ConversationTurnModel,
     IdempotencyRecordModel,
     InputSafetyCandidateDefinitionModel,
-    KnowledgeIngestionBatchModel,
     KnowledgeChunkModel,
+    KnowledgeIngestionBatchModel,
     LogicTraceModel,
-    BackgroundTaskModel,
     OutputSafetyCandidateDefinitionModel,
     PetMemoryEpisodeModel,
     PetMemoryFactModel,
@@ -30,11 +30,14 @@ from .models import (
     PetSessionBindingModel,
     RagAuditEventModel,
     RagRetrievalMissModel,
+    SemanticDAGRunProjectionModel,
+    SemanticDAGTaskProjectionModel,
     TaskRoutingDomainModel,
 )
 from .session import make_engine, make_session_factory, session_scope, sqlalchemy_url
 
 __all__ = [
+    "BackgroundTaskModel",
     "Base",
     "ClinicalConditionCardModel",
     "ClinicalSafetyAssetModel",
@@ -45,7 +48,6 @@ __all__ = [
     "ConversationTurnModel",
     "IdempotencyRecordModel",
     "InputSafetyCandidateDefinitionModel",
-    "BackgroundTaskModel",
     "KnowledgeChunkModel",
     "KnowledgeIngestionBatchModel",
     "LogicTraceModel",
@@ -58,6 +60,8 @@ __all__ = [
     "PetSessionBindingModel",
     "RagAuditEventModel",
     "RagRetrievalMissModel",
+    "SemanticDAGRunProjectionModel",
+    "SemanticDAGTaskProjectionModel",
     "TaskRoutingDomainModel",
     "make_engine",
     "make_session_factory",

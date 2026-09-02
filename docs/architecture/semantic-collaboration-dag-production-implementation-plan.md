@@ -5,8 +5,8 @@
       数据边界、测试门禁、生产接入顺序和回滚边界。
 范围: 适用于生产代码迁移、契约实现、SKILL 目录、Plan IR、任务调度、
       生成 / 审查 / 修复、artifact 版本、claim graph、领域投影和观测治理。
-说明: 本文不改变生产架构基线，不记录执行框架选型，不包含实验计划，
-      不展开类、函数、提示词全文或测试替身实现。
+说明: 本文不改变生产架构基线，固定使用架构基线声明的 Temporal durable
+      execution 边界，不包含实验计划，不展开类、函数、提示词全文或测试替身实现。
 维护: 当模块划分、阶段交付顺序、持久化契约、生产接入顺序、回滚策略或
       工程验收口径调整时，必须同步更新本文。
 =============================================================================
@@ -24,7 +24,7 @@
 > 持久化边界、测试门禁、生产接入与回滚
 >
 > **不适用范围**：医学规则设计、临床安全策略、OPA 细节、问诊状态实现、
-> 长期记忆写入策略、执行框架选型、实验矩阵和模型质量实验
+> 长期记忆写入策略、第二执行框架选型、实验矩阵和模型质量实验
 
 ## 1. 目标与工程定位
 
@@ -138,7 +138,7 @@ tests/test_semantic_collaboration*.py
 | M01 | Skill 契约与目录 | SkillSpec、SkillCatalog、所有权校验 | Phase 1 |
 | M02 | TurnSnapshot | 不可变上下文、digest、上下文预算 | Phase 1 |
 | M03 | Plan IR 与校验 | PlanIR、PlanValidator、规划 LLM adapter | Phase 2 |
-| M04 | DAG 调度 | 拓扑调度、并发、超时、终态 | Phase 2 |
+| M04 | Temporal-first DAG 调度 | 确定性 frontier、workflow / activity、终态投影 | Phase 2 |
 | M05 | 结构化 LLM Gateway | SKILL 调用、schema、usage、失败状态 | Phase 3 |
 | M06 | 生成 SKILL | intent、claim、语义与 phrase 生成 | Phase 3 / 4 |
 | M07 | Deterministic Verifier | schema、所有权、evidence、binding 校验 | Phase 3 / 4 |
@@ -158,7 +158,7 @@ M01 SkillCatalog
    ↓
 M03 PlanIR ← M02 TurnSnapshot
    ↓
-M04 Scheduler
+M04 Temporal Workflow
    ↓
 M05 Gateway → M06 Generator → M07 Verifier
                                 ↓
@@ -369,12 +369,13 @@ plan_id 与 canonical 内容不一致 blocked
 **范围**
 
 ```text
-DAGScheduler
-TaskExecutionState
-并发分组
-超时控制
+Temporal SemanticDAGWorkflow
+确定性 DAG frontier
+任务 activity 边界
+语义有界重试策略投影
 依赖失败传播
 terminal state 汇总
+PostgreSQL 只读投影
 ```
 
 **上游依赖**
@@ -386,12 +387,13 @@ M03 PlanIR
 
 **交付物**
 
-1. 拓扑执行器。
-2. 无依赖任务并行调度。
-3. 任务超时状态。
+1. Temporal workflow 与任务 activity。
+2. 无依赖任务并发调度。
+3. Temporal activity / workflow 超时。
 4. 依赖失败传播。
 5. cancellation / deadline 传播。
-6. 任务运行状态记录。
+6. 任务终态投影记录。
+7. 任务队列、语义 / 基础设施重试、worker 租约与恢复由 Temporal 负责。
 
 **验收标准**
 
@@ -402,6 +404,7 @@ M03 PlanIR
 超时输出 timeout
 任务无悬空状态
 调度器不修改 TurnSnapshot
+数据库不保存 worker_id / lease / ready / running / attempt 调度状态
 ```
 
 **禁止事项**
@@ -410,6 +413,7 @@ M03 PlanIR
 不在调度器中解释医学语义
 不在调度器中动态发明任务
 不把异常任务静默跳过
+不实现数据库任务队列、租约或自研 worker 恢复协议
 ```
 
 ### M05：结构化 LLM Gateway
@@ -1022,8 +1026,7 @@ terminal state 枚举完整
 
 ```text
 M03 PlanIR / PlanValidator / planner adapter
-M04 DAGScheduler
-TaskExecutionState
+M04 Temporal workflow / activity / projection
 依赖与超时治理
 ```
 
@@ -1034,6 +1037,8 @@ TaskExecutionState
 依赖环 blocked
 独立任务并行执行
 依赖失败传播
+Temporal 负责队列、retry、timeout 与 worker 恢复
+数据库不保存 worker / lease / ready / running / attempt 调度状态
 任务终态完整
 ```
 
@@ -1447,7 +1452,7 @@ PR 01 生产包边界与基础契约
 PR 02 SkillCatalog 与契约测试
 PR 03 TurnSnapshot 与 context policy
 PR 04 PlanIR / PlanValidator
-PR 05 DAGScheduler
+PR 05 Temporal-first DAG workflow
 PR 06 StructuredLLMGateway
 PR 07 Turn Intent + verifier
 PR 08 Claim Inventory + verifier
@@ -1540,7 +1545,7 @@ Review 生产代码时应检查：
 临床安全策略调整
 问诊状态合并实现
 长期记忆写入实现
-执行框架选型
+第二执行框架选型
 实验矩阵设计
 held-out 读取
 DSPy 接入
@@ -1558,3 +1563,4 @@ DSPy 接入
 5. [consultation-semantic-extraction-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/consultation-semantic-extraction-change-summary.md)
 6. [consultation-state-answerability-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/consultation-state-answerability-change-summary.md)
 7. [clinical-safety-semantic-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/clinical-safety-semantic-change-summary.md)
+8. [semantic-collaboration-dag-m04-scheduler-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m04-scheduler-change-summary.md)
