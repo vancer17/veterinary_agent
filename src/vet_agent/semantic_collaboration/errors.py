@@ -162,3 +162,41 @@ class PlanSelectionSchemaError(PlanError):
     :return: 无返回值；该错误不进行宽松 JSON 文本修复。
     """
     failure_code: ClassVar[str] = "plan_response_parse_failed"
+
+
+class SchedulerError(SemanticCollaborationError):
+    """表示 M04 Temporal-first 调度契约或 workflow 输入失败。
+
+    :return: 无返回值；该错误不允许被转换成空任务或默认计划。
+    """
+
+
+class DAGProjectionRepositoryError(SchedulerError):
+    """表示语义协作 DAG 只读投影仓储访问或契约冲突。
+
+    :return: 无返回值；投影失败不触发内存调度或旧语义链路回退。
+    """
+
+
+class SemanticTaskExecutionError(SchedulerError):
+    """表示受限语义任务执行端口发生不可恢复失败。
+
+    :return: 无返回值；该错误不触发旧问诊语义链路回退。
+    """
+
+    failure_code: str
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        failure_code: str,
+    ) -> None:
+        """初始化带稳定失败码的任务执行错误。
+
+        :param message: 面向工程排障的错误说明。
+        :param failure_code: 稳定任务端口失败码。
+        :return: 无返回值。
+        """
+        super().__init__(message)
+        self.failure_code = failure_code

@@ -6,8 +6,8 @@
 范围: 适用于用户原始表达到可投影结构化语义 claim graph 之间的生产主路径，
       包括受限任务规划、正交 SKILL、审查、局部修复、typed patch、
       artifact 版本、一致性门禁和问诊 / 临床安全 / 长期记忆投影契约。
-说明: 本文是生产工程实现基线，不记录执行框架选型，不包含实验计划，
-      不展开软件包内部实现、提示词全文或测试替身实现。
+说明: 本文是生产工程实现基线，固定 Temporal 作为 durable execution 边界，
+      不包含实验计划，不展开软件包内部实现、提示词全文或测试替身实现。
 维护: 当 SKILL 目录、Plan IR、TurnSnapshot、artifact 状态机、review / repair
       契约、上下文访问策略或领域投影边界调整时，必须同步更新本文。
 =============================================================================
@@ -91,7 +91,7 @@ contract-first
 → 受限任务规划 LLM
 → Plan IR
 → Plan Validator
-→ Skill DAG Scheduler
+→ Temporal SemanticDAGWorkflow
    ├─ Turn Intent Generator
    ├─ Claim Inventory Generator
    ├─ Claim Statement Semantics Generator
@@ -122,6 +122,8 @@ contract-first
 6. patch 由 deterministic applier 校验并应用。
 7. claim graph 在局部结果通过验证后组装。
 8. 下游领域只能通过 adapter 消费 verified graph。
+9. 任务队列、worker 租约、基础设施重试、超时与中断恢复由 Temporal 负责。
+10. PostgreSQL 只保存语义终态投影，不保存 ready / running / attempt 调度状态。
 
 ## 4. 核心不变量
 
@@ -194,6 +196,39 @@ projection_adapter_not_implemented
 ```
 
 不得在 preprocessing 中替问诊、临床安全或长期记忆实现业务逻辑。
+
+### 4.7 Durable execution 边界
+
+Temporal 是执行基础设施权威：
+
+```text
+activity 队列
+worker 恢复
+基础设施 retry
+语义 retryable failure 的下一次 attempt
+workflow / activity timeout
+执行 event history
+```
+
+自有代码只保留：
+
+```text
+Plan IR 依赖推进
+任务业务终态
+语义 retryable failure code
+artifact lineage
+repair budget
+claim graph 准入
+```
+
+禁止：
+
+```text
+数据库任务队列
+数据库 worker 租约
+数据库 attempt 调度状态
+自研 worker 抢占与恢复协议
+```
 
 ## 5. TurnSnapshot 与受限全局视图
 
@@ -1110,6 +1145,7 @@ review 状态机
 repair patch 契约
 context policy
 领域投影边界
+durable execution 边界
 生产验收口径
 ```
 
@@ -1125,3 +1161,4 @@ context policy
 5. [consultation-semantic-extraction-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/consultation-semantic-extraction-change-summary.md)
 6. [consultation-state-answerability-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/consultation-state-answerability-change-summary.md)
 7. [clinical-safety-semantic-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/clinical-safety-semantic-change-summary.md)
+8. [semantic-collaboration-dag-m04-scheduler-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m04-scheduler-change-summary.md)
