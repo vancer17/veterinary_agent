@@ -1,0 +1,1426 @@
+{
+  "schema_version": "v4",
+  "dataset_type": "development",
+  "reference_time": "2026-08-25T10:00:00+08:00",
+  "pet_profile": {
+    "species": "cat",
+    "lifestage": "adult"
+  },
+  "cases": [
+    {
+      "sample_id": "D4_shared_scope_dev",
+      "user_text": "没有呕吐、干呕、反流、流涎或舔唇；精神、食欲和饮水都正常；没有血便和黑便。",
+      "other_subjects": [],
+      "previous_question_target": null,
+      "expected_intent": {
+        "answer_now": false
+      },
+      "profile": {
+        "has_factual_statements": true
+      },
+      "expected_observations": [
+        {
+          "evidence_quote": "没有呕吐、干呕、反流、流涎或舔唇",
+          "target_quote": "呕吐",
+          "semantic_class": "state",
+          "assertion": "denied",
+          "certainty": "explicit",
+          "subject_reference": "current_pet",
+          "participants": [],
+          "object_mention": "",
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "not_applicable",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "canonical_surface": "呕吐",
+          "mapping_status": "confirmed",
+          "canonical_id": "vomiting",
+          "review_required": false
+        },
+        {
+          "evidence_quote": "没有呕吐、干呕、反流、流涎或舔唇",
+          "target_quote": "干呕",
+          "semantic_class": "state",
+          "assertion": "denied",
+          "certainty": "explicit",
+          "subject_reference": "current_pet",
+          "participants": [],
+          "object_mention": "",
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "not_applicable",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "canonical_surface": "干呕",
+          "mapping_status": "confirmed",
+          "canonical_id": "retching",
+          "review_required": false
+        },
+        {
+          "evidence_quote": "没有呕吐、干呕、反流、流涎或舔唇",
+          "target_quote": "反流",
+          "semantic_class": "state",
+          "assertion": "denied",
+          "certainty": "explicit",
+          "subject_reference": "current_pet",
+          "participants": [],
+          "object_mention": "",
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "not_applicable",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "canonical_surface": "反流",
+          "mapping_status": "confirmed",
+          "canonical_id": "regurgitation",
+          "review_required": false
+        },
+        {
+          "evidence_quote": "没有呕吐、干呕、反流、流涎或舔唇",
+          "target_quote": "流涎",
+          "semantic_class": "state",
+          "assertion": "denied",
+          "certainty": "explicit",
+          "subject_reference": "current_pet",
+          "participants": [],
+          "object_mention": "",
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "not_applicable",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "canonical_surface": "流涎",
+          "mapping_status": "confirmed",
+          "canonical_id": "drooling",
+          "review_required": false
+        },
+        {
+          "evidence_quote": "没有呕吐、干呕、反流、流涎或舔唇",
+          "target_quote": "舔唇",
+          "semantic_class": "state",
+          "assertion": "denied",
+          "certainty": "explicit",
+          "subject_reference": "current_pet",
+          "participants": [],
+          "object_mention": "",
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "not_applicable",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "canonical_surface": "舔唇",
+          "mapping_status": "confirmed",
+          "canonical_id": "lip_smacking",
+          "review_required": false
+        },
+        {
+          "evidence_quote": "精神、食欲和饮水都正常",
+          "target_quote": "精神",
+          "semantic_class": "state",
+          "assertion": "normal",
+          "certainty": "explicit",
+          "subject_reference": "current_pet",
+          "participants": [],
+          "object_mention": "",
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "not_applicable",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "canonical_surface": "精神",
+          "mapping_status": "confirmed",
+          "canonical_id": "mental_status",
+          "review_required": false
+        },
+        {
+          "evidence_quote": "精神、食欲和饮水都正常",
+          "target_quote": "食欲",
+          "semantic_class": "state",
+          "assertion": "normal",
+          "certainty": "explicit",
+          "subject_reference": "current_pet",
+          "participants": [],
+          "object_mention": "",
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "not_applicable",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "canonical_surface": "食欲",
+          "mapping_status": "confirmed",
+          "canonical_id": "appetite",
+          "review_required": false
+        },
+        {
+          "evidence_quote": "精神、食欲和饮水都正常",
+          "target_quote": "饮水",
+          "semantic_class": "state",
+          "assertion": "normal",
+          "certainty": "explicit",
+          "subject_reference": "current_pet",
+          "participants": [],
+          "object_mention": "",
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "not_applicable",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "canonical_surface": "饮水",
+          "mapping_status": "confirmed",
+          "canonical_id": "water_intake",
+          "review_required": false
+        },
+        {
+          "evidence_quote": "没有血便和黑便",
+          "target_quote": "血便",
+          "semantic_class": "state",
+          "assertion": "denied",
+          "certainty": "explicit",
+          "subject_reference": "current_pet",
+          "participants": [],
+          "object_mention": "",
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "not_applicable",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "canonical_surface": "血便",
+          "mapping_status": "confirmed",
+          "canonical_id": "bloody_stool",
+          "review_required": false
+        },
+        {
+          "evidence_quote": "没有血便和黑便",
+          "target_quote": "黑便",
+          "semantic_class": "state",
+          "assertion": "denied",
+          "certainty": "explicit",
+          "subject_reference": "current_pet",
+          "participants": [],
+          "object_mention": "",
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "not_applicable",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "canonical_surface": "黑便",
+          "mapping_status": "confirmed",
+          "canonical_id": "bloody_stool",
+          "review_required": false
+        }
+      ]
+    },
+    {
+      "sample_id": "E4_event_roles_dev",
+      "user_text": "我前天开始给它换新猫粮。医生给它开了药。主人昨天喂了罐头。另一只猫也在呕吐。它没有呕吐。如果它呕吐了怎么办。",
+      "other_subjects": [
+        {
+          "reference_id": "user",
+          "entity_type": "user",
+          "display_name": "用户"
+        },
+        {
+          "reference_id": "doctor",
+          "entity_type": "medical_actor",
+          "display_name": "医生"
+        },
+        {
+          "reference_id": "other_pet",
+          "entity_type": "other_pet",
+          "display_name": "另一只宠物"
+        }
+      ],
+      "previous_question_target": null,
+      "expected_intent": {
+        "answer_now": false
+      },
+      "profile": {
+        "has_factual_statements": true
+      },
+      "expected_observations": [
+        {
+          "evidence_quote": "我前天开始给它换新猫粮",
+          "target_quote": "换新猫粮",
+          "semantic_class": "action",
+          "assertion": "present",
+          "certainty": "explicit",
+          "subject_reference": "user",
+          "participants": [
+            {
+              "role": "action_agent",
+              "reference_id": "user"
+            },
+            {
+              "role": "action_recipient",
+              "reference_id": "current_pet"
+            }
+          ],
+          "object_mention": "新猫粮",
+          "temporal_quote": "前天",
+          "temporal_relation": "started_at",
+          "temporal_value": "day-2",
+          "temporal_precision": "day",
+          "temporal_status": "confirmed_present",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "canonical_surface": "换新猫粮",
+          "mapping_status": "confirmed",
+          "canonical_id": "diet_change",
+          "review_required": false
+        },
+        {
+          "evidence_quote": "医生给它开了药",
+          "target_quote": "开了药",
+          "semantic_class": "action",
+          "assertion": "present",
+          "certainty": "explicit",
+          "subject_reference": "doctor",
+          "participants": [
+            {
+              "role": "action_agent",
+              "reference_id": "doctor"
+            },
+            {
+              "role": "action_recipient",
+              "reference_id": "current_pet"
+            }
+          ],
+          "object_mention": "药",
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "not_applicable",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "canonical_surface": "开了药",
+          "mapping_status": "unmapped_mention",
+          "canonical_id": null,
+          "review_required": true
+        },
+        {
+          "evidence_quote": "主人昨天喂了罐头",
+          "target_quote": "喂了罐头",
+          "semantic_class": "action",
+          "assertion": "present",
+          "certainty": "explicit",
+          "subject_reference": "user",
+          "participants": [
+            {
+              "role": "action_agent",
+              "reference_id": "user"
+            },
+            {
+              "role": "action_recipient",
+              "reference_id": "current_pet"
+            }
+          ],
+          "object_mention": "罐头",
+          "temporal_quote": "昨天",
+          "temporal_relation": "started_at",
+          "temporal_value": "day-1",
+          "temporal_precision": "day",
+          "temporal_status": "confirmed_present",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "canonical_surface": "喂了罐头",
+          "mapping_status": "unmapped_mention",
+          "canonical_id": null,
+          "review_required": true
+        },
+        {
+          "evidence_quote": "另一只猫也在呕吐",
+          "target_quote": "呕吐",
+          "semantic_class": "state",
+          "assertion": "present",
+          "certainty": "explicit",
+          "subject_reference": "other_pet",
+          "participants": [
+            {
+              "role": "experiencer",
+              "reference_id": "other_pet"
+            }
+          ],
+          "object_mention": "",
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "not_applicable",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "canonical_surface": "呕吐",
+          "mapping_status": "confirmed",
+          "canonical_id": "vomiting",
+          "review_required": false
+        },
+        {
+          "evidence_quote": "它没有呕吐",
+          "target_quote": "呕吐",
+          "semantic_class": "state",
+          "assertion": "denied",
+          "certainty": "explicit",
+          "subject_reference": "current_pet",
+          "participants": [
+            {
+              "role": "experiencer",
+              "reference_id": "current_pet"
+            }
+          ],
+          "object_mention": "",
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "not_applicable",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "canonical_surface": "呕吐",
+          "mapping_status": "confirmed",
+          "canonical_id": "vomiting",
+          "review_required": false
+        },
+        {
+          "evidence_quote": "如果它呕吐了怎么办",
+          "target_quote": "呕吐",
+          "semantic_class": "state",
+          "assertion": "hypothetical",
+          "certainty": "explicit",
+          "subject_reference": "current_pet",
+          "participants": [
+            {
+              "role": "experiencer",
+              "reference_id": "current_pet"
+            }
+          ],
+          "object_mention": "",
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "not_applicable",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "canonical_surface": "呕吐",
+          "mapping_status": "confirmed",
+          "canonical_id": "vomiting",
+          "review_required": false
+        }
+      ]
+    },
+    {
+      "sample_id": "C4_answer_now_dev",
+      "user_text": "请先根据现有信息给阶段建议，不要继续追问。",
+      "other_subjects": [],
+      "previous_question_target": null,
+      "expected_intent": {
+        "answer_now": true
+      },
+      "profile": {
+        "has_factual_statements": false,
+        "has_control_intent": true
+      },
+      "expected_observations": []
+    },
+    {
+      "sample_id": "V4_unmapped_dev",
+      "user_text": "它最近出现ZZZ表现，请帮忙看看。",
+      "other_subjects": [],
+      "previous_question_target": null,
+      "expected_intent": {
+        "answer_now": false
+      },
+      "profile": {
+        "has_factual_statements": true
+      },
+      "expected_observations": [
+        {
+          "evidence_quote": "它最近出现ZZZ表现",
+          "target_quote": "ZZZ表现",
+          "semantic_class": "state",
+          "assertion": "present",
+          "certainty": "explicit",
+          "subject_reference": "current_pet",
+          "participants": [],
+          "object_mention": "",
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "not_applicable",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "canonical_surface": "ZZZ表现",
+          "mapping_status": "not_found",
+          "canonical_id": null,
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "sample_id": "X4_dirty_input_dev",
+      "user_text": "猫猫这两天有点软便呢，没有吐，也没有血便；精神还行，前天换粮了。",
+      "other_subjects": [
+        {
+          "reference_id": "user",
+          "entity_type": "user",
+          "display_name": "用户"
+        }
+      ],
+      "previous_question_target": null,
+      "expected_intent": {
+        "answer_now": false
+      },
+      "profile": {
+        "has_factual_statements": true
+      },
+      "expected_observations": [
+        {
+          "evidence_quote": "猫猫这两天有点软便呢",
+          "target_quote": "软便",
+          "semantic_class": "state",
+          "assertion": "abnormal",
+          "certainty": "explicit",
+          "subject_reference": "current_pet",
+          "participants": [],
+          "object_mention": "",
+          "temporal_quote": "这两天",
+          "temporal_relation": "duration",
+          "temporal_value": "recent-2-days",
+          "temporal_precision": "approximate_duration",
+          "temporal_status": "confirmed_present",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "canonical_surface": "软便",
+          "mapping_status": "confirmed",
+          "canonical_id": "soft_stool",
+          "review_required": false
+        },
+        {
+          "evidence_quote": "没有吐",
+          "target_quote": "吐",
+          "semantic_class": "state",
+          "assertion": "denied",
+          "certainty": "explicit",
+          "subject_reference": "current_pet",
+          "participants": [],
+          "object_mention": "",
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "not_applicable",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "canonical_surface": "呕吐",
+          "mapping_status": "confirmed",
+          "canonical_id": "vomiting",
+          "review_required": false
+        },
+        {
+          "evidence_quote": "也没有血便",
+          "target_quote": "血便",
+          "semantic_class": "state",
+          "assertion": "denied",
+          "certainty": "explicit",
+          "subject_reference": "current_pet",
+          "participants": [],
+          "object_mention": "",
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "not_applicable",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "canonical_surface": "血便",
+          "mapping_status": "confirmed",
+          "canonical_id": "bloody_stool",
+          "review_required": false
+        },
+        {
+          "evidence_quote": "精神还行",
+          "target_quote": "精神",
+          "semantic_class": "state",
+          "assertion": "normal",
+          "certainty": "explicit",
+          "subject_reference": "current_pet",
+          "participants": [],
+          "object_mention": "",
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "not_applicable",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "canonical_surface": "精神",
+          "mapping_status": "confirmed",
+          "canonical_id": "mental_status",
+          "review_required": false
+        },
+        {
+          "evidence_quote": "前天换粮了",
+          "target_quote": "换粮",
+          "semantic_class": "action",
+          "assertion": "present",
+          "certainty": "explicit",
+          "subject_reference": "user",
+          "participants": [
+            {
+              "role": "action_agent",
+              "reference_id": "user"
+            },
+            {
+              "role": "action_recipient",
+              "reference_id": "current_pet"
+            }
+          ],
+          "object_mention": "粮",
+          "temporal_quote": "前天",
+          "temporal_relation": "started_at",
+          "temporal_value": "day-2",
+          "temporal_precision": "day",
+          "temporal_status": "confirmed_present",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "canonical_surface": "换粮",
+          "mapping_status": "confirmed",
+          "canonical_id": "diet_change",
+          "review_required": false
+        }
+      ]
+    },
+    {
+      "sample_id": "M4_multi_turn_dev",
+      "user_text": "没有，精神正常。",
+      "other_subjects": [],
+      "previous_question_target": {
+        "reference_id": "current_pet",
+        "canonical_surface": "呕吐",
+        "assertion_context": "denial"
+      },
+      "expected_intent": {
+        "answer_now": false
+      },
+      "profile": {
+        "has_factual_statements": true
+      },
+      "expected_observations": [
+        {
+          "evidence_quote": "没有",
+          "target_quote": "没有",
+          "semantic_class": "state",
+          "assertion": "denied",
+          "certainty": "explicit",
+          "subject_reference": "current_pet",
+          "participants": [],
+          "object_mention": "",
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "not_applicable",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "canonical_surface": "呕吐",
+          "mapping_status": "confirmed",
+          "canonical_id": "vomiting",
+          "review_required": false
+        },
+        {
+          "evidence_quote": "精神正常",
+          "target_quote": "精神",
+          "semantic_class": "state",
+          "assertion": "normal",
+          "certainty": "explicit",
+          "subject_reference": "current_pet",
+          "participants": [],
+          "object_mention": "",
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "not_applicable",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "canonical_surface": "精神",
+          "mapping_status": "confirmed",
+          "canonical_id": "mental_status",
+          "review_required": false
+        }
+      ]
+    },
+    {
+      "sample_id": "L4_long_input_dev",
+      "user_text": "没有呕吐、干呕、反流、流涎、舔唇、血便或黑便；精神、食欲、饮水、玩耍和呼唤反应都正常；前天开始换新狗粮，这两天大便偏软，一天一次。",
+      "other_subjects": [
+        {
+          "reference_id": "user",
+          "entity_type": "user",
+          "display_name": "用户"
+        }
+      ],
+      "previous_question_target": null,
+      "expected_intent": {
+        "answer_now": false
+      },
+      "profile": {
+        "has_factual_statements": true
+      },
+      "expected_observations": [
+        {
+          "evidence_quote": "没有呕吐、干呕、反流、流涎、舔唇、血便或黑便",
+          "target_quote": "呕吐",
+          "semantic_class": "state",
+          "assertion": "denied",
+          "certainty": "explicit",
+          "subject_reference": "current_pet",
+          "participants": [],
+          "object_mention": "",
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "not_applicable",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "canonical_surface": "呕吐",
+          "mapping_status": "confirmed",
+          "canonical_id": "vomiting",
+          "review_required": false
+        },
+        {
+          "evidence_quote": "没有呕吐、干呕、反流、流涎、舔唇、血便或黑便",
+          "target_quote": "干呕",
+          "semantic_class": "state",
+          "assertion": "denied",
+          "certainty": "explicit",
+          "subject_reference": "current_pet",
+          "participants": [],
+          "object_mention": "",
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "not_applicable",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "canonical_surface": "干呕",
+          "mapping_status": "confirmed",
+          "canonical_id": "retching",
+          "review_required": false
+        },
+        {
+          "evidence_quote": "没有呕吐、干呕、反流、流涎、舔唇、血便或黑便",
+          "target_quote": "反流",
+          "semantic_class": "state",
+          "assertion": "denied",
+          "certainty": "explicit",
+          "subject_reference": "current_pet",
+          "participants": [],
+          "object_mention": "",
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "not_applicable",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "canonical_surface": "反流",
+          "mapping_status": "confirmed",
+          "canonical_id": "regurgitation",
+          "review_required": false
+        },
+        {
+          "evidence_quote": "没有呕吐、干呕、反流、流涎、舔唇、血便或黑便",
+          "target_quote": "流涎",
+          "semantic_class": "state",
+          "assertion": "denied",
+          "certainty": "explicit",
+          "subject_reference": "current_pet",
+          "participants": [],
+          "object_mention": "",
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "not_applicable",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "canonical_surface": "流涎",
+          "mapping_status": "confirmed",
+          "canonical_id": "drooling",
+          "review_required": false
+        },
+        {
+          "evidence_quote": "没有呕吐、干呕、反流、流涎、舔唇、血便或黑便",
+          "target_quote": "舔唇",
+          "semantic_class": "state",
+          "assertion": "denied",
+          "certainty": "explicit",
+          "subject_reference": "current_pet",
+          "participants": [],
+          "object_mention": "",
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "not_applicable",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "canonical_surface": "舔唇",
+          "mapping_status": "confirmed",
+          "canonical_id": "lip_smacking",
+          "review_required": false
+        },
+        {
+          "evidence_quote": "没有呕吐、干呕、反流、流涎、舔唇、血便或黑便",
+          "target_quote": "血便",
+          "semantic_class": "state",
+          "assertion": "denied",
+          "certainty": "explicit",
+          "subject_reference": "current_pet",
+          "participants": [],
+          "object_mention": "",
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "not_applicable",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "canonical_surface": "血便",
+          "mapping_status": "confirmed",
+          "canonical_id": "bloody_stool",
+          "review_required": false
+        },
+        {
+          "evidence_quote": "没有呕吐、干呕、反流、流涎、舔唇、血便或黑便",
+          "target_quote": "黑便",
+          "semantic_class": "state",
+          "assertion": "denied",
+          "certainty": "explicit",
+          "subject_reference": "current_pet",
+          "participants": [],
+          "object_mention": "",
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "not_applicable",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "canonical_surface": "黑便",
+          "mapping_status": "confirmed",
+          "canonical_id": "bloody_stool",
+          "review_required": false
+        },
+        {
+          "evidence_quote": "精神、食欲、饮水、玩耍和呼唤反应都正常",
+          "target_quote": "精神",
+          "semantic_class": "state",
+          "assertion": "normal",
+          "certainty": "explicit",
+          "subject_reference": "current_pet",
+          "participants": [],
+          "object_mention": "",
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "not_applicable",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "canonical_surface": "精神",
+          "mapping_status": "confirmed",
+          "canonical_id": "mental_status",
+          "review_required": false
+        },
+        {
+          "evidence_quote": "精神、食欲、饮水、玩耍和呼唤反应都正常",
+          "target_quote": "食欲",
+          "semantic_class": "state",
+          "assertion": "normal",
+          "certainty": "explicit",
+          "subject_reference": "current_pet",
+          "participants": [],
+          "object_mention": "",
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "not_applicable",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "canonical_surface": "食欲",
+          "mapping_status": "confirmed",
+          "canonical_id": "appetite",
+          "review_required": false
+        },
+        {
+          "evidence_quote": "精神、食欲、饮水、玩耍和呼唤反应都正常",
+          "target_quote": "饮水",
+          "semantic_class": "state",
+          "assertion": "normal",
+          "certainty": "explicit",
+          "subject_reference": "current_pet",
+          "participants": [],
+          "object_mention": "",
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "not_applicable",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "canonical_surface": "饮水",
+          "mapping_status": "confirmed",
+          "canonical_id": "water_intake",
+          "review_required": false
+        },
+        {
+          "evidence_quote": "精神、食欲、饮水、玩耍和呼唤反应都正常",
+          "target_quote": "玩耍",
+          "semantic_class": "state",
+          "assertion": "normal",
+          "certainty": "explicit",
+          "subject_reference": "current_pet",
+          "participants": [],
+          "object_mention": "",
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "not_applicable",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "canonical_surface": "玩耍",
+          "mapping_status": "confirmed",
+          "canonical_id": "play_behavior",
+          "review_required": false
+        },
+        {
+          "evidence_quote": "精神、食欲、饮水、玩耍和呼唤反应都正常",
+          "target_quote": "呼唤反应",
+          "semantic_class": "state",
+          "assertion": "normal",
+          "certainty": "explicit",
+          "subject_reference": "current_pet",
+          "participants": [],
+          "object_mention": "",
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "not_applicable",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "canonical_surface": "呼唤反应",
+          "mapping_status": "confirmed",
+          "canonical_id": "response_to_call",
+          "review_required": false
+        },
+        {
+          "evidence_quote": "前天开始换新狗粮",
+          "target_quote": "换新狗粮",
+          "semantic_class": "action",
+          "assertion": "present",
+          "certainty": "explicit",
+          "subject_reference": "user",
+          "participants": [
+            {
+              "role": "action_agent",
+              "reference_id": "user"
+            },
+            {
+              "role": "action_recipient",
+              "reference_id": "current_pet"
+            }
+          ],
+          "object_mention": "新狗粮",
+          "temporal_quote": "前天",
+          "temporal_relation": "started_at",
+          "temporal_value": "day-2",
+          "temporal_precision": "day",
+          "temporal_status": "confirmed_present",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "canonical_surface": "换新狗粮",
+          "mapping_status": "confirmed",
+          "canonical_id": "diet_change",
+          "review_required": false
+        },
+        {
+          "evidence_quote": "这两天大便偏软",
+          "target_quote": "大便偏软",
+          "semantic_class": "state",
+          "assertion": "abnormal",
+          "certainty": "explicit",
+          "subject_reference": "current_pet",
+          "participants": [],
+          "object_mention": "",
+          "temporal_quote": "这两天",
+          "temporal_relation": "duration",
+          "temporal_value": "recent-2-days",
+          "temporal_precision": "approximate_duration",
+          "temporal_status": "confirmed_present",
+          "measurement_quote": "",
+          "measurement_value": "",
+          "measurement_unit": "",
+          "measurement_status": "not_applicable",
+          "canonical_surface": "大便偏软",
+          "mapping_status": "confirmed",
+          "canonical_id": "soft_stool",
+          "review_required": false
+        },
+        {
+          "evidence_quote": "一天一次",
+          "target_quote": "一天一次",
+          "semantic_class": "measurement",
+          "assertion": "present",
+          "certainty": "explicit",
+          "subject_reference": "current_pet",
+          "participants": [],
+          "object_mention": "",
+          "temporal_quote": "",
+          "temporal_relation": "unstructured",
+          "temporal_value": "",
+          "temporal_precision": "unresolved",
+          "temporal_status": "not_applicable",
+          "measurement_quote": "一天一次",
+          "measurement_value": "1",
+          "measurement_unit": "次/day",
+          "measurement_status": "confirmed_present",
+          "canonical_surface": "一天一次",
+          "mapping_status": "confirmed",
+          "canonical_id": "stool_frequency",
+          "review_required": false
+        }
+      ]
+    },
+    {
+      "sample_id": "B4_empty_base_dev",
+      "user_text": "我想咨询一下要不要去医院。",
+      "other_subjects": [],
+      "previous_question_target": null,
+      "expected_intent": {
+        "answer_now": false,
+        "wants_triage": true
+      },
+      "profile": {
+        "has_factual_statements": false,
+        "has_user_question": true
+      },
+      "expected_observations": []
+    }
+  ],
+  "experiments": [
+    {
+      "experiment_id": "FLAT_SCHEMA_D4",
+      "kind": "flat_schema",
+      "architecture_question": "单层扁平 schema 是否比 V3 嵌套契约更稳定",
+      "control_group": "V3-BASE",
+      "experimental_group": "FLAT-PYDANTIC",
+      "sample_ids": [
+        "D4_shared_scope_dev",
+        "E4_event_roles_dev"
+      ],
+      "repeat_count": 3,
+      "primary_metrics": [],
+      "gate_expectation": "blocking_gates_prevent_false_consumption",
+      "decision_rule": "development exploration only; no production admission",
+      "expected_outcome": "architecture_match"
+    },
+    {
+      "experiment_id": "QUOTE_GATE_D4",
+      "kind": "quote_gate",
+      "architecture_question": "引述锚定是否能阻断幻觉",
+      "control_group": "V3-BASE",
+      "experimental_group": "strict quote gate",
+      "sample_ids": [
+        "D4_shared_scope_dev"
+      ],
+      "repeat_count": 3,
+      "primary_metrics": [],
+      "gate_expectation": "blocking_gates_prevent_false_consumption",
+      "decision_rule": "development exploration only; no production admission",
+      "expected_outcome": "architecture_match"
+    },
+    {
+      "experiment_id": "SHARED_COVERAGE_D4",
+      "kind": "shared_coverage",
+      "architecture_question": "无 expected count 时能否逐项覆盖共享断言",
+      "control_group": "V3 shared scope",
+      "experimental_group": "FLAT multi-row observations",
+      "sample_ids": [
+        "D4_shared_scope_dev",
+        "L4_long_input_dev"
+      ],
+      "repeat_count": 3,
+      "primary_metrics": [],
+      "gate_expectation": "blocking_gates_prevent_false_consumption",
+      "decision_rule": "development exploration only; no production admission",
+      "expected_outcome": "architecture_match"
+    },
+    {
+      "experiment_id": "SUBJECT_ROLE_E4",
+      "kind": "subject_role",
+      "architecture_question": "扁平字段能否稳定绑定主体和角色",
+      "control_group": "V3 / no-context",
+      "experimental_group": "FLAT + TurnContext",
+      "sample_ids": [
+        "E4_event_roles_dev"
+      ],
+      "repeat_count": 3,
+      "primary_metrics": [],
+      "gate_expectation": "blocking_gates_prevent_false_consumption",
+      "decision_rule": "development exploration only; no production admission",
+      "expected_outcome": "architecture_match"
+    },
+    {
+      "experiment_id": "ASSERT_TEMPORAL_D4",
+      "kind": "assert_temporal",
+      "architecture_question": "扁平抽取能否保留断言时间与度量",
+      "control_group": "V3",
+      "experimental_group": "FLAT fields",
+      "sample_ids": [
+        "D4_shared_scope_dev",
+        "M4_multi_turn_dev",
+        "L4_long_input_dev"
+      ],
+      "repeat_count": 3,
+      "primary_metrics": [],
+      "gate_expectation": "blocking_gates_prevent_false_consumption",
+      "decision_rule": "development exploration only; no production admission",
+      "expected_outcome": "architecture_match"
+    },
+    {
+      "experiment_id": "CAN_RECALL_V4",
+      "kind": "can_recall",
+      "architecture_question": "canonical surface 能否召回候选",
+      "control_group": "V3 retrieval",
+      "experimental_group": "FLAT surface -> candidate retriever",
+      "sample_ids": [
+        "D4_shared_scope_dev",
+        "V4_unmapped_dev"
+      ],
+      "repeat_count": 3,
+      "primary_metrics": [],
+      "gate_expectation": "blocking_gates_prevent_false_consumption",
+      "decision_rule": "development exploration only; no production admission",
+      "expected_outcome": "architecture_match"
+    },
+    {
+      "experiment_id": "CAN_SELECT_D4",
+      "kind": "can_select",
+      "architecture_question": "候选选择能否避免假确认和 under-confirmation",
+      "control_group": "V3 selector",
+      "experimental_group": "deterministic top-1 selected reference",
+      "sample_ids": [
+        "D4_shared_scope_dev",
+        "E4_event_roles_dev"
+      ],
+      "repeat_count": 3,
+      "primary_metrics": [],
+      "gate_expectation": "blocking_gates_prevent_false_consumption",
+      "decision_rule": "development exploration only; no production admission",
+      "expected_outcome": "architecture_match"
+    },
+    {
+      "experiment_id": "CAN_TYPE_E4",
+      "kind": "can_type",
+      "architecture_question": "粗粒度类型是否足以阻止事件状态错配",
+      "control_group": "无类型约束",
+      "experimental_group": "semantic class + entity type matrix",
+      "sample_ids": [
+        "E4_event_roles_dev"
+      ],
+      "repeat_count": 3,
+      "primary_metrics": [],
+      "gate_expectation": "blocking_gates_prevent_false_consumption",
+      "decision_rule": "development exploration only; no production admission",
+      "expected_outcome": "architecture_match"
+    },
+    {
+      "experiment_id": "DIRTY_INPUT_X4",
+      "kind": "dirty_input",
+      "architecture_question": "口语脏数据是否稳健",
+      "control_group": "V3 / clean FLAT",
+      "experimental_group": "FLAT dirty samples",
+      "sample_ids": [
+        "X4_dirty_input_dev"
+      ],
+      "repeat_count": 3,
+      "primary_metrics": [],
+      "gate_expectation": "blocking_gates_prevent_false_consumption",
+      "decision_rule": "development exploration only; no production admission",
+      "expected_outcome": "architecture_match"
+    },
+    {
+      "experiment_id": "MULTI_TURN_M4",
+      "kind": "multi_turn",
+      "architecture_question": "扁平抽取能否消费多轮上下文",
+      "control_group": "single-turn FLAT",
+      "experimental_group": "TurnContext + previous question target",
+      "sample_ids": [
+        "M4_multi_turn_dev"
+      ],
+      "repeat_count": 3,
+      "primary_metrics": [],
+      "gate_expectation": "blocking_gates_prevent_false_consumption",
+      "decision_rule": "development exploration only; no production admission",
+      "expected_outcome": "architecture_match"
+    },
+    {
+      "experiment_id": "ANSWER_NOW_C4",
+      "kind": "answer_now",
+      "architecture_question": "intent-only 是否仍可独立",
+      "control_group": "V3 Turn Intent",
+      "experimental_group": "FLAT intent field",
+      "sample_ids": [
+        "C4_answer_now_dev"
+      ],
+      "repeat_count": 3,
+      "primary_metrics": [],
+      "gate_expectation": "blocking_gates_prevent_false_consumption",
+      "decision_rule": "development exploration only; no production admission",
+      "expected_outcome": "architecture_match"
+    },
+    {
+      "experiment_id": "EMPTY_BASE_B4",
+      "kind": "empty_base",
+      "architecture_question": "无明确事实输入是否不产生伪事实",
+      "control_group": "no gate",
+      "experimental_group": "suspicious empty gate",
+      "sample_ids": [
+        "B4_empty_base_dev"
+      ],
+      "repeat_count": 3,
+      "primary_metrics": [],
+      "gate_expectation": "blocking_gates_prevent_false_consumption",
+      "decision_rule": "development exploration only; no production admission",
+      "expected_outcome": "architecture_match"
+    },
+    {
+      "experiment_id": "NEG_D4",
+      "kind": "neg",
+      "architecture_question": "gate 是否阻断非法扁平输出",
+      "control_group": "无 mutation",
+      "experimental_group": "deterministic negative mutations",
+      "sample_ids": [
+        "D4_shared_scope_dev",
+        "E4_event_roles_dev",
+        "V4_unmapped_dev"
+      ],
+      "repeat_count": 1,
+      "primary_metrics": [],
+      "gate_expectation": "blocking_gates_prevent_false_consumption",
+      "decision_rule": "development exploration only; no production admission",
+      "expected_outcome": "gate_blocked_as_expected"
+    },
+    {
+      "experiment_id": "REP_D4",
+      "kind": "repeat_stability",
+      "architecture_question": "输出是否稳定",
+      "control_group": "V3",
+      "experimental_group": "best FLAT variant",
+      "sample_ids": [
+        "D4_shared_scope_dev",
+        "E4_event_roles_dev",
+        "V4_unmapped_dev"
+      ],
+      "repeat_count": 3,
+      "primary_metrics": [],
+      "gate_expectation": "blocking_gates_prevent_false_consumption",
+      "decision_rule": "development exploration only; no production admission",
+      "expected_outcome": "stable_output"
+    },
+    {
+      "experiment_id": "ASYNC_D4",
+      "kind": "async",
+      "architecture_question": "异步 worker 是否具备 API shadow 接入条件",
+      "control_group": "V3 file queue",
+      "experimental_group": "V4 file queue report-only",
+      "sample_ids": [
+        "D4_shared_scope_dev",
+        "E4_event_roles_dev",
+        "V4_unmapped_dev"
+      ],
+      "repeat_count": 1,
+      "primary_metrics": [],
+      "gate_expectation": "blocking_gates_prevent_false_consumption",
+      "decision_rule": "development exploration only; no production admission",
+      "expected_outcome": "async_isolation_report_only"
+    },
+    {
+      "experiment_id": "DOMAIN_PROJECTION_D4",
+      "kind": "domain_projection",
+      "architecture_question": "扁平 observation 能否投影问诊事实",
+      "control_group": "IDEAL-FLAT / existing prod",
+      "experimental_group": "FLAT -> report-only consultation projection",
+      "sample_ids": [
+        "D4_shared_scope_dev",
+        "M4_multi_turn_dev"
+      ],
+      "repeat_count": 1,
+      "primary_metrics": [],
+      "gate_expectation": "blocking_gates_prevent_false_consumption",
+      "decision_rule": "development exploration only; no production admission",
+      "expected_outcome": "comparison_report_only"
+    },
+    {
+      "experiment_id": "CS_D4",
+      "kind": "cs_report_only",
+      "architecture_question": "临床安全结构差异是否可解释",
+      "control_group": "clinical baseline",
+      "experimental_group": "FLAT report-only projection",
+      "sample_ids": [
+        "D4_shared_scope_dev",
+        "E4_event_roles_dev"
+      ],
+      "repeat_count": 1,
+      "primary_metrics": [],
+      "gate_expectation": "blocking_gates_prevent_false_consumption",
+      "decision_rule": "development exploration only; no production admission",
+      "expected_outcome": "comparison_report_only"
+    }
+  ],
+  "negative_mutations": [
+    {
+      "mutation_id": "evidence_quote_not_anchored",
+      "base_sample_id": "D4_shared_scope_dev"
+    },
+    {
+      "mutation_id": "target_quote_not_contained",
+      "base_sample_id": "D4_shared_scope_dev"
+    },
+    {
+      "mutation_id": "temporal_quote_not_anchored",
+      "base_sample_id": "X4_dirty_input_dev"
+    },
+    {
+      "mutation_id": "subject_not_in_turn_context",
+      "base_sample_id": "D4_shared_scope_dev"
+    },
+    {
+      "mutation_id": "participant_role_type_mismatch",
+      "base_sample_id": "E4_event_roles_dev"
+    },
+    {
+      "mutation_id": "confirmed_without_candidates",
+      "base_sample_id": "V4_unmapped_dev"
+    },
+    {
+      "mutation_id": "selected_candidate_not_in_candidate_set",
+      "base_sample_id": "D4_shared_scope_dev"
+    },
+    {
+      "mutation_id": "invented_canonical",
+      "base_sample_id": "V4_unmapped_dev"
+    },
+    {
+      "mutation_id": "unmapped_review_missing",
+      "base_sample_id": "V4_unmapped_dev"
+    },
+    {
+      "mutation_id": "suspicious_empty",
+      "base_sample_id": "D4_shared_scope_dev"
+    }
+  ]
+}
