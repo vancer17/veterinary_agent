@@ -107,7 +107,7 @@ class SkillPatchType(StrEnum):
     """
 
     INTENT_FIELD_PATCH = "intent_field_patch"
-    CLAIM_ENVELOPE_PATCH = "claim_envelope_patch"
+    CLAIM_PROPOSITION_PATCH = "claim_proposition_patch"
     STATEMENT_SEMANTICS_PATCH = "statement_semantics_patch"
     PARTICIPANT_PHRASE_PATCH = "participant_phrase_patch"
     TEMPORAL_PHRASE_PATCH = "temporal_phrase_patch"

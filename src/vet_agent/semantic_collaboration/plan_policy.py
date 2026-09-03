@@ -2,9 +2,9 @@
 =============================================================================
 文件：src/vet_agent/semantic_collaboration/plan_policy.py
 作用：声明受限语义协作 DAG 的 M03 初始 Turn Plan 生产策略组合根。
-范围：覆盖必选根任务、claim 级语义 lane、禁止初始修复任务和静态依赖规则。
+范围：覆盖必选并行根任务、禁止初始修复任务和静态依赖规则。
 说明：本文件只建立系统侧计划策略，不调用 LLM、不展开 Plan IR、不执行调度，
-      也不把 review / repair / patch 开放给任务规划模型自由选择。
+      不预估 claim 数量，也不把 review / repair / patch 开放给模型选择。
 =============================================================================
 """
 
@@ -15,38 +15,20 @@ from .contracts import SkillSpec
 from .plan_contracts import (
     PLAN_POLICY_VERSION,
     PlanDependencyRule,
-    PlanDependencyScope,
     PlanEnvelopeKind,
     PlanPolicySpec,
     PlanSkillRequirementMode,
     PlanSkillRule,
 )
 from .production import (
-    CANONICAL_DESCRIPTOR_SPEC,
     CLAIM_INVENTORY_SPEC,
-    MEASUREMENT_PHRASE_SPEC,
-    PARTICIPANT_PHRASE_SPEC,
     PATCH_APPLIER_SPEC,
     SEMANTIC_REPAIR_SPEC,
     SEMANTIC_REVIEW_SPEC,
-    STATEMENT_SEMANTICS_SPEC,
-    TEMPORAL_PHRASE_SPEC,
     TURN_INTENT_SPEC,
 )
 
 PRODUCTION_PLAN_POLICY_ID = "production-semantic-turn-generation"
-
-
-def _root_dependency(skill_id: str) -> PlanDependencyRule:
-    """构造指向 turn root 任务的依赖规则。
-
-    :param skill_id: 被依赖 SKILL 的稳定标识。
-    :return: 返回 root envelope 范围内的依赖规则。
-    """
-    return PlanDependencyRule(
-        dependency_skill_id=skill_id,
-        dependency_scope=PlanDependencyScope.ROOT_ENVELOPE,
-    )
 
 
 def _skill_rule(
@@ -90,47 +72,6 @@ def build_production_plan_policy(registry: SkillRegistry) -> PlanPolicySpec:
             CLAIM_INVENTORY_SPEC,
             requirement=PlanSkillRequirementMode.ALWAYS,
             target_envelope_kind=PlanEnvelopeKind.TURN,
-            depends_on=(_root_dependency(TURN_INTENT_SPEC.skill_id),),
-        ),
-        _skill_rule(
-            STATEMENT_SEMANTICS_SPEC,
-            requirement=PlanSkillRequirementMode.WHEN_CLAIM_ENVELOPE_PRESENT,
-            target_envelope_kind=PlanEnvelopeKind.CLAIM,
-            depends_on=(
-                _root_dependency(CLAIM_INVENTORY_SPEC.skill_id),
-            ),
-        ),
-        _skill_rule(
-            PARTICIPANT_PHRASE_SPEC,
-            requirement=PlanSkillRequirementMode.OPTIONAL,
-            target_envelope_kind=PlanEnvelopeKind.CLAIM,
-            depends_on=(
-                _root_dependency(CLAIM_INVENTORY_SPEC.skill_id),
-            ),
-        ),
-        _skill_rule(
-            TEMPORAL_PHRASE_SPEC,
-            requirement=PlanSkillRequirementMode.OPTIONAL,
-            target_envelope_kind=PlanEnvelopeKind.CLAIM,
-            depends_on=(
-                _root_dependency(CLAIM_INVENTORY_SPEC.skill_id),
-            ),
-        ),
-        _skill_rule(
-            MEASUREMENT_PHRASE_SPEC,
-            requirement=PlanSkillRequirementMode.OPTIONAL,
-            target_envelope_kind=PlanEnvelopeKind.CLAIM,
-            depends_on=(
-                _root_dependency(CLAIM_INVENTORY_SPEC.skill_id),
-            ),
-        ),
-        _skill_rule(
-            CANONICAL_DESCRIPTOR_SPEC,
-            requirement=PlanSkillRequirementMode.OPTIONAL,
-            target_envelope_kind=PlanEnvelopeKind.CLAIM,
-            depends_on=(
-                _root_dependency(CLAIM_INVENTORY_SPEC.skill_id),
-            ),
         ),
         _skill_rule(
             SEMANTIC_REVIEW_SPEC,
@@ -151,8 +92,7 @@ def build_production_plan_policy(registry: SkillRegistry) -> PlanPolicySpec:
     policy = PlanPolicySpec(
         policy_id=PRODUCTION_PLAN_POLICY_ID,
         policy_version=PLAN_POLICY_VERSION,
-        max_claim_envelope_count=8,
-        max_task_count=42,
+        max_task_count=2,
         skills=rules,
     )
     for rule in policy.skills:

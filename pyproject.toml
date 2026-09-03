@@ -15,6 +15,7 @@ dependencies = [
     "alembic>=1.17.2",
     "fastapi>=0.139.0",
     "httpx>=0.28.1",
+    "jinja2>=3.1.6,<4",
     "litellm==1.96.2",
     "llama-index-core>=0.14.23",
     "llama-index-vector-stores-postgres>=0.8.1",
@@ -58,6 +59,9 @@ url = "https://pypi.org/simple"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"vet_agent.semantic_collaboration" = ["skills/*/SKILL.md"]
 
 [tool.pytest.ini_options]
 # pytest 仅收集本仓库测试，避免把 vendor 子模块的上游测试作为业务门禁。

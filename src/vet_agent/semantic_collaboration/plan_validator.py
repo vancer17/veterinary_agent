@@ -234,6 +234,13 @@ class PlanValidator:
             for envelope in plan.envelopes
             if envelope.kind == PlanEnvelopeKind.CLAIM
         )
+        if claim_envelopes:
+            self._add_failure(
+                code=PlanValidationFailureCode.ENVELOPE_POLICY_VIOLATION,
+                path="envelopes.claim",
+                message="initial root plan cannot preallocate claim envelopes",
+                envelope_id=claim_envelopes[0].envelope_id,
+            )
         for envelope in claim_envelopes:
             if envelope.parent_envelope_id != "turn_root":
                 self._add_failure(

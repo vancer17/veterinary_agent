@@ -4,7 +4,7 @@
 作用: 定义受限语义协作 DAG 在生产工程实现中的稳定架构、任务边界、
       契约状态机、审查与局部重写治理、上下文策略和领域投影边界。
 范围: 适用于用户原始表达到可投影结构化语义 claim graph 之间的生产主路径，
-      包括受限任务规划、正交 SKILL、审查、局部修复、typed patch、
+      包括确定性初始 Root Plan、正交 SKILL、审查、局部修复、typed patch、
       artifact 版本、一致性门禁和问诊 / 临床安全 / 长期记忆投影契约。
 说明: 本文是生产工程实现基线，固定 Temporal 作为 durable execution 边界，
       不包含实验计划，不展开软件包内部实现、提示词全文或测试替身实现。
@@ -92,8 +92,8 @@ contract-first
 ```text
 用户当前回合
 → TurnSnapshot Assembly
-→ 受限任务规划 LLM
-→ Plan IR
+→ Deterministic Root Plan Compiler
+→ Root Plan IR
 → Plan Validator
 → Temporal SemanticDAGWorkflow
    ├─ Turn Intent Generator
@@ -256,7 +256,6 @@ snapshot_version
 
 | 任务 | 当前回合全文 | 有界历史 | 宠物画像 | 其他任务输出 | 下游领域状态 |
 |---|---:|---:|---:|---:|---:|
-| 任务规划 LLM | 必需 | 按需 | 按需 | 禁止 | 禁止 |
 | 生成 SKILL | 必需 | 按需 | 按需 | 禁止 | 禁止 |
 | 局部 Review SKILL | 必需 | 按需 | 按需 | 只看被审查输出 | 禁止 |
 | 局部 Repair SKILL | 必需 | 按需 | 按需 | 只看失败输出与 hint | 禁止 |
@@ -281,39 +280,43 @@ context_budget_exceeded
 
 不得静默截断当前回合原文。
 
-## 6. 受限任务规划与 Plan IR
+## 6. 确定性 Root Plan 与 Plan IR
 
-### 6.1 规划器职责
+### 6.1 初始规划职责
 
-任务规划 LLM 只能输出固定字段 `PlanSelection`：
+当前生产不存在任务规划 LLM，也不存在 `PlanSelection`。初始 Turn Plan 由
+Deterministic Root Plan Compiler 根据 PlanPolicy 直接生成：
 
 ```text
-claim_envelope_count
+turn_root envelope
+turn_intent task
+claim_inventory task
 ```
 
-其中 `claim_envelope_count` 只是执行槽位估计，不是最终 claim 权威数量；最终
-claim 集合必须由后续 Claim Proposition Inventory 和 Coverage Review 校验或修复。
-statement semantics、participant、temporal、measurement 与 canonical lane 当前均为
-deferred，不得出现在生产 PlanSelection 中。
+两个根任务互不依赖，可由 Temporal 并行调度。claim 数量、claim envelope 与
+claim binding 均不得在 Claim Inventory 前预估或预分配。
 
 以下结构由 Deterministic Plan Compiler 根据 `PlanPolicy` 生成：
 
-1. turn / claim envelope 与稳定标识。
-2. 必选任务与被选择的语义 lane。
+1. turn root envelope 与稳定标识。
+2. 必选并行根任务。
 3. task_id 与 canonical dependency edge。
 4. exact skill version 与 expected output schema reference。
 5. turn / snapshot / catalog / policy digest 绑定。
 6. canonical plan_id。
 
+claim envelope 分配属于 Claim Inventory、M07 结构验证与 Coverage /
+Faithfulness Review 之后的确定性后置阶段。初始 Root Plan 中预分配 claim envelope
+会被 Plan Validator 阻断。
+
 禁止：
 
 ```text
-发明新 skill
-发明新 task_type
-输出任务图、任务引用或依赖
-输出 skill version 或 schema
+调用规划 LLM
+预估或输出 claim 数量
+预分配 claim envelope
+发明新 skill / task_type / dependency
 输出自由自然语言命令
-声明未注册依赖
 访问或调用下游领域
 ```
 
@@ -452,11 +455,51 @@ patch apply
 
 ## 8. 生成任务契约
 
-每个生成 SKILL 必须同时交付版本化 prompt renderer。renderer 根据 SkillSpec、受限
-TurnSnapshot 投影和目标 envelope 生成不可变 `SkillPromptProjection`。
+每个生成 SKILL 必须同时交付标准化 `SKILL.md`、版本化 prompt renderer 和对应
+verifier。renderer 根据静态校验后的 SKILL 文档、SkillSpec 与受限 TurnSnapshot
+投影生成不可变 `SkillPromptProjection`。
 
 M05 只消费、校验、序列化和哈希该投影，不得生成 SKILL 语义提示词、解析 Markdown、
 按症状词扩展上下文或读取未授权资源。
+
+标准化 `SKILL.md` 的结构为：
+
+```text
+文件头部静态元数据区
+角色定位与目标
+工作流 / 业务规则
+输出约束与回复规范
+异常处理与边界规则
+记忆与上下文规则
+Prompt Context Template
+安全与领域隔离
+```
+
+文件头部元数据区包含：
+
+```text
+skill_id / skill_version / prompt_version
+task_kind / execution_family
+verifier id / version
+output schema id / version
+context resources
+prompt variables
+model-visible sections
+```
+
+元数据区仅由确定性 loader、SkillCatalog、PlanValidator 和 PromptRenderer 消费，
+永远不进入模型消息。启动期必须校验：
+
+```text
+SKILL.md skill 身份与 SkillSpec 一致
+task kind / execution family 与 SkillSpec 一致
+output schema id / version 与 SkillSpec 一致
+verifier id / version 与 SkillSpec 一致
+context resources 与 SkillSpec context contract 一致
+prompt variables 在全局白名单内
+model-visible sections 是标准章节子集
+文档 SHA-256 与注册投影一致
+```
 
 ### 8.1 极薄 JSON 信封
 
@@ -500,12 +543,48 @@ description: 英短
 要求：
 
 1. 不向模型展示 task_id、run_id、snapshot digest、skill version 或完整 JSON schema。
-2. 不提示 `estimated_claim_envelope_count`，避免模型为凑数量合并或拆错 claim。
+2. 不提示任何 claim 数量，避免模型为凑数量合并或拆错 claim。
 3. 当前回合原文必须完整保留，不得用摘要替代。
 4. renderer 必须处理 tag delimiter collision；无法安全渲染时 Fail Fast。
 5. 上下文只能来自 TurnSnapshotProjector 授权资源。
 
-### 8.3 Turn Intent
+### 8.3 受限模板规则
+
+Prompt Context Template 使用受限 Jinja 子集，只允许顶层白名单字符串变量：
+
+```jinja
+{{ current_turn }}
+{{ last_assistant_questions }}
+{{ verified_prior_facts }}
+{{ trusted_pet_context }}
+```
+
+模板必须在启动期通过 AST 白名单校验，只允许：
+
+```text
+Template
+Output
+TemplateData
+Name
+```
+
+禁止：
+
+```text
+{% if %} / {% for %}
+过滤器
+属性访问
+方法调用
+宏、import、include
+任意表达式
+动态模板源
+```
+
+动态值只能来自 TurnSnapshotProjector 授权并预格式化后的字符串。渲染变量集合
+必须与 SKILL 文档声明完全一致，使用 StrictUndefined；输出中不得残留 Jinja 标记。
+用户原文只作为数据值传入模板，不得作为模板源被执行。
+
+### 8.4 Turn Intent
 
 输出 fixed-field boolean：
 
@@ -528,22 +607,25 @@ description: 英短
 3. `answer_now` 是控制意图，不是医学事实。
 4. `question_present` 与 claim proposition 分离。
 
-### 8.4 Claim Proposition Inventory
+### 8.5 Claim Proposition Inventory
 
 Claim Inventory 输出完整、自包含的自然语言 proposition，而不是主题词。
+proposition 的主语义必须是当前宠物、宠物状态、宠物行为或宠物相关事件；
+不得把 `用户报告`、`用户认为`、`用户询问` 作为 claim 主语义。
+来源、说话人与观察方式由系统 metadata 和后续审查状态承载。
 
 输出形式：
 
 ```json
 {
   "claims": [
-    "用户报告我家英短前天开始更换新猫粮",
-    "用户报告我家英短这两天大便偏软",
-    "用户报告我家英短精神状态良好",
-    "用户报告我家英短进食正常",
-    "用户报告我家英短饮水正常",
-    "用户报告我家英短没有呕吐",
-    "用户报告我家英短没有血便"
+    "英短前天开始更换新猫粮",
+    "英短这两天大便偏软",
+    "英短精神状态良好",
+    "英短进食正常",
+    "英短饮水正常",
+    "英短没有呕吐",
+    "英短大便没有血"
   ]
 }
 ```
@@ -560,7 +642,7 @@ Claim Inventory 输出完整、自包含的自然语言 proposition，而不是�
 
 主题词会丢失主体、否定、时间、程度和断言方向，导致下游重新猜语义或 RAG 查询过宽。
 
-### 8.5 受限语义重写
+### 8.6 受限语义重写
 
 Claim Proposition Inventory 允许做受限语义重写，以便把口语、省略和 shared scope 整理
 成自包含 proposition。
@@ -571,7 +653,7 @@ Claim Proposition Inventory 允许做受限语义重写，以便把口语、省�
 根据可信上下文补全当前讨论宠物主体
 拆分 shared scope
 保留否定、否定范围和纠正语义
-保留不确定、未观察和用户猜测
+保留不确定、未观察和可能因果
 保留时间、频率、数量、程度和比较基线
 ```
 
@@ -584,8 +666,8 @@ Claim Proposition Inventory 允许做受限语义重写，以便把口语、省�
 应拆为：
 
 ```text
-用户报告我家英短进食正常
-用户报告我家英短饮水正常
+英短进食正常
+英短饮水正常
 ```
 
 禁止：
@@ -594,27 +676,35 @@ Claim Proposition Inventory 允许做受限语义重写，以便把口语、省�
 把“精神正常”写成“否认精神异常”
 把“没看到吐过”写成“绝对没有呕吐”
 把“可能有关”写成“确定因果关系”
+把宠物状态写成“用户报告……”元命题
 输出诊断、疾病名、风险、就医建议或治疗建议
 在指代不明时猜测对象
 ```
 
 如果上下文不足以消解指代，应保留保守表达并交给 Faithfulness Review 标记歧义。
 
-### 8.6 Claim 与 Plan envelope 的关系
+### 8.7 Claim 与 Plan envelope 的关系
 
-`PlanSelection.claim_envelope_count` 只是执行槽位估计，不是最终 claim 权威数量。
-Claim proposition 数组顺序与系统生成的 envelope 顺序对应，claim id 由系统附加。
+初始 Root Plan 不包含 claim envelope，也不包含 claim 数量。Claim proposition
+数组顺序是后续确定性分配 envelope 的唯一顺序来源，claim count 与 claim id 均由
+系统附加。
 
-如果 proposition 数量与 Plan envelope 数量不一致：
+claim envelope 分配必须发生在 Claim Inventory 通过结构验证和语义审查之后：
 
 ```text
-不得动态修改 PlanIR
-不得截断 proposition
-不得为凑数合并 proposition
-不得自动新增 envelope
+claims.length → claim_count
+claims[0] → claim_env_0000
+claims[1] → claim_env_0001
 ```
 
-必须进入显式 `blocked`、`disagreement` 或后续 plan reconciliation 契约。
+如果 claims 数量超过 SkillCatalog schema 上限：
+
+```text
+blocked
+不得截断
+不得合并
+不得为凑数修改 proposition
+```
 
 ## 9. Deterministic Verifier
 
@@ -631,7 +721,7 @@ extra field 拒绝
 字符串非空、长度与换行约束
 claims 数量上限
 claims 重复检测
-claim 数量与 envelope 数量一致性
+claim 数量由 claims.length 确定性派生
 target envelope 存在性
 context digest 校验
 task / skill / schema 身份一致性
@@ -654,7 +744,7 @@ canonical selector
 schema_invalid
 forbidden_field_present
 field_ownership_violation
-claim_count_mismatch
+claim_count_exceeds_schema_limit
 duplicate_claim
 empty_claim_proposition
 context_digest_mismatch
@@ -1339,7 +1429,7 @@ repair mapping 目录。
 deterministic verifier。
 
 验收：所有输出 strict schema；forbidden field 不被清洗后放行；claim 为自包含自然语言
-proposition；claim 数量与 envelope 数量不一致显式 blocked。
+proposition；claim 数量由 `claims.length` 派生，超过 schema 上限显式 blocked。
 
 ### 阶段 D：Review 与 Repair
 
@@ -1376,7 +1466,7 @@ forbidden field blocked
 normal / denied / uncertain / unobserved / corrected 自然语言语义回归
 shared scope 拆分
 多轮指代与 answer_now
-claim 数量不匹配 blocked
+claim 数量超过 schema 上限 blocked
 主题词 claim 拒绝
 review 布尔矩阵 extra field 拒绝
 医学推断添加可被删除式局部修复

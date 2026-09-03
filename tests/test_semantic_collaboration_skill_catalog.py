@@ -63,8 +63,8 @@ def test_production_catalog_is_closed_and_frozen() -> None:
     catalog = build_production_skill_catalog()
 
     assert catalog.frozen is True
-    assert len(catalog.list_specs()) == len(PRODUCTION_SEMANTIC_SKILL_SPECS) == 10
-    assert catalog.require("turn_intent", "1.0.0").skill_id == "turn_intent"
+    assert len(catalog.list_specs()) == len(PRODUCTION_SEMANTIC_SKILL_SPECS) == 5
+    assert catalog.require("turn_intent", "2.0.0").skill_id == "turn_intent"
     assert len(catalog.ownership_matrix().records) > 0
     assert (
         catalog.contract_digest() == build_production_skill_catalog().contract_digest()
