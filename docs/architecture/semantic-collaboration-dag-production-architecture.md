@@ -17,6 +17,10 @@
 
 > **文档状态**：生产工程实现基线
 >
+> **当前边界修订**：M06 已收敛为 Turn Intent + 自然语言 Claim Proposition
+> Inventory，详见
+> [semantic-collaboration-dag-m06-production-boundary-revision.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m06-production-boundary-revision.md)。
+>
 > **适用范围**：输入前置语义协作、窄域语义生成、结构化审查、局部重写、
 > typed patch、claim graph 组装、质量门禁与领域投影契约
 >
@@ -59,10 +63,10 @@ contract-first
 
 ### 2.1 目标
 
-1. 将用户当前回合显式语义稳定转换为可审计的结构化 claim graph。
-2. 显式区分 `present`、`denied`、`reported_normal`、`uncertain`、`unknown`、`corrected`。
+1. 将用户当前回合显式语义稳定转换为可审查的自包含自然语言 proposition，并在后续组装为可审计 claim graph。
+2. 在 proposition 中保留 normal、denied、uncertain、corrected、未观察和用户归因等语义差异；结构化 enum 映射后置到领域投影。
 3. 支持 shared scope、多事实陈述、多轮指代、用户纠正和控制意图。
-4. 为每个结构化结果保留 evidence binding 和上下文版本。
+4. 保留上下文版本，并将 evidence binding 后置为独立治理状态；生成 SKILL 不自证 evidence。
 5. 通过正交 Review SKILL 发现 schema 无法判断的语义忠实性问题。
 6. 通过局部 typed patch 修复可恢复错误，而不是整轮自由重写。
 7. 让每个任务都有显式终态，失败不得表现为空事实。
@@ -93,14 +97,9 @@ contract-first
 → Plan Validator
 → Temporal SemanticDAGWorkflow
    ├─ Turn Intent Generator
-   ├─ Claim Inventory Generator
-   ├─ Claim Statement Semantics Generator
-   ├─ Participant Phrase Generator
-   ├─ Temporal Phrase Generator
-   ├─ Measurement Phrase Generator
-   └─ Canonical Descriptor Generator
+   └─ Claim Proposition Inventory Generator
 → Deterministic Verifier
-→ 正交 Review SKILL
+→ Coverage Review / Faithfulness Review
 → Review Verifier
 → Deterministic Repair Planner
 → 局部 Repair SKILL
@@ -151,11 +150,8 @@ contract-first
 Review SKILL 只能输出：
 
 ```text
-review_verdict
-failure_code
-check result
-repair_hint
-confidence
+固定布尔检查矩阵
+有界的 repair hint
 ```
 
 不得直接输出 corrected artifact，也不得绕过 Repair SKILL 和 Patch Applier。
@@ -182,7 +178,7 @@ Repair SKILL 只能针对注册过的 failure code 和白名单 patch path 输�
 模型漏抽 ≠ 用户未提供
 审查失败 ≠ 原任务通过
 修复耗尽 ≠ 修复成功
-canonical 无候选 ≠ 确认 canonical
+候选不足或指代不明 ≠ 可自动确认事实
 上下文不足 ≠ unknown 事实
 ```
 
@@ -292,15 +288,12 @@ context_budget_exceeded
 
 ```text
 claim_envelope_count
-run_statement_semantics
-run_participant_phrase
-run_temporal_phrase
-run_measurement_phrase
-run_canonical_descriptor
 ```
 
 其中 `claim_envelope_count` 只是执行槽位估计，不是最终 claim 权威数量；最终
-claim envelope 必须由后续 Claim Inventory verified artifact 校验或修复。
+claim 集合必须由后续 Claim Proposition Inventory 和 Coverage Review 校验或修复。
+statement semantics、participant、temporal、measurement 与 canonical lane 当前均为
+deferred，不得出现在生产 PlanSelection 中。
 
 以下结构由 Deterministic Plan Compiler 根据 `PlanPolicy` 生成：
 
@@ -391,40 +384,47 @@ plan_id_invalid
 
 ### 7.1 权威契约
 
-权威契约由机器可读的 SkillSpec、schema 和 verifier 承担，至少声明：
+权威契约由机器可读的 SkillSpec、strict JSON Schema、context policy、failure policy 和
+verifier binding 承担。`SKILL.md` 只能作为提示词与审计投影，不是运行时权威来源。
+
+M06 当前生产生成面收窄为：
 
 ```text
-skill_id
-version
-task_type
-input contract
-output contract
-owns
-does_not_own
-forbidden_output
-context requirements
-verifier bindings
-failure policy
-repair mappings
+turn_intent
+claim_proposition_inventory
 ```
 
-`SKILL.md` 可以作为面向 LLM 的多段说明，但只是契约的提示词投影，不是运行时
-权威来源。运行时不得解析 Markdown 正文来决定字段所有权。
+以下 lane 为 deferred，不进入当前生产 PlanPolicy，也不得为了“看起来完整”而提前注册为
+可选生成任务：
+
+```text
+statement_semantics
+participant_phrase
+temporal_phrase
+measurement_phrase
+canonical_descriptor
+```
+
+deferred 原则：
+
+1. 必须先有明确下游消费者。
+2. 必须先有 candidate-only resolver、deterministic parser 或领域投影契约。
+3. 必须同步交付 verifier 和负例测试。
+4. 不得把自然语言 proposition 反向拆成无人消费的结构化字段。
 
 ### 7.2 正交粒度
 
-正交粒度是语义权威域，不是业务槽位或症状词。
+正交粒度是语义权威域，不是医学槽位或症状词。
 
-正确划分：
+当前正确划分：
 
 ```text
 turn intent
-claim inventory
-statement semantics
-participant phrase
-temporal phrase
-measurement phrase
-canonical descriptor
+claim proposition inventory
+claim coverage review
+claim faithfulness review
+repair
+patch apply
 ```
 
 错误划分：
@@ -442,73 +442,136 @@ canonical descriptor
 
 | SKILL | 权威输出 | 明确不拥有 |
 |---|---|---|
-| Turn Intent | fixed-field intent 与 intent evidence | 医学事实、claim 语义 |
-| Claim Inventory | claim envelope、ordinal、parent scope | assertion state、canonical |
-| Statement Semantics | statement_type、assertion_state、certainty、scope | participant、temporal、canonical |
-| Participant Phrase | subject / agent / recipient / object phrase | entity_id、诊断、风险 |
-| Temporal Phrase | temporal phrase 与 claim binding | normalized temporal authority |
-| Measurement Phrase | measurement phrase 与 claim binding | normalized measurement authority |
-| Canonical Descriptor | descriptor、target query、claim binding | canonical_id、医学结论 |
-| Review SKILL | verdict、failure_code、repair_hint | 被审查字段最终权威 |
-| Repair SKILL | typed patch proposal | artifact 直接应用权 |
+| Turn Intent | fixed-field boolean intent signals | evidence、claim 事实、医学语义 |
+| Claim Proposition Inventory | `claims[]` 自然语言 proposition | claim_id、evidence、assertion enum、canonical |
+| Coverage Review | 覆盖问题布尔矩阵和有界 missing hint | 直接追加或修改 claim |
+| Faithfulness Review | 语义漂移布尔矩阵 | corrected proposition、evidence、verdict |
+| Repair SKILL | 受限 proposition patch proposal | artifact 直接应用权 |
 | Patch Applier | artifact 新版本 | 语义猜测 |
 
 ## 8. 生成任务契约
 
-每个生成 SKILL 必须同时交付版本化的 prompt renderer。该 renderer 根据
-SkillSpec、受限 TurnSnapshot 投影和目标 envelope 生成不可变
-`SkillPromptProjection`。
+每个生成 SKILL 必须同时交付版本化 prompt renderer。renderer 根据 SkillSpec、受限
+TurnSnapshot 投影和目标 envelope 生成不可变 `SkillPromptProjection`。
 
-Structured LLM Gateway 只消费、校验、序列化和哈希该投影，不得生成 SKILL
-语义提示词、解析 Markdown 正文、按症状词扩展上下文或读取未授权资源。
+M05 只消费、校验、序列化和哈希该投影，不得生成 SKILL 语义提示词、解析 Markdown、
+按症状词扩展上下文或读取未授权资源。
 
-### 8.1 Turn Intent
+### 8.1 极薄 JSON 信封
 
-输出 fixed-field intent：
+生产传输仍使用 strict JSON Schema，但 JSON 只是传输信封；语义载荷是自然语言。
 
-```text
-answer_now
-wants_triage
-correction
-clarification_request
-fact_statement_present
-question_present
-report_context_present
-```
-
-要求：
-
-1. 每个信号在当前回合最多输出一次。
-2. intent 必须绑定 evidence phrase。
-3. `answer_now` 是控制意图，不是医学事实。
-4. 不按 claim 重复输出 `fact_statement_present`。
-
-### 8.2 Claim Inventory
-
-输出可独立审计的候选事实单元：
+禁止在模型输出中构造深层语义 schema、自证字段或无消费者字段：
 
 ```text
 claim_id
 ordinal
-evidence_phrase
-parent_scope
-shared_scope_hint
+target
 unit_type
+shared_parent
+evidence_phrase
+assertion_state
+certainty
+scope
+entity_id
+canonical_id
+reason
+confidence
 ```
 
-职责：
+工程身份由系统根据 PlanTask、attempt、TurnSnapshot digest 和 schema contract 附加。
 
-1. 拆分多事实输入。
-2. 保留 shared scope 的父子关系。
-3. 为下游任务提供稳定 envelope。
+### 8.2 Prompt 输入形态
 
-禁止：
+Prompt user message 使用结构化 tag 或极浅文本，不使用深层 JSON：
 
 ```text
-判断 normal / denied
-输出 canonical_id
-合并多个 target 为一个粗 claim
-丢失否定、时间或主体范围
+<current_turn>
+...
+</current_turn>
+
+<trusted_pet_context>
+species: cat
+description: 英短
+</trusted_pet_context>
+```
+
+要求：
+
+1. 不向模型展示 task_id、run_id、snapshot digest、skill version 或完整 JSON schema。
+2. 不提示 `estimated_claim_envelope_count`，避免模型为凑数量合并或拆错 claim。
+3. 当前回合原文必须完整保留，不得用摘要替代。
+4. renderer 必须处理 tag delimiter collision；无法安全渲染时 Fail Fast。
+5. 上下文只能来自 TurnSnapshotProjector 授权资源。
+
+### 8.3 Turn Intent
+
+输出 fixed-field boolean：
+
+```json
+{
+  "answer_now": true,
+  "wants_triage": false,
+  "correction": false,
+  "clarification_request": false,
+  "fact_statement_present": true,
+  "question_present": true,
+  "report_context_present": false
+}
+```
+
+要求：
+
+1. 每个信号在当前回合最多出现一次。
+2. 不输出 evidence、reason 或 confidence。
+3. `answer_now` 是控制意图，不是医学事实。
+4. `question_present` 与 claim proposition 分离。
+
+### 8.4 Claim Proposition Inventory
+
+Claim Inventory 输出完整、自包含的自然语言 proposition，而不是主题词。
+
+输出形式：
+
+```json
+{
+  "claims": [
+    "用户报告我家英短前天开始更换新猫粮",
+    "用户报告我家英短这两天大便偏软",
+    "用户报告我家英短精神状态良好",
+    "用户报告我家英短进食正常",
+    "用户报告我家英短饮水正常",
+    "用户报告我家英短没有呕吐",
+    "用户报告我家英短没有血便"
+  ]
+}
+```
+
+禁止输出：
+
+```text
+呕吐
+血便
+精神状态
+食欲
+饮水
+```
+
+主题词会丢失主体、否定、时间、程度和断言方向，导致下游重新猜语义或 RAG 查询过宽。
+
+### 8.5 受限语义重写
+
+Claim Proposition Inventory 允许做受限语义重写，以便把口语、省略和 shared scope 整理
+成自包含 proposition。
+
+允许：
+
+```text
+根据可信上下文补全当前讨论宠物主体
+拆分 shared scope
+保留否定、否定范围和纠正语义
+保留不确定、未观察和用户猜测
+保留时间、频率、数量、程度和比较基线
 ```
 
 示例：
@@ -517,105 +580,72 @@ unit_type
 饭和水都正常
 ```
 
-应表达为一个 parent scope 下的两个 claim envelope：
+应拆为：
 
 ```text
-食欲正常
-饮水正常
+用户报告我家英短进食正常
+用户报告我家英短饮水正常
 ```
 
-### 8.3 Claim Statement Semantics
-
-对单个 claim 或极小批量 claim 输出：
+禁止：
 
 ```text
-statement_type
-assertion_state
-certainty
-scope
+把“精神正常”写成“否认精神异常”
+把“没看到吐过”写成“绝对没有呕吐”
+把“可能有关”写成“确定因果关系”
+输出诊断、疾病名、风险、就医建议或治疗建议
+在指代不明时猜测对象
 ```
 
-`assertion_state` 必须区分：
+如果上下文不足以消解指代，应保留保守表达并交给 Faithfulness Review 标记歧义。
 
-| 状态 | 语义 |
-|---|---|
-| `present` | 用户报告现象存在 |
-| `denied` | 用户明确否认现象存在 |
-| `reported_normal` | 用户明确报告状态正常 |
-| `uncertain` | 用户不确定或证据不足 |
-| `corrected` | 用户纠正先前信息 |
-| `unknown` | 当前证据无法建立该事实 |
+### 8.6 Claim 与 Plan envelope 的关系
 
-禁止把 `精神正常` 表示为 `denied`。
+`PlanSelection.claim_envelope_count` 只是执行槽位估计，不是最终 claim 权威数量。
+Claim proposition 数组顺序与系统生成的 envelope 顺序对应，claim id 由系统附加。
 
-### 8.4 Participant Phrase
-
-LLM 只输出 phrase：
+如果 proposition 数量与 Plan envelope 数量不一致：
 
 ```text
-subject_phrase
-agent_phrase
-recipient_phrase
-object_phrase
+不得动态修改 PlanIR
+不得截断 proposition
+不得为凑数合并 proposition
+不得自动新增 envelope
 ```
 
-实体绑定由 deterministic candidate-only resolver 完成：
-
-```text
-唯一候选 → resolved
-无候选 → not_found
-多候选 → ambiguous
-模型发明 entity_id → blocked
-```
-
-### 8.5 Temporal / Measurement Phrase
-
-LLM 只输出 phrase 和 claim binding。归一化权威属于 deterministic parser / verifier：
-
-```text
-temporal parser
-measurement parser
-unit policy
-```
-
-禁止模型自由输出不可验证的 normalized value 并伪装为 verified。
-
-### 8.6 Canonical Descriptor
-
-LLM 只输出：
-
-```text
-descriptor
-target query
-claim binding
-```
-
-canonical 绑定必须 candidate-only：
-
-```text
-无候选 → not_found
-候选模糊 → ambiguous
-模型发明 canonical_id → blocked
-```
+必须进入显式 `blocked`、`disagreement` 或后续 plan reconciliation 契约。
 
 ## 9. Deterministic Verifier
 
-每个生成任务输出必须经过 verifier，至少包括：
+每个生成任务输出必须先经过 deterministic verifier。
+
+当前 M07 只验证结构与身份，不做医学语义判断：
 
 ```text
-schema check
-enum check
-extra field check
-field ownership check
-target existence check
-claim binding check
-evidence phrase check
-parent scope check
-context digest check
-cross-field consistency check
+strict schema check
+boolean / string 类型校验
+required field 校验
+extra field 拒绝
+字段所有权校验
+字符串非空、长度与换行约束
+claims 数量上限
+claims 重复检测
+claim 数量与 envelope 数量一致性
+target envelope 存在性
+context digest 校验
+task / skill / schema 身份一致性
 ```
 
-Verifier 职责是验证结构和证据，不做医学判断。
+当前不验证：
+
+```text
+evidence phrase
+assertion enum
+participant resolver
+temporal parser
+measurement parser
+canonical selector
+```
 
 典型失败：
 
@@ -623,10 +653,9 @@ Verifier 职责是验证结构和证据，不做医学判断。
 schema_invalid
 forbidden_field_present
 field_ownership_violation
-evidence_not_found
-evidence_outside_parent_scope
-evidence_ambiguous
-claim_binding_invalid
+claim_count_mismatch
+duplicate_claim
+empty_claim_proposition
 context_digest_mismatch
 semantic_conflict
 ```
@@ -636,123 +665,184 @@ semantic_conflict
 ```text
 静默删除 forbidden field 后继续
 宽松解析非法 JSON
-把模型 proposal 标记为 verified
+把 proposal 标记为 verified
 用关键词规则补造语义
+截断或合并 claim 以匹配 Plan envelope
 ```
 
 ## 10. 正交 Review SKILL
 
 ### 10.1 拆分原则
 
-Review SKILL 必须按任务域拆分，避免一次调用审查所有输出：
+Review 必须拆成 coverage 与 faithfulness 两个语义权威域：
 
 ```text
-review.turn_intent
-review.claim_inventory
-review.claim_statement_semantics
-review.participant_phrase
-review.temporal_phrase
-review.measurement_phrase
-review.canonical_descriptor
-review.graph_consistency
+claim_coverage_review
+claim_faithfulness_review
 ```
 
-单次审查必须限制目标数量。Statement semantics review 推荐一次只审查一个 claim；
-如必须批量，应设置小上限并按 claim_id 一一对应。
+Coverage Review 是 turn 级任务，用于发现漏抽、合并、多抽和非自包含 proposition。
+Faithfulness Review 是 claim 级任务，一次只审查一个 proposition。
 
 ### 10.2 输入
 
-局部 Review SKILL 输入：
+Coverage Review 输入：
 
 ```text
-同一 TurnSnapshot
-target envelope
-candidate output
-被审查 SKILL 契约
-必要的候选集或 parser 结果
+current_turn
+generated_claims
+必要的有界上下文
 ```
 
-Review 必须与 generator 使用同一 `context_digest`。
+Faithfulness Review 输入：
 
-### 10.3 输出
+```text
+current_turn
+单条 claim proposition
+必要的有界上下文
+```
+
+Review 与 generator 使用同一 `context_digest`。Reviewer 不读取生成器 prompt、reason、
+confidence、evidence 或下游领域状态，避免被生成器自证锚定。
+
+### 10.3 Coverage Review 输出
+
+Coverage Review 使用固定布尔矩阵，不输出自由 verdict：
 
 ```json
 {
-  "review_id": "string",
-  "review_skill_id": "string",
-  "target_task_id": "string",
-  "target_artifact_id": "string",
-  "reviewed_skill_id": "string",
-  "reviewed_skill_version": "string",
-  "verdict": "approved | rejected | needs_repair | inconclusive",
-  "failure_code": "string | null",
-  "checks": "object",
-  "repair_hint": "object | null",
-  "confidence": "number"
+  "存在漏抽显式事实": false,
+  "存在多事实合并": false,
+  "存在重复claim": false,
+  "存在原文不支持的claim": false,
+  "存在非自包含proposition": false,
+  "存在shared scope拆分错误": false,
+  "未分类覆盖问题": false
 }
 ```
 
-### 10.4 审查边界
+可附带不超过上限的 `missing_claim_candidates` 作为 repair hint；该数组不是权威 artifact，
+不能直接追加到原结果。
+
+### 10.4 Faithfulness Review 输出
+
+Faithfulness Review 使用固定中文布尔矩阵，不输出 `verdict`、`reason`、`confidence`
+或 corrected proposition：
+
+```json
+{
+  "主体或指代范围改变": false,
+  "否定方向改变": false,
+  "否定范围改变": false,
+  "正常状态误写为否认": false,
+  "事实类型改变": false,
+  "时间范围改变": false,
+  "频率或数量改变": false,
+  "程度或强度改变": false,
+  "确定性改变": false,
+  "因果关系改变": false,
+  "医学推断或建议添加": false,
+  "命题不自包含": false,
+  "指代对象不明": false,
+  "时间基准不明": false,
+  "否定范围不明": false,
+  "比较基线不明": false,
+  "未分类语义改变": false
+}
+```
+
+所有字段必须为 boolean、required 且 `additionalProperties=false`。
+
+### 10.5 确定性结果派生
+
+Review LLM 不输出业务 verdict。业务结果由 deterministic rules 从布尔矩阵派生：
+
+```text
+全部 false
+→ review_supported
+
+任一歧义字段 true，或未分类问题 true
+→ human_review_required
+
+医学推断或建议添加 true
+→ review_rejected 或 human_review_required
+
+可修复漂移字段 true 数量不超过上限
+→ repair_required
+
+可修复漂移字段 true 数量超过上限
+→ human_review_required，禁止自动全局重写
+```
+
+歧义字段包括：
+
+```text
+指代对象不明
+时间基准不明
+否定范围不明
+比较基线不明
+```
+
+### 10.6 审查边界
 
 Review 可以判断：
 
 ```text
-输出是否忠实于证据
-normal / denied / present / uncertain 是否误用
+claim 是否覆盖当前回合显式事实
+proposition 是否改变主体、否定、时间、频率、数量、程度、确定性或因果
+是否添加医学推断、风险或建议
+proposition 是否自包含
 shared scope 是否漏拆
-participant phrase 是否缺失或越界
-temporal / measurement binding 是否错误
-canonical candidate 是否支持选择
-intent 与 claim 是否冲突
 ```
 
 Review 禁止：
 
 ```text
 直接修改 artifact
-输出最终 corrected assertion
+输出 corrected proposition
 输出诊断或临床风险
 读取下游领域状态
 把审查失败当作原任务通过
+把未分类问题自动归入某个已知维度
 ```
-
-### 10.5 Review 终态
-
-```text
-review_verified
-review_failed
-review_target_missing
-review_schema_invalid
-review_scope_violation
-review_disagreement
-review_timeout
-review_inconclusive
-```
-
-当审查是必需门槛时，`review_failed` 不得让原 artifact 进入 verified 状态。
 
 ## 11. 局部重写与 typed patch
 
 ### 11.1 Repair Planner
 
-Repair Planner 是 deterministic 组件，根据注册的 failure code 创建修复任务。
-禁止由 Review LLM 直接决定自由修复。
+Repair Planner 是 deterministic 组件，根据 Faithfulness / Coverage 布尔矩阵中为 true 的
+具体维度创建受限修复任务。禁止由 Review LLM 直接决定自由修复。
 
 映射示例：
 
-| failure code | 允许的 Repair SKILL |
+| review dimension | 允许的 Repair SKILL |
 |---|---|
-| `assertion_state_semantic_mismatch` | `repair.claim.assertion_semantics` |
-| `shared_scope_under_split` | `repair.claim_inventory.shared_scope` |
-| `evidence_phrase_boundary_invalid` | `repair.evidence.claim_phrase` |
-| `participant_role_phrase_missing` | `repair.participant.role_phrase` |
-| `temporal_phrase_missing` | `repair.temporal.claim_phrase` |
-| `measurement_phrase_missing` | `repair.measurement.claim_phrase` |
-| `canonical_descriptor_recall_miss` | `repair.canonical.descriptor_query` |
+| `否定方向改变` | `repair.claim.assertion_direction` |
+| `否定范围改变` | `repair.claim.assertion_scope` |
+| `正常状态误写为否认` | `repair.claim.normal_statement` |
+| `时间范围改变` | `repair.claim.temporal_wording` |
+| `频率或数量改变` | `repair.claim.frequency_or_quantity` |
+| `程度或强度改变` | `repair.claim.degree_wording` |
+| `确定性改变` | `repair.claim.certainty_wording` |
+| `因果关系改变` | `repair.claim.causality_wording` |
+| `命题不自包含` | `repair.claim.self_containment` |
+| `存在多事实合并` / `存在shared scope拆分错误` | `repair.claim_inventory.scope_split` |
+| `存在漏抽显式事实` | `repair.claim_inventory.missing_claim` |
 
-未注册 failure code 输出 `repair_unavailable`。
+以下维度不得自动修复，必须进入人工审查或 rejected：
+
+```text
+医学推断或建议添加
+指代对象不明
+时间基准不明
+否定范围不明
+比较基线不明
+未分类语义改变
+```
 
 ### 11.2 RepairPatchProposal
+
+Repair SKILL 只能输出白名单 typed patch proposal：
 
 ```json
 {
@@ -761,12 +851,13 @@ Repair Planner 是 deterministic 组件，根据注册的 failure code 创建修
   "target_task_id": "string",
   "target_artifact_id": "string",
   "base_version": "number",
-  "failure_code": "string",
+  "review_dimension": "string",
   "operations": "array",
-  "evidence_binding": "object",
   "reason_code": "string"
 }
 ```
+
+禁止自由 JSON Patch、整轮重写或修复未申报维度。
 
 ### 11.3 Patch 应用校验
 
@@ -776,41 +867,41 @@ Patch Applier 必须校验：
 target artifact 存在
 base_version 一致
 repair skill 已注册
-failure code 匹配
+review dimension 匹配
 patch path 在白名单
-patch value 符合 schema
+patch value 符合 proposition schema
 未修改 forbidden path
 无并行 patch 冲突
-evidence binding 存在
 repair budget 未超限
 ```
 
-通过后应用 patch、递增 artifact version 并记录 repair lineage；
-失败时输出 `patch_rejected`，不得静默修正 patch。
+Evidence binding 不作为 Patch Applier 的语义判断条件；patch 后仍处于
+`evidence_binding_pending`，除非独立证据门禁已完成。
 
 ### 11.4 修复边界
 
 可修复：
 
 ```text
-断言语义误判
-evidence phrase 边界不准
-claim shared scope 漏拆
-participant phrase 缺失
-temporal / measurement phrase 缺失或绑定错误
-canonical descriptor 查询表达不当
+否定方向或范围漂移
+normal / denied 表达漂移
+时间、频率、数量、程度或确定性措辞漂移
+因果措辞漂移
+proposition 不自包含
+shared scope 漏拆或合并
+漏抽显式 claim，且 coverage hint 可用
 ```
 
-不可修复：
+不可自动修复：
 
 ```text
 forbidden field 出现
 schema 根本非法
 原文无证据
-候选模糊
-canonical 无候选
-临床风险或安全动作越权
+指代或比较基线不明
+医学推断、风险或建议越权
 下游 adapter 未实现
+review 维度未分类
 ```
 
 ### 11.5 修复预算
@@ -820,8 +911,8 @@ canonical 无候选
 ```text
 repair_depth = 1
 不允许 repair of repair
-每个字段最多一次修复
-每个 claim 的修复任务数量有限
+同一 proposition 最多一次修复
+单次 patch 只能修复声明的有限维度
 每轮全局 repair budget 固定
 必须有全局 deadline
 ```
@@ -830,11 +921,16 @@ repair_depth = 1
 
 ## 12. Artifact 状态机与 DAG 闭环
 
-### 12.1 任务终态
+### 12.1 任务与证据门禁状态
 
-每个任务必须有显式终态：
+每个任务必须有显式终态或门禁状态：
 
 ```text
+schema_valid
+semantic_review_pending
+semantic_review_supported
+evidence_binding_pending
+human_review_required
 verified
 repair_verified
 not_applicable
@@ -848,70 +944,94 @@ context_budget_exceeded
 timeout
 ```
 
+`semantic_review_supported` 不等于 `verified`。在生产证据门禁完成前，artifact 必须保持
+`evidence_binding_pending` 或 `human_review_required`。
+
 ### 12.2 空结果语义
 
-空结果必须区分：
+空 claim 集合必须区分：
 
 ```text
 no_explicit_fact
 suspicious_empty
 model_returned_empty
-low_confidence
 schema_invalid
 extraction_failed
 dependency_failed
 review_failed
 ```
 
-禁止把系统失败静默转换为 `facts=[]`、`unknown` 或 `not_found`。
+原文包含多个显式事实而输出空集合时，Coverage Review 必须标记 `suspicious_empty`。
 
 ### 12.3 disagreement
 
-生成结果与审查结果不一致时，不得默认任一方正确。必须保留：
+生成、Coverage Review、Faithfulness Review 或人工审查结果不一致时，不得默认任一方
+正确。必须保留：
 
 ```text
-field
-candidate values
-generator confidence
-review confidence
-evidence binding
+claim proposition
+review boolean matrix
+candidate repair hint
+人工审查状态
+artifact base version
 ```
 
 终态为 `disagreement`。除非存在显式 adjudicator 契约，否则不得自动裁决。
 
-### 12.4 下游 stale
+### 12.4 Evidence binding 后置
 
-上游 artifact 修复导致结构变化时，必须标记下游 stale。
+Evidence binding 是独立后续任务，不由生成器或 Faithfulness Review 自证。
 
-示例：
+当前过渡阶段允许人工审查承担证据判断，但必须显式记录：
+
+```text
+review_mode=human
+proposal id / claim id
+supported / rejected / ambiguous
+reviewer role
+review time
+decision digest
+```
+
+禁止：
+
+```text
+把人工通过伪装成自动 verified
+无 evidence binding 时静默标记 verified
+人工审查直接改写 artifact
+```
+
+### 12.5 下游 stale
+
+上游 claim proposition 修复导致拆分、合并或删除时，必须标记相关下游结果 stale：
 
 ```text
 claim inventory 修复
-→ 原 claim 拆分
-→ 原 statement semantics / participant / temporal / canonical 输出 stale
-→ 相关下游任务重新执行
+→ claim 集合变化
+→ 相关 review / repair / graph / domain projection 结果 stale
+→ 下游任务重新执行
 ```
 
-禁止把旧 claim 的语义结果直接迁移到新 claim，或修复上游后直接投影下游。
+禁止把旧 claim 的审查或投影结果直接迁移到新 claim。
 
 ## 13. Claim Graph 与一致性门禁
 
 ### 13.1 组装
 
-Claim graph 由 deterministic orchestrator 根据 verified artifact 组装：
+当前 claim graph 的最小节点是：
 
 ```text
-claim envelope
-statement semantics
-participant binding
-temporal binding
-measurement binding
-canonical binding
-intent summary
-relation / graph edges
+turn intent
+claim proposition
+coverage review outcome
+faithfulness review outcome
+evidence binding status
+artifact version / lineage
 ```
 
-LLM 不直接输出最终完整图。
+LLM 不直接输出最终完整图。后续领域如需要 assertion enum、participant、temporal、
+measurement 或 canonical 绑定，必须通过独立领域投影或专门 resolver 立项，不得反向要求
+M06 输出这些字段。
 
 ### 13.2 Graph Consistency Gate
 
@@ -920,19 +1040,19 @@ LLM 不直接输出最终完整图。
 ```text
 ID 引用存在
 依赖完整
-claim 无重复
-binding 唯一
-枚举不冲突
+claim proposition 无重复
+intent 与 claim 集合身份一致
+review / repair / evidence 状态完整
+artifact version 与 lineage 一致
 field ownership 不冲突
 ```
 
 需要语义判断的冲突可交给受限 graph consistency reviewer，例如：
 
 ```text
-intent 与 claim 冲突
-时间范围与断言 scope 冲突
-participant 与关系需求冲突
-canonical polarity 与 assertion state 冲突
+intent 与 claim proposition 冲突
+多个 proposition 表达同一事实但语义相反
+repair 后 proposition 与 coverage 结果不一致
 ```
 
 图级终态：
@@ -1034,7 +1154,9 @@ prompt_hash
 model snapshot
 input envelope digest
 artifact id / version
-review verdict
+review outcome
+review matrix digest
+evidence binding status
 failure code
 repair lineage
 latency
@@ -1047,8 +1169,10 @@ terminal state
 ```text
 schema invalid rate
 forbidden field blocked rate
-evidence mismatch rate
+claim count mismatch rate
 review disagreement rate
+coverage missing rate
+faithfulness drift dimension distribution
 repair required rate
 repair success rate
 repair regression rate
@@ -1079,18 +1203,19 @@ repair mapping 目录。
 
 ### 阶段 C：生成 SKILL 与 verifier
 
-交付 intent、claim inventory、statement semantics、participant / temporal /
-measurement / canonical phrase 和 strict verifier。
+交付 Turn Intent、Claim Proposition Inventory、版本化 prompt renderer 和 strict
+deterministic verifier。
 
-验收：所有输出 strict schema；forbidden field 不被清洗后放行；evidence /
-binding 失败显式 blocked。
+验收：所有输出 strict schema；forbidden field 不被清洗后放行；claim 为自包含自然语言
+proposition；claim 数量与 envelope 数量不一致显式 blocked。
 
 ### 阶段 D：Review 与 Repair
 
-交付正交 Review SKILL、review verifier、deterministic repair planner、typed patch、
-patch verifier 和 applier。
+交付 Coverage Review、Faithfulness Review、review verifier、deterministic outcome
+derivation、repair planner、typed patch、patch verifier 和 applier。
 
-验收：review 不直接修改 artifact；repair 只能修改白名单 path；修复预算和终态有效。
+验收：review 不直接修改 artifact；review 不输出 corrected value；repair 只能修改白名单
+path；修复预算和终态有效。
 
 ### 阶段 E：Artifact 与 Claim Graph
 
@@ -1116,10 +1241,12 @@ SkillCatalog 所有权冲突
 Plan IR 非法 skill / 依赖环 / 上下文越权
 strict schema extra field 拒绝
 forbidden field blocked
-normal / denied / uncertain / unknown 语义回归
+normal / denied / uncertain / unobserved / corrected 自然语言语义回归
 shared scope 拆分
 多轮指代与 answer_now
-evidence outside scope 拒绝
+claim 数量不匹配 blocked
+主题词 claim 拒绝
+review 布尔矩阵 extra field 拒绝
 review 输出越权拒绝
 repair patch 越权拒绝
 base version 冲突拒绝
@@ -1162,10 +1289,11 @@ durable execution 边界
 ## 19. 关联材料
 
 1. [semantic-collaboration-dag-production-implementation-plan.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-production-implementation-plan.md)
-2. [agent-input-preprocessing-domain-extraction-migration-plan.md](/home/vancer17/veterinary_agent/docs/architecture/agent-input-preprocessing-domain-extraction-migration-plan.md)
-3. [input-preprocessing-v13-llm-first-structured-claim-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/input-preprocessing-v13-llm-first-structured-claim-change-summary.md)
-4. [input-preprocessing-v14-onepass-governance-convergence-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/input-preprocessing-v14-onepass-governance-convergence-change-summary.md)
-5. [consultation-semantic-extraction-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/consultation-semantic-extraction-change-summary.md)
-6. [consultation-state-answerability-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/consultation-state-answerability-change-summary.md)
-7. [clinical-safety-semantic-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/clinical-safety-semantic-change-summary.md)
-8. [semantic-collaboration-dag-m04-scheduler-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m04-scheduler-change-summary.md)
+2. [semantic-collaboration-dag-m06-production-boundary-revision.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m06-production-boundary-revision.md)
+3. [agent-input-preprocessing-domain-extraction-migration-plan.md](/home/vancer17/veterinary_agent/docs/architecture/agent-input-preprocessing-domain-extraction-migration-plan.md)
+4. [input-preprocessing-v13-llm-first-structured-claim-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/input-preprocessing-v13-llm-first-structured-claim-change-summary.md)
+5. [input-preprocessing-v14-onepass-governance-convergence-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/input-preprocessing-v14-onepass-governance-convergence-change-summary.md)
+6. [consultation-semantic-extraction-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/consultation-semantic-extraction-change-summary.md)
+7. [consultation-state-answerability-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/consultation-state-answerability-change-summary.md)
+8. [clinical-safety-semantic-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/clinical-safety-semantic-change-summary.md)
+9. [semantic-collaboration-dag-m04-scheduler-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m04-scheduler-change-summary.md)

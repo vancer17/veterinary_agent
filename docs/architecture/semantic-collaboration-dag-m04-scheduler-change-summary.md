@@ -15,6 +15,10 @@
 
 > **文档状态**：M04 生产工程边界已实现；待 Temporal Docker 编排、真实
 > workflow 联调与 VetOrchestrator 接入后关闭
+>
+> **边界修订说明**：M04 Temporal-first 边界不变。最新 M06 生产契约已收敛为
+> Turn Intent + 自然语言 Claim Proposition Inventory，任务执行门禁需同步纳入
+> M08 Coverage / Faithfulness Review。
 
 ## 1. 当前状态
 
@@ -28,6 +32,7 @@
 | 真实 Temporal workflow 联调 | 未执行 |
 | M05 StructuredLLMGateway | 已实现；尚未接入任务执行器 |
 | M07 Deterministic Verifier | 未实现 |
+| M08 Coverage / Faithfulness Review | 未实现 |
 | M11 Artifact Store | 未实现 |
 | VetOrchestrator 生产切换 | 未接入 |
 
@@ -61,7 +66,7 @@ M04 固定采用：
 | Plan IR 依赖关系 | M03 |
 | Skill 失败与语义重试策略 | M01 SkillCatalog |
 | DAG frontier 计算 | M04 自有语义图内核 |
-| 任务业务终态解释 | M04 契约 + M07 verifier |
+| 任务业务终态解释 | M04 契约 + M07 verifier + M08 review outcome |
 | 任务队列 / activity 分发 | Temporal |
 | worker 崩溃恢复 | Temporal |
 | 基础设施重试 | Temporal RetryPolicy |
@@ -197,6 +202,7 @@ Temporal 不可用时自动降级为进程内调度器
 ```text
 M05 StructuredLLMGateway
 + M07 Deterministic Verifier
++ M08 Review Outcome
 + M11 Artifact commit
 = SemanticTaskExecutor
 ```
@@ -537,7 +543,8 @@ SemanticModelProposal
 attempt metadata
 ```
 
-该结果仍必须交给 M07 verifier，不能直接生成 verified artifact 或任务成功终态。
+该结果仍必须交给 M07 verifier 和 M08 review，不能直接生成 verified artifact
+或任务成功终态。
 
 验收：
 
@@ -698,3 +705,4 @@ long_term_memory_written = false
 
 1. [semantic-collaboration-dag-production-architecture.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-production-architecture.md)
 2. [semantic-collaboration-dag-production-implementation-plan.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-production-implementation-plan.md)
+3. [semantic-collaboration-dag-m06-production-boundary-revision.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m06-production-boundary-revision.md)
