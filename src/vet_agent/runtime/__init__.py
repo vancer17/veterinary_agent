@@ -1,19 +1,22 @@
 """
 文件：src/vet_agent/runtime/__init__.py
 作用：作为 runtime 包入口，封装模型调用、向量生成与外部运行时能力。
+范围：暴露普通模型调用、Pydantic 结构化调用、M05 单次结构化传输、
+      向量生成与离线启动检查的稳定公共能力。
 说明：本文件遵循项目标准文件树编排；跨包引用应通过对应包的 __init__.py 暴露能力。
 """
 
 
 
 from .embeddings import EmbeddingClient, QwenEmbeddingClient
-from .qwen import QwenClient
+from .qwen import QwenClient, StructuredChatResponse
 
 __all__ = [
     "EmbeddingClient",
     "OfflineStartupCheckResult",
     "QwenClient",
     "QwenEmbeddingClient",
+    "StructuredChatResponse",
     "run_offline_startup_checks",
 ]
 
@@ -26,7 +29,10 @@ def __getattr__(name: str) -> object:
     :raises AttributeError: 名称未在 runtime 包公共能力中声明时抛出。
     """
     if name in {"OfflineStartupCheckResult", "run_offline_startup_checks"}:
-        from .offline_startup import OfflineStartupCheckResult, run_offline_startup_checks
+        from .offline_startup import (
+            OfflineStartupCheckResult,
+            run_offline_startup_checks,
+        )
 
         values = {
             "OfflineStartupCheckResult": OfflineStartupCheckResult,

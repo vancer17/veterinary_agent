@@ -4,14 +4,17 @@
 作用：定义受限语义协作 DAG 的 Skill、TurnSnapshot、Plan 与调度错误类型。
 范围：覆盖 SkillSpec 校验、SkillCatalog 注册、投影一致性、快照构建、
       上下文预算、digest 校验、Plan 编译、模型适配、结构化选择失败、
-      DAG 状态仓储访问、run 租约冲突与任务执行端口失败。
+      M05 结构化模型网关、DAG 状态仓储访问与任务执行端口失败。
 说明：本文件只承载错误语义，不访问数据库、不调用模型、不提供任何回退路径。
 =============================================================================
 """
 
 from __future__ import annotations
 
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
+
+if TYPE_CHECKING:
+    from .gateway_contracts import StructuredLLMCallMetadata
 
 
 class SemanticCollaborationError(Exception):
@@ -200,3 +203,94 @@ class SemanticTaskExecutionError(SchedulerError):
         """
         super().__init__(message)
         self.failure_code = failure_code
+
+
+class StructuredLLMGatewayError(SemanticCollaborationError):
+    """表示 M05 结构化模型网关发生不可恢复失败。
+
+    :return: 无返回值；该错误族禁止转换为空事实或旧语义链路回退。
+    """
+
+
+class StructuredLLMGatewayContractError(StructuredLLMGatewayError):
+    """表示 M05 调用前发现 Skill、schema 或上下文契约错配。
+
+    :return: 无返回值；该错误在模型调用前阻断，不进入语义重试。
+    """
+
+    failure_code: ClassVar[str] = "structured_gateway_contract_violation"
+
+
+class StructuredLLMModelCallError(StructuredLLMGatewayError):
+    """表示结构化模型网关、传输或模型响应调用失败。
+
+    :return: 无返回值；该错误保留 attempt metadata 且不做隐藏 fallback。
+    """
+
+    failure_code: ClassVar[str] = "model_call_failed"
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        metadata: StructuredLLMCallMetadata | None = None,
+    ) -> None:
+        """初始化带调用审计元数据的模型调用失败。
+
+        :param message: 面向工程排障的错误说明。
+        :param metadata: 失败发生时已经可确定的调用元数据。
+        :return: 无返回值。
+        """
+        super().__init__(message)
+        self.metadata = metadata
+
+
+class StructuredLLMResponseParseError(StructuredLLMGatewayError):
+    """表示模型内容不是可接受的严格 JSON object。
+
+    :return: 无返回值；该错误禁止文本 JSON 检索、截取或手工修复。
+    """
+
+    failure_code: ClassVar[str] = "response_parse_failed"
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        metadata: StructuredLLMCallMetadata | None = None,
+    ) -> None:
+        """初始化带调用审计元数据的响应解析失败。
+
+        :param message: 面向工程排障的错误说明。
+        :param metadata: 当前模型调用返回的审计元数据。
+        :return: 无返回值。
+        """
+        super().__init__(message)
+        self.metadata = metadata
+
+
+class StructuredLLMSchemaError(StructuredLLMGatewayError):
+    """表示模型 proposal 未通过权威输出 JSON Schema。
+
+    :return: 无返回值；该错误禁止清洗 extra field 后继续。
+    """
+
+    failure_code: ClassVar[str] = "schema_invalid"
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        schema_path: str,
+        metadata: StructuredLLMCallMetadata | None = None,
+    ) -> None:
+        """初始化带 schema 路径与调用元数据的结构失败。
+
+        :param message: 面向工程排障的错误说明。
+        :param schema_path: 首个违规字段或根节点路径。
+        :param metadata: 当前模型调用返回的审计元数据。
+        :return: 无返回值。
+        """
+        super().__init__(message)
+        self.schema_path = schema_path
+        self.metadata = metadata

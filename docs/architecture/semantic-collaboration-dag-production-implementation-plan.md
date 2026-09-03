@@ -418,6 +418,10 @@ M03 PlanIR
 
 ### M05：结构化 LLM Gateway
 
+> **实施状态**：M05 生产契约与实现已完成；尚未接入任务执行器。实现边界、
+> 有意 TODO 与验证状态见
+> [semantic-collaboration-dag-m05-structured-llm-gateway-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m05-structured-llm-gateway-change-summary.md)。
+
 **目标**
 
 为所有 SKILL 提供统一、可审计的结构化模型调用边界。
@@ -426,7 +430,7 @@ M03 PlanIR
 
 ```text
 StructuredLLMGateway
-Skill prompt 投影
+SkillPromptProjection 身份与 digest 校验
 response schema 绑定
 usage / model snapshot / finish reason
 模型调用失败状态
@@ -443,7 +447,7 @@ M01 SkillCatalog
 **交付物**
 
 1. Gateway 接口。
-2. SkillSpec 到 prompt projection 的转换。
+2. SkillPromptProjection 到模型消息的确定性投影与哈希。
 3. strict output schema 绑定。
 4. usage 和模型快照记录。
 5. 调用失败与 schema 失败区分。
@@ -467,7 +471,12 @@ attempt_count 与 failure history 完整
 不做手工 JSON 修复
 不做医学兜底
 不用 retry 后结果冒充单次成功
+不在 Gateway 内生成 SKILL 语义提示词
 ```
+
+SKILL 语义 prompt renderer 属于 M06 生成 SKILL 交付物。M05 只接收、校验、
+序列化和哈希上游传入的 `SkillPromptProjection`，不得解析 `SKILL.md` 正文、
+按症状词发明提示词或读取未授权上下文。
 
 ### M06：生成 SKILL
 
@@ -478,6 +487,7 @@ attempt_count 与 failure history 完整
 **范围**
 
 ```text
+SkillPromptRenderer
 TurnIntentGenerator
 ClaimInventoryGenerator
 ClaimStatementSemanticsGenerator
@@ -500,7 +510,8 @@ M05 Gateway
 **建议实现顺序**
 
 ```text
-Turn Intent
+SKILL prompt renderer
+→ Turn Intent
 → Claim Inventory
 → Claim Statement Semantics
 → Participant Phrase
@@ -513,6 +524,8 @@ Turn Intent
 
 ```text
 fixed-field intent 无重复事实数组
+每个生成 SKILL 携带版本化 prompt renderer
+prompt projection 与 SkillSpec / envelope / snapshot digest 身份闭合
 shared scope 可拆分
 reported_normal / denied / present / uncertain / corrected / unknown 分离
 participant 只输出 phrase

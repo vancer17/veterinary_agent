@@ -3,7 +3,8 @@
 文件：src/vet_agent/semantic_collaboration/__init__.py
 作用：作为受限语义协作 DAG 的稳定包入口。
 范围：暴露 M01 Skill 契约、目录、投影、生产组合根、M02 TurnSnapshot、
-      M03 Plan IR 与 M04 Temporal-first DAG 调度相关公开 API。
+      M03 Plan IR、M04 Temporal-first DAG 调度与 M05 结构化 LLM Gateway
+      相关公开 API。
 说明：跨包调用不得深入内部模块；后续能力必须继续通过本入口
       显式暴露，避免形成隐式跨包依赖。
 =============================================================================
@@ -50,12 +51,31 @@ from .errors import (
     SkillCatalogError,
     SkillContractError,
     SkillProjectionError,
+    StructuredLLMGatewayContractError,
+    StructuredLLMGatewayError,
+    StructuredLLMModelCallError,
+    StructuredLLMResponseParseError,
+    StructuredLLMSchemaError,
     TurnSnapshotBudgetExceededError,
     TurnSnapshotContextPolicyViolationError,
     TurnSnapshotDigestMismatchError,
     TurnSnapshotError,
     TurnSnapshotSourceUnavailableError,
     UnsupportedTurnInputError,
+)
+from .gateway import (
+    StructuredLLMGateway,
+    canonical_gateway_json,
+    compute_gateway_digest,
+)
+from .gateway_contracts import (
+    SemanticChatMessage,
+    SemanticModelProposal,
+    SkillPromptProjection,
+    StructuredLLMCallMetadata,
+    StructuredLLMCallRequest,
+    StructuredModelTransport,
+    StructuredModelTransportResponse,
 )
 from .plan_compiler import DeterministicPlanCompiler
 from .plan_contracts import (
@@ -255,9 +275,11 @@ __all__ = [
     "SchedulerError",
     "SchemaContract",
     "SchemaContractReference",
+    "SemanticChatMessage",
     "SemanticCollaborationError",
     "SemanticDAGProjectionRepository",
     "SemanticDAGWorkflow",
+    "SemanticModelProposal",
     "SemanticTaskExecutionError",
     "SemanticTaskExecutionRequest",
     "SemanticTaskExecutor",
@@ -274,11 +296,22 @@ __all__ = [
     "SkillPatchType",
     "SkillProjectionError",
     "SkillProjectionMetadata",
+    "SkillPromptProjection",
     "SkillRegistry",
     "SkillRepairMappingRecord",
     "SkillSpec",
     "SkillTaskKind",
     "SkillTraceKind",
+    "StructuredLLMCallMetadata",
+    "StructuredLLMCallRequest",
+    "StructuredLLMGateway",
+    "StructuredLLMGatewayContractError",
+    "StructuredLLMGatewayError",
+    "StructuredLLMModelCallError",
+    "StructuredLLMResponseParseError",
+    "StructuredLLMSchemaError",
+    "StructuredModelTransport",
+    "StructuredModelTransportResponse",
     "StructuredPlanModelClient",
     "TODOSemanticTaskExecutor",
     "TemporalDAGActivityRuntime",
@@ -321,8 +354,10 @@ __all__ = [
     "build_production_plan_policy",
     "build_production_skill_catalog",
     "build_temporal_semantic_dag_worker",
+    "canonical_gateway_json",
     "canonical_plan_json",
     "canonical_turn_snapshot_json",
+    "compute_gateway_digest",
     "compute_plan_digest",
     "compute_plan_policy_digest",
     "compute_turn_snapshot_digest",
