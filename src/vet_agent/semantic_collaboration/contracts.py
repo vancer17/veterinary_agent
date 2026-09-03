@@ -34,7 +34,8 @@ class SkillTaskKind(StrEnum):
     TEMPORAL_PHRASE = "temporal_phrase"
     MEASUREMENT_PHRASE = "measurement_phrase"
     CANONICAL_DESCRIPTOR = "canonical_descriptor"
-    REVIEW = "review"
+    CLAIM_COVERAGE_REVIEW = "claim_coverage_review"
+    CLAIM_FAITHFULNESS_REVIEW = "claim_faithfulness_review"
     REPAIR = "repair"
     PATCH_APPLY = "patch_apply"
 
@@ -46,7 +47,7 @@ class SkillExecutionFamily(StrEnum):
     """
 
     STRUCTURED_GENERATION = "structured_generation"
-    DETERMINISTIC_REVIEW = "deterministic_review"
+    STRUCTURED_REVIEW = "structured_review"
     TYPED_REPAIR = "typed_repair"
     DETERMINISTIC_PATCH_APPLY = "deterministic_patch_apply"
 
@@ -670,6 +671,11 @@ class SkillSpec(BaseModel):
             and self.observability.trace_kind != SkillTraceKind.GENERATION_SKILL
         ):
             raise SkillContractError("generation skill has invalid trace kind")
+        if (
+            self.execution_family == SkillExecutionFamily.STRUCTURED_REVIEW
+            and self.observability.trace_kind != SkillTraceKind.REVIEW_SKILL
+        ):
+            raise SkillContractError("review skill has invalid trace kind")
         if self.repair_mappings and self.task_kind == SkillTaskKind.REPAIR:
             raise SkillContractError("repair skill cannot recursively map repairs")
         for mapping in self.repair_mappings:

@@ -58,6 +58,8 @@ ALLOWED_SKILL_PROMPT_VARIABLES: tuple[str, ...] = (
     "last_assistant_questions",
     "verified_prior_facts",
     "trusted_pet_context",
+    "generated_claims",
+    "claim_proposition",
 )
 
 

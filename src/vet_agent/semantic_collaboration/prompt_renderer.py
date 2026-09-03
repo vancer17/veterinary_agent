@@ -1,9 +1,9 @@
 """
 =============================================================================
 文件：src/vet_agent/semantic_collaboration/prompt_renderer.py
-作用：实现受限语义协作 DAG M06 的标准化 SKILL 文档提示词渲染器。
-范围：覆盖渲染请求身份校验、受限上下文投影、SKILL 文档绑定、模型可见
-      章节选择、受限 Jinja 变量替换、tag 冲突校验与 renderer 目录闭合。
+作用：实现受限语义协作 DAG M06 / M08 的标准化 SKILL 文档提示词渲染器。
+范围：覆盖渲染请求身份校验、生成与 Review 受限上下文投影、SKILL 文档绑定、
+      模型可见章节选择、受限 Jinja 变量替换、tag 冲突校验与 renderer 目录闭合。
 说明：SKILL.md 文件头部元数据仅确定性代码可见；正文只有声明章节进入模型。
       本文件不调用模型、不做 evidence 绑定、不读取下游领域状态。
 =============================================================================
@@ -38,7 +38,61 @@ PROMPT_RESERVED_TAGS: tuple[str, ...] = (
     "last_assistant_questions",
     "verified_prior_facts",
     "trusted_pet_context",
+    "generated_claims",
+    "claim_proposition",
 )
+
+
+class SkillPromptReviewContext(BaseModel):
+    """表示 M08 Review SKILL 的确定性任务内上下文。
+
+    :return: 无返回值；该上下文只携带待审查 claims，不携带生成器审计信息。
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+        strict=True,
+        validate_assignment=True,
+    )
+
+    generated_claims: tuple[str, ...] | None = Field(
+        default=None,
+        description="Coverage Review 待审查的系统编号 claim 集合。",
+    )
+    claim_proposition: str | None = Field(
+        default=None,
+        description="Faithfulness Review 当前唯一待审查 proposition。",
+    )
+
+    @model_validator(mode="after")
+    def validate_review_context(self) -> Self:
+        """校验 Review 上下文一次只表达一种审查粒度。
+
+        :return: 返回可注入受限模板的 Review 上下文。
+        :raises ValueError: 上下文缺失、重复、claim 超界或形态非法时抛出。
+        """
+        if (self.generated_claims is None) == (self.claim_proposition is None):
+            raise ValueError("skill review context must define exactly one subject")
+        if self.generated_claims is not None:
+            if len(self.generated_claims) > 8:
+                raise ValueError("generated claims review subject is empty or oversized")
+            if any(
+                not claim.strip()
+                or claim != claim.strip()
+                or "\n" in claim
+                or "\r" in claim
+                for claim in self.generated_claims
+            ):
+                raise ValueError("generated claims review subject is invalid")
+        if self.claim_proposition is not None and (
+            not self.claim_proposition.strip()
+            or self.claim_proposition != self.claim_proposition.strip()
+            or "\n" in self.claim_proposition
+            or "\r" in self.claim_proposition
+        ):
+            raise ValueError("claim proposition review subject is invalid")
+        return self
 
 
 class SkillPromptRenderRequest(BaseModel):
@@ -62,6 +116,10 @@ class SkillPromptRenderRequest(BaseModel):
     projection: TurnSnapshotProjection = Field(
         description="按 SkillSpec 上下文策略生成的受限 TurnSnapshot 投影。",
     )
+    review_context: SkillPromptReviewContext | None = Field(
+        default=None,
+        description="M08 Review 专用任务内上下文；生成 SKILL 必须为空。",
+    )
 
     @model_validator(mode="after")
     def validate_renderer_identity(self) -> Self:
@@ -84,7 +142,7 @@ class SkillPromptRenderRequest(BaseModel):
 
 
 class SkillPromptRenderer(Protocol):
-    """表示 M06 版本化提示词渲染端口。
+    """表示 M06 / M08 版本化提示词渲染端口。
 
     :return: 无返回值；实现只能读取受限投影并输出不可变提示词投影。
     """
@@ -224,6 +282,39 @@ def _pet_context_lines(projection: TurnSnapshotProjection) -> str:
     return "\n".join(values)
 
 
+def _generated_claim_lines(context: SkillPromptReviewContext) -> str:
+    """渲染 Coverage Review 的系统编号 claim 集合。
+
+    :param context: 当前 Review 任务的受限任务内上下文。
+    :return: 返回逐行编号的 generated claims 文本。
+    :raises SemanticPromptRenderError: Review 上下文缺失时抛出。
+    """
+    if context.generated_claims is None:
+        raise SemanticPromptRenderError(
+            "coverage review prompt context is missing generated claims",
+        )
+    if not context.generated_claims:
+        return "none"
+    return "\n".join(
+        f"{index}. {claim}"
+        for index, claim in enumerate(context.generated_claims, start=1)
+    )
+
+
+def _claim_proposition_text(context: SkillPromptReviewContext) -> str:
+    """读取 Faithfulness Review 的唯一 proposition。
+
+    :param context: 当前 Review 任务的受限任务内上下文。
+    :return: 返回单行自然语言 proposition。
+    :raises SemanticPromptRenderError: Review 上下文缺失时抛出。
+    """
+    if context.claim_proposition is None:
+        raise SemanticPromptRenderError(
+            "faithfulness review prompt context is missing claim proposition",
+        )
+    return context.claim_proposition
+
+
 def _validate_projection_resources(request: SkillPromptRenderRequest) -> None:
     """校验受限投影覆盖 SkillSpec 声明的全部 TurnSnapshot 资源。
 
@@ -256,21 +347,51 @@ def _prompt_variables(
     :return: 返回与白名单完全闭合的顶层字符串变量集合。
     :raises SemanticPromptRenderError: 授权变量缺失或未知变量声明时抛出。
     """
-    renderers = {
-        "current_turn": _current_turn_text,
-        "last_assistant_questions": _question_lines,
-        "verified_prior_facts": _prior_fact_lines,
-        "trusted_pet_context": _pet_context_lines,
+    known_variables = {
+        "current_turn",
+        "last_assistant_questions",
+        "verified_prior_facts",
+        "trusted_pet_context",
+        "generated_claims",
+        "claim_proposition",
     }
-    unknown = set(allowed_variables) - set(renderers)
+    if "generated_claims" in allowed_variables or "claim_proposition" in allowed_variables:
+        if request.review_context is None:
+            raise SemanticPromptRenderError(
+                "review prompt variables require review context",
+            )
+    elif request.review_context is not None:
+        raise SemanticPromptRenderError(
+            "review context is not allowed for non-review skill",
+        )
+    unknown = set(allowed_variables) - known_variables
     if unknown:
         raise SemanticPromptRenderError(
             "semantic skill declares unknown prompt variable",
         )
-    return {
-        name: renderers[name](request.projection)
-        for name in allowed_variables
-    }
+    values: dict[str, str] = {}
+    for name in allowed_variables:
+        if name == "generated_claims":
+            if request.review_context is None:
+                raise SemanticPromptRenderError(
+                    "review prompt renderer requires review context",
+                )
+            values[name] = _generated_claim_lines(request.review_context)
+        elif name == "claim_proposition":
+            if request.review_context is None:
+                raise SemanticPromptRenderError(
+                    "review prompt renderer requires review context",
+                )
+            values[name] = _claim_proposition_text(request.review_context)
+        elif name == "current_turn":
+            values[name] = _current_turn_text(request.projection)
+        elif name == "last_assistant_questions":
+            values[name] = _question_lines(request.projection)
+        elif name == "verified_prior_facts":
+            values[name] = _prior_fact_lines(request.projection)
+        else:
+            values[name] = _pet_context_lines(request.projection)
+    return values
 
 
 def _reject_reserved_tags(values: dict[str, str]) -> None:
@@ -309,7 +430,7 @@ def _validate_rendered_tags(
 
 
 class StandardSkillPromptRenderer:
-    """表示基于标准化 SKILL.md 的 M06 提示词渲染器。
+    """表示基于标准化 SKILL.md 的 M06 / M08 提示词渲染器。
 
     :return: 无返回值；渲染器只消费启动期校验后的文档与受限投影。
     """
@@ -442,6 +563,34 @@ class ClaimPropositionInventoryPromptRenderer(StandardSkillPromptRenderer):
         super().__init__(load_semantic_skill_document("claim_inventory"))
 
 
+class ClaimCoverageReviewPromptRenderer(StandardSkillPromptRenderer):
+    """表示 Coverage Review standardized SKILL 渲染器。
+
+    :return: 无返回值；该渲染器只输出回合级覆盖审查矩阵规则。
+    """
+
+    def __init__(self) -> None:
+        """加载生产包内的 Coverage Review SKILL.md。
+
+        :return: 无返回值。
+        """
+        super().__init__(load_semantic_skill_document("claim_coverage_review"))
+
+
+class ClaimFaithfulnessReviewPromptRenderer(StandardSkillPromptRenderer):
+    """表示 Faithfulness Review standardized SKILL 渲染器。
+
+    :return: 无返回值；该渲染器只输出单 claim 忠实性审查矩阵规则。
+    """
+
+    def __init__(self) -> None:
+        """加载生产包内的 Faithfulness Review SKILL.md。
+
+        :return: 无返回值。
+        """
+        super().__init__(load_semantic_skill_document("claim_faithfulness_review"))
+
+
 class SkillPromptRendererRegistry:
     """表示 M06 生产 renderer 的不可变注册目录。
 
@@ -504,13 +653,17 @@ class SkillPromptRendererRegistry:
         :raises SemanticPromptRenderError: 缺失 renderer、未知 renderer 或任务类型不匹配时抛出。
         """
         materialized_specs = tuple(specs)
-        generation_identities = {
+        model_backed_identities = {
             (spec.skill_id, spec.skill_version)
             for spec in materialized_specs
-            if spec.execution_family is SkillExecutionFamily.STRUCTURED_GENERATION
+            if spec.execution_family
+            in {
+                SkillExecutionFamily.STRUCTURED_GENERATION,
+                SkillExecutionFamily.STRUCTURED_REVIEW,
+            }
         }
         renderer_identities = set(self._renderers)
-        if generation_identities != renderer_identities:
+        if model_backed_identities != renderer_identities:
             raise SemanticPromptRenderError(
                 "semantic prompt renderer catalog is not closed",
             )
@@ -518,7 +671,7 @@ class SkillPromptRendererRegistry:
             (renderer.skill_id, renderer.skill_version): renderer
             for renderer in self._renderers.values()
         }
-        for identity in generation_identities:
+        for identity in model_backed_identities:
             renderer = renderer_by_identity[identity]
             spec = next(
                 item
@@ -540,5 +693,7 @@ def build_production_prompt_renderer_registry() -> SkillPromptRendererRegistry:
         (
             TurnIntentPromptRenderer(),
             ClaimPropositionInventoryPromptRenderer(),
+            ClaimCoverageReviewPromptRenderer(),
+            ClaimFaithfulnessReviewPromptRenderer(),
         ),
     )

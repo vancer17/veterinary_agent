@@ -796,19 +796,43 @@ current_turn
 Review 与 generator 使用同一 `context_digest`。Reviewer 不读取生成器 prompt、reason、
 confidence、evidence 或下游领域状态，避免被生成器自证锚定。
 
+### 10.2.1 生产执行边界
+
+M08 只能审查已经通过 M07 结构验证的 Claim Inventory proposal。初始 Root Plan 不预置
+Review 任务，也不预估 claim 数量；Coverage / Faithfulness 任务由系统在 M07 accepted
+后按确定性规则展开。
+
+稳定边界：
+
+```text
+Review 模型调用必须经过 M05 StructuredLLMGateway
+Coverage Review 先执行
+Faithfulness Review 按单条 claim 有界 fan-out
+skipped review 必须携带稳定原因
+review bundle 不是权威 artifact
+semantic_review_supported 不是 verified
+```
+
+当 Coverage Review 只发现 inventory 级修复问题时，可以显式跳过即将因 claim 集合变化
+而失效的 Faithfulness Review，并把该 claim 标记为 skipped；skipped 不是 supported，
+后续不得当作已审查 claim 消费。
+
 ### 10.3 Coverage Review 输出
 
 Coverage Review 使用固定布尔矩阵，不输出自由 verdict：
 
 ```json
 {
-  "存在漏抽显式事实": false,
-  "存在多事实合并": false,
-  "存在重复claim": false,
-  "存在原文不支持的claim": false,
-  "存在非自包含proposition": false,
-  "存在shared scope拆分错误": false,
-  "未分类覆盖问题": false
+  "coverage_matrix": {
+    "存在漏抽显式事实": false,
+    "存在多事实合并": false,
+    "存在重复claim": false,
+    "存在原文不支持的claim": false,
+    "存在非自包含proposition": false,
+    "存在shared scope拆分错误": false,
+    "未分类覆盖问题": false
+  },
+  "missing_claim_candidates": []
 }
 ```
 
@@ -822,23 +846,25 @@ Faithfulness Review 使用固定中文布尔矩阵，不输出 `verdict`、`reas
 
 ```json
 {
-  "主体或指代范围改变": false,
-  "否定方向改变": false,
-  "否定范围改变": false,
-  "正常状态误写为否认": false,
-  "事实类型改变": false,
-  "时间范围改变": false,
-  "频率或数量改变": false,
-  "程度或强度改变": false,
-  "确定性改变": false,
-  "因果关系改变": false,
-  "医学推断或建议添加": false,
-  "命题不自包含": false,
-  "指代对象不明": false,
-  "时间基准不明": false,
-  "否定范围不明": false,
-  "比较基线不明": false,
-  "未分类语义改变": false
+  "faithfulness_matrix": {
+    "主体或指代范围改变": false,
+    "否定方向改变": false,
+    "否定范围改变": false,
+    "正常状态误写为否认": false,
+    "事实类型改变": false,
+    "时间范围改变": false,
+    "频率或数量改变": false,
+    "程度或强度改变": false,
+    "确定性改变": false,
+    "因果关系改变": false,
+    "医学推断或建议添加": false,
+    "命题不自包含": false,
+    "指代对象不明": false,
+    "时间基准不明": false,
+    "否定范围不明": false,
+    "比较基线不明": false,
+    "未分类语义改变": false
+  }
 }
 ```
 
@@ -861,7 +887,7 @@ Review LLM 不输出业务 verdict。业务结果由 deterministic rules 从布�
 
 ```text
 全部 false
-→ review_supported
+→ semantic_review_supported
 
 仅来源绑定缺失字段 true
 → clarification_required
@@ -878,6 +904,15 @@ Review LLM 不输出业务 verdict。业务结果由 deterministic rules 从布�
 
 可修复 true 维度数量超过上限
 → human_review_required，禁止自动全局重写
+
+Coverage claim 级问题与全部相关 Faithfulness 结果 supported 冲突
+→ disagreement
+
+Coverage 输出 missing claim candidates 但未标记存在漏抽显式事实
+→ disagreement
+
+Review schema / 任务 / claim 身份验证失败
+→ review_failed，且原任务不得因此通过
 ```
 
 来源绑定缺失字段包括：
@@ -1439,6 +1474,10 @@ derivation、repair / clarification router、typed patch、patch verifier 和 ap
 验收：review 不直接修改 artifact；review 不输出 corrected value；repair 只能修改白名单
 path；修复预算和终态有效。
 
+当前生产实现状态：Coverage Review、Faithfulness Review、review verifier 与 deterministic
+outcome derivation 已完成；repair / clarification router、typed patch、patch verifier 与
+applier 仍等待 M09 / M10，M08 结果仍需等待 M11 权威 artifact 提交。
+
 ### 阶段 E：Artifact 与 Claim Graph
 
 交付 artifact store、版本管理、repair lineage、stale 标记、graph assembly 和
@@ -1521,3 +1560,4 @@ durable execution 边界
 7. [consultation-state-answerability-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/consultation-state-answerability-change-summary.md)
 8. [clinical-safety-semantic-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/clinical-safety-semantic-change-summary.md)
 9. [semantic-collaboration-dag-m04-scheduler-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m04-scheduler-change-summary.md)
+10. [semantic-collaboration-dag-m08-review-skill-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m08-review-skill-change-summary.md)

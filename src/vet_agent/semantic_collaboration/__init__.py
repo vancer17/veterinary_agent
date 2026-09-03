@@ -4,8 +4,8 @@
 作用：作为受限语义协作 DAG 的稳定包入口。
 范围：暴露 M01 Skill 契约、目录、投影、生产组合根、M02 TurnSnapshot、
       M03 Plan IR、M04 Temporal-first DAG 调度、M05 结构化 LLM Gateway、
-      M06 标准化 SKILL 文档、受限 Prompt Renderer 与生成执行器
-      相关公开 API。
+      M06 标准化 SKILL 文档、受限 Prompt Renderer、M06 生成执行器与
+      M08 Coverage / Faithfulness Review 相关公开 API。
 说明：跨包调用不得深入内部模块；后续能力必须继续通过本入口
       显式暴露，避免形成隐式跨包依赖。
 =============================================================================
@@ -48,6 +48,7 @@ from .errors import (
     SemanticCollaborationError,
     SemanticGenerationContractError,
     SemanticPromptRenderError,
+    SemanticReviewContractError,
     SemanticSkillDocumentError,
     SemanticTaskExecutionError,
     SkillCatalogError,
@@ -118,11 +119,12 @@ from .plan_policy import (
 )
 from .plan_validator import PlanValidator
 from .production import (
+    CLAIM_COVERAGE_REVIEW_SPEC,
+    CLAIM_FAITHFULNESS_REVIEW_SPEC,
     CLAIM_INVENTORY_SPEC,
     PATCH_APPLIER_SPEC,
     PRODUCTION_SEMANTIC_SKILL_SPECS,
     SEMANTIC_REPAIR_SPEC,
-    SEMANTIC_REVIEW_SPEC,
     TURN_INTENT_SPEC,
     build_production_skill_catalog,
 )
@@ -133,13 +135,52 @@ from .projection import (
     render_skill_projection_from_metadata,
 )
 from .prompt_renderer import (
+    ClaimCoverageReviewPromptRenderer,
+    ClaimFaithfulnessReviewPromptRenderer,
     ClaimPropositionInventoryPromptRenderer,
     SkillPromptRenderer,
     SkillPromptRendererRegistry,
     SkillPromptRenderRequest,
+    SkillPromptReviewContext,
     TurnIntentPromptRenderer,
     build_production_prompt_renderer_registry,
 )
+from .review_contracts import (
+    ClaimCoverageReviewDerivedResult,
+    ClaimCoverageReviewDimension,
+    ClaimCoverageReviewMatrix,
+    ClaimCoverageReviewOutput,
+    ClaimCoverageReviewRecord,
+    ClaimCoverageReviewVerificationResult,
+    ClaimFaithfulnessExecutionState,
+    ClaimFaithfulnessReviewDerivedResult,
+    ClaimFaithfulnessReviewDimension,
+    ClaimFaithfulnessReviewMatrix,
+    ClaimFaithfulnessReviewOutput,
+    ClaimFaithfulnessReviewRecord,
+    ClaimFaithfulnessReviewVerificationResult,
+    ClaimFaithfulnessSkipReason,
+    ClarificationBindingType,
+    ClarificationGapProposal,
+    ReviewArtifactStore,
+    ReviewVerificationState,
+    SemanticReviewBundle,
+    SemanticReviewOutcome,
+    TODOReviewArtifactStore,
+    build_claim_coverage_review_execution,
+    build_claim_faithfulness_review_execution,
+    compute_claim_digest,
+    compute_review_task_hash,
+)
+from .review_outcome import (
+    ReviewOutcomeDeriver,
+    SemanticReviewDerivationPolicy,
+)
+from .review_runner import (
+    StructuredReviewSkillRunner,
+    validate_review_configuration,
+)
+from .review_verifier import SemanticReviewVerifier
 from .scheduler_contracts import (
     DAG_SCHEDULER_CONTRACT_VERSION,
     DAGExecutionPolicy,
@@ -233,6 +274,8 @@ from .verifier import (
 
 __all__ = [
     "ALLOWED_SKILL_PROMPT_VARIABLES",
+    "CLAIM_COVERAGE_REVIEW_SPEC",
+    "CLAIM_FAITHFULNESS_REVIEW_SPEC",
     "CLAIM_INVENTORY_SPEC",
     "DAG_SCHEDULER_CONTRACT_VERSION",
     "DOMAIN_ISOLATED_CONTEXT_RESOURCES",
@@ -242,7 +285,6 @@ __all__ = [
     "PRODUCTION_PLAN_POLICY_ID",
     "PRODUCTION_SEMANTIC_SKILL_SPECS",
     "SEMANTIC_REPAIR_SPEC",
-    "SEMANTIC_REVIEW_SPEC",
     "SKILL_DOCUMENT_REQUIRED_MODEL_SECTIONS",
     "SKILL_DOCUMENT_SECTIONS",
     "SKILL_DOC_REQUIRED_SECTIONS",
@@ -252,8 +294,26 @@ __all__ = [
     "BoundedConversationHistoryReader",
     "BoundedHistoryReadResult",
     "BoundedHistoryReadStatus",
+    "ClaimCoverageReviewDerivedResult",
+    "ClaimCoverageReviewDimension",
+    "ClaimCoverageReviewMatrix",
+    "ClaimCoverageReviewOutput",
+    "ClaimCoverageReviewPromptRenderer",
+    "ClaimCoverageReviewRecord",
+    "ClaimCoverageReviewVerificationResult",
+    "ClaimFaithfulnessExecutionState",
+    "ClaimFaithfulnessReviewDerivedResult",
+    "ClaimFaithfulnessReviewDimension",
+    "ClaimFaithfulnessReviewMatrix",
+    "ClaimFaithfulnessReviewOutput",
+    "ClaimFaithfulnessReviewPromptRenderer",
+    "ClaimFaithfulnessReviewRecord",
+    "ClaimFaithfulnessReviewVerificationResult",
+    "ClaimFaithfulnessSkipReason",
     "ClaimInventoryProposalShape",
     "ClaimPropositionInventoryPromptRenderer",
+    "ClarificationBindingType",
+    "ClarificationGapProposal",
     "ContextContract",
     "DAGDependencyFailure",
     "DAGExecutionPolicy",
@@ -293,6 +353,9 @@ __all__ = [
     "PostgresSemanticDAGProjectionRepository",
     "RepairMapping",
     "RestrictedSkillTemplate",
+    "ReviewArtifactStore",
+    "ReviewOutcomeDeriver",
+    "ReviewVerificationState",
     "SchedulerError",
     "SchemaContract",
     "SchemaContractReference",
@@ -307,6 +370,11 @@ __all__ = [
     "SemanticGenerationVerifier",
     "SemanticModelProposal",
     "SemanticPromptRenderError",
+    "SemanticReviewBundle",
+    "SemanticReviewContractError",
+    "SemanticReviewDerivationPolicy",
+    "SemanticReviewOutcome",
+    "SemanticReviewVerifier",
     "SemanticSkillDocument",
     "SemanticSkillDocumentError",
     "SemanticSkillDocumentMetadata",
@@ -331,6 +399,7 @@ __all__ = [
     "SkillPromptRenderRequest",
     "SkillPromptRenderer",
     "SkillPromptRendererRegistry",
+    "SkillPromptReviewContext",
     "SkillRegistry",
     "SkillRepairMappingRecord",
     "SkillSpec",
@@ -347,6 +416,8 @@ __all__ = [
     "StructuredLLMSchemaError",
     "StructuredModelTransport",
     "StructuredModelTransportResponse",
+    "StructuredReviewSkillRunner",
+    "TODOReviewArtifactStore",
     "TODOSemanticTaskExecutor",
     "TODOTurnSnapshotReader",
     "TemporalDAGActivityRuntime",
@@ -388,6 +459,8 @@ __all__ = [
     "VerifiedPriorFactSummary",
     "VerifiedPriorFactSummaryStatus",
     "VerifierBinding",
+    "build_claim_coverage_review_execution",
+    "build_claim_faithfulness_review_execution",
     "build_dag_task_policies",
     "build_production_plan_policy",
     "build_production_prompt_renderer_registry",
@@ -396,9 +469,11 @@ __all__ = [
     "canonical_gateway_json",
     "canonical_plan_json",
     "canonical_turn_snapshot_json",
+    "compute_claim_digest",
     "compute_gateway_digest",
     "compute_plan_digest",
     "compute_plan_policy_digest",
+    "compute_review_task_hash",
     "compute_turn_snapshot_digest",
     "evaluate_dag_frontier",
     "execution_layers",
@@ -409,4 +484,5 @@ __all__ = [
     "schema_reference_matches",
     "semantic_dag_run_id",
     "validate_generation_configuration",
+    "validate_review_configuration",
 ]

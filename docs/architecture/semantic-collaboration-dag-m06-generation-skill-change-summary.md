@@ -34,7 +34,7 @@
 | M05 Gateway 组合 | 已实现 |
 | 最小 M07 结构 verifier | 已实现 |
 | 持久化 TurnSnapshotReader | TODO，显式 Fail Fast |
-| M08 Coverage / Faithfulness Review | 未实现 |
+| M08 Coverage / Faithfulness Review | 已在后续 M08 阶段实现 |
 | M11 Artifact Store | 未实现 |
 | `SemanticTaskExecutor` 生产组合 | 未替换 TODO |
 | VetOrchestrator 接入 | 未接入 |
@@ -360,10 +360,10 @@ claim envelope 分配尚未实现，必须等 M08 审查与可能 repair 后的 
 | TODO | 当前行为 | 后续责任 | 启用条件 |
 |---|---|---|---|
 | 持久化 TurnSnapshotReader | 显式 Fail Fast | M02 / M06 运行时接入 | 定义 snapshot 持久化、按 digest 读取与生命周期契约 |
-| Coverage Review | 未实现 | M08 | 输入 current_turn 与 generated claims，输出固定布尔覆盖矩阵 |
-| Faithfulness Review | 未实现 | M08 | 单 claim 输入，输出中文语义漂移布尔矩阵 |
-| Evidence Binding | 未实现，当前可人工审查 | M08 / 后置证据绑定 | 独立 anchor 契约或人工审查记录契约明确 |
-| Claim Envelope Allocator | 未实现 | M08 / M12 | claim 列表通过 coverage、faithfulness 与 repair 后稳定 |
+| Coverage Review | 已在后续 M08 实现 | M08 | 输入 current_turn 与 generated claims，输出固定布尔覆盖矩阵 |
+| Faithfulness Review | 已在后续 M08 实现 | M08 | 单 claim 输入，输出中文语义漂移布尔矩阵 |
+| Evidence Binding | 未实现，当前可人工审查 | 后置证据绑定 / 人工审查 | 独立 anchor 契约或人工审查记录契约明确；M08 不自证 evidence |
+| Claim Envelope Allocator | 未实现 | M09 / M12 | claim 列表通过 M08 审查与 M09/M10 修复后稳定；M08 不分配 envelope |
 | Artifact Store | 未实现 | M11 | append-only、版本、lineage、stale 与幂等提交契约明确 |
 | `SemanticTaskExecutor` 生产组合 | TODO executor 继续显式失败 | M04 / M06 / M07 / M11 | M07、M08、M11 的消费时序与失败终态闭合 |
 | 真实 LiteLLM 冒烟 | 未执行 | 集成验证 | 显式外部测试环境与模型 snapshot |
@@ -395,6 +395,10 @@ Canonical Descriptor lane
 
 若后续要恢复其中任何能力，必须先修订生产架构基线、SkillSpec、PlanPolicy 与
 验收测试，不允许在实现中静默兼容。
+
+M08 当前已提供 Coverage / Faithfulness Review 与 deterministic outcome，但其结果仍不是
+权威 artifact。M06 proposal 必须先经过 M07、M08、M09/M10 与 M11 门禁，才能进入
+claim envelope allocation 和 M12 Claim Graph。
 
 ## 9. 后续模块对接边界
 
@@ -542,3 +546,9 @@ SemanticTaskExecutor 组合完成
 真实 LiteLLM / Temporal / VetOrchestrator 联调完成
 生产切换或回滚策略变化
 ```
+
+## 12. 关联材料
+
+1. [semantic-collaboration-dag-production-architecture.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-production-architecture.md)
+2. [semantic-collaboration-dag-production-implementation-plan.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-production-implementation-plan.md)
+3. [semantic-collaboration-dag-m08-review-skill-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m08-review-skill-change-summary.md)

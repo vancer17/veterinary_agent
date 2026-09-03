@@ -58,12 +58,13 @@ class PlanDependencyScope(StrEnum):
 
 
 class PlanTaskSelectionSource(StrEnum):
-    """表示计划任务由确定性生产策略产生。
+    """表示计划任务由确定性系统规则产生。
 
-    :return: 无返回值；当前初始 Root Plan 不存在模型选择来源。
+    :return: 无返回值；所有任务来源均不允许由模型自选。
     """
 
     PLAN_POLICY = "plan_policy"
+    DETERMINISTIC_REVIEW_EXPANSION = "deterministic_review_expansion"
 
 
 class PlanValidationFailureCode(StrEnum):
