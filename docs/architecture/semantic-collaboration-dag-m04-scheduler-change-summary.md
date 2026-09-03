@@ -26,7 +26,7 @@
 | PostgreSQL 只读投影 | 已实现 |
 | Temporal Server Docker 编排 | 未实现 |
 | 真实 Temporal workflow 联调 | 未执行 |
-| M05 StructuredLLMGateway | 未实现 |
+| M05 StructuredLLMGateway | 已实现；尚未接入任务执行器 |
 | M07 Deterministic Verifier | 未实现 |
 | M11 Artifact Store | 未实现 |
 | VetOrchestrator 生产切换 | 未接入 |
@@ -35,7 +35,8 @@
 自有数据库任务队列、租约、attempt 状态机或 worker 恢复协议。
 
 当前不能宣称的是：语义协作 DAG 已经可以端到端生成 verified claim graph。
-原因在于 M05～M11 的语义执行与 artifact 链路尚未接入。
+原因在于 M05 尚未接入 M04 任务执行器，且 M06～M11 的生成 SKILL、
+verifier 与 artifact 链路尚未完成。
 
 ## 2. 架构结论
 
@@ -505,7 +506,7 @@ finish_run
 | TODO | 责任模块 | M04 当前边界 | 后续接入方式 |
 |---|---|---|---|
 | Temporal Docker 编排 | 运维 / 部署 | 不提供服务编排 | 提供 Server、持久化、namespace、task queue、worker 与健康检查 |
-| StructuredLLMGateway | M05 | 不调用模型 | 作为任务执行器内的模型调用边界 |
+| StructuredLLMGateway | M05 | M04 不直接调用模型 | 消费 M05 已实现的模型调用边界，在执行器内返回未验证 proposal |
 | Deterministic Verifier | M07 | 不解释任务输出 | 校验 schema、所有权、evidence 与 forbidden output |
 | Artifact Store | M11 | 只传递 artifact reference | 提供 append-only artifact、版本、lineage 与 stale |
 | Review SKILL | M08 | 不做 review | 按 review 契约诊断任务或 artifact |
@@ -519,7 +520,7 @@ finish_run
 
 ### 9.1 M05 对接
 
-M05 应实现：
+M05 已实现：
 
 ```text
 结构化模型调用
@@ -528,6 +529,15 @@ strict response schema
 usage / finish reason
 调用失败显式化
 ```
+
+M04 任务执行器后续消费的是：
+
+```text
+SemanticModelProposal
+attempt metadata
+```
+
+该结果仍必须交给 M07 verifier，不能直接生成 verified artifact 或任务成功终态。
 
 验收：
 

@@ -455,6 +455,13 @@ canonical descriptor
 
 ## 8. 生成任务契约
 
+每个生成 SKILL 必须同时交付版本化的 prompt renderer。该 renderer 根据
+SkillSpec、受限 TurnSnapshot 投影和目标 envelope 生成不可变
+`SkillPromptProjection`。
+
+Structured LLM Gateway 只消费、校验、序列化和哈希该投影，不得生成 SKILL
+语义提示词、解析 Markdown 正文、按症状词扩展上下文或读取未授权资源。
+
 ### 8.1 Turn Intent
 
 输出 fixed-field intent：
