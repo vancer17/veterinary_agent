@@ -255,6 +255,8 @@ self-justification
 Evidence binding 后置为独立状态：
 
 ```text
+clarification_required
+repair_then_clarification_required
 evidence_binding_pending
 human_review_required
 verified
@@ -323,13 +325,84 @@ Faithfulness Review 是 claim 级任务，一次只审查一个 proposition。
 
 ```text
 全部 false → review_supported
-歧义 / 未分类 true → human_review_required
-医学越权 true → rejected 或 human_review_required
-有限可修复 true → repair_required
+来源绑定缺失 true → clarification_required
+模型漂移 / 模型越权 true → repair_required
+模型漂移与来源绑定缺失同时 true → repair_then_clarification_required
+未分类 true → human_review_required
 可修复 true 过多 → human_review_required
 ```
 
-## 7. Deferred lane
+来源绑定缺失维度包括：
+
+```text
+指代对象不明
+时间基准不明
+否定范围不明
+比较基线不明
+```
+
+这些维度不允许由 Repair 猜测补全，应生成显式 clarification gap 并交给问诊策略决定
+是否追问或带 gap 阶段性回答。
+
+`医学推断或建议添加` 属于模型越权，不属于来源绑定缺失。它应进入删除式局部修复：
+只移除模型添加的诊断、风险、就医或治疗建议，并恢复用户明确表达；Repair 不判断医学
+结论是否正确，也不生成新的医学建议。
+
+## 7. Repair 与 Clarification 边界
+
+核心原则：
+
+```text
+信息存在但模型表达错 → repair
+信息不存在但下游需要 → clarification
+模型越权添加内容 → repair by removal / restoration
+无法归类 → human review
+结构非法 → blocked
+```
+
+可修复问题包括：
+
+```text
+否定方向或范围漂移
+normal / denied 表达漂移
+时间、频率、数量、程度或确定性措辞漂移
+因果措辞漂移
+医学推断、风险判断或建议添加
+proposition 不自包含且授权上下文可补全
+shared scope 漏拆或合并
+漏抽显式 claim
+```
+
+`医学推断或建议添加` 的允许修复方式仅限：
+
+```text
+删除模型添加的医学解释、诊断、风险、就医建议或治疗建议
+恢复用户明确报告、猜测、未观察或请求语义
+```
+
+禁止：
+
+```text
+判断医学结论是否正确
+生成新的诊断、风险或建议
+补造用户未提供的事实
+```
+
+应进入 clarification 的问题包括：
+
+```text
+指代对象不明
+时间基准不明
+否定范围不明
+比较基线不明
+命题不自包含且授权上下文无法补全
+```
+
+`clarification_required` 不是 verified，也不是强制追问指令。语义协作 DAG 输出显式
+gap；是否追问由问诊领域结合 `answer_now`、安全状态、回答充分性、已有事实和追问轮数
+决定。上一轮未消解 clarification gap 不得进入 verified prior fact summary。
+
+## 8. Deferred lane
 
 以下 lane 不进入当前生产实现：
 
@@ -354,7 +427,7 @@ verifier
 
 不得为了“看起来完整”而把自然语言 proposition 反向拆成无人消费的结构化字段。
 
-## 8. 实现防漂移检查清单
+## 9. 实现防漂移检查清单
 
 实现和 code review 时必须检查：
 
@@ -374,7 +447,9 @@ claim 数量不匹配是否 blocked
 Faithfulness Review 是否输出固定布尔矩阵
 review 是否输出 corrected value
 repair 是否只针对具体 true 维度
-歧义是否自动修复
+来源绑定缺失是否输出 clarification_required 而不是自动修复
+医学推断 / 建议添加是否只做删除或还原式修复
+修复后医学推断是否被重新审查
 semantic_review_supported 是否被误写成 verified
 人工审查是否显式记录
 生产模块是否 import 实验 runner
@@ -383,7 +458,7 @@ semantic_review_supported 是否被误写成 verified
 
 任一项不满足，应阻断实现合并。
 
-## 9. 最小验收样本
+## 10. 最小验收样本
 
 至少覆盖：
 
@@ -398,7 +473,8 @@ shared scope：饭和水都正常
 好像没有呕吐
 可能是换粮导致
 上一轮短答：正常
-指代不明：它有点软
+指代不明：它有点软，进入 clarification gap
+医学推断添加，进入删除式修复
 用户纠正
 answer_now
 纯问题且无事实
@@ -408,7 +484,7 @@ claim 数量不匹配
 
 这些样本是工程质量门禁，不是重新开启模型质量实验或 held-out 优化。
 
-## 10. 关联材料
+## 11. 关联材料
 
 1. [semantic-collaboration-dag-production-architecture.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-production-architecture.md)
 2. [semantic-collaboration-dag-production-implementation-plan.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-production-implementation-plan.md)

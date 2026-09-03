@@ -101,10 +101,11 @@ contract-first
 → Deterministic Verifier
 → Coverage Review / Faithfulness Review
 → Review Verifier
-→ Deterministic Repair Planner
-→ 局部 Repair SKILL
-→ Patch Verifier
-→ Patch Applier
+→ Deterministic Repair / Clarification Router
+   ├─ 局部 Repair SKILL
+   │    → Patch Verifier
+   │    → Patch Applier
+   └─ Clarification Gap Artifact
 → Artifact Store / Version
 → Claim Graph Assembly
 → Graph Consistency Gate
@@ -755,26 +756,41 @@ Faithfulness Review 使用固定中文布尔矩阵，不输出 `verdict`、`reas
 
 ### 10.5 确定性结果派生
 
-Review LLM 不输出业务 verdict。业务结果由 deterministic rules 从布尔矩阵派生：
+Review LLM 不输出业务 verdict。业务结果由 deterministic rules 从布尔矩阵派生。
+
+维度先按信息来源分类：
+
+```text
+模型漂移类：信息在 current_turn / 授权上下文中存在，但 proposition 表达错误
+模型越权类：模型添加了推断、风险、建议或用户未表达的结论
+来源绑定缺失类：current_turn / 授权上下文本身无法确定对象、时间基准、否定范围或比较基线
+未分类类：无法稳定归入上述类型
+```
+
+派生规则：
 
 ```text
 全部 false
 → review_supported
 
-任一歧义字段 true，或未分类问题 true
-→ human_review_required
+仅来源绑定缺失字段 true
+→ clarification_required
 
-医学推断或建议添加 true
-→ review_rejected 或 human_review_required
-
-可修复漂移字段 true 数量不超过上限
+仅模型漂移 / 模型越权字段 true，且数量不超过上限
 → repair_required
 
-可修复漂移字段 true 数量超过上限
+模型漂移 / 越权字段与来源绑定缺失字段同时 true
+→ repair_then_clarification_required：
+  先删除或还原模型引入的漂移，再保留保守 proposition 与 clarification gap
+
+未分类字段 true
+→ human_review_required
+
+可修复 true 维度数量超过上限
 → human_review_required，禁止自动全局重写
 ```
 
-歧义字段包括：
+来源绑定缺失字段包括：
 
 ```text
 指代对象不明
@@ -782,6 +798,20 @@ Review LLM 不输出业务 verdict。业务结果由 deterministic rules 从布�
 否定范围不明
 比较基线不明
 ```
+
+`命题不自包含` 必须条件路由：
+
+```text
+授权上下文足以补全主体 / target → repair
+授权上下文不足以补全 → clarification_required
+```
+
+`医学推断或建议添加` 属于模型越权类，不是来源绑定缺失类。它应进入局部修复，
+删除或还原模型添加的医学推断、风险判断或建议；Repair 不得评估该医学内容是否正确。
+
+`clarification_required` 不是 verified，也不是系统失败。它表示当前 proposition 存在
+显式语义 gap，需要下游问诊策略决定是否追问、是否带 gap 阶段性回答，或在下一回合
+TurnSnapshot 中消解。
 
 ### 10.6 审查边界
 
@@ -804,6 +834,7 @@ Review 禁止：
 读取下游领域状态
 把审查失败当作原任务通过
 把未分类问题自动归入某个已知维度
+把来源绑定缺失当作可修复漂移
 ```
 
 ## 11. 局部重写与 typed patch
@@ -811,34 +842,57 @@ Review 禁止：
 ### 11.1 Repair Planner
 
 Repair Planner 是 deterministic 组件，根据 Faithfulness / Coverage 布尔矩阵中为 true 的
-具体维度创建受限修复任务。禁止由 Review LLM 直接决定自由修复。
+具体维度创建受限修复或 clarification gap 任务。禁止由 Review LLM 直接决定自由修复。
 
 映射示例：
 
-| review dimension | 允许的 Repair SKILL |
-|---|---|
-| `否定方向改变` | `repair.claim.assertion_direction` |
-| `否定范围改变` | `repair.claim.assertion_scope` |
-| `正常状态误写为否认` | `repair.claim.normal_statement` |
-| `时间范围改变` | `repair.claim.temporal_wording` |
-| `频率或数量改变` | `repair.claim.frequency_or_quantity` |
-| `程度或强度改变` | `repair.claim.degree_wording` |
-| `确定性改变` | `repair.claim.certainty_wording` |
-| `因果关系改变` | `repair.claim.causality_wording` |
-| `命题不自包含` | `repair.claim.self_containment` |
-| `存在多事实合并` / `存在shared scope拆分错误` | `repair.claim_inventory.scope_split` |
-| `存在漏抽显式事实` | `repair.claim_inventory.missing_claim` |
+| review dimension | 路由 | 允许的 Repair / Gap SKILL |
+|---|---|---|
+| `否定方向改变` | repair | `repair.claim.assertion_direction` |
+| `否定范围改变` | repair | `repair.claim.assertion_scope` |
+| `正常状态误写为否认` | repair | `repair.claim.normal_statement` |
+| `时间范围改变` | repair | `repair.claim.temporal_wording` |
+| `频率或数量改变` | repair | `repair.claim.frequency_or_quantity` |
+| `程度或强度改变` | repair | `repair.claim.degree_wording` |
+| `确定性改变` | repair | `repair.claim.certainty_wording` |
+| `因果关系改变` | repair | `repair.claim.causality_wording` |
+| `医学推断或建议添加` | repair | `repair.claim.remove_external_medical_inference` |
+| `命题不自包含` 且上下文可补全 | repair | `repair.claim.self_containment` |
+| `命题不自包含` 且上下文不可补全 | clarification | `clarification.claim.binding` |
+| `指代对象不明` | clarification | `clarification.claim.reference_target` |
+| `时间基准不明` | clarification / gap | `clarification.claim.temporal_anchor` |
+| `否定范围不明` | clarification | `clarification.claim.negation_scope` |
+| `比较基线不明` | clarification / gap | `clarification.claim.comparison_baseline` |
+| `存在多事实合并` / `存在shared scope拆分错误` | repair | `repair.claim_inventory.scope_split` |
+| `存在漏抽显式事实` | repair | `repair.claim_inventory.missing_claim` |
+| `未分类语义改变` | human review | 无自动修复 |
 
-以下维度不得自动修复，必须进入人工审查或 rejected：
+`医学推断或建议添加` 的修复只能是受限删除 / 还原：
 
 ```text
-医学推断或建议添加
-指代对象不明
-时间基准不明
-否定范围不明
-比较基线不明
-未分类语义改变
+删除模型添加的诊断、医学解释、风险判断、就医建议或治疗建议
+恢复用户明确表达的事实、猜测、未观察或请求语义
+不得判断医学结论是否正确
+不得生成新的医学建议
+不得补造用户未提供的事实
 ```
+
+因此该修复不是医学判断，而是移除模型越权生成内容。
+
+以下问题不得自动修复：
+
+```text
+forbidden field 出现
+schema 根本非法
+原文无证据且无法还原为 supported proposition
+来源绑定缺失：指代对象、时间基准、否定范围或比较基线不明
+review 维度未分类
+结构 / ID 越权
+下游 adapter 未实现
+```
+
+来源绑定缺失输出 `clarification_required`，不得由 Repair 猜测对象、时间基准、否定
+范围或比较基线。
 
 ### 11.2 RepairPatchProposal
 
@@ -878,7 +932,25 @@ repair budget 未超限
 Evidence binding 不作为 Patch Applier 的语义判断条件；patch 后仍处于
 `evidence_binding_pending`，除非独立证据门禁已完成。
 
-### 11.4 修复边界
+### 11.4 修复与澄清边界
+
+核心原则：
+
+```text
+Repair may remove or restore model-introduced drift,
+but must not create information absent from the TurnSnapshot.
+Clarification is required when the source itself lacks the binding.
+```
+
+即：
+
+```text
+信息存在但模型表达错 → repair
+信息不存在但下游需要 → clarification
+模型越权添加内容 → repair by removal / restoration
+无法归类 → human review
+结构非法 → blocked
+```
 
 可修复：
 
@@ -887,21 +959,31 @@ Evidence binding 不作为 Patch Applier 的语义判断条件；patch 后仍处
 normal / denied 表达漂移
 时间、频率、数量、程度或确定性措辞漂移
 因果措辞漂移
-proposition 不自包含
+医学推断、风险判断或建议等模型越权内容
+proposition 不自包含且授权上下文可补全
 shared scope 漏拆或合并
 漏抽显式 claim，且 coverage hint 可用
 ```
 
-不可自动修复：
+应进入 clarification：
+
+```text
+指代对象不明
+时间基准不明
+否定范围不明
+比较基线不明
+proposition 不自包含且授权上下文无法补全
+```
+
+不得自动修复：
 
 ```text
 forbidden field 出现
 schema 根本非法
-原文无证据
-指代或比较基线不明
-医学推断、风险或建议越权
-下游 adapter 未实现
+原文无证据且无 supported proposition 可还原
+模型发明 entity_id / canonical_id
 review 维度未分类
+下游 adapter 未实现
 ```
 
 ### 11.5 修复预算
@@ -929,6 +1011,8 @@ repair_depth = 1
 schema_valid
 semantic_review_pending
 semantic_review_supported
+clarification_required
+repair_then_clarification_required
 evidence_binding_pending
 human_review_required
 verified
@@ -945,7 +1029,8 @@ timeout
 ```
 
 `semantic_review_supported` 不等于 `verified`。在生产证据门禁完成前，artifact 必须保持
-`evidence_binding_pending` 或 `human_review_required`。
+`evidence_binding_pending`、`clarification_required`、`repair_then_clarification_required`
+或 `human_review_required`。
 
 ### 12.2 空结果语义
 
@@ -978,7 +1063,43 @@ artifact base version
 
 终态为 `disagreement`。除非存在显式 adjudicator 契约，否则不得自动裁决。
 
-### 12.4 Evidence binding 后置
+### 12.4 Clarification gap artifact
+
+`clarification_required` 必须产生显式 gap artifact 或等价结构化状态，至少保留：
+
+```text
+claim proposition
+ambiguous dimension
+required binding type
+turn snapshot digest
+artifact base version
+是否已经过模型越权修复
+```
+
+Clarification gap 语义：
+
+```text
+不是 verified
+不是 failure
+不是 unknown fact
+不是自动追问指令
+```
+
+语义协作 DAG 不直接生成最终用户追问文案。是否追问由问诊领域结合以下信息决定：
+
+```text
+answer_now
+安全状态
+回答充分性策略
+已有事实
+追问轮数
+医学必要缺口
+```
+
+上一轮 clarification gap 在未消解前不得进入 `verified_prior_fact_summary`。下一回合
+TurnSnapshot 可通过 `last_assistant_questions` 支持用户短答消解。
+
+### 12.5 Evidence binding 后置
 
 Evidence binding 是独立后续任务，不由生成器或 Faithfulness Review 自证。
 
@@ -999,9 +1120,10 @@ decision digest
 把人工通过伪装成自动 verified
 无 evidence binding 时静默标记 verified
 人工审查直接改写 artifact
+clarification gap 被当成已验证事实
 ```
 
-### 12.5 下游 stale
+### 12.6 下游 stale
 
 上游 claim proposition 修复导致拆分、合并或删除时，必须标记相关下游结果 stale：
 
@@ -1025,6 +1147,8 @@ turn intent
 claim proposition
 coverage review outcome
 faithfulness review outcome
+repair outcome
+clarification gap status
 evidence binding status
 artifact version / lineage
 ```
@@ -1042,7 +1166,7 @@ ID 引用存在
 依赖完整
 claim proposition 无重复
 intent 与 claim 集合身份一致
-review / repair / evidence 状态完整
+review / repair / clarification / evidence 状态完整
 artifact version 与 lineage 一致
 field ownership 不冲突
 ```
@@ -1105,7 +1229,12 @@ normal / denied / uncertain 映射
 呕吐否认
 血便否认
 用户纠正
+clarification_required gap
 ```
+
+问诊投影必须把 clarification gap 交给问诊回答充分性 / followup 策略。语义 DAG 不得
+把 gap 直接转换为强制追问；当 `answer_now=true` 且无安全阻断时，问诊策略可以带 gap
+输出阶段性回答。
 
 禁止：
 
@@ -1173,7 +1302,10 @@ claim count mismatch rate
 review disagreement rate
 coverage missing rate
 faithfulness drift dimension distribution
+clarification required rate
+repair then clarification rate
 repair required rate
+repair by medical-inference removal rate
 repair success rate
 repair regression rate
 repair exhausted rate
@@ -1212,7 +1344,7 @@ proposition；claim 数量与 envelope 数量不一致显式 blocked。
 ### 阶段 D：Review 与 Repair
 
 交付 Coverage Review、Faithfulness Review、review verifier、deterministic outcome
-derivation、repair planner、typed patch、patch verifier 和 applier。
+derivation、repair / clarification router、typed patch、patch verifier 和 applier。
 
 验收：review 不直接修改 artifact；review 不输出 corrected value；repair 只能修改白名单
 path；修复预算和终态有效。
@@ -1247,6 +1379,8 @@ shared scope 拆分
 claim 数量不匹配 blocked
 主题词 claim 拒绝
 review 布尔矩阵 extra field 拒绝
+医学推断添加可被删除式局部修复
+来源绑定缺失进入 clarification_required
 review 输出越权拒绝
 repair patch 越权拒绝
 base version 冲突拒绝

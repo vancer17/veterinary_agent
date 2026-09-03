@@ -243,7 +243,7 @@ failure_message
 约束：
 
 ```text
-verified / repair_verified 必须携带 artifact_reference
+verified / repair_verified / clarification_required 必须携带 artifact_reference
 失败终态不得携带 artifact_reference
 失败终态必须携带 failure_code 和 failure_message
 not_applicable 不携带 artifact，也不携带 failure
@@ -255,6 +255,7 @@ not_applicable 不携带 artifact，也不携带 failure
 verified
 repair_verified
 not_applicable
+clarification_required
 blocked
 disagreement
 repair_exhausted
@@ -264,6 +265,12 @@ review_failed
 context_budget_exceeded
 timeout
 ```
+
+`clarification_required` 是合法业务终态，不是基础设施失败。它必须携带可审计的
+clarification gap artifact reference；调度器只记录该终态，不生成用户追问，也不读取
+问诊回答充分性策略。当前 M04 契约若尚未支持该状态，必须在 M08 / M09 接入前显式
+扩展 terminal state 与 artifact payload 契约，不得把 clarification gap 伪装成
+`blocked`、`timeout` 或 verified。
 
 ### 4.3 当前 TODO 空壳
 

@@ -404,7 +404,8 @@ M03 PlanIR
 4. 依赖失败传播。
 5. cancellation / deadline 传播。
 6. 任务终态投影记录。
-7. 任务队列、语义 / 基础设施重试、worker 租约与恢复由 Temporal 负责。
+7. `clarification_required` 终态与 clarification gap artifact 引用投影契约。
+8. 任务队列、语义 / 基础设施重试、worker 租约与恢复由 Temporal 负责。
 
 **验收标准**
 
@@ -413,6 +414,7 @@ M03 PlanIR
 独立任务可并行
 依赖失败输出 dependency_failed
 超时输出 timeout
+来源绑定缺失输出 clarification_required，而不是 blocked 或 verified
 任务无悬空状态
 调度器不修改 TurnSnapshot
 数据库不保存 worker_id / lease / ready / running / attempt 调度状态
@@ -706,7 +708,8 @@ M07 Verifier
 5. deterministic outcome derivation。
 6. review 输出 verifier。
 7. review terminal state。
-8. 人工审查过渡状态契约。
+8. `clarification_required` 与 `repair_then_clarification_required` 派生契约。
+9. 人工审查过渡状态契约。
 
 **Coverage Review 输出**
 
@@ -760,7 +763,11 @@ review 输出 forbidden field blocked
 review_failed 不使原任务 verified
 review_disagreement 显式保留
 全部 false 派生 review_supported
-歧义和未分类维度派生 human_review_required
+来源绑定缺失维度派生 clarification_required
+模型漂移 / 模型越权维度派生 repair_required
+模型漂移与来源绑定缺失同时存在派生 repair_then_clarification_required
+医学推断或建议添加派生删除式局部修复
+未分类维度派生 human_review_required
 可修复维度 true 数量超过上限派生 human_review_required
 ```
 
@@ -770,6 +777,7 @@ review_disagreement 显式保留
 Faithfulness Review
 → Coverage Review
 → deterministic outcome derivation
+→ repair / clarification router
 → 人工审查状态接入
 ```
 
@@ -786,6 +794,7 @@ ReviewDimensionCatalog
 RepairMapping
 RepairPlanner
 RepairBudget
+ClarificationGapRouter
 HumanReviewRouter
 ```
 
@@ -802,13 +811,17 @@ M08 ReviewArtifact
 2. review dimension 到 Repair SKILL 的白名单映射。
 3. repair depth 控制。
 4. per-proposition / per-turn budget。
-5. `repair_unavailable` 与 `human_review_required` 状态。
+5. repair dimension 到删除式修复 / 措辞修复的白名单映射。
+6. `clarification_required` gap 路由。
+7. `repair_unavailable` 与 `human_review_required` 状态。
 
 **验收标准**
 
 ```text
 未知 review dimension 不动态匹配 repair
-歧义、未分类和医学越权维度不自动修复
+来源绑定缺失维度输出 clarification_required，不进入 repair
+医学推断或建议添加进入删除式局部 repair
+未分类维度输出 human_review_required
 repair_depth 不超过 1
 不允许 repair of repair
 同一 proposition 最多一次修复
@@ -820,7 +833,7 @@ budget 超限输出 repair_exhausted
 
 **目标**
 
-用局部 typed patch 修复可恢复的自然语言 proposition 漂移。
+用局部 typed patch 修复可恢复的自然语言 proposition 漂移，并删除模型引入的越权生成内容。
 
 **范围**
 
@@ -844,16 +857,18 @@ M11 ArtifactStore
 
 1. Repair SKILL 注册。
 2. review dimension 到 patch operation 的白名单。
-3. base version 契约。
-4. patch verifier。
-5. deterministic applier。
-6. repair lineage。
+3. `remove_external_medical_inference` 删除式 patch 契约。
+4. base version 契约。
+5. patch verifier。
+6. deterministic applier。
+7. repair lineage。
 
 **验收标准**
 
 ```text
 patch path 越权 blocked
 未申报 review dimension 的 patch blocked
+医学推断 / 风险 / 建议 patch 只能删除或还原用户表述，不得生成新医学结论
 base_version 冲突 blocked
 forbidden field 不可修复
 schema 根本非法输出不可修复
@@ -867,8 +882,9 @@ repair lineage 可追溯
 不自由重写完整 artifact
 不整轮重写 claim list
 不补造无证据事实
-不自动消解歧义指代
-不修改临床风险或安全动作
+不自动消解指代、时间基准、否定范围或比较基线
+不判断医学推断是否正确
+不生成新的诊断、风险、就医或治疗建议
 ```
 
 ### M11：Artifact Store 与版本
@@ -884,6 +900,7 @@ TaskArtifact
 ArtifactVersion
 EvidenceBindingStatus
 HumanReviewRecord
+ClarificationGapRecord
 ArtifactStore
 RepairLineage
 StaleMarker
@@ -900,7 +917,7 @@ Phase 1 先交付契约；Phase 4 与 repair 一起交付生产持久化。
 2. artifact version 状态。
 3. append-only 写入接口。
 4. repair lineage 存储。
-5. evidence binding / human review 状态存储。
+5. evidence binding / clarification gap / human review 状态存储。
 6. stale dependency 存储。
 7. terminal state 查询。
 
@@ -912,7 +929,7 @@ artifact 不可原地覆盖
 失败结果不会被成功结果覆盖
 repair lineage 完整
 semantic_review_supported 不被写成 verified
-evidence_binding_pending / human_review_required 可查询
+evidence_binding_pending / clarification_required / human_review_required 可查询
 上游结构变化触发下游 stale
 历史 artifact 可审计
 ```
@@ -921,7 +938,7 @@ evidence_binding_pending / human_review_required 可查询
 
 **目标**
 
-将已通过语义审查和证据门禁的 artifact 组装为可投影 proposition graph。
+将已通过语义审查和证据门禁的 proposition artifact，以及显式 clarification gap artifact，组装为可投影 proposition graph。
 
 **范围**
 
@@ -929,6 +946,7 @@ evidence_binding_pending / human_review_required 可查询
 ClaimGraphBuilder
 IntentClaimConsistencyGate
 ReviewStatusMerger
+ClarificationGapMerger
 EvidenceGateMerger
 GraphConsistencyGate
 GraphArtifact
@@ -945,10 +963,11 @@ M06～M11
 1. proposition graph schema。
 2. turn intent 与 claim proposition 合并。
 3. coverage / faithfulness / repair 状态合并。
-4. evidence binding 状态合并。
-5. ID 引用校验。
-6. 图级一致性门禁。
-7. graph terminal state。
+4. clarification gap 状态合并。
+5. evidence binding 状态合并。
+6. ID 引用校验。
+7. 图级一致性门禁。
+8. graph terminal state。
 
 **验收标准**
 
@@ -957,7 +976,7 @@ M06～M11
 不消费 proposal
 引用缺失 blocked
 claim proposition 重复 blocked
-证据门禁缺失时不得 graph_verified
+证据门禁或 clarification gap 未按契约处理时不得 graph_verified
 局部 gap 保留为 graph_partial_with_gaps
 图级冲突保留为 graph_disagreement
 ```
@@ -989,12 +1008,14 @@ ConsultationProjectionAdapter
 **问诊投影验收**
 
 ```text
-输入是 reviewed 自包含自然语言 proposition
+输入是 reviewed 自包含自然语言 proposition 或显式 clarification gap
 reported normal 不映射为 denied
 denied 保留否定语义
 unobserved 与绝对否定分离
 unknown 不代表追问已完成
 answer_now 独立传递
+clarification gap 交给问诊回答充分性 / followup 策略
+clarification_required 不等于强制追问
 adapter 不做医学风险判断
 不得用关键词 / 正则代替领域投影契约
 ```
@@ -1031,6 +1052,7 @@ MetricCollector
 RunReport
 FailureAttribution
 RepairMetrics
+ClarificationGapMetrics
 ContextMetrics
 ```
 
@@ -1049,6 +1071,7 @@ input envelope digest
 artifact_id / version
 review_outcome
 review_matrix_digest
+clarification_gap_status
 evidence_binding_status
 failure_code
 repair_lineage
@@ -1063,6 +1086,7 @@ terminal_state
 任一失败可定位到 task / skill / artifact / failure code
 terminal state distribution 可统计
 repair required / success / regression / exhausted 可观测
+clarification required / repair_then_clarification 可观测
 context budget failure 可观测
 trace 不记录未授权下游领域状态
 ```
@@ -1242,6 +1266,7 @@ review 失败不等于原任务通过
 M09 Repair Planner
 M10 Repair SKILL / typed patch
 M11 ArtifactStore 生产实现
+M08/M09 clarification_required 与 repair_then_clarification_required 状态
 M11 evidence_binding_pending / human_review_required 状态
 M11 stale marker
 M14 repair metrics
@@ -1251,7 +1276,9 @@ M14 repair metrics
 
 ```text
 repair 只针对具体 true review dimension
-歧义、未分类和医学越权维度不自动修复
+来源绑定缺失维度输出 clarification_required，不被 repair 猜测
+医学推断 / 风险 / 建议添加可被删除式局部修复
+未分类维度进入 human_review_required
 repair 不自由重写完整 artifact
 patch base version 校验有效
 repair budget 有效
@@ -1495,7 +1522,9 @@ context digest mismatch
 review 布尔字段缺失或非 boolean
 review 输出 verdict / reason / confidence
 review 输出 corrected final value
-歧义维度进入自动修复
+来源绑定缺失维度进入自动修复
+医学推断添加未被删除式修复而直接放行
+clarification_required 被当成 verified
 repair patch 越权
 base version 冲突
 repair budget 超限
@@ -1547,6 +1576,8 @@ uncertain 输入
 用户猜测归因输入
 answer_now 输入
 多轮指代输入
+指代不明进入 clarification gap
+医学推断添加进入删除式修复
 用户纠正输入
 claim 数量不匹配输入
 空集合但原文事实丰富输入
@@ -1654,18 +1685,20 @@ Review 生产代码时应检查：
 8. Coverage Review 可发现漏抽、合并和非自包含 proposition
 9. Faithfulness Review 使用固定布尔矩阵定位语义漂移维度
 10. Review 按域正交且不直接修改 artifact
-11. Repair 只能针对具体 true 维度输出白名单 typed patch
-12. patch base version 校验有效
-13. repair budget 和 repair_exhausted 有效
-14. artifact 版本、lineage 与证据门禁状态可追溯
-15. 上游修复触发下游 stale
-16. claim graph 只消费完整门禁后的 verified artifact
-17. 领域只通过 adapter 消费
-18. preprocessing 不写问诊状态
-19. preprocessing 不触发临床安全 evaluator / OPA / required_context
-20. 失败不会变成空 facts
-21. 生产失败可显式回滚或止血
-22. trace / metrics 可定位任一任务
+11. 来源绑定缺失输出 clarification_required，不被 repair 补造
+12. Repair 只能针对具体 true 维度输出白名单 typed patch
+13. 医学推断 / 风险 / 建议添加只能被删除或还原为用户表述
+14. patch base version 校验有效
+15. repair budget 和 repair_exhausted 有效
+16. artifact 版本、lineage、clarification gap 与证据门禁状态可追溯
+17. 上游修复触发下游 stale
+18. claim graph 只消费完整门禁后的 verified artifact
+19. 领域只通过 adapter 消费
+20. preprocessing 不写问诊状态
+21. preprocessing 不触发临床安全 evaluator / OPA / required_context
+22. 失败不会变成空 facts
+23. 生产失败可显式回滚或止血
+24. trace / metrics 可定位任一任务
 ```
 
 ## 12. 明确不做事项
