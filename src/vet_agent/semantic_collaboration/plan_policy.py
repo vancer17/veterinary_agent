@@ -21,10 +21,11 @@ from .plan_contracts import (
     PlanSkillRule,
 )
 from .production import (
+    CLAIM_COVERAGE_REVIEW_SPEC,
+    CLAIM_FAITHFULNESS_REVIEW_SPEC,
     CLAIM_INVENTORY_SPEC,
     PATCH_APPLIER_SPEC,
     SEMANTIC_REPAIR_SPEC,
-    SEMANTIC_REVIEW_SPEC,
     TURN_INTENT_SPEC,
 )
 
@@ -74,7 +75,12 @@ def build_production_plan_policy(registry: SkillRegistry) -> PlanPolicySpec:
             target_envelope_kind=PlanEnvelopeKind.TURN,
         ),
         _skill_rule(
-            SEMANTIC_REVIEW_SPEC,
+            CLAIM_COVERAGE_REVIEW_SPEC,
+            requirement=PlanSkillRequirementMode.FORBIDDEN,
+            target_envelope_kind=PlanEnvelopeKind.TURN,
+        ),
+        _skill_rule(
+            CLAIM_FAITHFULNESS_REVIEW_SPEC,
             requirement=PlanSkillRequirementMode.FORBIDDEN,
             target_envelope_kind=PlanEnvelopeKind.CLAIM,
         ),

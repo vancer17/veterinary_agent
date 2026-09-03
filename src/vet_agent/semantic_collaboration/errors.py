@@ -305,3 +305,12 @@ class SemanticGenerationContractError(SemanticCollaborationError):
     """
 
     failure_code: ClassVar[str] = "semantic_generation_contract_violation"
+
+
+class SemanticReviewContractError(SemanticCollaborationError):
+    """表示 M08 Review 执行器的 Skill、模型策略或上下文契约失败。
+
+    :return: 无返回值；该错误不得被转换为空矩阵或原任务通过。
+    """
+
+    failure_code: ClassVar[str] = "semantic_review_contract_violation"

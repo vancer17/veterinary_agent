@@ -33,7 +33,7 @@
 | M05 StructuredLLMGateway | 已实现；尚未接入任务执行器 |
 | M06 生成 SKILL | 已实现；可返回 Turn Intent 与自然语言 claims proposal |
 | M07 最小结构 verifier | 已实现；完整 M07 仍待硬化 |
-| M08 Coverage / Faithfulness Review | 未实现 |
+| M08 Coverage / Faithfulness Review | 已实现；尚未接入生产任务执行器 |
 | M11 Artifact Store | 未实现 |
 | VetOrchestrator 生产切换 | 未接入 |
 
@@ -41,8 +41,8 @@
 自有数据库任务队列、租约、attempt 状态机或 worker 恢复协议。
 
 当前不能宣称的是：语义协作 DAG 已经可以端到端生成 verified claim graph。
-原因在于 M04 的 TODO 任务执行器尚未组合 M06 / M07 / M11，M08 Review 与
-M11 Artifact Store 也尚未实现。
+原因在于 M04 的 TODO 任务执行器尚未组合 M06 / M07 / M08 / M11，M11
+Artifact Store 也尚未实现。
 
 ## 2. 架构结论
 
@@ -272,6 +272,10 @@ clarification gap artifact reference；调度器只记录该终态，不生成�
 问诊回答充分性策略。当前 M04 契约若尚未支持该状态，必须在 M08 / M09 接入前显式
 扩展 terminal state 与 artifact payload 契约，不得把 clarification gap 伪装成
 `blocked`、`timeout` 或 verified。
+
+随着 M08 已能输出 `clarification_required` 与
+`repair_then_clarification_required` 路由，该终态扩展已成为 M04 生产组合的前置阻塞项；
+在扩展完成前，TODO executor 不得把 M08 review bundle 直接映射为任务成功。
 
 ### 4.3 当前 TODO 空壳
 
@@ -524,7 +528,7 @@ finish_run
 | M06 生成 SKILL | M06 | 不由调度器解释 proposition | 消费标准化 SKILL prompt、M05 proposal 与 M06 Runner |
 | 最小结构 verifier | M07 | 不解释自然语言语义 | 校验 schema、任务身份、claim 形态、重复与数量上限 |
 | Artifact Store | M11 | 只传递 artifact reference | 提供 append-only artifact、版本、lineage 与 stale |
-| Review SKILL | M08 | 不做 review | 按 review 契约诊断任务或 artifact |
+| Review SKILL | M08 | M08 已实现；M04 不解释矩阵语义 | 组合 Coverage / Faithfulness outcome，并交给 M09 / M11 |
 | Repair Planner | M09 | 不规划修复 | 只根据白名单 failure code 生成修复任务 |
 | Repair / Patch | M10 | 不修改输出 | 只输出和验证 typed patch |
 | Claim Graph | M12 | 不组装 graph | 只消费 verified artifact |
@@ -612,6 +616,55 @@ verified 结果必须携带有效 artifact reference
 ### 9.4 M08～M10 对接
 
 Review / Repair / Patch 不得由 M04 代实现。
+
+当前对接状态：
+
+```text
+M08 Coverage Review: 已实现
+M08 Faithfulness Review: 已实现
+M08 deterministic outcome: 已实现
+M08 artifact commit: 等待 M11
+M09 Repair Planner: 未实现
+M10 Repair / Patch: 未实现
+```
+
+M04 后续组合边界：
+
+```text
+M06 generation
+→ M07 structural verifier
+→ M08 review bundle
+→ M09 repair route / clarification route
+→ M10 typed patch
+→ M11 artifact commit
+```
+
+M04 只消费任务终态与 artifact reference，不解释：
+
+```text
+coverage matrix
+faithfulness matrix
+true dimension
+clarification gap
+```
+
+在 M11 未实现前，M08 的 `semantic_review_supported`、`repair_required`、
+`clarification_required`、`repair_then_clarification_required`、`disagreement` 与
+`review_failed` 都不能映射为 `verified`。M04 若尚未支持对应终态，必须在接入前显式
+扩展任务终态与 artifact payload 契约。
+
+终态映射边界：
+
+```text
+repair_required / repair_then_clarification_required
+→ 先交给 M09 / M10 / M11 完成修复与 gap 门禁，不能直接成为 verified
+
+clarification_required
+→ 需要 clarification gap artifact reference
+
+disagreement / review_failed
+→ 必须保留显式失败或冲突终态，不得降级为空事实
+```
 
 验收：
 
@@ -718,3 +771,4 @@ long_term_memory_written = false
 1. [semantic-collaboration-dag-production-architecture.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-production-architecture.md)
 2. [semantic-collaboration-dag-production-implementation-plan.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-production-implementation-plan.md)
 3. [semantic-collaboration-dag-m06-production-boundary-revision.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m06-production-boundary-revision.md)
+4. [semantic-collaboration-dag-m08-review-skill-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m08-review-skill-change-summary.md)

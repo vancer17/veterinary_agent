@@ -18,10 +18,11 @@ import pytest
 from pydantic import ValidationError
 
 from vet_agent.semantic_collaboration import (
+    CLAIM_FAITHFULNESS_REVIEW_SPEC,
     CLAIM_INVENTORY_SPEC,
     DOMAIN_ISOLATED_CONTEXT_RESOURCES,
     PRODUCTION_SEMANTIC_SKILL_SPECS,
-    SEMANTIC_REVIEW_SPEC,
+    SEMANTIC_REPAIR_SPEC,
     SkillCatalog,
     SkillCatalogError,
     SkillContractError,
@@ -63,7 +64,7 @@ def test_production_catalog_is_closed_and_frozen() -> None:
     catalog = build_production_skill_catalog()
 
     assert catalog.frozen is True
-    assert len(catalog.list_specs()) == len(PRODUCTION_SEMANTIC_SKILL_SPECS) == 5
+    assert len(catalog.list_specs()) == len(PRODUCTION_SEMANTIC_SKILL_SPECS) == 6
     assert catalog.require("turn_intent", "2.0.0").skill_id == "turn_intent"
     assert len(catalog.ownership_matrix().records) > 0
     assert (
@@ -129,25 +130,25 @@ def test_exact_and_parent_field_ownership_conflicts_are_blocked() -> None:
     :return: 无返回值。
     """
     exact_conflict = _variant(
-        SEMANTIC_REVIEW_SPEC,
+        CLAIM_FAITHFULNESS_REVIEW_SPEC,
         {
             "skill_id": "exact_conflict",
-            "owns": [{"path": "review.verdict"}],
+            "owns": [{"path": "faithfulness_matrix"}],
         },
     )
     parent_conflict = _variant(
-        SEMANTIC_REVIEW_SPEC,
+        SEMANTIC_REPAIR_SPEC,
         {
             "skill_id": "parent_conflict",
-            "owns": [{"path": "review"}],
+            "owns": [{"path": "repair"}],
         },
     )
 
-    exact_catalog = SkillCatalog(initial_specs=(SEMANTIC_REVIEW_SPEC,))
+    exact_catalog = SkillCatalog(initial_specs=(CLAIM_FAITHFULNESS_REVIEW_SPEC,))
     with pytest.raises(SkillCatalogError, match="field ownership conflict"):
         exact_catalog.register(exact_conflict)
 
-    parent_catalog = SkillCatalog(initial_specs=(SEMANTIC_REVIEW_SPEC,))
+    parent_catalog = SkillCatalog(initial_specs=(SEMANTIC_REPAIR_SPEC,))
     with pytest.raises(SkillCatalogError, match="field ownership conflict"):
         parent_catalog.register(parent_conflict)
 
@@ -157,11 +158,11 @@ def test_parent_owned_and_forbidden_path_conflict_is_blocked() -> None:
 
     :return: 无返回值。
     """
-    payload = SEMANTIC_REVIEW_SPEC.model_dump(mode="json")
+    payload = SEMANTIC_REPAIR_SPEC.model_dump(mode="json")
     payload["skill_id"] = "invalid_forbidden_scope"
-    payload["forbidden_output"] = [{"path": "review"}]
+    payload["forbidden_output"] = [{"path": "repair"}]
     metadata = replace(
-        projection_metadata_from_spec(SEMANTIC_REVIEW_SPEC),
+        projection_metadata_from_spec(SEMANTIC_REPAIR_SPEC),
         skill_id=payload["skill_id"],
     )
     payload["prompt_projection"] = render_skill_projection(metadata).model_dump(
@@ -169,7 +170,7 @@ def test_parent_owned_and_forbidden_path_conflict_is_blocked() -> None:
     )
 
     with pytest.raises(SkillContractError, match="owned and forbidden"):
-        type(SEMANTIC_REVIEW_SPEC).model_validate(payload)
+        type(SEMANTIC_REPAIR_SPEC).model_validate(payload)
 
 
 def test_unregistered_repair_target_fails_catalog_validation() -> None:

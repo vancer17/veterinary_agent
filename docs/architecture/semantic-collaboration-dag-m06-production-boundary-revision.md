@@ -297,6 +297,8 @@ shared scope 拆分错误
 ```
 
 输出固定布尔矩阵；`missing_claim_candidates` 只能作为 bounded repair hint。
+当前生产 envelope 为 `coverage_matrix` 与 `missing_claim_candidates`，详见
+[semantic-collaboration-dag-m08-review-skill-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m08-review-skill-change-summary.md)。
 
 ### 6.2 Faithfulness Review
 
@@ -307,35 +309,39 @@ Faithfulness Review 是 claim 级任务，一次只审查一个 proposition。
 
 ```json
 {
-  "主体或指代范围改变": false,
-  "否定方向改变": false,
-  "否定范围改变": false,
-  "正常状态误写为否认": false,
-  "事实类型改变": false,
-  "时间范围改变": false,
-  "频率或数量改变": false,
-  "程度或强度改变": false,
-  "确定性改变": false,
-  "因果关系改变": false,
-  "医学推断或建议添加": false,
-  "命题不自包含": false,
-  "指代对象不明": false,
-  "时间基准不明": false,
-  "否定范围不明": false,
-  "比较基线不明": false,
-  "未分类语义改变": false
+  "faithfulness_matrix": {
+    "主体或指代范围改变": false,
+    "否定方向改变": false,
+    "否定范围改变": false,
+    "正常状态误写为否认": false,
+    "事实类型改变": false,
+    "时间范围改变": false,
+    "频率或数量改变": false,
+    "程度或强度改变": false,
+    "确定性改变": false,
+    "因果关系改变": false,
+    "医学推断或建议添加": false,
+    "命题不自包含": false,
+    "指代对象不明": false,
+    "时间基准不明": false,
+    "否定范围不明": false,
+    "比较基线不明": false,
+    "未分类语义改变": false
+  }
 }
 ```
 
 业务结果由 deterministic rules 派生：
 
 ```text
-全部 false → review_supported
+全部 false → semantic_review_supported
 来源绑定缺失 true → clarification_required
 模型漂移 / 模型越权 true → repair_required
 模型漂移与来源绑定缺失同时 true → repair_then_clarification_required
 未分类 true → human_review_required
 可修复 true 过多 → human_review_required
+Coverage 与 Faithfulness 冲突 → disagreement
+Review schema / 身份失败 → review_failed
 ```
 
 来源绑定缺失维度包括：
@@ -502,3 +508,4 @@ claim 数量超过 schema 上限
 3. [semantic-collaboration-dag-m05-structured-llm-gateway-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m05-structured-llm-gateway-change-summary.md)
 4. [input-preprocessing-v13-llm-first-structured-claim-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/input-preprocessing-v13-llm-first-structured-claim-change-summary.md)
 5. [input-preprocessing-v14-onepass-governance-convergence-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/input-preprocessing-v14-onepass-governance-convergence-change-summary.md)
+6. [semantic-collaboration-dag-m08-review-skill-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m08-review-skill-change-summary.md)

@@ -686,6 +686,28 @@ semantic_conflict 显式保留
 
 ### M08：Review SKILL
 
+**当前实现状态**
+
+Coverage Review、Faithfulness Review、固定布尔矩阵、M05 Gateway 接入、review verifier、
+deterministic outcome derivation、clarification gap proposal 和 M11 TODO 空壳已实现。
+
+当前仍未完成：
+
+```text
+M04 SemanticTaskExecutor 组合
+M09 Repair Planner
+M10 typed patch / applier
+M11 Review Artifact Store
+真实 LiteLLM 冒烟
+真实 Temporal workflow 联调
+```
+
+因此 M08 当前只能返回可审计 review bundle，不能返回权威 artifact reference，也不能把
+`semantic_review_supported` 伪装成 `verified`。
+
+实现边界与后续对接契约见
+[semantic-collaboration-dag-m08-review-skill-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m08-review-skill-change-summary.md)。
+
 **目标**
 
 独立发现 Claim Inventory 的覆盖问题和单条 proposition 的语义漂移问题。
@@ -727,13 +749,16 @@ M07 Verifier
 
 ```json
 {
-  "存在漏抽显式事实": false,
-  "存在多事实合并": false,
-  "存在重复claim": false,
-  "存在原文不支持的claim": false,
-  "存在非自包含proposition": false,
-  "存在shared scope拆分错误": false,
-  "未分类覆盖问题": false
+  "coverage_matrix": {
+    "存在漏抽显式事实": false,
+    "存在多事实合并": false,
+    "存在重复claim": false,
+    "存在原文不支持的claim": false,
+    "存在非自包含proposition": false,
+    "存在shared scope拆分错误": false,
+    "未分类覆盖问题": false
+  },
+  "missing_claim_candidates": []
 }
 ```
 
@@ -743,23 +768,25 @@ M07 Verifier
 
 ```json
 {
-  "主体或指代范围改变": false,
-  "否定方向改变": false,
-  "否定范围改变": false,
-  "正常状态误写为否认": false,
-  "事实类型改变": false,
-  "时间范围改变": false,
-  "频率或数量改变": false,
-  "程度或强度改变": false,
-  "确定性改变": false,
-  "因果关系改变": false,
-  "医学推断或建议添加": false,
-  "命题不自包含": false,
-  "指代对象不明": false,
-  "时间基准不明": false,
-  "否定范围不明": false,
-  "比较基线不明": false,
-  "未分类语义改变": false
+  "faithfulness_matrix": {
+    "主体或指代范围改变": false,
+    "否定方向改变": false,
+    "否定范围改变": false,
+    "正常状态误写为否认": false,
+    "事实类型改变": false,
+    "时间范围改变": false,
+    "频率或数量改变": false,
+    "程度或强度改变": false,
+    "确定性改变": false,
+    "因果关系改变": false,
+    "医学推断或建议添加": false,
+    "命题不自包含": false,
+    "指代对象不明": false,
+    "时间基准不明": false,
+    "否定范围不明": false,
+    "比较基线不明": false,
+    "未分类语义改变": false
+  }
 }
 ```
 
@@ -773,24 +800,27 @@ review 不直接修改 artifact
 review 不输出 verdict / reason / confidence / corrected value
 review 输出 forbidden field blocked
 review_failed 不使原任务 verified
-review_disagreement 显式保留
-全部 false 派生 review_supported
+disagreement 显式保留
+全部 false 派生 semantic_review_supported
 来源绑定缺失维度派生 clarification_required
 模型漂移 / 模型越权维度派生 repair_required
 模型漂移与来源绑定缺失同时存在派生 repair_then_clarification_required
 医学推断或建议添加派生删除式局部修复
 未分类维度派生 human_review_required
 可修复维度 true 数量超过上限派生 human_review_required
+claims=[] 区分 no_explicit_fact 与 suspicious_empty
+skipped Faithfulness Review 不伪装 supported
+Review schema / claim 身份失败显式 review_failed
 ```
 
-**建议实现顺序**
+**当前实现顺序结论**
 
 ```text
-Faithfulness Review
-→ Coverage Review
-→ deterministic outcome derivation
-→ repair / clarification router
-→ 人工审查状态接入
+Faithfulness Review 已实现
+→ Coverage Review 已实现
+→ deterministic outcome derivation 已实现
+→ repair / clarification router 待 M09
+→ 人工审查 artifact 状态待 M11
 ```
 
 ### M09：Repair Planner
@@ -1242,6 +1272,21 @@ M08 Coverage Review
 M08 deterministic outcome derivation
 M14 task trace
 ```
+
+**当前实现状态**
+
+```text
+M05 StructuredLLMGateway: 已实现
+M06 Turn Intent / Claim Inventory: 已实现
+M07 最小结构 verifier: 已实现
+M08 Coverage / Faithfulness Review: 已实现
+M08 deterministic outcome derivation: 已实现
+M14 完整 task trace / metrics: 未完成
+真实 LiteLLM / Temporal 联调: 未执行
+```
+
+本阶段尚不能因 M08 已实现而关闭；关闭前还需补齐 M14 观测闭环，并通过显式外部服务
+集成验证。当前全部链路验证均使用进程内测试替身。
 
 **验收**
 
@@ -1743,3 +1788,4 @@ DSPy 接入
 7. [consultation-state-answerability-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/consultation-state-answerability-change-summary.md)
 8. [clinical-safety-semantic-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/clinical-safety-semantic-change-summary.md)
 9. [semantic-collaboration-dag-m04-scheduler-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m04-scheduler-change-summary.md)
+10. [semantic-collaboration-dag-m08-review-skill-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m08-review-skill-change-summary.md)

@@ -62,9 +62,6 @@ def _leaf_schema(path: str) -> dict[str, Any]:
     :return: 返回不含医学语义的字段 schema 定义。
     """
     scalar_types: dict[str, str] = {
-        "review.verdict": "string",
-        "review.failure_code": "string",
-        "review.repair_hint": "string",
         "repair.patch_type": "string",
         "repair.base_version": "string",
         "repair.proposal": "object",
@@ -201,6 +198,112 @@ def _claim_inventory_output_schema() -> SchemaContract:
     )
 
 
+def _claim_coverage_review_output_schema() -> SchemaContract:
+    """构造 Coverage Review 固定布尔矩阵输出契约。
+
+    :return: 返回仅包含覆盖矩阵和有界缺失提示的严格 schema。
+    """
+    fields = (
+        "存在漏抽显式事实",
+        "存在多事实合并",
+        "存在重复claim",
+        "存在原文不支持的claim",
+        "存在非自包含proposition",
+        "存在shared scope拆分错误",
+        "未分类覆盖问题",
+    )
+    matrix_properties: dict[str, Any] = {
+        field: {
+            "type": "boolean",
+            "description": f"Coverage review signal: {field}.",
+        }
+        for field in fields
+    }
+    return SchemaContract(
+        schema_id="semantic_collaboration.claim_coverage_review.output",
+        schema_version="1.0.0",
+        json_schema={
+            "type": "object",
+            "description": "Turn-level claim coverage boolean matrix.",
+            "properties": {
+                "coverage_matrix": {
+                    "type": "object",
+                    "description": "Fixed Chinese coverage review dimensions.",
+                    "properties": matrix_properties,
+                    "required": list(fields),
+                    "additionalProperties": False,
+                },
+                "missing_claim_candidates": {
+                    "type": "array",
+                    "description": "Bounded natural-language repair hints only.",
+                    "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 240,
+                    },
+                    "minItems": 0,
+                    "maxItems": 8,
+                    "uniqueItems": True,
+                },
+            },
+            "required": ["coverage_matrix", "missing_claim_candidates"],
+            "additionalProperties": False,
+        },
+    )
+
+
+def _claim_faithfulness_review_output_schema() -> SchemaContract:
+    """构造 Faithfulness Review 固定布尔矩阵输出契约。
+
+    :return: 返回只描述单条 proposition 语义漂移维度的严格 schema。
+    """
+    fields = (
+        "主体或指代范围改变",
+        "否定方向改变",
+        "否定范围改变",
+        "正常状态误写为否认",
+        "事实类型改变",
+        "时间范围改变",
+        "频率或数量改变",
+        "程度或强度改变",
+        "确定性改变",
+        "因果关系改变",
+        "医学推断或建议添加",
+        "命题不自包含",
+        "指代对象不明",
+        "时间基准不明",
+        "否定范围不明",
+        "比较基线不明",
+        "未分类语义改变",
+    )
+    matrix_properties: dict[str, Any] = {
+        field: {
+            "type": "boolean",
+            "description": f"Faithfulness review signal: {field}.",
+        }
+        for field in fields
+    }
+    return SchemaContract(
+        schema_id="semantic_collaboration.claim_faithfulness_review.output",
+        schema_version="1.0.0",
+        json_schema={
+            "type": "object",
+            "description": "Claim-level faithfulness boolean matrix.",
+            "properties": {
+                "faithfulness_matrix": {
+                    "type": "object",
+                    "description": "Fixed Chinese faithfulness review dimensions.",
+                    "properties": matrix_properties,
+                    "required": list(fields),
+                    "additionalProperties": False,
+                },
+            },
+            "required": ["faithfulness_matrix"],
+            "additionalProperties": False,
+        },
+    )
+
+
 def _input_schema(skill_id: str) -> SchemaContract:
     """构造 SKILL 输入契约。
 
@@ -322,13 +425,17 @@ def _skill_spec(
     )
     trace_kind = {
         SkillExecutionFamily.STRUCTURED_GENERATION: SkillTraceKind.GENERATION_SKILL,
-        SkillExecutionFamily.DETERMINISTIC_REVIEW: SkillTraceKind.REVIEW_SKILL,
+        SkillExecutionFamily.STRUCTURED_REVIEW: SkillTraceKind.REVIEW_SKILL,
         SkillExecutionFamily.TYPED_REPAIR: SkillTraceKind.REPAIR_SKILL,
         SkillExecutionFamily.DETERMINISTIC_PATCH_APPLY: SkillTraceKind.PATCH_APPLIER,
     }[execution_family]
+    document_backed_families = {
+        SkillExecutionFamily.STRUCTURED_GENERATION,
+        SkillExecutionFamily.STRUCTURED_REVIEW,
+    }
     skill_document = (
         load_semantic_skill_document(skill_id)
-        if execution_family is SkillExecutionFamily.STRUCTURED_GENERATION
+        if execution_family in document_backed_families
         else None
     )
     if skill_document is None:
@@ -457,32 +564,72 @@ CLAIM_INVENTORY_SPEC = _skill_spec(
 )
 
 
-SEMANTIC_REVIEW_SPEC = _skill_spec(
-    skill_id="semantic_review",
+CLAIM_COVERAGE_REVIEW_SPEC = _skill_spec(
+    skill_id="claim_coverage_review",
     skill_version="1.0.0",
-    task_kind=SkillTaskKind.REVIEW,
-    execution_family=SkillExecutionFamily.DETERMINISTIC_REVIEW,
-    verifier_id="semantic_review_verifier",
-    owns=_paths(
-        "review.verdict",
-        "review.failure_code",
-        "review.repair_hint",
+    task_kind=SkillTaskKind.CLAIM_COVERAGE_REVIEW,
+    execution_family=SkillExecutionFamily.STRUCTURED_REVIEW,
+    verifier_id="claim_coverage_review_verifier",
+    owns=_paths("coverage_matrix", "missing_claim_candidates"),
+    output_contract=_claim_coverage_review_output_schema(),
+    forbidden_output=_paths(
+        "claims",
+        "verdict",
+        "reason",
+        "confidence",
+        "corrected_proposition",
+        "evidence",
+        "medical_decision",
     ),
-    output_contract=_nested_output_schema(
-        "semantic_collaboration.semantic_review.output",
-        _paths(
-            "review.verdict",
-            "review.failure_code",
-            "review.repair_hint",
-        ),
-    ),
-    forbidden_output=_paths("claims", "medical_decision"),
     required_context=(
         SkillContextResource.TURN_SNAPSHOT_DIGEST,
         SkillContextResource.ORIGINAL_USER_TEXT,
-        SkillContextResource.VERIFIED_PEER_ARTIFACT,
-        SkillContextResource.VERIFIED_REVIEW_ARTIFACT,
+        SkillContextResource.LAST_ASSISTANT_QUESTIONS,
+        SkillContextResource.VERIFIED_PRIOR_FACT_SUMMARY,
+        SkillContextResource.TRUSTED_PET_CONTEXT,
     ),
+    retryable_failures=(
+        SkillFailureCode.MODEL_CALL_FAILED,
+        SkillFailureCode.RESPONSE_PARSE_FAILED,
+        SkillFailureCode.TIMEOUT,
+    ),
+    max_attempts=2,
+)
+
+
+CLAIM_FAITHFULNESS_REVIEW_SPEC = _skill_spec(
+    skill_id="claim_faithfulness_review",
+    skill_version="1.0.0",
+    task_kind=SkillTaskKind.CLAIM_FAITHFULNESS_REVIEW,
+    execution_family=SkillExecutionFamily.STRUCTURED_REVIEW,
+    verifier_id="claim_faithfulness_review_verifier",
+    owns=_paths("faithfulness_matrix"),
+    output_contract=_claim_faithfulness_review_output_schema(),
+    forbidden_output=_paths(
+        "claims",
+        "verdict",
+        "reason",
+        "confidence",
+        "corrected_proposition",
+        "evidence",
+        "assertion_state",
+        "canonical_id",
+        "entity_id",
+        "medical_decision",
+    ),
+    required_context=(
+        SkillContextResource.TURN_SNAPSHOT_DIGEST,
+        SkillContextResource.ORIGINAL_USER_TEXT,
+        SkillContextResource.LAST_ASSISTANT_QUESTIONS,
+        SkillContextResource.VERIFIED_PRIOR_FACT_SUMMARY,
+        SkillContextResource.TRUSTED_PET_CONTEXT,
+    ),
+    retryable_failures=(
+        SkillFailureCode.MODEL_CALL_FAILED,
+        SkillFailureCode.RESPONSE_PARSE_FAILED,
+        SkillFailureCode.TIMEOUT,
+    ),
+    max_attempts=2,
 )
 
 
@@ -547,7 +694,8 @@ PATCH_APPLIER_SPEC = _skill_spec(
 PRODUCTION_SEMANTIC_SKILL_SPECS: tuple[SkillSpec, ...] = (
     TURN_INTENT_SPEC,
     CLAIM_INVENTORY_SPEC,
-    SEMANTIC_REVIEW_SPEC,
+    CLAIM_COVERAGE_REVIEW_SPEC,
+    CLAIM_FAITHFULNESS_REVIEW_SPEC,
     SEMANTIC_REPAIR_SPEC,
     PATCH_APPLIER_SPEC,
 )
