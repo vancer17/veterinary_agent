@@ -15,6 +15,10 @@
 
 > **文档状态**：M04 生产工程边界已实现；待 Temporal Docker 编排、真实
 > workflow 联调与 VetOrchestrator 接入后关闭
+>
+> **边界修订说明**：M04 Temporal-first 边界不变。最新 M06 生产契约已收敛为
+> Turn Intent + 自然语言 Claim Proposition Inventory，任务执行门禁需同步纳入
+> M08 Coverage / Faithfulness Review。
 
 ## 1. 当前状态
 
@@ -28,6 +32,7 @@
 | 真实 Temporal workflow 联调 | 未执行 |
 | M05 StructuredLLMGateway | 已实现；尚未接入任务执行器 |
 | M07 Deterministic Verifier | 未实现 |
+| M08 Coverage / Faithfulness Review | 未实现 |
 | M11 Artifact Store | 未实现 |
 | VetOrchestrator 生产切换 | 未接入 |
 
@@ -61,7 +66,7 @@ M04 固定采用：
 | Plan IR 依赖关系 | M03 |
 | Skill 失败与语义重试策略 | M01 SkillCatalog |
 | DAG frontier 计算 | M04 自有语义图内核 |
-| 任务业务终态解释 | M04 契约 + M07 verifier |
+| 任务业务终态解释 | M04 契约 + M07 verifier + M08 review outcome |
 | 任务队列 / activity 分发 | Temporal |
 | worker 崩溃恢复 | Temporal |
 | 基础设施重试 | Temporal RetryPolicy |
@@ -197,6 +202,7 @@ Temporal 不可用时自动降级为进程内调度器
 ```text
 M05 StructuredLLMGateway
 + M07 Deterministic Verifier
++ M08 Review Outcome
 + M11 Artifact commit
 = SemanticTaskExecutor
 ```
@@ -237,7 +243,7 @@ failure_message
 约束：
 
 ```text
-verified / repair_verified 必须携带 artifact_reference
+verified / repair_verified / clarification_required 必须携带 artifact_reference
 失败终态不得携带 artifact_reference
 失败终态必须携带 failure_code 和 failure_message
 not_applicable 不携带 artifact，也不携带 failure
@@ -249,6 +255,7 @@ not_applicable 不携带 artifact，也不携带 failure
 verified
 repair_verified
 not_applicable
+clarification_required
 blocked
 disagreement
 repair_exhausted
@@ -258,6 +265,12 @@ review_failed
 context_budget_exceeded
 timeout
 ```
+
+`clarification_required` 是合法业务终态，不是基础设施失败。它必须携带可审计的
+clarification gap artifact reference；调度器只记录该终态，不生成用户追问，也不读取
+问诊回答充分性策略。当前 M04 契约若尚未支持该状态，必须在 M08 / M09 接入前显式
+扩展 terminal state 与 artifact payload 契约，不得把 clarification gap 伪装成
+`blocked`、`timeout` 或 verified。
 
 ### 4.3 当前 TODO 空壳
 
@@ -537,7 +550,8 @@ SemanticModelProposal
 attempt metadata
 ```
 
-该结果仍必须交给 M07 verifier，不能直接生成 verified artifact 或任务成功终态。
+该结果仍必须交给 M07 verifier 和 M08 review，不能直接生成 verified artifact
+或任务成功终态。
 
 验收：
 
@@ -698,3 +712,4 @@ long_term_memory_written = false
 
 1. [semantic-collaboration-dag-production-architecture.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-production-architecture.md)
 2. [semantic-collaboration-dag-production-implementation-plan.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-production-implementation-plan.md)
+3. [semantic-collaboration-dag-m06-production-boundary-revision.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m06-production-boundary-revision.md)
