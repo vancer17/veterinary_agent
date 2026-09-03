@@ -3,7 +3,8 @@
 文件：src/vet_agent/semantic_collaboration/__init__.py
 作用：作为受限语义协作 DAG 的稳定包入口。
 范围：暴露 M01 Skill 契约、目录、投影、生产组合根、M02 TurnSnapshot、
-      M03 Plan IR、M04 Temporal-first DAG 调度与 M05 结构化 LLM Gateway
+      M03 Plan IR、M04 Temporal-first DAG 调度、M05 结构化 LLM Gateway、
+      M06 标准化 SKILL 文档、受限 Prompt Renderer 与生成执行器
       相关公开 API。
 说明：跨包调用不得深入内部模块；后续能力必须继续通过本入口
       显式暴露，避免形成隐式跨包依赖。
@@ -43,10 +44,11 @@ from .errors import (
     DAGProjectionRepositoryError,
     PlanCompilationError,
     PlanError,
-    PlanModelClientError,
-    PlanSelectionSchemaError,
     SchedulerError,
     SemanticCollaborationError,
+    SemanticGenerationContractError,
+    SemanticPromptRenderError,
+    SemanticSkillDocumentError,
     SemanticTaskExecutionError,
     SkillCatalogError,
     SkillContractError,
@@ -77,6 +79,14 @@ from .gateway_contracts import (
     StructuredModelTransport,
     StructuredModelTransportResponse,
 )
+from .generation import (
+    SemanticGenerationModelPolicy,
+    SemanticGenerationModelRule,
+    StructuredGenerationSkillRunner,
+    TODOTurnSnapshotReader,
+    TurnSnapshotReader,
+    validate_generation_configuration,
+)
 from .plan_compiler import DeterministicPlanCompiler
 from .plan_contracts import (
     PLAN_IR_VERSION,
@@ -88,7 +98,6 @@ from .plan_contracts import (
     PlanEnvelopeKind,
     PlanIR,
     PlanPolicySpec,
-    PlanSelection,
     PlanSkillRequirementMode,
     PlanSkillRule,
     PlanTask,
@@ -107,23 +116,13 @@ from .plan_policy import (
     PRODUCTION_PLAN_POLICY_ID,
     build_production_plan_policy,
 )
-from .plan_proposer import (
-    PLAN_PLANNER_CONTEXT_CONTRACT,
-    LLMPlanSelector,
-    StructuredPlanModelClient,
-)
 from .plan_validator import PlanValidator
 from .production import (
-    CANONICAL_DESCRIPTOR_SPEC,
     CLAIM_INVENTORY_SPEC,
-    MEASUREMENT_PHRASE_SPEC,
-    PARTICIPANT_PHRASE_SPEC,
     PATCH_APPLIER_SPEC,
     PRODUCTION_SEMANTIC_SKILL_SPECS,
     SEMANTIC_REPAIR_SPEC,
     SEMANTIC_REVIEW_SPEC,
-    STATEMENT_SEMANTICS_SPEC,
-    TEMPORAL_PHRASE_SPEC,
     TURN_INTENT_SPEC,
     build_production_skill_catalog,
 )
@@ -132,6 +131,14 @@ from .projection import (
     projection_metadata_from_spec,
     render_skill_projection,
     render_skill_projection_from_metadata,
+)
+from .prompt_renderer import (
+    ClaimPropositionInventoryPromptRenderer,
+    SkillPromptRenderer,
+    SkillPromptRendererRegistry,
+    SkillPromptRenderRequest,
+    TurnIntentPromptRenderer,
+    build_production_prompt_renderer_registry,
 )
 from .scheduler_contracts import (
     DAG_SCHEDULER_CONTRACT_VERSION,
@@ -161,6 +168,16 @@ from .scheduler_repository import (
     InMemorySemanticDAGProjectionRepository,
     PostgresSemanticDAGProjectionRepository,
 )
+from .skill_document import (
+    ALLOWED_SKILL_PROMPT_VARIABLES,
+    SKILL_DOCUMENT_REQUIRED_MODEL_SECTIONS,
+    SKILL_DOCUMENT_SECTIONS,
+    SemanticSkillDocument,
+    SemanticSkillDocumentMetadata,
+    SemanticSkillDocumentSection,
+    load_semantic_skill_document,
+)
+from .skill_template import RestrictedSkillTemplate
 from .snapshot import (
     BoundedConversationHistoryReader,
     TrustedPetContextReader,
@@ -206,31 +223,37 @@ from .temporal_scheduler import (
     build_dag_task_policies,
     build_temporal_semantic_dag_worker,
 )
+from .verifier import (
+    ClaimInventoryProposalShape,
+    GenerationVerificationState,
+    SemanticGenerationVerificationResult,
+    SemanticGenerationVerifier,
+    TurnIntentProposalShape,
+)
 
 __all__ = [
-    "CANONICAL_DESCRIPTOR_SPEC",
+    "ALLOWED_SKILL_PROMPT_VARIABLES",
     "CLAIM_INVENTORY_SPEC",
     "DAG_SCHEDULER_CONTRACT_VERSION",
     "DOMAIN_ISOLATED_CONTEXT_RESOURCES",
-    "MEASUREMENT_PHRASE_SPEC",
-    "PARTICIPANT_PHRASE_SPEC",
     "PATCH_APPLIER_SPEC",
     "PLAN_IR_VERSION",
-    "PLAN_PLANNER_CONTEXT_CONTRACT",
     "PLAN_POLICY_VERSION",
     "PRODUCTION_PLAN_POLICY_ID",
     "PRODUCTION_SEMANTIC_SKILL_SPECS",
     "SEMANTIC_REPAIR_SPEC",
     "SEMANTIC_REVIEW_SPEC",
+    "SKILL_DOCUMENT_REQUIRED_MODEL_SECTIONS",
+    "SKILL_DOCUMENT_SECTIONS",
     "SKILL_DOC_REQUIRED_SECTIONS",
-    "STATEMENT_SEMANTICS_SPEC",
-    "TEMPORAL_PHRASE_SPEC",
     "TURN_INTENT_SPEC",
     "TURN_SNAPSHOT_CONTEXT_RESOURCES",
     "TURN_SNAPSHOT_VERSION",
     "BoundedConversationHistoryReader",
     "BoundedHistoryReadResult",
     "BoundedHistoryReadStatus",
+    "ClaimInventoryProposalShape",
+    "ClaimPropositionInventoryPromptRenderer",
     "ContextContract",
     "DAGDependencyFailure",
     "DAGExecutionPolicy",
@@ -246,8 +269,8 @@ __all__ = [
     "DeterministicPlanCompiler",
     "FailurePolicy",
     "FieldOwnershipPath",
+    "GenerationVerificationState",
     "InMemorySemanticDAGProjectionRepository",
-    "LLMPlanSelector",
     "OriginalTextExtractionPolicy",
     "OriginalUserText",
     "PlanCompilationError",
@@ -258,10 +281,7 @@ __all__ = [
     "PlanEnvelopeKind",
     "PlanError",
     "PlanIR",
-    "PlanModelClientError",
     "PlanPolicySpec",
-    "PlanSelection",
-    "PlanSelectionSchemaError",
     "PlanSkillRequirementMode",
     "PlanSkillRule",
     "PlanTask",
@@ -272,6 +292,7 @@ __all__ = [
     "PlanValidator",
     "PostgresSemanticDAGProjectionRepository",
     "RepairMapping",
+    "RestrictedSkillTemplate",
     "SchedulerError",
     "SchemaContract",
     "SchemaContractReference",
@@ -279,7 +300,17 @@ __all__ = [
     "SemanticCollaborationError",
     "SemanticDAGProjectionRepository",
     "SemanticDAGWorkflow",
+    "SemanticGenerationContractError",
+    "SemanticGenerationModelPolicy",
+    "SemanticGenerationModelRule",
+    "SemanticGenerationVerificationResult",
+    "SemanticGenerationVerifier",
     "SemanticModelProposal",
+    "SemanticPromptRenderError",
+    "SemanticSkillDocument",
+    "SemanticSkillDocumentError",
+    "SemanticSkillDocumentMetadata",
+    "SemanticSkillDocumentSection",
     "SemanticTaskExecutionError",
     "SemanticTaskExecutionRequest",
     "SemanticTaskExecutor",
@@ -297,11 +328,15 @@ __all__ = [
     "SkillProjectionError",
     "SkillProjectionMetadata",
     "SkillPromptProjection",
+    "SkillPromptRenderRequest",
+    "SkillPromptRenderer",
+    "SkillPromptRendererRegistry",
     "SkillRegistry",
     "SkillRepairMappingRecord",
     "SkillSpec",
     "SkillTaskKind",
     "SkillTraceKind",
+    "StructuredGenerationSkillRunner",
     "StructuredLLMCallMetadata",
     "StructuredLLMCallRequest",
     "StructuredLLMGateway",
@@ -312,8 +347,8 @@ __all__ = [
     "StructuredLLMSchemaError",
     "StructuredModelTransport",
     "StructuredModelTransportResponse",
-    "StructuredPlanModelClient",
     "TODOSemanticTaskExecutor",
+    "TODOTurnSnapshotReader",
     "TemporalDAGActivityRuntime",
     "TemporalDAGRunHandle",
     "TemporalDAGWorkflowInput",
@@ -326,6 +361,8 @@ __all__ = [
     "TrustedPetContextReader",
     "TrustedPetContextSource",
     "TrustedPetProfile",
+    "TurnIntentPromptRenderer",
+    "TurnIntentProposalShape",
     "TurnSnapshot",
     "TurnSnapshotBudget",
     "TurnSnapshotBudgetExceededError",
@@ -338,6 +375,7 @@ __all__ = [
     "TurnSnapshotError",
     "TurnSnapshotProjection",
     "TurnSnapshotProjector",
+    "TurnSnapshotReader",
     "TurnSnapshotSourceRequest",
     "TurnSnapshotSourceScope",
     "TurnSnapshotSourceUnavailableError",
@@ -352,6 +390,7 @@ __all__ = [
     "VerifierBinding",
     "build_dag_task_policies",
     "build_production_plan_policy",
+    "build_production_prompt_renderer_registry",
     "build_production_skill_catalog",
     "build_temporal_semantic_dag_worker",
     "canonical_gateway_json",
@@ -363,9 +402,11 @@ __all__ = [
     "compute_turn_snapshot_digest",
     "evaluate_dag_frontier",
     "execution_layers",
+    "load_semantic_skill_document",
     "projection_metadata_from_spec",
     "render_skill_projection",
     "render_skill_projection_from_metadata",
     "schema_reference_matches",
     "semantic_dag_run_id",
+    "validate_generation_configuration",
 ]

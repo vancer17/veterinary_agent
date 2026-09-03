@@ -1,11 +1,11 @@
 """
 =============================================================================
 文件：src/vet_agent/semantic_collaboration/plan_compiler.py
-作用：实现受限语义协作 DAG 的 M03 确定性 Plan Compiler。
-范围：覆盖 PlanSelection 预算检查、SkillRegistry 解析、必选任务展开、
-      claim envelope 生成、静态依赖重写、schema 引用注入与 Plan IR 身份计算。
-说明：本文件不调用 LLM、不修复非法选择、不生成默认回退计划，也不接入 M04
-      DAGScheduler；所有不可编译输入均以稳定错误显式失败。
+作用：实现受限语义协作 DAG M03 的确定性 Root Plan Compiler。
+范围：覆盖 SkillRegistry 解析、必选根任务展开、turn root envelope、静态依赖
+      重写、schema 引用注入与 canonical Plan IR 身份计算。
+说明：本文件不调用规划 LLM、不预估计 claim 数量、不预生成 claim envelope、
+      不修复非法计划、不生成默认回退计划，也不接入 M04 DAGScheduler。
 =============================================================================
 """
 
@@ -22,7 +22,6 @@ from .plan_contracts import (
     PlanEnvelopeKind,
     PlanIR,
     PlanPolicySpec,
-    PlanSelection,
     PlanSkillRequirementMode,
     PlanTask,
     PlanTaskSelectionSource,
@@ -33,8 +32,17 @@ from .plan_contracts import (
 from .snapshot_contracts import TurnSnapshot
 
 
+def _dependency_sort_key(dependency: PlanDependency) -> tuple[str, str]:
+    """读取计划依赖边的稳定排序键。
+
+    :param dependency: 计划依赖边。
+    :return: 返回任务标识与被依赖任务标识组成的元组。
+    """
+    return dependency.task_id, dependency.depends_on_task_id
+
+
 class DeterministicPlanCompiler:
-    """把模型侧最小 PlanSelection 确定性编译为 CandidatePlanIR。
+    """把生产 PlanPolicy 确定性编译为初始 Root PlanIR。
 
     :return: 无返回值；编译结果仍必须经过 PlanValidator 才能调度。
     """
@@ -48,7 +56,7 @@ class DeterministicPlanCompiler:
         """初始化绑定权威目录与生产策略的计划编译器。
 
         :param registry: 已冻结的 SkillCatalog 只读门面。
-        :param policy: 初始 Turn Plan 生产策略。
+        :param policy: 初始 Root Plan 生产策略。
         :return: 无返回值。
         :raises SkillCatalogError: 策略引用的 SKILL 或版本不存在时抛出。
         """
@@ -59,20 +67,16 @@ class DeterministicPlanCompiler:
 
     def compile(
         self,
-        selection: PlanSelection,
         snapshot: TurnSnapshot,
     ) -> PlanIR:
-        """将受限计划选择编译为绑定上下文与目录的 Plan IR。
+        """将生产策略编译为绑定上下文与目录的 Root PlanIR。
 
-        :param selection: 任务规划 LLM 输出的固定字段选择结果。
         :param snapshot: 当前回合不可变 TurnSnapshot。
-        :return: 返回尚未通过 M03 准入门禁的 CandidatePlanIR。
-        :raises PlanCompilationError: 选择超过策略预算或策略无法展开时抛出。
+        :return: 返回尚未通过 M03 准入门禁的 Candidate Root PlanIR。
+        :raises PlanCompilationError: 策略依赖无法展开时抛出。
         """
-        self._validate_budget(selection)
-        envelopes = self._build_envelopes(selection)
+        envelopes = self._build_envelopes()
         unresolved_tasks = self._build_tasks(
-            selection=selection,
             snapshot=snapshot,
             envelopes=envelopes,
         )
@@ -119,76 +123,26 @@ class DeterministicPlanCompiler:
             )
         return specs
 
-    def _validate_budget(self, selection: PlanSelection) -> None:
-        """校验模型选择是否超过生产计划硬预算。
+    def _build_envelopes(self) -> tuple[PlanEnvelope, ...]:
+        """生成初始 Root Plan 的 turn root envelope。
 
-        :param selection: 任务规划 LLM 输出的固定字段选择结果。
-        :return: 无返回值。
-        :raises PlanCompilationError: claim envelope 或任务数量超过策略时抛出。
+        :return: 返回仅包含 turn_root 的不可变 envelope 集合。
         """
-        if selection.claim_envelope_count > self.policy.max_claim_envelope_count:
-            raise PlanCompilationError(
-                "claim envelope count exceeds plan policy budget",
-                failure_code="plan_budget_exceeded",
-            )
-        root_task_count = sum(
-            rule.requirement == PlanSkillRequirementMode.ALWAYS
-            for rule in self.policy.skills
-        )
-        selected_claim_lanes = sum(
-            rule.target_envelope_kind == PlanEnvelopeKind.CLAIM
-            and (
-                rule.requirement
-                == PlanSkillRequirementMode.WHEN_CLAIM_ENVELOPE_PRESENT
-                or self._is_rule_selected(rule.skill_id, selection)
-            )
-            for rule in self.policy.skills
-        )
-        estimated_task_count = root_task_count + (
-            selected_claim_lanes * selection.claim_envelope_count
-        )
-        if estimated_task_count > self.policy.max_task_count:
-            raise PlanCompilationError(
-                "estimated plan task count exceeds plan policy budget",
-                failure_code="plan_budget_exceeded",
-            )
-
-    def _build_envelopes(
-        self,
-        selection: PlanSelection,
-    ) -> tuple[PlanEnvelope, ...]:
-        """生成 turn root 与受限数量 claim envelope。
-
-        :param selection: 任务规划 LLM 输出的固定字段选择结果。
-        :return: 返回系统生成的不可变 envelope 集合。
-        """
-        envelopes: list[PlanEnvelope] = [
+        return (
             PlanEnvelope(
                 envelope_id="turn_root",
                 kind=PlanEnvelopeKind.TURN,
             ),
-        ]
-        envelopes.extend(
-            PlanEnvelope(
-                envelope_id=f"claim_env_{ordinal:04d}",
-                kind=PlanEnvelopeKind.CLAIM,
-                parent_envelope_id="turn_root",
-                ordinal=ordinal,
-            )
-            for ordinal in range(selection.claim_envelope_count)
         )
-        return tuple(envelopes)
 
     def _build_tasks(
         self,
         *,
-        selection: PlanSelection,
         snapshot: TurnSnapshot,
         envelopes: tuple[PlanEnvelope, ...],
     ) -> tuple[PlanTask, ...]:
-        """按生产策略与模型选择展开完整任务集合。
+        """按生产策略展开当前计划中的必选任务。
 
-        :param selection: 任务规划 LLM 输出的固定字段选择结果。
         :param snapshot: 当前回合不可变 TurnSnapshot。
         :param envelopes: 系统生成的计划 envelope 集合。
         :return: 返回确定性排序前的不可变任务集合。
@@ -197,12 +151,11 @@ class DeterministicPlanCompiler:
         for rule in self.policy.skills:
             if rule.requirement == PlanSkillRequirementMode.FORBIDDEN:
                 continue
-            selected = self._is_rule_selected(rule.skill_id, selection)
             required = rule.requirement in {
                 PlanSkillRequirementMode.ALWAYS,
                 PlanSkillRequirementMode.WHEN_CLAIM_ENVELOPE_PRESENT,
             }
-            if not selected and not required:
+            if not required:
                 continue
             target_envelopes = self._target_envelopes(
                 target_kind=rule.target_envelope_kind,
@@ -214,34 +167,9 @@ class DeterministicPlanCompiler:
                         spec=self.skill_specs[rule.skill_id],
                         envelope=envelope,
                         turn_id=snapshot.turn_id,
-                        selection_source=(
-                            PlanTaskSelectionSource.PLAN_POLICY
-                            if required
-                            else PlanTaskSelectionSource.PLAN_SELECTION
-                        ),
                     ),
                 )
         return tuple(tasks)
-
-    def _is_rule_selected(
-        self,
-        skill_id: str,
-        selection: PlanSelection,
-    ) -> bool:
-        """读取固定字段选择结果中对应 SKILL 的启用状态。
-
-        :param skill_id: 生产策略中的 SKILL 稳定标识。
-        :param selection: 任务规划 LLM 输出的固定字段选择结果。
-        :return: 返回该 SKILL 是否被模型选择启用。
-        """
-        selected_fields = {
-            "statement_semantics": selection.run_statement_semantics,
-            "participant_phrase": selection.run_participant_phrase,
-            "temporal_phrase": selection.run_temporal_phrase,
-            "measurement_phrase": selection.run_measurement_phrase,
-            "canonical_descriptor": selection.run_canonical_descriptor,
-        }
-        return selected_fields.get(skill_id, False)
 
     def _target_envelopes(
         self,
@@ -267,15 +195,13 @@ class DeterministicPlanCompiler:
         spec: SkillSpec,
         envelope: PlanEnvelope,
         turn_id: str,
-        selection_source: PlanTaskSelectionSource,
     ) -> PlanTask:
         """构造带稳定身份与权威 schema 引用的计划任务。
 
         :param spec: SkillCatalog 解析出的权威 SkillSpec。
         :param envelope: 任务绑定的计划 envelope。
         :param turn_id: 当前 TurnSnapshot 回合标识。
-        :param selection_source: 任务产生来源。
-        :return: 返回不可变计划任务。
+        :return: 返回由生产策略产生的不可变计划任务。
         """
         return PlanTask(
             task_id=(
@@ -289,14 +215,14 @@ class DeterministicPlanCompiler:
             expected_output_schema=SchemaContractReference.from_contract(
                 spec.output_contract,
             ),
-            selection_source=selection_source,
+            selection_source=PlanTaskSelectionSource.PLAN_POLICY,
         )
 
     def _build_dependencies(
         self,
         tasks: tuple[PlanTask, ...],
     ) -> tuple[PlanDependency, ...]:
-        """根据 PlanPolicy 静态规则重写任务依赖边。
+        """根据 PlanPolicy 静态规则生成任务依赖边。
 
         :param tasks: 系统展开后的计划任务集合。
         :return: 返回按稳定键排序的 canonical 依赖边集合。
@@ -396,21 +322,7 @@ class DeterministicPlanCompiler:
         }
         return tuple(
             task.model_copy(
-                update={
-                    "depends_on": dependency_ids.get(
-                        task.task_id,
-                        (),
-                    ),
-                },
+                update={"depends_on": dependency_ids.get(task.task_id, ())},
             )
             for task in tasks
         )
-
-
-def _dependency_sort_key(dependency: PlanDependency) -> tuple[str, str]:
-    """读取计划依赖边的稳定排序键。
-
-    :param dependency: 计划依赖边。
-    :return: 返回任务标识与被依赖任务标识组成的元组。
-    """
-    return dependency.task_id, dependency.depends_on_task_id

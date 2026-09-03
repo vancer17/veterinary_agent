@@ -1,9 +1,9 @@
 """
 =============================================================================
 文件：src/vet_agent/semantic_collaboration/plan_contracts.py
-作用：定义受限语义协作 DAG 的 M03 PlanSelection、PlanPolicy 与 Plan IR 契约。
-范围：覆盖模型侧最小固定字段选择、生产计划策略、任务与 envelope 展开结果、
-      schema 引用、依赖边、canonical plan 身份以及显式校验失败状态。
+作用：定义受限语义协作 DAG 的 M03 PlanPolicy 与 Root Plan IR 契约。
+范围：覆盖确定性生产计划策略、任务与 envelope 展开结果、schema 引用、
+      依赖边、canonical plan 身份以及显式校验失败状态。
 说明：本文件是纯契约层，不调用模型、不访问数据库、不执行 DAG 调度，也不提供
       默认计划、旧链路回退或宽松 JSON 修复路径。
 =============================================================================
@@ -22,7 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from .contracts import SchemaContract
 
 PLAN_IR_VERSION: Final = "1.0.0"
-PLAN_POLICY_VERSION: Final = "1.0.0"
+PLAN_POLICY_VERSION: Final = "3.0.0"
 
 
 class PlanEnvelopeKind(StrEnum):
@@ -58,13 +58,12 @@ class PlanDependencyScope(StrEnum):
 
 
 class PlanTaskSelectionSource(StrEnum):
-    """表示计划任务由策略强制产生还是由模型选择产生。
+    """表示计划任务由确定性生产策略产生。
 
-    :return: 无返回值；该枚举用于审计任务来源而不暴露模型自由命令。
+    :return: 无返回值；当前初始 Root Plan 不存在模型选择来源。
     """
 
     PLAN_POLICY = "plan_policy"
-    PLAN_SELECTION = "plan_selection"
 
 
 class PlanValidationFailureCode(StrEnum):
@@ -96,60 +95,6 @@ class PlanValidationFailureCode(StrEnum):
     PLAN_ID_INVALID = "plan_id_invalid"
     EMPTY_PLAN = "empty_plan"
     NON_CANONICAL_ORDER = "non_canonical_order"
-
-
-class PlanSelection(BaseModel):
-    """表示任务规划 LLM 允许输出的最小固定字段选择结果。
-
-    :return: 无返回值；模型只选择 claim envelope 数量与语义 lane，不输出图结构。
-    """
-
-    model_config = ConfigDict(
-        extra="forbid",
-        frozen=True,
-        strict=True,
-        validate_assignment=True,
-    )
-
-    claim_envelope_count: int = Field(
-        ge=0,
-        le=16,
-        description="模型估计的当前回合 claim 执行 envelope 数量；不是最终 claim 权威数量。",
-    )
-    run_statement_semantics: bool = Field(
-        description="是否为每个 claim envelope 执行 statement_semantics SKILL。",
-    )
-    run_participant_phrase: bool = Field(
-        description="是否为每个 claim envelope 执行 participant_phrase SKILL。",
-    )
-    run_temporal_phrase: bool = Field(
-        description="是否为每个 claim envelope 执行 temporal_phrase SKILL。",
-    )
-    run_measurement_phrase: bool = Field(
-        description="是否为每个 claim envelope 执行 measurement_phrase SKILL。",
-    )
-    run_canonical_descriptor: bool = Field(
-        description="是否为每个 claim envelope 执行 canonical_descriptor SKILL。",
-    )
-
-    @model_validator(mode="after")
-    def validate_claim_lane_consistency(self) -> Self:
-        """校验 claim 数量与 claim 级语义 lane 的一致性。
-
-        :return: 返回通过基础一致性校验的模型选择结果。
-        """
-        claim_lanes = (
-            self.run_statement_semantics,
-            self.run_participant_phrase,
-            self.run_temporal_phrase,
-            self.run_measurement_phrase,
-            self.run_canonical_descriptor,
-        )
-        if self.claim_envelope_count == 0 and any(claim_lanes):
-            raise ValueError("claim lanes cannot run without a claim envelope")
-        if self.claim_envelope_count > 0 and not self.run_statement_semantics:
-            raise ValueError("statement_semantics is required for claim envelopes")
-        return self
 
 
 class PlanDependencyRule(BaseModel):
@@ -242,13 +187,8 @@ class PlanPolicySpec(BaseModel):
         max_length=160,
         description="生产计划策略稳定标识。",
     )
-    policy_version: Literal["1.0.0"] = Field(
+    policy_version: Literal["3.0.0"] = Field(
         description="PlanPolicy 契约版本。",
-    )
-    max_claim_envelope_count: int = Field(
-        ge=0,
-        le=16,
-        description="初始 Turn Plan 允许的最大 claim envelope 数量。",
     )
     max_task_count: int = Field(
         ge=1,
@@ -301,11 +241,7 @@ class PlanPolicySpec(BaseModel):
                     raise ValueError(
                         "same-envelope dependency is only valid for claim skills",
                     )
-        minimum_task_count = always_count + sum(
-            rule.requirement
-            == PlanSkillRequirementMode.WHEN_CLAIM_ENVELOPE_PRESENT
-            for rule in self.skills
-        ) * self.max_claim_envelope_count
+        minimum_task_count = always_count
         if self.max_task_count < minimum_task_count:
             raise ValueError("plan policy task budget cannot cover required tasks")
         policy_graph = {

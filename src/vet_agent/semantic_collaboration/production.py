@@ -2,11 +2,12 @@
 =============================================================================
 文件：src/vet_agent/semantic_collaboration/production.py
 作用：声明受限语义协作 DAG 的 M01 生产 SkillCatalog 组合根。
-范围：覆盖 Turn Intent、Claim Inventory、Statement Semantics、Participant、
-      Temporal、Measurement、Canonical、Review、Repair 与 Patch Apply 的
-      权威契约。
-说明：本文件只注册正交语义任务，不包含医学词表、prompt 全文、调度实现、
-      模型调用或领域状态写入；未实现的下游能力由后续模块显式立项。
+范围：覆盖 Turn Intent、Claim Proposition Inventory、Review、Repair 与
+      Patch Apply 的权威契约；当前生产生成面只保留两个正交根任务。
+说明：本文件不包含医学词表、prompt 全文、调度实现、模型调用或领域状态
+      写入；生成任务绑定包内标准化 SKILL.md，Participant / Temporal /
+      Measurement / Canonical 等未具备 resolver 与消费者的 lane 不进入当前
+      生产目录。
 =============================================================================
 """
 
@@ -33,6 +34,7 @@ from .contracts import (
     VerifierBinding,
 )
 from .projection import SkillProjectionMetadata, render_skill_projection
+from .skill_document import load_semantic_skill_document
 
 
 def _paths(*values: str) -> tuple[FieldOwnershipPath, ...]:
@@ -45,7 +47,7 @@ def _paths(*values: str) -> tuple[FieldOwnershipPath, ...]:
 
 
 def _context_resource_sort_key(resource: SkillContextResource) -> str:
-    """读取上下文资源枚举的排序键。
+    """读取上下文资源枚举的稳定排序键。
 
     :param resource: 受限上下文资源枚举。
     :return: 返回资源稳定枚举值。
@@ -56,33 +58,16 @@ def _context_resource_sort_key(resource: SkillContextResource) -> str:
 def _leaf_schema(path: str) -> dict[str, Any]:
     """按字段路径构造结构化叶子 schema。
 
-    :param path: 规范化字段路径。
-    :return: 返回叶子字段的 JSON Schema 定义。
+    :param path: 规范化字段所有权路径。
+    :return: 返回不含医学语义的字段 schema 定义。
     """
     scalar_types: dict[str, str] = {
-        "turn_intent.evidence.phrase": "string",
-        "claim.envelope.ordinal": "integer",
-        "claim.envelope.parent_scope": "string",
-        "claim.semantics.statement_type": "string",
-        "claim.semantics.assertion_state": "string",
-        "claim.semantics.certainty": "string",
-        "claim.semantics.scope": "string",
-        "claim.participants.subject.phrase": "string",
-        "claim.participants.agent.phrase": "string",
-        "claim.participants.recipient.phrase": "string",
-        "claim.participants.object.phrase": "string",
-        "claim.temporal.phrase": "string",
-        "claim.temporal.claim_binding": "string",
-        "claim.measurement.phrase": "string",
-        "claim.measurement.claim_binding": "string",
-        "claim.canonical.descriptor": "string",
-        "claim.canonical.target_query": "string",
-        "claim.canonical.claim_binding": "string",
         "review.verdict": "string",
         "review.failure_code": "string",
         "review.repair_hint": "string",
         "repair.patch_type": "string",
         "repair.base_version": "string",
+        "repair.proposal": "object",
         "artifact.version": "integer",
         "artifact.lineage": "string",
         "artifact.stale": "boolean",
@@ -95,8 +80,11 @@ def _leaf_schema(path: str) -> dict[str, Any]:
     }
 
 
-def _insert_field_tree(tree: dict[str, Any], segments: tuple[str, ...]) -> None:
-    """将一条字段路径插入输出 schema 的嵌套属性树。
+def _insert_field_tree(
+    tree: dict[str, Any],
+    segments: tuple[str, ...],
+) -> None:
+    """把一条所有权路径插入输出 schema 属性树。
 
     :param tree: 当前层级的 properties 字典。
     :param segments: 字段路径分段集合。
@@ -122,10 +110,11 @@ def _insert_field_tree(tree: dict[str, Any], segments: tuple[str, ...]) -> None:
         current = nested_properties
 
 
-def _output_schema(
-    schema_id: str, owns: tuple[FieldOwnershipPath, ...]
+def _nested_output_schema(
+    schema_id: str,
+    owns: tuple[FieldOwnershipPath, ...],
 ) -> SchemaContract:
-    """构造 SKILL 输出契约。
+    """从字段所有权路径构造严格嵌套输出 schema。
 
     :param schema_id: 输出 schema 稳定标识。
     :param owns: 当前 SKILL 拥有的字段路径集合。
@@ -147,11 +136,76 @@ def _output_schema(
     )
 
 
+def _turn_intent_output_schema() -> SchemaContract:
+    """构造 Turn Intent fixed-field boolean 输出契约。
+
+    :return: 返回七个回合意图信号的极薄严格 schema。
+    """
+    fields = (
+        "answer_now",
+        "wants_triage",
+        "correction",
+        "clarification_request",
+        "fact_statement_present",
+        "question_present",
+        "report_context_present",
+    )
+    properties: dict[str, Any] = {
+        field: {
+            "type": "boolean",
+            "description": f"Turn-level intent signal: {field}.",
+        }
+        for field in fields
+    }
+    return SchemaContract(
+        schema_id="semantic_collaboration.turn_intent.output",
+        schema_version="2.0.0",
+        json_schema={
+            "type": "object",
+            "description": "Fixed-field turn intent contract without evidence fields.",
+            "properties": properties,
+            "required": list(fields),
+            "additionalProperties": False,
+        },
+    )
+
+
+def _claim_inventory_output_schema() -> SchemaContract:
+    """构造自然语言 Claim Proposition Inventory 输出契约。
+
+    :return: 返回仅包含 claims 字符串数组的极薄严格 schema。
+    """
+    return SchemaContract(
+        schema_id="semantic_collaboration.claim_inventory.output",
+        schema_version="2.0.0",
+        json_schema={
+            "type": "object",
+            "description": "Self-contained natural-language claim proposition inventory.",
+            "properties": {
+                "claims": {
+                    "type": "array",
+                    "description": "Ordered self-contained Chinese claim propositions.",
+                    "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 240,
+                    },
+                    "minItems": 0,
+                    "maxItems": 8,
+                    "uniqueItems": True,
+                },
+            },
+            "required": ["claims"],
+            "additionalProperties": False,
+        },
+    )
+
+
 def _input_schema(skill_id: str) -> SchemaContract:
     """构造 SKILL 输入契约。
 
     :param skill_id: SKILL 稳定标识。
-    :return: 返回绑定 TurnSnapshot 与 verified artifact 的输入 schema 契约。
+    :return: 返回绑定 TurnSnapshot digest 与依赖 artifact 的输入 schema。
     """
     return SchemaContract(
         schema_id=f"semantic_collaboration.{skill_id}.input",
@@ -160,14 +214,10 @@ def _input_schema(skill_id: str) -> SchemaContract:
             "type": "object",
             "description": "Immutable task envelope bound to one TurnSnapshot digest.",
             "properties": {
-                "task_id": {"type": "string", "description": "计划内任务标识。"},
-                "turn_snapshot_digest": {
-                    "type": "string",
-                    "description": "当前回合不可变上下文摘要。",
-                },
+                "task_id": {"type": "string"},
+                "turn_snapshot_digest": {"type": "string"},
                 "dependencies": {
                     "type": "object",
-                    "description": "按契约声明的 verified artifact 输入。",
                     "additionalProperties": False,
                     "properties": {},
                 },
@@ -184,7 +234,7 @@ def _context_contract(
     """构造受限上下文契约。
 
     :param required_resources: 必需只读上下文资源集合。
-    :return: 返回包含完整领域隔离禁止项的上下文契约。
+    :return: 返回包含领域隔离禁止项的上下文契约。
     """
     return ContextContract(
         required_resources=required_resources,
@@ -218,10 +268,10 @@ def _repair_mapping(
     failure_code: SkillFailureCode,
     patch_type: SkillPatchType,
 ) -> RepairMapping:
-    """构造一个白名单修复映射。
+    """构造白名单修复映射。
 
-    :param failure_code: 可修复失败码。
-    :param patch_type: 允许的 typed patch 类型。
+    :param failure_code: 可修复的稳定失败码。
+    :param patch_type: 允许提议的 typed patch 类型。
     :return: 返回修复映射契约。
     """
     return RepairMapping(
@@ -235,29 +285,33 @@ def _repair_mapping(
 def _skill_spec(
     *,
     skill_id: str,
+    skill_version: str,
     task_kind: SkillTaskKind,
     execution_family: SkillExecutionFamily,
     verifier_id: str,
     owns: tuple[FieldOwnershipPath, ...],
+    output_contract: SchemaContract,
     forbidden_output: tuple[FieldOwnershipPath, ...],
     required_context: tuple[SkillContextResource, ...],
     repair_mappings: tuple[RepairMapping, ...] = (),
     retryable_failures: tuple[SkillFailureCode, ...] = (),
     max_attempts: int = 1,
 ) -> SkillSpec:
-    """构造生产 SkillSpec。
+    """构造通过权威边界校验的生产 SkillSpec。
 
-    :param skill_id: SKILL 稳定标识。
-    :param task_kind: 正交任务类型。
-    :param execution_family: 执行家族类型。
-    :param verifier_id: verifier 稳定标识。
-    :param owns: 权威输出字段集合。
+    :param skill_id: 生产 SKILL 稳定标识。
+    :param skill_version: 生产 SKILL 精确版本。
+    :param task_kind: 正交语义任务类型。
+    :param execution_family: SKILL 执行家族类型。
+    :param verifier_id: 绑定的确定性 verifier 标识。
+    :param owns: 当前 SKILL 权威字段集合。
+    :param output_contract: 显式输出 schema 契约。
     :param forbidden_output: 禁止输出字段集合。
     :param required_context: 必需上下文资源集合。
     :param repair_mappings: 白名单修复映射集合。
     :param retryable_failures: 允许有界重试的失败码集合。
     :param max_attempts: 最大执行尝试次数。
-    :return: 返回通过自身一致性校验的 SkillSpec。
+    :return: 返回可注册的 SkillSpec。
     """
     mapped_failures = {mapping.failure_code for mapping in repair_mappings}
     retryable = set(retryable_failures)
@@ -272,38 +326,44 @@ def _skill_spec(
         SkillExecutionFamily.TYPED_REPAIR: SkillTraceKind.REPAIR_SKILL,
         SkillExecutionFamily.DETERMINISTIC_PATCH_APPLY: SkillTraceKind.PATCH_APPLIER,
     }[execution_family]
-    projection_metadata = SkillProjectionMetadata(
-        skill_id=skill_id,
-        skill_version="1.0.0",
-        task_kind=task_kind.value,
-        verifier_id=verifier_id,
-        verifier_version="1.0.0",
-        contract_version="1.0.0",
-        execution_family=execution_family.value,
-        owns=owns,
-        forbidden_output=forbidden_output,
-        required_context=required_context,
-        terminal_failures=terminal,
-        repair_mappings=tuple(
-            (
-                mapping.failure_code.value,
-                mapping.repair_skill_id,
-                mapping.repair_skill_version,
-            )
-            for mapping in repair_mappings
-        ),
+    skill_document = (
+        load_semantic_skill_document(skill_id)
+        if execution_family is SkillExecutionFamily.STRUCTURED_GENERATION
+        else None
     )
-    return SkillSpec(
+    if skill_document is None:
+        projection_metadata = SkillProjectionMetadata(
+            skill_id=skill_id,
+            skill_version=skill_version,
+            task_kind=task_kind.value,
+            verifier_id=verifier_id,
+            verifier_version="1.0.0",
+            contract_version="1.0.0",
+            execution_family=execution_family.value,
+            owns=owns,
+            forbidden_output=forbidden_output,
+            required_context=required_context,
+            terminal_failures=terminal,
+            repair_mappings=tuple(
+                (
+                    mapping.failure_code.value,
+                    mapping.repair_skill_id,
+                    mapping.repair_skill_version,
+                )
+                for mapping in repair_mappings
+            ),
+        )
+        prompt_projection = render_skill_projection(projection_metadata)
+    else:
+        prompt_projection = skill_document.projection
+    spec = SkillSpec(
         skill_id=skill_id,
-        skill_version="1.0.0",
+        skill_version=skill_version,
         contract_version="1.0.0",
         task_kind=task_kind,
         execution_family=execution_family,
         input_contract=_input_schema(skill_id),
-        output_contract=_output_schema(
-            f"semantic_collaboration.{skill_id}.output",
-            owns,
-        ),
+        output_contract=output_contract,
         owns=owns,
         does_not_own=forbidden_output,
         forbidden_output=forbidden_output,
@@ -315,25 +375,34 @@ def _skill_spec(
             max_attempts=max_attempts,
         ),
         repair_mappings=repair_mappings,
-        prompt_projection=render_skill_projection(projection_metadata),
+        prompt_projection=prompt_projection,
         observability=SkillObservabilityContract(trace_kind=trace_kind),
     )
+    if skill_document is not None:
+        skill_document.validate_against_spec(spec)
+    return spec
 
 
 TURN_INTENT_SPEC = _skill_spec(
     skill_id="turn_intent",
+    skill_version="2.0.0",
     task_kind=SkillTaskKind.TURN_INTENT,
     execution_family=SkillExecutionFamily.STRUCTURED_GENERATION,
     verifier_id="turn_intent_verifier",
     owns=_paths(
-        "turn_intent.acts",
-        "turn_intent.evidence.phrase",
+        "answer_now",
+        "wants_triage",
+        "correction",
+        "clarification_request",
+        "fact_statement_present",
+        "question_present",
+        "report_context_present",
     ),
-    forbidden_output=_paths("claim", "medical_decision"),
+    output_contract=_turn_intent_output_schema(),
+    forbidden_output=_paths("claims", "evidence", "medical_decision"),
     required_context=(
         SkillContextResource.TURN_SNAPSHOT_DIGEST,
         SkillContextResource.ORIGINAL_USER_TEXT,
-        SkillContextResource.BOUNDED_CONVERSATION_HISTORY,
         SkillContextResource.LAST_ASSISTANT_QUESTIONS,
         SkillContextResource.VERIFIED_PRIOR_FACT_SUMMARY,
     ),
@@ -354,185 +423,29 @@ TURN_INTENT_SPEC = _skill_spec(
 
 CLAIM_INVENTORY_SPEC = _skill_spec(
     skill_id="claim_inventory",
+    skill_version="2.0.0",
     task_kind=SkillTaskKind.CLAIM_INVENTORY,
     execution_family=SkillExecutionFamily.STRUCTURED_GENERATION,
     verifier_id="claim_inventory_verifier",
-    owns=_paths(
-        "claim.envelope.ordinal",
-        "claim.envelope.parent_scope",
+    owns=_paths("claims"),
+    output_contract=_claim_inventory_output_schema(),
+    forbidden_output=_paths(
+        "answer_now",
+        "wants_triage",
+        "evidence",
+        "medical_decision",
     ),
-    forbidden_output=_paths("turn_intent", "medical_decision"),
     required_context=(
         SkillContextResource.TURN_SNAPSHOT_DIGEST,
         SkillContextResource.ORIGINAL_USER_TEXT,
+        SkillContextResource.LAST_ASSISTANT_QUESTIONS,
         SkillContextResource.VERIFIED_PRIOR_FACT_SUMMARY,
         SkillContextResource.TRUSTED_PET_CONTEXT,
-        SkillContextResource.VERIFIED_PEER_ARTIFACT,
     ),
     repair_mappings=(
         _repair_mapping(
             SkillFailureCode.SCHEMA_INVALID,
-            SkillPatchType.CLAIM_ENVELOPE_PATCH,
-        ),
-    ),
-    retryable_failures=(
-        SkillFailureCode.MODEL_CALL_FAILED,
-        SkillFailureCode.RESPONSE_PARSE_FAILED,
-        SkillFailureCode.TIMEOUT,
-    ),
-    max_attempts=2,
-)
-
-
-STATEMENT_SEMANTICS_SPEC = _skill_spec(
-    skill_id="statement_semantics",
-    task_kind=SkillTaskKind.STATEMENT_SEMANTICS,
-    execution_family=SkillExecutionFamily.STRUCTURED_GENERATION,
-    verifier_id="statement_semantics_verifier",
-    owns=_paths(
-        "claim.semantics.statement_type",
-        "claim.semantics.assertion_state",
-        "claim.semantics.certainty",
-        "claim.semantics.scope",
-    ),
-    forbidden_output=_paths("claim.participants", "medical_decision"),
-    required_context=(
-        SkillContextResource.TURN_SNAPSHOT_DIGEST,
-        SkillContextResource.ORIGINAL_USER_TEXT,
-        SkillContextResource.VERIFIED_PEER_ARTIFACT,
-    ),
-    repair_mappings=(
-        _repair_mapping(
-            SkillFailureCode.SCHEMA_INVALID,
-            SkillPatchType.STATEMENT_SEMANTICS_PATCH,
-        ),
-        _repair_mapping(
-            SkillFailureCode.REVIEW_REJECTED,
-            SkillPatchType.STATEMENT_SEMANTICS_PATCH,
-        ),
-    ),
-    retryable_failures=(
-        SkillFailureCode.MODEL_CALL_FAILED,
-        SkillFailureCode.RESPONSE_PARSE_FAILED,
-        SkillFailureCode.TIMEOUT,
-    ),
-    max_attempts=2,
-)
-
-
-PARTICIPANT_PHRASE_SPEC = _skill_spec(
-    skill_id="participant_phrase",
-    task_kind=SkillTaskKind.PARTICIPANT_PHRASE,
-    execution_family=SkillExecutionFamily.STRUCTURED_GENERATION,
-    verifier_id="participant_phrase_verifier",
-    owns=_paths(
-        "claim.participants.subject.phrase",
-        "claim.participants.agent.phrase",
-        "claim.participants.recipient.phrase",
-        "claim.participants.object.phrase",
-    ),
-    forbidden_output=_paths("claim.semantics", "medical_decision"),
-    required_context=(
-        SkillContextResource.TURN_SNAPSHOT_DIGEST,
-        SkillContextResource.ORIGINAL_USER_TEXT,
-        SkillContextResource.TRUSTED_PET_CONTEXT,
-        SkillContextResource.VERIFIED_PEER_ARTIFACT,
-    ),
-    repair_mappings=(
-        _repair_mapping(
-            SkillFailureCode.EVIDENCE_OUT_OF_SCOPE,
-            SkillPatchType.PARTICIPANT_PHRASE_PATCH,
-        ),
-    ),
-    retryable_failures=(
-        SkillFailureCode.MODEL_CALL_FAILED,
-        SkillFailureCode.RESPONSE_PARSE_FAILED,
-        SkillFailureCode.TIMEOUT,
-    ),
-    max_attempts=2,
-)
-
-
-TEMPORAL_PHRASE_SPEC = _skill_spec(
-    skill_id="temporal_phrase",
-    task_kind=SkillTaskKind.TEMPORAL_PHRASE,
-    execution_family=SkillExecutionFamily.STRUCTURED_GENERATION,
-    verifier_id="temporal_phrase_verifier",
-    owns=_paths(
-        "claim.temporal.phrase",
-        "claim.temporal.claim_binding",
-    ),
-    forbidden_output=_paths("claim.measurement", "medical_decision"),
-    required_context=(
-        SkillContextResource.TURN_SNAPSHOT_DIGEST,
-        SkillContextResource.ORIGINAL_USER_TEXT,
-        SkillContextResource.VERIFIED_PEER_ARTIFACT,
-    ),
-    repair_mappings=(
-        _repair_mapping(
-            SkillFailureCode.CLAIM_BINDING_INVALID,
-            SkillPatchType.TEMPORAL_PHRASE_PATCH,
-        ),
-    ),
-    retryable_failures=(
-        SkillFailureCode.MODEL_CALL_FAILED,
-        SkillFailureCode.RESPONSE_PARSE_FAILED,
-        SkillFailureCode.TIMEOUT,
-    ),
-    max_attempts=2,
-)
-
-
-MEASUREMENT_PHRASE_SPEC = _skill_spec(
-    skill_id="measurement_phrase",
-    task_kind=SkillTaskKind.MEASUREMENT_PHRASE,
-    execution_family=SkillExecutionFamily.STRUCTURED_GENERATION,
-    verifier_id="measurement_phrase_verifier",
-    owns=_paths(
-        "claim.measurement.phrase",
-        "claim.measurement.claim_binding",
-    ),
-    forbidden_output=_paths("claim.temporal", "medical_decision"),
-    required_context=(
-        SkillContextResource.TURN_SNAPSHOT_DIGEST,
-        SkillContextResource.ORIGINAL_USER_TEXT,
-        SkillContextResource.VERIFIED_PEER_ARTIFACT,
-    ),
-    repair_mappings=(
-        _repair_mapping(
-            SkillFailureCode.CLAIM_BINDING_INVALID,
-            SkillPatchType.MEASUREMENT_PHRASE_PATCH,
-        ),
-    ),
-    retryable_failures=(
-        SkillFailureCode.MODEL_CALL_FAILED,
-        SkillFailureCode.RESPONSE_PARSE_FAILED,
-        SkillFailureCode.TIMEOUT,
-    ),
-    max_attempts=2,
-)
-
-
-CANONICAL_DESCRIPTOR_SPEC = _skill_spec(
-    skill_id="canonical_descriptor",
-    task_kind=SkillTaskKind.CANONICAL_DESCRIPTOR,
-    execution_family=SkillExecutionFamily.STRUCTURED_GENERATION,
-    verifier_id="canonical_descriptor_verifier",
-    owns=_paths(
-        "claim.canonical.descriptor",
-        "claim.canonical.target_query",
-        "claim.canonical.claim_binding",
-    ),
-    forbidden_output=_paths("canonical_id", "medical_decision"),
-    required_context=(
-        SkillContextResource.TURN_SNAPSHOT_DIGEST,
-        SkillContextResource.ORIGINAL_USER_TEXT,
-        SkillContextResource.VERIFIED_PEER_ARTIFACT,
-    ),
-    repair_mappings=(
-        _repair_mapping(
-            SkillFailureCode.SCHEMA_INVALID,
-            SkillPatchType.CANONICAL_DESCRIPTOR_PATCH,
+            SkillPatchType.CLAIM_PROPOSITION_PATCH,
         ),
     ),
     retryable_failures=(
@@ -546,6 +459,7 @@ CANONICAL_DESCRIPTOR_SPEC = _skill_spec(
 
 SEMANTIC_REVIEW_SPEC = _skill_spec(
     skill_id="semantic_review",
+    skill_version="1.0.0",
     task_kind=SkillTaskKind.REVIEW,
     execution_family=SkillExecutionFamily.DETERMINISTIC_REVIEW,
     verifier_id="semantic_review_verifier",
@@ -554,7 +468,15 @@ SEMANTIC_REVIEW_SPEC = _skill_spec(
         "review.failure_code",
         "review.repair_hint",
     ),
-    forbidden_output=_paths("claim", "medical_decision"),
+    output_contract=_nested_output_schema(
+        "semantic_collaboration.semantic_review.output",
+        _paths(
+            "review.verdict",
+            "review.failure_code",
+            "review.repair_hint",
+        ),
+    ),
+    forbidden_output=_paths("claims", "medical_decision"),
     required_context=(
         SkillContextResource.TURN_SNAPSHOT_DIGEST,
         SkillContextResource.ORIGINAL_USER_TEXT,
@@ -566,6 +488,7 @@ SEMANTIC_REVIEW_SPEC = _skill_spec(
 
 SEMANTIC_REPAIR_SPEC = _skill_spec(
     skill_id="semantic_repair",
+    skill_version="1.0.0",
     task_kind=SkillTaskKind.REPAIR,
     execution_family=SkillExecutionFamily.TYPED_REPAIR,
     verifier_id="semantic_repair_verifier",
@@ -573,6 +496,14 @@ SEMANTIC_REPAIR_SPEC = _skill_spec(
         "repair.patch_type",
         "repair.base_version",
         "repair.proposal",
+    ),
+    output_contract=_nested_output_schema(
+        "semantic_collaboration.semantic_repair.output",
+        _paths(
+            "repair.patch_type",
+            "repair.base_version",
+            "repair.proposal",
+        ),
     ),
     forbidden_output=_paths("artifact", "medical_decision"),
     required_context=(
@@ -587,6 +518,7 @@ SEMANTIC_REPAIR_SPEC = _skill_spec(
 
 PATCH_APPLIER_SPEC = _skill_spec(
     skill_id="patch_applier",
+    skill_version="1.0.0",
     task_kind=SkillTaskKind.PATCH_APPLY,
     execution_family=SkillExecutionFamily.DETERMINISTIC_PATCH_APPLY,
     verifier_id="patch_applier_verifier",
@@ -595,7 +527,15 @@ PATCH_APPLIER_SPEC = _skill_spec(
         "artifact.lineage",
         "artifact.stale",
     ),
-    forbidden_output=_paths("claim", "medical_decision"),
+    output_contract=_nested_output_schema(
+        "semantic_collaboration.patch_applier.output",
+        _paths(
+            "artifact.version",
+            "artifact.lineage",
+            "artifact.stale",
+        ),
+    ),
+    forbidden_output=_paths("claims", "medical_decision"),
     required_context=(
         SkillContextResource.TURN_SNAPSHOT_DIGEST,
         SkillContextResource.VERIFIED_PATCH_PROPOSAL,
@@ -607,11 +547,6 @@ PATCH_APPLIER_SPEC = _skill_spec(
 PRODUCTION_SEMANTIC_SKILL_SPECS: tuple[SkillSpec, ...] = (
     TURN_INTENT_SPEC,
     CLAIM_INVENTORY_SPEC,
-    STATEMENT_SEMANTICS_SPEC,
-    PARTICIPANT_PHRASE_SPEC,
-    TEMPORAL_PHRASE_SPEC,
-    MEASUREMENT_PHRASE_SPEC,
-    CANONICAL_DESCRIPTOR_SPEC,
     SEMANTIC_REVIEW_SPEC,
     SEMANTIC_REPAIR_SPEC,
     PATCH_APPLIER_SPEC,

@@ -141,7 +141,7 @@ tests/test_semantic_collaboration*.py
 |---|---|---|---|
 | M01 | Skill 契约与目录 | SkillSpec、SkillCatalog、所有权校验 | Phase 1 |
 | M02 | TurnSnapshot | 不可变上下文、digest、上下文预算 | Phase 1 |
-| M03 | Plan IR 与校验 | PlanIR、PlanValidator、规划 LLM adapter | Phase 2 |
+| M03 | Root Plan IR 与校验 | PlanIR、PlanValidator、确定性编译器 | Phase 2 |
 | M04 | Temporal-first DAG 调度 | 确定性 frontier、workflow / activity、终态投影 | Phase 2 |
 | M05 | 结构化 LLM Gateway | SKILL 调用、schema、usage、失败状态 | Phase 3 |
 | M06 | 生成 SKILL | prompt renderer、Turn Intent、Claim Proposition Inventory | Phase 3 |
@@ -304,22 +304,20 @@ generator / reviewer / repairer digest 一致
 context_budget_exceeded 可测试
 ```
 
-### M03：Plan IR 与 Plan Validator
+### M03：Root Plan IR 与 Plan Validator
 
 **目标**
 
-把任务规划 LLM 的输出限制为固定字段 `PlanSelection`，再由确定性编译层生成
-可验证 Plan IR。
+由确定性编译层根据生产 PlanPolicy 直接生成可验证初始 Root Plan IR，不调用
+任务规划 LLM，不预估 claim 数量，不预分配 claim envelope。
 
 **范围**
 
 ```text
 PlanIR
-PlanSelection
 PlanPolicySpec
 DeterministicPlanCompiler
 PlanValidator
-任务规划 LLM adapter
 Plan envelope 契约
 ```
 
@@ -333,8 +331,8 @@ M02 TurnSnapshot
 **交付物**
 
 1. Plan IR schema。
-2. 固定字段 PlanSelection 契约。
-3. 生产 PlanPolicy 与静态依赖规则。
+2. 生产 PlanPolicy 与并行根任务规则。
+3. turn_root envelope 契约。
 4. task / dependency / envelope 契约。
 5. skill 与 version 校验。
 6. 依赖存在、策略一致与无环校验。
@@ -342,16 +340,7 @@ M02 TurnSnapshot
 8. expected output schema 校验。
 9. turn / snapshot / catalog / policy digest 绑定校验。
 10. canonical plan_id 校验。
-11. 规划失败状态。
-
-当前生产 `PlanSelection` 仅允许输出：
-
-```text
-claim_envelope_count
-```
-
-该值只是执行槽位估计。statement semantics、participant、temporal、measurement 与
-canonical lane 均为 deferred，禁止进入当前 PlanSelection 或 PlanPolicy。
+11. 初始计划预分配 claim envelope 的阻断状态。
 
 **验收标准**
 
@@ -362,13 +351,16 @@ task_id 重复 blocked
 依赖缺失 blocked
 依赖环 blocked
 envelope 非法 blocked
+初始计划包含 claim envelope blocked
 context policy 越权 blocked
 expected output schema 不一致 blocked
 PlanPolicy 依赖不一致 blocked
 snapshot / catalog / policy digest 不一致 blocked
 plan_id 与 canonical 内容不一致 blocked
 计划或上下文预算超限 blocked
-规划失败不触发默认硬编码任务
+不得调用规划 LLM
+不得输出或消费 claim 数量预估值
+根任务不得互相依赖，应可并行调度
 ```
 
 ### M04：DAG 调度器
@@ -493,6 +485,11 @@ SKILL 语义 prompt renderer 属于 M06 生成 SKILL 交付物。M05 只接收�
 
 ### M06：生成 SKILL
 
+> **实施状态**：M06 生产契约与实现已完成；待 M08 Review、M11 Artifact Store、
+> `SemanticTaskExecutor` 组合与真实外部联调后关闭。实现边界、有意 TODO 与
+> 验证状态见
+> [semantic-collaboration-dag-m06-generation-skill-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m06-generation-skill-change-summary.md)。
+
 **目标**
 
 实现当前生产面所需的正交窄域自然语言 proposition 生成任务。
@@ -500,6 +497,8 @@ SKILL 语义 prompt renderer 属于 M06 生成 SKILL 交付物。M05 只接收�
 **范围**
 
 ```text
+SemanticSkillDocument / SKILL.md
+RestrictedSkillTemplate
 SkillPromptRenderer
 RendererRegistry
 GenerationModelPolicy
@@ -521,7 +520,8 @@ M05 Gateway
 **建议实现顺序**
 
 ```text
-Skill prompt renderer / renderer registry
+标准化 SKILL.md / 受限模板
+→ Skill prompt renderer / renderer registry
 → Turn Intent
 → Claim Proposition Inventory
 → Generation Runner 接入 M05
@@ -548,29 +548,39 @@ Claim Proposition Inventory 输出自然语言 proposition：
 ```json
 {
   "claims": [
-    "用户报告我家英短前天开始更换新猫粮",
-    "用户报告我家英短这两天大便偏软",
-    "用户报告我家英短精神状态良好",
-    "用户报告我家英短进食正常",
-    "用户报告我家英短饮水正常",
-    "用户报告我家英短没有呕吐",
-    "用户报告我家英短没有血便"
+    "英短前天开始更换新猫粮",
+    "英短这两天大便偏软",
+    "英短精神状态良好",
+    "英短进食正常",
+    "英短饮水正常",
+    "英短没有呕吐",
+    "英短大便没有血"
   ]
 }
 ```
 
+Claim proposition 必须使用对象层主语义：当前宠物、宠物状态、宠物行为或宠物
+相关事件。不得把 `用户报告`、`用户认为`、`用户询问` 作为 proposition 主语义；
+来源与观察方式由系统 metadata 和审查状态承载。
+
 **验收标准**
 
 ```text
-每个生成 SKILL 携带版本化 prompt renderer
+每个生成 SKILL 携带标准化 SKILL.md 和版本化 prompt renderer
+SKILL.md 文件头部元数据仅确定性代码可见
+SKILL.md 身份、schema、context、verifier 与 SkillSpec 闭合
+model-visible sections 与标准章节白名单闭合
+受限 Jinja 只允许顶层白名单字符串变量
+模板 AST 不含条件、循环、过滤器、属性访问或表达式
 prompt projection 与 SkillSpec / envelope / snapshot digest 身份闭合
 prompt user message 使用结构化 tag 或极浅文本，不使用深层 JSON
-prompt 不暴露 task_id / run_id / digest / 完整 schema
+prompt 不暴露 task_id / run_id / digest / 完整 schema / front matter
 prompt 不提示 estimated claim envelope count
 Turn Intent fixed-field 无重复数组
 Claim Inventory 输出自包含 proposition，不输出主题词
 shared scope 可拆分
 normal / denied / unobserved / uncertain / corrected 在自然语言中保留
+proposition 主语义是宠物或宠物相关事件，不是用户报告行为
 模型不输出 evidence、reason、confidence 或自证字段
 模型不输出 claim_id、target、unit_type、shared_parent
 所有输出不包含 forbidden field
@@ -614,6 +624,9 @@ verifier
 
 ### M07：Deterministic Verifier
 
+> **实施状态**：M06 配套的最小结构 verifier 已实现；完整 M07 所有权、
+> target envelope 与跨字段治理仍待后续硬化。
+
 **目标**
 
 在结构层和任务身份层验证生成结果，不做医学语义判断。
@@ -645,7 +658,7 @@ M06 Generator 输出
 4. boolean / string 类型校验。
 5. claim 字符串非空、长度和换行校验。
 6. claim 数量上限与重复检测。
-7. claim 数量与 Plan envelope 数量一致性校验。
+7. claim 数量由 `claims.length` 确定性派生。
 8. context digest 与任务身份校验。
 9. 显式跨字段冲突状态。
 
@@ -655,7 +668,6 @@ M06 Generator 输出
 forbidden_field_present blocked
 field_ownership_violation blocked
 schema_invalid blocked
-claim_count_mismatch blocked
 duplicate_claim blocked
 empty_claim_proposition blocked
 context_digest_mismatch blocked
@@ -1240,7 +1252,7 @@ intent fixed-field 输出
 claim proposition 自包含
 shared scope 可拆分
 normal / denied / unobserved / uncertain 语义在自然语言 proposition 中保留
-claim 数量与 envelope 数量不一致 blocked
+claim 数量超过 schema 上限 blocked
 coverage 漏抽和合并问题可发现
 faithfulness 语义漂移维度可定位
 review 失败不等于原任务通过
@@ -1514,7 +1526,7 @@ context policy 越权
 extra field
 forbidden field
 field ownership conflict
-claim 数量与 envelope 数量不一致
+claim 数量超过 schema 上限
 空 claim proposition
 重复 claim proposition
 主题词 claim
@@ -1573,13 +1585,13 @@ normal 状态输入
 denied 状态输入
 unobserved 输入
 uncertain 输入
-用户猜测归因输入
+可能因果归因输入
 answer_now 输入
 多轮指代输入
 指代不明进入 clarification gap
 医学推断添加进入删除式修复
 用户纠正输入
-claim 数量不匹配输入
+claim 数量超过 schema 上限输入
 空集合但原文事实丰富输入
 可修复错误
 不可修复错误

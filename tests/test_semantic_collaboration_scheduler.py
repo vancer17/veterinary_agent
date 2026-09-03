@@ -38,7 +38,6 @@ from vet_agent.semantic_collaboration import (
     DAGTaskTerminalState,
     DeterministicPlanCompiler,
     InMemorySemanticDAGProjectionRepository,
-    PlanSelection,
     PlanValidator,
     SemanticTaskExecutionError,
     SemanticTaskExecutionRequest,
@@ -71,21 +70,6 @@ def _snapshot() -> TurnSnapshot:
     return asyncio.run(builder.build(_request())).snapshot
 
 
-def _selection() -> PlanSelection:
-    """构造最小生产计划选择。
-
-    :return: 返回一个 claim envelope 并只启用必需 claim lane 的选择。
-    """
-    return PlanSelection(
-        claim_envelope_count=1,
-        run_statement_semantics=True,
-        run_participant_phrase=False,
-        run_temporal_phrase=False,
-        run_measurement_phrase=False,
-        run_canonical_descriptor=False,
-    )
-
-
 def _validated_plan(snapshot: TurnSnapshot) -> ValidatedPlan:
     """构造并通过 M03 校验的权威计划。
 
@@ -97,10 +81,7 @@ def _validated_plan(snapshot: TurnSnapshot) -> ValidatedPlan:
     plan = DeterministicPlanCompiler(
         registry=registry,
         policy=policy,
-    ).compile(
-        _selection(),
-        snapshot,
-    )
+    ).compile(snapshot)
     result = PlanValidator(
         registry=registry,
         policy=policy,
@@ -232,8 +213,8 @@ def test_task_policies_are_projected_from_skill_catalog() -> None:
     )
 
 
-def test_dag_frontier_advances_only_after_verified_dependencies() -> None:
-    """验证图前沿只在上游成功后释放下游任务。
+def test_dag_frontier_initially_releases_parallel_root_tasks() -> None:
+    """验证无依赖根任务在初始前沿即可并行执行。
 
     :return: 无返回值。
     """
@@ -247,15 +228,7 @@ def test_dag_frontier_advances_only_after_verified_dependencies() -> None:
         validated_plan.plan.tasks,
         {},
     )
-    second_frontier = evaluate_dag_frontier(
-        validated_plan.plan.tasks,
-        {
-            task_by_skill["turn_intent"].task_id: (
-                DAGTaskTerminalState.VERIFIED
-            ),
-        },
-    )
-    third_frontier: DAGFrontier = evaluate_dag_frontier(
+    completed_frontier: DAGFrontier = evaluate_dag_frontier(
         validated_plan.plan.tasks,
         {
             task_by_skill["turn_intent"].task_id: (
@@ -267,20 +240,18 @@ def test_dag_frontier_advances_only_after_verified_dependencies() -> None:
         },
     )
 
-    assert first_frontier.ready_task_ids == (
-        task_by_skill["turn_intent"].task_id,
+    assert first_frontier.ready_task_ids == tuple(
+        sorted(
+            (
+                task_by_skill["claim_inventory"].task_id,
+                task_by_skill["turn_intent"].task_id,
+            ),
+        ),
     )
-    assert second_frontier.ready_task_ids == (
-        task_by_skill["claim_inventory"].task_id,
-    )
-    assert third_frontier.ready_task_ids == ()
-    assert third_frontier.waiting_task_ids == ()
-    assert [
-        failure.task_id
-        for failure in third_frontier.dependency_failures
-    ] == [
-        task_by_skill["statement_semantics"].task_id,
-    ]
+    assert first_frontier.waiting_task_ids == ()
+    assert completed_frontier.ready_task_ids == ()
+    assert completed_frontier.waiting_task_ids == ()
+    assert completed_frontier.dependency_failures == ()
 
 
 def test_projection_repository_records_terminal_closure() -> None:
@@ -319,11 +290,6 @@ def test_projection_repository_records_terminal_closure() -> None:
         request.run_id,
         claim_result,
     )
-    repository.record_dependency_failure(
-        request.run_id,
-        task_by_skill["statement_semantics"].task_id,
-        task_by_skill["claim_inventory"].task_id,
-    )
     final = repository.finish_run(
         request.run_id,
         DAGRunStatus.COMPLETED_WITH_FAILURES,
@@ -337,10 +303,6 @@ def test_projection_repository_records_terminal_closure() -> None:
     assert final.status == DAGRunStatus.COMPLETED_WITH_FAILURES
     assert terminal_by_skill["turn_intent"] == DAGTaskTerminalState.VERIFIED
     assert terminal_by_skill["claim_inventory"] == DAGTaskTerminalState.BLOCKED
-    assert (
-        terminal_by_skill["statement_semantics"]
-        == DAGTaskTerminalState.DEPENDENCY_FAILED
-    )
 
 
 def test_temporal_task_activity_executes_executor_port() -> None:

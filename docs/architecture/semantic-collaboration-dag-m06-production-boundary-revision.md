@@ -14,7 +14,8 @@
 
 # 受限语义协作 DAG M06 生产边界修订记录
 
-> **文档状态**：生产实现前边界修订基线
+> **文档状态**：生产边界修订已由 M06 实现落地；实现状态见
+> [semantic-collaboration-dag-m06-generation-skill-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m06-generation-skill-change-summary.md)
 >
 > **权威关系**：本文细化
 > [semantic-collaboration-dag-production-architecture.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-production-architecture.md)
@@ -109,13 +110,13 @@ Claim Inventory 输出自包含自然语言 proposition：
 ```json
 {
   "claims": [
-    "用户报告我家英短前天开始更换新猫粮",
-    "用户报告我家英短这两天大便偏软",
-    "用户报告我家英短精神状态良好",
-    "用户报告我家英短进食正常",
-    "用户报告我家英短饮水正常",
-    "用户报告我家英短没有呕吐",
-    "用户报告我家英短没有血便"
+    "英短前天开始更换新猫粮",
+    "英短这两天大便偏软",
+    "英短精神状态良好",
+    "英短进食正常",
+    "英短饮水正常",
+    "英短没有呕吐",
+    "英短大便没有血"
   ]
 }
 ```
@@ -158,11 +159,16 @@ confidence
 自包含
 一个 proposition
 有主体和断言
+主语义是当前宠物、宠物状态、宠物行为或宠物相关事件
 保留否定、否定范围和纠正语义
-保留不确定、未观察和用户猜测
+保留不确定、未观察和可能因果
 保留时间、频率、数量、程度和比较基线
 不包含诊断、风险、就医建议或治疗建议
 ```
+
+Claim proposition 是对象层语义，不是“用户报告行为”的元命题。禁止把
+`用户报告`、`用户认为`、`用户询问` 作为 claim 主语义。来源、说话人和观察方式
+由系统 metadata、审查状态与后续投影承载，不进入 RAG 消费的主 proposition。
 
 示例：
 
@@ -173,23 +179,23 @@ confidence
 必须拆为：
 
 ```text
-用户报告我家英短进食正常
-用户报告我家英短饮水正常
+英短进食正常
+英短饮水正常
 ```
 
 以下表达必须区分：
 
 ```text
-用户报告我家英短没有呕吐
-用户报告未观察到我家英短呕吐
-用户认为软便可能与更换猫粮有关
-用户纠正此前信息：我家英短当前没有呕吐
+英短没有呕吐
+未观察到英短呕吐
+更换猫粮可能与英短软便有关
+英短当前没有呕吐（纠正此前信息）
 ```
 
 不得改写为：
 
 ```text
-用户否认精神异常
+用户报告英短精神异常
 我家英短绝对没有呕吐
 换粮导致软便
 ```
@@ -221,7 +227,7 @@ snapshot_digest
 skill_id / skill_version
 完整 JSON schema
 owned_fields / forbidden_fields
-estimated_claim_envelope_count
+任何 claim 数量或 envelope 数量
 ```
 
 要求：
@@ -438,11 +444,16 @@ verifier
 是否输出主题词而非自包含 proposition
 是否把 normal 写成 denied
 是否把未观察写成绝对否定
-是否把用户猜测写成确定因果
+是否把可能因果写成确定因果
+是否把宠物状态写成用户报告行为
 是否提示 estimated claim count
 是否暴露工程元数据给模型
+是否使用标准化 SKILL.md 作为版本化 prompt 来源
+SKILL.md front matter 是否仅确定性代码可见
+受限模板是否只允许顶层白名单字符串变量
+模板是否包含条件、循环、过滤器或属性访问
 是否处理 tag delimiter collision
-claim 数量不匹配是否 blocked
+claim 数量超过 schema 上限是否 blocked
 空集合是否交给 Coverage Review 区分 no_explicit_fact / suspicious_empty
 Faithfulness Review 是否输出固定布尔矩阵
 review 是否输出 corrected value
@@ -478,7 +489,7 @@ shared scope：饭和水都正常
 用户纠正
 answer_now
 纯问题且无事实
-claim 数量不匹配
+claim 数量超过 schema 上限
 原文事实丰富但 claims=[]
 ```
 

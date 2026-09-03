@@ -31,7 +31,8 @@
 | Temporal Server Docker 编排 | 未实现 |
 | 真实 Temporal workflow 联调 | 未执行 |
 | M05 StructuredLLMGateway | 已实现；尚未接入任务执行器 |
-| M07 Deterministic Verifier | 未实现 |
+| M06 生成 SKILL | 已实现；可返回 Turn Intent 与自然语言 claims proposal |
+| M07 最小结构 verifier | 已实现；完整 M07 仍待硬化 |
 | M08 Coverage / Faithfulness Review | 未实现 |
 | M11 Artifact Store | 未实现 |
 | VetOrchestrator 生产切换 | 未接入 |
@@ -40,8 +41,8 @@
 自有数据库任务队列、租约、attempt 状态机或 worker 恢复协议。
 
 当前不能宣称的是：语义协作 DAG 已经可以端到端生成 verified claim graph。
-原因在于 M05 尚未接入 M04 任务执行器，且 M06～M11 的生成 SKILL、
-verifier 与 artifact 链路尚未完成。
+原因在于 M04 的 TODO 任务执行器尚未组合 M06 / M07 / M11，M08 Review 与
+M11 Artifact Store 也尚未实现。
 
 ## 2. 架构结论
 
@@ -520,7 +521,8 @@ finish_run
 |---|---|---|---|
 | Temporal Docker 编排 | 运维 / 部署 | 不提供服务编排 | 提供 Server、持久化、namespace、task queue、worker 与健康检查 |
 | StructuredLLMGateway | M05 | M04 不直接调用模型 | 消费 M05 已实现的模型调用边界，在执行器内返回未验证 proposal |
-| Deterministic Verifier | M07 | 不解释任务输出 | 校验 schema、所有权、evidence 与 forbidden output |
+| M06 生成 SKILL | M06 | 不由调度器解释 proposition | 消费标准化 SKILL prompt、M05 proposal 与 M06 Runner |
+| 最小结构 verifier | M07 | 不解释自然语言语义 | 校验 schema、任务身份、claim 形态、重复与数量上限 |
 | Artifact Store | M11 | 只传递 artifact reference | 提供 append-only artifact、版本、lineage 与 stale |
 | Review SKILL | M08 | 不做 review | 按 review 契约诊断任务或 artifact |
 | Repair Planner | M09 | 不规划修复 | 只根据白名单 failure code 生成修复任务 |
@@ -564,24 +566,27 @@ schema invalid 不伪装成功
 
 ### 9.2 M07 对接
 
-M07 应实现：
+当前最小 M07 已实现：
 
 ```text
 schema 校验
-字段所有权校验
-evidence binding 校验
-forbidden output 阻断
-claim binding 校验
+Turn Intent boolean shape 校验
+claims array shape 校验
+claim 非空 / 单行 / 去重校验
+claim 数量由 claims.length 派生
+proposal / task 身份校验
 ```
 
-验收：
+完整 M07 仍需补齐：
 
 ```text
-未验证输出不能返回 verified
-forbidden field blocked
-ownership violation blocked
-evidence mismatch blocked
+字段所有权治理
+target envelope 治理
+跨字段一致性治理
+与 M08 review outcome 的终态组合
 ```
+
+无论最小 M07 还是完整 M07，都不能把 proposal 标记为 verified artifact。
 
 ### 9.3 M11 对接
 

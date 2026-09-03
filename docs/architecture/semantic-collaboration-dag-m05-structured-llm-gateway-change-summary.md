@@ -13,7 +13,7 @@
 
 # 受限语义协作 DAG M05 结构化 LLM Gateway 变更总结
 
-> **文档状态**：M05 生产契约与实现已完成；待 M06 prompt renderer、M07
+> **文档状态**：M05 生产契约与实现已完成；M06 已接入 M05。待完整 M07
 > verifier、M11 artifact store 和 SemanticTaskExecutor 组合接入后关闭
 >
 > **边界修订说明**：M05 的单次结构化传输边界不变。M06 后续生产契约已收敛为
@@ -30,8 +30,8 @@
 | SkillCatalog schema 绑定 | 已实现 |
 | prompt / proposal / contract digest | 已实现 |
 | usage 与模型快照 metadata | 已实现 |
-| M06 SKILL prompt renderer | 未实现 |
-| M07 Deterministic Verifier | 未实现 |
+| M06 SKILL prompt renderer | 已实现 |
+| M07 最小结构 verifier | 已实现；完整 M07 待硬化 |
 | M11 Artifact Store | 未实现 |
 | SemanticTaskExecutor 接入 | 未实现 |
 | VetOrchestrator 接入 | 未接入 |
@@ -157,11 +157,10 @@ M06 prompt renderer
 
 | TODO | 责任模块 | M05 当前边界 | 后续对接方式 |
 |---|---|---|---|
-| SKILL prompt renderer | M06 | 只接收 `SkillPromptProjection`，不生成语义 prompt | 按 SkillSpec、TurnSnapshot 投影和 envelope 生成提示词 |
-| Turn Intent 生成 SKILL | M06 | 不生成医学事实 | 生成 fixed-field intent proposal 并交给 M07 |
-| Claim Proposition Inventory 生成 SKILL | M06 | 不做 evidence 自证 | 生成自包含自然语言 claims[] proposal |
+| Turn Intent 生成 SKILL | M06 | 已通过 M05 返回 fixed-field intent proposal | 交由 M07 / M08 继续治理 |
+| Claim Proposition Inventory 生成 SKILL | M06 | 已通过 M05 返回自然语言 claims[] proposal | 交由 M07 / M08 继续治理 |
 | Statement Semantics / Phrase / Canonical lane | deferred | 当前不接入 M05 | 待下游消费者、resolver / parser 与 verifier 契约齐全后另行立项 |
-| Deterministic Verifier | M07 | 只做 JSON Schema 校验 | 复核 schema、所有权、claim 形态与 forbidden output |
+| Deterministic Verifier | M07 | 最小结构 verifier 已实现，claim 数量由 claims.length 派生 | 继续补齐完整所有权、target envelope 与跨字段治理 |
 | Artifact Store | M11 | 不提交、版本化或 stale 标记 proposal | 只提交 M07 verified 后的 artifact |
 | SemanticTaskExecutor 组合 | M04 / M06 / M07 / M11 | 不返回任务业务终态 | 组合 prompt、gateway、verifier 与 artifact commit |
 | 真实 LiteLLM 冒烟 | 集成验证 | 单元测试使用测试替身 | 显式外部测试验证模型响应与 metadata |

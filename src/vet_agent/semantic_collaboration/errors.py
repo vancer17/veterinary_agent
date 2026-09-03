@@ -3,8 +3,9 @@
 文件：src/vet_agent/semantic_collaboration/errors.py
 作用：定义受限语义协作 DAG 的 Skill、TurnSnapshot、Plan 与调度错误类型。
 范围：覆盖 SkillSpec 校验、SkillCatalog 注册、投影一致性、快照构建、
-      上下文预算、digest 校验、Plan 编译、模型适配、结构化选择失败、
-      M05 结构化模型网关、DAG 状态仓储访问与任务执行端口失败。
+      上下文预算、digest 校验、Plan 编译、M05 结构化模型网关、
+      M06 标准化 SKILL 文档、Prompt Renderer 与生成执行器、DAG 状态仓储访问
+      与任务执行端口失败。
 说明：本文件只承载错误语义，不访问数据库、不调用模型、不提供任何回退路径。
 =============================================================================
 """
@@ -150,23 +151,6 @@ class PlanCompilationError(PlanError):
         self.failure_code = failure_code
 
 
-class PlanModelClientError(PlanError):
-    """表示任务规划结构化模型客户端调用失败。
-
-    :return: 无返回值；该错误不触发旧问诊语义链路回退。
-    """
-
-    failure_code: ClassVar[str] = "plan_model_call_failed"
-
-
-class PlanSelectionSchemaError(PlanError):
-    """表示任务规划模型返回值未通过 PlanSelection 契约。
-
-    :return: 无返回值；该错误不进行宽松 JSON 文本修复。
-    """
-    failure_code: ClassVar[str] = "plan_response_parse_failed"
-
-
 class SchedulerError(SemanticCollaborationError):
     """表示 M04 Temporal-first 调度契约或 workflow 输入失败。
 
@@ -294,3 +278,30 @@ class StructuredLLMSchemaError(StructuredLLMGatewayError):
         super().__init__(message)
         self.schema_path = schema_path
         self.metadata = metadata
+
+
+class SemanticPromptRenderError(SemanticCollaborationError):
+    """表示 M06 Prompt Renderer 违反受限上下文或身份契约。
+
+    :return: 无返回值；该错误在进入 M05 前显式阻断，不做提示词修复。
+    """
+
+    failure_code: ClassVar[str] = "semantic_prompt_render_contract_violation"
+
+
+class SemanticSkillDocumentError(SemanticCollaborationError):
+    """表示标准化 SKILL.md 违反静态元数据或权威契约绑定。
+
+    :return: 无返回值；该错误在启动期或渲染前阻断，不解析正文作为权威。
+    """
+
+    failure_code: ClassVar[str] = "semantic_skill_document_contract_violation"
+
+
+class SemanticGenerationContractError(SemanticCollaborationError):
+    """表示 M06 生成执行器的 Skill、模型策略或上下文契约失败。
+
+    :return: 无返回值；该错误不做旧问诊语义抽取器或隐藏模型回退。
+    """
+
+    failure_code: ClassVar[str] = "semantic_generation_contract_violation"

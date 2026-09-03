@@ -30,7 +30,6 @@ from vet_agent import Settings
 from vet_agent.runtime import QwenClient, StructuredChatResponse
 from vet_agent.semantic_collaboration import (
     DeterministicPlanCompiler,
-    PlanSelection,
     SemanticChatMessage,
     SemanticTaskExecutionRequest,
     SkillPromptProjection,
@@ -193,17 +192,7 @@ def _turn_intent_execution(snapshot: TurnSnapshot) -> SemanticTaskExecutionReque
         registry=registry,
         policy=build_production_plan_policy(registry),
     )
-    plan = compiler.compile(
-        PlanSelection(
-            claim_envelope_count=0,
-            run_statement_semantics=False,
-            run_participant_phrase=False,
-            run_temporal_phrase=False,
-            run_measurement_phrase=False,
-            run_canonical_descriptor=False,
-        ),
-        snapshot,
-    )
+    plan = compiler.compile(snapshot)
     task = next(item for item in plan.tasks if item.skill_id == "turn_intent")
     return SemanticTaskExecutionRequest(
         run_id=plan.plan_id,
@@ -281,10 +270,13 @@ def _valid_payload() -> dict[str, object]:
     :return: 返回包含全部已声明叶子字段的 JSON object。
     """
     return {
-        "turn_intent": {
-            "acts": {},
-            "evidence": {"phrase": "前天开始换新猫粮"},
-        },
+        "answer_now": False,
+        "wants_triage": False,
+        "correction": False,
+        "clarification_request": False,
+        "fact_statement_present": True,
+        "question_present": False,
+        "report_context_present": False,
     }
 
 
@@ -308,7 +300,7 @@ def test_gateway_returns_unverified_proposal_with_attempt_metadata() -> None:
     assert proposal.metadata.usage_available is True
     assert proposal.metadata.total_tokens == 30
     assert len(transport.calls) == 1
-    assert transport.calls[0]["schema_name"] == "turn_intent_1_0_0_output"
+    assert transport.calls[0]["schema_name"] == "turn_intent_2_0_0_output"
     assert transport.calls[0]["json_schema"]["additionalProperties"] is False
 
 
@@ -384,7 +376,7 @@ def test_gateway_rejects_deterministic_execution_family() -> None:
     ("content", "expected_type"),
     [
         ("not a json object", StructuredLLMResponseParseError),
-        ('{"turn_intent":{"acts":{},"evidence":{"phrase":12}}}', StructuredLLMSchemaError),
+        ('{"answer_now":"yes"}', StructuredLLMSchemaError),
     ],
 )
 def test_gateway_separates_parse_and_schema_failures(
@@ -414,19 +406,17 @@ def test_gateway_blocks_duplicate_json_key_and_extra_field() -> None:
     snapshot = _snapshot()
     execution = _turn_intent_execution(snapshot)
     duplicate_transport = RecordingTransport(
-        content='{"turn_intent":{}, "turn_intent":{}}',
+        content='{"answer_now":false, "answer_now":true}',
     )
     with pytest.raises(StructuredLLMResponseParseError):
         asyncio.run(_gateway(duplicate_transport).generate(_request(execution)))
 
     payload = _valid_payload()
-    nested = payload["turn_intent"]
-    if isinstance(nested, dict):
-        nested["forbidden"] = "extra"
+    payload["forbidden"] = "extra"
     extra_transport = RecordingTransport(content=payload)
     with pytest.raises(StructuredLLMSchemaError) as error:
         asyncio.run(_gateway(extra_transport).generate(_request(execution)))
-    assert error.value.schema_path == "turn_intent"
+    assert error.value.schema_path == "$"
 
 
 def test_gateway_keeps_missing_usage_observable_and_blocks_bad_finish() -> None:
