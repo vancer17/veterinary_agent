@@ -1,0 +1,8 @@
+limit.maxIDLength:
+  - value: 255
+    constraints: {}
+
+# 开发 SQL visibility 环境使用；不要直接照搬到生产。
+system.forceSearchAttributesCacheRefreshOnRead:
+  - value: true
+    constraints: {}

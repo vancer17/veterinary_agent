@@ -365,6 +365,11 @@ plan_id 与 canonical 内容不一致 blocked
 
 ### M04：DAG 调度器
 
+> **集成环境状态**：远端开发环境 Temporal Server / Web UI / namespace 已就绪；
+> 环境地址、数据库边界与冒烟命令见
+> [temporal-dev-environment-baseline.md](/home/vancer17/veterinary_agent/docs/deployment/temporal-dev-environment-baseline.md)。
+> 该基线不改变本模块验收标准，也不代表真实 workflow 联调已完成。
+
 **目标**
 
 按 Plan IR 执行任务，并保证每个任务进入显式终态。
@@ -1253,6 +1258,8 @@ Temporal 负责队列、retry、timeout 与 worker 恢复
 **工程约束**
 
 本阶段可使用测试替身验证调度，不要求接生产 orchestrator。
+真实 Temporal 集成测试必须显式启用远端开发环境基线，普通单元测试不得访问
+外部 Temporal。
 
 ### Phase 3：核心生成与验证
 
@@ -1287,6 +1294,7 @@ M14 完整 task trace / metrics: 未完成
 
 本阶段尚不能因 M08 已实现而关闭；关闭前还需补齐 M14 观测闭环，并通过显式外部服务
 集成验证。当前全部链路验证均使用进程内测试替身。
+其中 Temporal 基础设施已就绪，但尚未执行真实 workflow / activity 联调。
 
 **验收**
 
@@ -1789,3 +1797,4 @@ DSPy 接入
 8. [clinical-safety-semantic-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/clinical-safety-semantic-change-summary.md)
 9. [semantic-collaboration-dag-m04-scheduler-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m04-scheduler-change-summary.md)
 10. [semantic-collaboration-dag-m08-review-skill-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m08-review-skill-change-summary.md)
+11. [temporal-dev-environment-baseline.md](/home/vancer17/veterinary_agent/docs/deployment/temporal-dev-environment-baseline.md)
