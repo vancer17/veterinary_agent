@@ -30,7 +30,7 @@
 | PostgreSQL 只读投影 | 已实现 |
 | Temporal Server Docker 编排 | 已部署于远端开发环境 |
 | Temporal 基础设施连通性 | 已通过 cluster health、namespace 与 Python SDK 验证 |
-| 真实 Temporal workflow 联调 | 未执行 |
+| 真实 Temporal workflow 联调 | Pre-M11 scheduler-only 已通过；生产执行器组合仍未接入 |
 | M05 StructuredLLMGateway | 已实现；尚未接入任务执行器 |
 | M06 生成 SKILL | 已实现；可返回 Turn Intent 与自然语言 claims proposal |
 | M07 最小结构 verifier | 已实现；完整 M07 仍待硬化 |
@@ -44,6 +44,10 @@
 当前不能宣称的是：语义协作 DAG 已经可以端到端生成 verified claim graph。
 原因在于 M04 的 TODO 任务执行器尚未组合 M06 / M07 / M08 / M11，M11
 Artifact Store 也尚未实现。
+
+Pre-M11 集成测试已在真实 Temporal `semantic-collaboration-dev` namespace 完成
+scheduler-only workflow / activity / projection 验证；该结果不改变生产执行器
+和 M11 未接入的边界。
 
 ### 1.1 远端开发环境基线
 
@@ -216,6 +220,15 @@ task queue
 SemanticDAGProjectionRepository
 SemanticTaskExecutor
 ```
+
+Temporal client 必须支持 strict Pydantic tuple / enum 解码。生产接入应使用：
+
+```text
+connect_temporal_semantic_client(address, namespace)
+```
+
+该门面固定使用 Temporal `pydantic_data_converter`。直接使用默认 JSON converter
+连接 M04 会在 workflow 输入解码阶段把 tuple 还原为 list 并导致启动失败。
 
 禁止：
 
@@ -821,4 +834,6 @@ long_term_memory_written = false
 3. [semantic-collaboration-dag-m06-production-boundary-revision.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m06-production-boundary-revision.md)
 4. [semantic-collaboration-dag-m08-review-skill-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m08-review-skill-change-summary.md)
 5. [semantic-collaboration-dag-m09-repair-planner-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m09-repair-planner-change-summary.md)
-6. [temporal-dev-environment-baseline.md](/home/vancer17/veterinary_agent/docs/deployment/temporal-dev-environment-baseline.md)
+6. [semantic-collaboration-dag-pre-m11-integration-test-design.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-pre-m11-integration-test-design.md)
+7. [semantic-collaboration-dag-pre-m11-integration-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-pre-m11-integration-change-summary.md)
+8. [temporal-dev-environment-baseline.md](/home/vancer17/veterinary_agent/docs/deployment/temporal-dev-environment-baseline.md)

@@ -327,6 +327,7 @@ from .temporal_scheduler import (
     TemporalTaskResultInput,
     build_dag_task_policies,
     build_temporal_semantic_dag_worker,
+    connect_temporal_semantic_client,
 )
 from .verifier import (
     ClaimInventoryProposalShape,
@@ -590,6 +591,7 @@ __all__ = [
     "compute_review_bundle_digest",
     "compute_review_task_hash",
     "compute_turn_snapshot_digest",
+    "connect_temporal_semantic_client",
     "evaluate_dag_frontier",
     "execution_layers",
     "load_semantic_skill_document",

@@ -40,7 +40,8 @@
 | M04 任务执行器组合 | 未接入 | M10 尚未进入 SemanticTaskExecutor 生产链路 |
 | M07 re-verify | 未编排 | patch 后新 claims 仍需重新结构验证 |
 | M08 re-review | 未编排 | patch 是否语义有效必须由独立 review 判断 |
-| 真实 LiteLLM / Temporal 联调 | 未执行 | 当前验证使用进程内测试替身 |
+| 真实 LiteLLM Repair 调用 | Pre-M11 集成已通过 | 已验证 proposition / inventory 两条 lane 与 patch preview |
+| M10 接入真实 Temporal 生产执行器 | 未执行 | 当前仅 M04 scheduler-only workflow 独立验证 |
 
 ## 2. 架构位置
 
@@ -628,11 +629,18 @@ human_review_required
 
 ### 10.5 真实外部服务联调
 
-尚未执行：
+当前已完成：
 
 ```text
 真实 LiteLLM Repair SKILL 调用
-真实 Temporal workflow / activity 联调
+M10 patch verifier / application preview
+test-only post-patch M07 / M08 probe
+```
+
+尚未执行：
+
+```text
+M10 接入真实 Temporal workflow / activity 生产执行器
 M11 PostgreSQL artifact 存储联调
 ```
 
@@ -764,10 +772,22 @@ no-op proposition 替换 blocked
 
 以上验证使用进程内测试替身，不代表真实 LiteLLM、Temporal 或 M11 集成完成。
 
+Pre-M11 集成补充结果：
+
+```text
+真实 LiteLLM proposition repair: PASS
+真实 LiteLLM inventory sparse delta repair: PASS
+patch verifier / application preview: PASS
+test-only post-patch probe: PASS
+M11 commit: 保持 TODO Fail Fast
+```
+
 ## 15. 关联材料
 
 1. [semantic-collaboration-dag-production-architecture.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-production-architecture.md)
 2. [semantic-collaboration-dag-production-implementation-plan.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-production-implementation-plan.md)
-3. [semantic-collaboration-dag-m09-repair-planner-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m09-repair-planner-change-summary.md)
-4. [semantic-collaboration-dag-m04-scheduler-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m04-scheduler-change-summary.md)
-5. [semantic-collaboration-dag-m08-review-skill-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m08-review-skill-change-summary.md)
+3. [semantic-collaboration-dag-pre-m11-integration-test-design.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-pre-m11-integration-test-design.md)
+4. [semantic-collaboration-dag-pre-m11-integration-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-pre-m11-integration-change-summary.md)
+5. [semantic-collaboration-dag-m09-repair-planner-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m09-repair-planner-change-summary.md)
+6. [semantic-collaboration-dag-m04-scheduler-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m04-scheduler-change-summary.md)
+7. [semantic-collaboration-dag-m08-review-skill-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m08-review-skill-change-summary.md)

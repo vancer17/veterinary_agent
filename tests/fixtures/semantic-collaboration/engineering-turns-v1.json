@@ -1,0 +1,11 @@
+{
+  "fixture_version": "engineering-turns-v1",
+  "cases": [
+    {
+      "case_id": "ENG-011",
+      "priority": "P0",
+      "group": "engineering",
+      "current_turn": "我家英短精神正常，没有呕吐。请先根据现有信息给阶段建议，不要继续追问。"
+    }
+  ]
+}

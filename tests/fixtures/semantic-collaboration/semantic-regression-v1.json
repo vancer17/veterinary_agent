@@ -1,0 +1,417 @@
+{
+  "fixture_version": "semantic-regression-v1",
+  "cases": [
+    {
+      "case_id": "GEN-001",
+      "priority": "P0",
+      "group": "generation",
+      "current_turn": "我家英短精神正常。",
+      "forbidden_dimensions": [
+        "正常状态误写为否认",
+        "事实类型改变",
+        "存在漏抽显式事实"
+      ]
+    },
+    {
+      "case_id": "GEN-002",
+      "priority": "P0",
+      "group": "generation",
+      "current_turn": "我家英短没有呕吐。",
+      "forbidden_dimensions": [
+        "否定方向改变",
+        "否定范围改变",
+        "存在漏抽显式事实"
+      ]
+    },
+    {
+      "case_id": "GEN-003",
+      "priority": "P0",
+      "group": "generation",
+      "current_turn": "我家英短好像没有呕吐。",
+      "forbidden_dimensions": [
+        "确定性改变",
+        "存在漏抽显式事实"
+      ]
+    },
+    {
+      "case_id": "GEN-005",
+      "priority": "P0",
+      "group": "generation",
+      "current_turn": "我家英短前天开始换新猫粮。",
+      "forbidden_dimensions": [
+        "时间范围改变",
+        "存在漏抽显式事实"
+      ]
+    },
+    {
+      "case_id": "GEN-006",
+      "priority": "P0",
+      "group": "generation",
+      "current_turn": "我家英短大便有一点软。",
+      "forbidden_dimensions": [
+        "程度或强度改变",
+        "存在漏抽显式事实"
+      ]
+    },
+    {
+      "case_id": "GEN-007",
+      "priority": "P0",
+      "group": "generation",
+      "current_turn": "我家英短饭和水都正常。",
+      "forbidden_dimensions": [
+        "存在原文不支持的claim",
+        "存在漏抽显式事实"
+      ],
+      "minimum_claim_count": 2
+    },
+    {
+      "case_id": "GEN-008",
+      "priority": "P0",
+      "group": "generation",
+      "current_turn": "请先根据现有信息给阶段建议，不要继续追问。",
+      "expected_intent": {
+        "answer_now": true,
+        "wants_triage": false,
+        "correction": false,
+        "clarification_request": false,
+        "fact_statement_present": false,
+        "question_present": false,
+        "report_context_present": false
+      },
+      "forbidden_dimensions": [
+        "存在原文不支持的claim"
+      ]
+    },
+    {
+      "case_id": "GEN-010",
+      "priority": "P0",
+      "group": "generation",
+      "current_turn": "我家英短前天开始换新猫粮，这两天大便偏软，精神正常，食欲正常，饮水正常，没有呕吐，也没有血便。",
+      "forbidden_dimensions": [
+        "存在漏抽显式事实"
+      ],
+      "minimum_claim_count": 6
+    },
+    {
+      "case_id": "REV-001",
+      "priority": "P0",
+      "group": "coverage_review",
+      "current_turn": "我家英短没有呕吐，也没有血便。",
+      "claims": [
+        "我家英短没有呕吐"
+      ],
+      "expected_dimensions": [
+        "存在漏抽显式事实"
+      ]
+    },
+    {
+      "case_id": "REV-002",
+      "priority": "P0",
+      "group": "coverage_review",
+      "current_turn": "我家英短饭和水都正常。",
+      "claims": [
+        "我家英短的日常状态总体正常"
+      ],
+      "expected_any_dimensions": [
+        "存在多事实合并",
+        "存在shared scope拆分错误",
+        "存在漏抽显式事实"
+      ]
+    },
+    {
+      "case_id": "REV-006",
+      "priority": "P0",
+      "group": "coverage_review",
+      "current_turn": "我家英短前天开始换新猫粮，这两天大便偏软，精神正常，食欲正常，饮水正常，没有呕吐，也没有血便。",
+      "claims": [],
+      "expected_dimensions": [
+        "存在漏抽显式事实"
+      ]
+    },
+    {
+      "case_id": "REV-102",
+      "priority": "P0",
+      "group": "faithfulness_review",
+      "current_turn": "我家英短没有呕吐。",
+      "claims": [
+        "我家英短呕吐"
+      ],
+      "expected_dimensions": [
+        "否定方向改变"
+      ]
+    },
+    {
+      "case_id": "REV-105",
+      "priority": "P0",
+      "group": "faithfulness_review",
+      "current_turn": "我家英短前天开始换新猫粮。",
+      "claims": [
+        "我家英短今天开始换新猫粮"
+      ],
+      "expected_dimensions": [
+        "时间范围改变"
+      ]
+    },
+    {
+      "case_id": "REV-107",
+      "priority": "P0",
+      "group": "faithfulness_review",
+      "current_turn": "我家英短大便有一点软。",
+      "claims": [
+        "我家英短大便严重软便"
+      ],
+      "expected_dimensions": [
+        "程度或强度改变"
+      ]
+    },
+    {
+      "case_id": "REV-109",
+      "priority": "P0",
+      "group": "faithfulness_review",
+      "current_turn": "我家英短前天开始换新猫粮，这两天大便有一点软。",
+      "claims": [
+        "换新猫粮导致我家英短大便软"
+      ],
+      "expected_any_dimensions": [
+        "因果关系改变",
+        "医学推断或建议添加"
+      ]
+    },
+    {
+      "case_id": "REV-110",
+      "priority": "P0",
+      "group": "faithfulness_review",
+      "current_turn": "我家英短精神正常，食欲正常，饮水正常。",
+      "claims": [
+        "需要立即带我家英短就医"
+      ],
+      "expected_any_dimensions": [
+        "存在原文不支持的claim",
+        "医学推断或建议添加"
+      ]
+    },
+    {
+      "case_id": "REV-111",
+      "priority": "P0",
+      "group": "faithfulness_review",
+      "current_turn": "它也正常。",
+      "claims": [
+        "它也正常"
+      ],
+      "expected_any_dimensions": [
+        "指代对象不明",
+        "命题不自包含"
+      ]
+    },
+    {
+      "case_id": "REV-005",
+      "priority": "P0",
+      "group": "coverage_review",
+      "current_turn": "它也不舒服。",
+      "claims": [
+        "它也不舒服"
+      ],
+      "expected_any_dimensions": [
+        "存在非自包含proposition",
+        "指代对象不明"
+      ]
+    },
+    {
+      "case_id": "REV-101",
+      "priority": "P0",
+      "group": "faithfulness_review",
+      "current_turn": "我家英短精神正常。",
+      "claims": [
+        "我家英短精神状态未知"
+      ],
+      "expected_any_dimensions": [
+        "正常状态误写为否认",
+        "事实类型改变"
+      ]
+    },
+    {
+      "case_id": "REV-103",
+      "priority": "P0",
+      "group": "faithfulness_review",
+      "current_turn": "我家英短没有呕吐和干呕。",
+      "claims": [
+        "我家英短没有呕吐；干呕情况不明"
+      ],
+      "expected_any_dimensions": [
+        "否定范围改变",
+        "否定范围不明",
+        "存在原文不支持的claim",
+        "存在shared scope拆分错误"
+      ]
+    },
+    {
+      "case_id": "PLAN-001",
+      "priority": "P0",
+      "group": "repair_plan",
+      "current_turn": "我家英短没有呕吐，也没有血便。",
+      "claims": [
+        "我家英短没有呕吐"
+      ],
+      "coverage_true_dimensions": [
+        "存在漏抽显式事实"
+      ],
+      "expected_route": "repair_required"
+    },
+    {
+      "case_id": "PLAN-002",
+      "priority": "P0",
+      "group": "repair_plan",
+      "current_turn": "我家英短饭和水都正常。",
+      "claims": [
+        "我家英短日常状态总体正常"
+      ],
+      "coverage_true_dimensions": [
+        "存在多事实合并"
+      ],
+      "expected_route": "repair_required"
+    },
+    {
+      "case_id": "PLAN-003",
+      "priority": "P0",
+      "group": "repair_plan",
+      "current_turn": "我家英短饭和水都正常。",
+      "claims": [
+        "我家英短日常状态总体正常"
+      ],
+      "coverage_true_dimensions": [
+        "存在shared scope拆分错误"
+      ],
+      "expected_route": "repair_required"
+    },
+    {
+      "case_id": "PLAN-005",
+      "priority": "P0",
+      "group": "repair_plan",
+      "current_turn": "我家英短精神正常。",
+      "claims": [
+        "我家英短精神状态被否认"
+      ],
+      "faithfulness_true_dimensions": [
+        "正常状态误写为否认"
+      ],
+      "expected_route": "repair_required"
+    },
+    {
+      "case_id": "PLAN-006",
+      "priority": "P0",
+      "group": "repair_plan",
+      "current_turn": "我家英短没有呕吐。",
+      "claims": [
+        "我家英短呕吐"
+      ],
+      "faithfulness_true_dimensions": [
+        "否定方向改变"
+      ],
+      "expected_route": "repair_required"
+    },
+    {
+      "case_id": "PLAN-007",
+      "priority": "P0",
+      "group": "repair_plan",
+      "current_turn": "我家英短前天开始换新猫粮。",
+      "claims": [
+        "我家英短今天开始换新猫粮"
+      ],
+      "faithfulness_true_dimensions": [
+        "时间范围改变"
+      ],
+      "expected_route": "repair_required"
+    },
+    {
+      "case_id": "PLAN-008",
+      "priority": "P0",
+      "group": "repair_plan",
+      "current_turn": "我家英短大便有一点软。",
+      "claims": [
+        "我家英短大便严重软便"
+      ],
+      "faithfulness_true_dimensions": [
+        "程度或强度改变"
+      ],
+      "expected_route": "repair_required"
+    },
+    {
+      "case_id": "PLAN-009",
+      "priority": "P0",
+      "group": "repair_plan",
+      "current_turn": "它也正常。",
+      "claims": [
+        "它也正常"
+      ],
+      "faithfulness_true_dimensions": [
+        "指代对象不明"
+      ],
+      "expected_route": "clarification_required"
+    },
+    {
+      "case_id": "PLAN-010",
+      "priority": "P0",
+      "group": "repair_plan",
+      "current_turn": "从那以后它偶尔呕吐。",
+      "claims": [
+        "它偶尔呕吐"
+      ],
+      "faithfulness_true_dimensions": [
+        "时间基准不明"
+      ],
+      "expected_route": "clarification_required"
+    },
+    {
+      "case_id": "PLAN-011",
+      "priority": "P0",
+      "group": "repair_plan",
+      "current_turn": "它进食量和之前一样。",
+      "claims": [
+        "它进食量和之前一样"
+      ],
+      "faithfulness_true_dimensions": [
+        "比较基线不明"
+      ],
+      "expected_route": "clarification_required"
+    },
+    {
+      "case_id": "PLAN-012",
+      "priority": "P0",
+      "group": "repair_plan",
+      "current_turn": "我家英短精神正常。",
+      "claims": [
+        "我家英短精神状态发生未知变化"
+      ],
+      "faithfulness_true_dimensions": [
+        "未分类语义改变"
+      ],
+      "expected_route": "human_review_required"
+    },
+    {
+      "case_id": "FIX-001",
+      "priority": "P0",
+      "group": "repair",
+      "current_turn": "我家英短精神正常。",
+      "claims": [
+        "我家英短精神状态被否认"
+      ],
+      "expected_dimensions": [
+        "正常状态误写为否认"
+      ],
+      "expected_route": "repair_required"
+    },
+    {
+      "case_id": "FIX-003",
+      "priority": "P0",
+      "group": "repair",
+      "current_turn": "我家英短没有呕吐，也没有血便。",
+      "claims": [
+        "我家英短没有呕吐"
+      ],
+      "expected_dimensions": [
+        "存在漏抽显式事实"
+      ],
+      "expected_route": "repair_required"
+    }
+  ]
+}
