@@ -1,0 +1,74 @@
+# =============================================================================
+# 文件: docker/temporal/compose.dev.yml
+# 作用: 为受限语义协作 DAG 提供远端开发环境 Temporal 集成测试依赖。
+# 范围: Temporal Server、既有共享 PostgreSQL、Web UI 与 admin-tools。
+# 说明: 复用 vet-agent-dev-postgres 的独立逻辑库；auto-setup 只用于开发集成环境，
+#       不作为生产部署拓扑。
+# =============================================================================
+
+name: ${COMPOSE_PROJECT_NAME:-vet-agent-dev-temporal}
+
+services:
+  temporal:
+    image: ${TEMPORAL_IMAGE:-temporalio/auto-setup:1.29.1}
+    container_name: vet-agent-dev-temporal
+    restart: unless-stopped
+    environment:
+      DB: postgres12
+      DB_PORT: "5432"
+      DBNAME: ${TEMPORAL_POSTGRES_DB:-temporal}
+      VISIBILITY_DBNAME: ${TEMPORAL_VISIBILITY_DB:-temporal_visibility}
+      POSTGRES_USER: ${TEMPORAL_POSTGRES_USER:-temporal}
+      POSTGRES_PWD: ${TEMPORAL_POSTGRES_PASSWORD:?set TEMPORAL_POSTGRES_PASSWORD in compose.dev.env}
+      POSTGRES_SEEDS: ${TEMPORAL_POSTGRES_HOST:?set TEMPORAL_POSTGRES_HOST in compose.dev.env}
+      DYNAMIC_CONFIG_FILE_PATH: config/dynamicconfig/development-sql.yaml
+      # 逻辑库和登录角色由部署脚本预先创建；auto-setup 不需要 CREATEDB 权限。
+      SKIP_DB_CREATE: "true"
+      # auto-setup 的启动后健康检查必须访问容器网络地址；Temporal Server
+      # 在当前镜像中绑定容器 IP，而不是 127.0.0.1。
+      TEMPORAL_ADDRESS: semantic-collaboration-temporal:7233
+      TEMPORAL_CLI_ADDRESS: semantic-collaboration-temporal:7233
+    volumes:
+      - ./dynamicconfig:/etc/temporal/config/dynamicconfig:ro
+    ports:
+      - "${TEMPORAL_FRONTEND_BIND:-127.0.0.1}:${TEMPORAL_FRONTEND_PORT:-7233}:7233"
+    networks:
+      temporal:
+        aliases:
+          - semantic-collaboration-temporal
+
+  temporal-ui:
+    image: ${TEMPORAL_UI_IMAGE:-temporalio/ui:2.34.0}
+    container_name: vet-agent-dev-temporal-ui
+    restart: unless-stopped
+    depends_on:
+      - temporal
+    environment:
+      TEMPORAL_ADDRESS: semantic-collaboration-temporal:7233
+      TEMPORAL_CORS_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+    ports:
+      - "${TEMPORAL_UI_BIND:-127.0.0.1}:${TEMPORAL_UI_PORT:-8080}:8080"
+    networks:
+      - temporal
+
+  temporal-admin-tools:
+    image: ${TEMPORAL_ADMIN_TOOLS_IMAGE:-temporalio/admin-tools:1.29.1-tctl-1.18.4-cli-1.5.0}
+    container_name: vet-agent-dev-temporal-admin-tools
+    restart: "no"
+    profiles:
+      - ops
+    depends_on:
+      - temporal
+    environment:
+      TEMPORAL_ADDRESS: semantic-collaboration-temporal:7233
+      TEMPORAL_CLI_ADDRESS: semantic-collaboration-temporal:7233
+    # admin-tools 镜像默认 entrypoint 会 sleep infinity；ops profile 下必须
+    # 显式切到 temporal CLI，才能使用 compose run 执行一次性运维命令。
+    entrypoint: ["temporal"]
+    networks:
+      - temporal
+
+networks:
+  temporal:
+    name: ${TEMPORAL_NETWORK_NAME:?set TEMPORAL_NETWORK_NAME in compose.dev.env}
+    external: true

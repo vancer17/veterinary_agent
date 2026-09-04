@@ -227,6 +227,10 @@ claim graph 准入
 自研 worker 抢占与恢复协议
 ```
 
+远端开发环境的 Temporal 地址、namespace 与持久化边界见
+[temporal-dev-environment-baseline.md](/home/vancer17/veterinary_agent/docs/deployment/temporal-dev-environment-baseline.md)。
+该环境仅用于显式集成测试，不改变生产 durable execution 边界，也不提供本地调度回退。
+
 ## 5. TurnSnapshot 与受限全局视图
 
 ### 5.1 契约
@@ -1561,3 +1565,4 @@ durable execution 边界
 8. [clinical-safety-semantic-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/clinical-safety-semantic-change-summary.md)
 9. [semantic-collaboration-dag-m04-scheduler-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m04-scheduler-change-summary.md)
 10. [semantic-collaboration-dag-m08-review-skill-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m08-review-skill-change-summary.md)
+11. [temporal-dev-environment-baseline.md](/home/vancer17/veterinary_agent/docs/deployment/temporal-dev-environment-baseline.md)

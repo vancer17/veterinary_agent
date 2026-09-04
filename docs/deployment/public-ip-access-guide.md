@@ -2,7 +2,8 @@
 =============================================================================
 文件: docs/deployment/public-ip-access-guide.md
 作用: 记录远程开发环境通过公网 IPv4 与 Nginx 路径路由访问外部依赖服务的方式。
-范围: 覆盖 Mem0 Dashboard、Mem0 REST API、LiteLLM、OPA REST API 与 OPA 诊断 API。
+范围: 覆盖 Mem0 Dashboard、Mem0 REST API、LiteLLM、OPA REST API、OPA 诊断 API，
+      以及 Temporal 开发服务的有意非公网暴露边界。
 说明: 本文档只记录非敏感访问路径、配置位置和排障方式；真实密钥不得写入正式 docs 目录。
 =============================================================================
 -->
@@ -31,12 +32,15 @@
 | LiteLLM OpenAI 兼容 API | `http://47.97.19.58/litellm/v1/` | `127.0.0.1:4000` | 模型网关 API |
 | OPA REST API | `http://47.97.19.58/opa/` | `127.0.0.1:8181` | 策略裁决、Data API、Policy API 与 Config API |
 | OPA 诊断 API | `http://47.97.19.58/opa-diagnostics/` | `127.0.0.1:8282` | 只读健康检查与 Prometheus metrics |
+| Temporal Frontend | 无；SSH tunnel 后 `127.0.0.1:7233` | `127.0.0.1:7233` | 受限语义协作 DAG 集成测试 gRPC 入口 |
+| Temporal Web UI | 无；SSH tunnel 后 `http://127.0.0.1:8080` | `127.0.0.1:8080` | Temporal workflow / namespace 运维界面 |
 
 说明：
 
 - OPA 当前没有独立前端页面，因此只配置 REST API 与诊断 API 路由。
 - 外部访问应优先使用 80 端口下的 Nginx 路径路由。
 - 直接暴露端口只用于临时开发排障，不作为长期公网契约。
+- Temporal Frontend 与 Web UI 有意不配置 Nginx 公网路由；本地访问必须通过 SSH tunnel，详见 [temporal-dev-environment-baseline.md](/home/vancer17/veterinary_agent/docs/deployment/temporal-dev-environment-baseline.md)。
 
 ## 3. Nginx 路由规则
 

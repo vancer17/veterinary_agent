@@ -13,8 +13,8 @@
 
 # 受限语义协作 DAG M04 Temporal-first 调度器对接基线
 
-> **文档状态**：M04 生产工程边界已实现；待 Temporal Docker 编排、真实
-> workflow 联调与 VetOrchestrator 接入后关闭
+> **文档状态**：M04 生产工程边界已实现；待真实 workflow 联调与
+> VetOrchestrator 接入后关闭
 >
 > **边界修订说明**：M04 Temporal-first 边界不变。最新 M06 生产契约已收敛为
 > Turn Intent + 自然语言 Claim Proposition Inventory，任务执行门禁需同步纳入
@@ -28,7 +28,8 @@
 | 确定性语义图推进 | 已实现 |
 | Temporal workflow / activity 边界 | 已实现 |
 | PostgreSQL 只读投影 | 已实现 |
-| Temporal Server Docker 编排 | 未实现 |
+| Temporal Server Docker 编排 | 已部署于远端开发环境 |
+| Temporal 基础设施连通性 | 已通过 cluster health、namespace 与 Python SDK 验证 |
 | 真实 Temporal workflow 联调 | 未执行 |
 | M05 StructuredLLMGateway | 已实现；尚未接入任务执行器 |
 | M06 生成 SKILL | 已实现；可返回 Turn Intent 与自然语言 claims proposal |
@@ -43,6 +44,37 @@
 当前不能宣称的是：语义协作 DAG 已经可以端到端生成 verified claim graph。
 原因在于 M04 的 TODO 任务执行器尚未组合 M06 / M07 / M08 / M11，M11
 Artifact Store 也尚未实现。
+
+### 1.1 远端开发环境基线
+
+当前远端开发环境已部署：
+
+```text
+vet-agent-dev-temporal
+vet-agent-dev-temporal-ui
+```
+
+已注册集成测试 namespace：
+
+```text
+semantic-collaboration-dev
+```
+
+已验证：
+
+```text
+cluster health = SERVING
+namespace describe = PASS
+Web UI HTTP = 200
+Python temporalio SDK connect = PASS
+```
+
+环境地址、数据库边界、SSH tunnel、admin-tools 用法和运维命令以
+[temporal-dev-environment-baseline.md](/home/vancer17/veterinary_agent/docs/deployment/temporal-dev-environment-baseline.md)
+为权威基线。
+
+该基线只证明 Temporal 基础设施可用，不表示 M04 已完成真实 workflow / activity
+联调，也不表示 VetOrchestrator 已接入生产主路径。
 
 ## 2. 架构结论
 
@@ -733,6 +765,16 @@ VetOrchestrator 接入时必须显式选择：
 
 ### 11.1 Temporal 环境验收
 
+前置环境检查：
+
+```text
+cluster health = SERVING
+namespace = semantic-collaboration-dev
+Python SDK 可连接
+```
+
+真实联调验收：
+
 ```text
 workflow 可启动
 activity 可调度
@@ -772,3 +814,4 @@ long_term_memory_written = false
 2. [semantic-collaboration-dag-production-implementation-plan.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-production-implementation-plan.md)
 3. [semantic-collaboration-dag-m06-production-boundary-revision.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m06-production-boundary-revision.md)
 4. [semantic-collaboration-dag-m08-review-skill-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m08-review-skill-change-summary.md)
+5. [temporal-dev-environment-baseline.md](/home/vancer17/veterinary_agent/docs/deployment/temporal-dev-environment-baseline.md)
