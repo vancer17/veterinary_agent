@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import timedelta
 from typing import Any
 
@@ -19,6 +20,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from temporalio import activity, workflow
 from temporalio.client import Client, WorkflowHandle
 from temporalio.common import RetryPolicy, WorkflowIDReusePolicy
+from temporalio.contrib.pydantic import pydantic_data_converter
 from temporalio.exceptions import ActivityError, ApplicationError
 from temporalio.exceptions import TimeoutError as TemporalTimeoutError
 from temporalio.worker import Worker
@@ -298,6 +300,7 @@ class SemanticDAGWorkflow:
                     ],
                 )
                 for result in outcomes:
+                    result = self._normalize_task_result(result)
                     await workflow.execute_activity(
                         "semantic_dag.record_task_result",
                         TemporalTaskResultInput(
@@ -420,6 +423,34 @@ class SemanticDAGWorkflow:
         self._terminal_states[result.task_id] = result.terminal_state
         if result.artifact_reference is not None:
             self._artifact_references[result.task_id] = result.artifact_reference
+
+    def _normalize_task_result(
+        self,
+        result: DAGTaskExecutionResult | dict[str, Any],
+    ) -> DAGTaskExecutionResult:
+        """归一化 Temporal activity 返回中的枚举字符串。
+
+        Temporal Python 在部分 activity result 场景不会向 payload converter 提供
+        返回类型提示；workflow 可能收到 JSON dict 或其中的 enum 字符串。该
+        方法只做确定性结构归一化，不解释业务结果。
+
+        :param result: activity 返回的任务结果。
+        :return: 返回枚举类型闭合的任务结果。
+        :raises RuntimeError: 任务终态或失败码不是权威枚举值时抛出。
+        """
+        if (
+            isinstance(result, DAGTaskExecutionResult)
+            and isinstance(result.terminal_state, DAGTaskTerminalState)
+        ):
+            return result
+        payload = (
+            result.model_dump(mode="json")
+            if isinstance(result, DAGTaskExecutionResult)
+            else result
+        )
+        return DAGTaskExecutionResult.model_validate_json(
+            json.dumps(payload, ensure_ascii=False, sort_keys=True),
+        )
 
     def _dependency_artifacts(
         self,
@@ -638,6 +669,28 @@ class TemporalDAGActivityRuntime:
             request.run_id,
             request.status,
         )
+
+
+async def connect_temporal_semantic_client(
+    address: str,
+    *,
+    namespace: str,
+) -> Client:
+    """连接受限语义协作 DAG 的 Temporal client。
+
+    M04 workflow 输入和 activity 输入包含 strict Pydantic tuple 与 enum。Temporal
+    Python 默认 JSON converter 会把这些字段还原为 list / str，导致 strict 模型
+    解码失败。因此生产接入必须使用 Pydantic v2 data converter。
+
+    :param address: Temporal Frontend gRPC 地址。
+    :param namespace: 语义协作 Temporal namespace。
+    :return: 返回绑定权威 data converter 的 Temporal client。
+    """
+    return await Client.connect(
+        address,
+        namespace=namespace,
+        data_converter=pydantic_data_converter,
+    )
 
 
 def build_temporal_semantic_dag_worker(

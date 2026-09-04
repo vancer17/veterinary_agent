@@ -1359,7 +1359,7 @@ M07 最小结构 verifier: 已实现
 M08 Coverage / Faithfulness Review: 已实现
 M08 deterministic outcome derivation: 已实现
 M14 完整 task trace / metrics: 未完成
-真实 LiteLLM / Temporal 联调: 未执行
+真实 LiteLLM / Temporal 联调: Pre-M11 首个 semantic 集成切片已通过
 ```
 
 本阶段尚不能因 M08 已实现而关闭；关闭前还需补齐 M14 观测闭环，并通过显式外部服务
@@ -1403,6 +1403,17 @@ M10 Repair SKILL / typed patch: 已实现；尚未接入 M04 任务执行器
 M11 ArtifactStore: 未实现
 M14 repair metrics: 未完成
 ```
+
+本阶段在进入 M11 实现前，应按
+[semantic-collaboration-dag-pre-m11-integration-test-design.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-pre-m11-integration-test-design.md)
+执行 M02～M10 的真实 LiteLLM、Temporal 与 PostgreSQL projection 集成验证，并归档
+测试报告。该报告用于确认 M11 snapshot / commit / gate 的工程输入，不得通过测试
+替身伪造 M11 权威 artifact。
+
+当前 Pre-M11 首个 42-case semantic 集成切片已通过，结果见
+[semantic-collaboration-dag-pre-m11-integration-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-pre-m11-integration-change-summary.md)。
+其中语义维度第一公民结论见
+[semantic-collaboration-dag-pre-m11-semantic-validation-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-pre-m11-semantic-validation-summary.md)。
 
 **交付**
 
@@ -1867,15 +1878,18 @@ DSPy 接入
 ## 13. 关联材料
 
 1. [semantic-collaboration-dag-production-architecture.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-production-architecture.md)
-2. [semantic-collaboration-dag-m06-production-boundary-revision.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m06-production-boundary-revision.md)
-3. [agent-input-preprocessing-domain-extraction-migration-plan.md](/home/vancer17/veterinary_agent/docs/architecture/agent-input-preprocessing-domain-extraction-migration-plan.md)
-4. [input-preprocessing-v13-llm-first-structured-claim-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/input-preprocessing-v13-llm-first-structured-claim-change-summary.md)
-5. [input-preprocessing-v14-onepass-governance-convergence-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/input-preprocessing-v14-onepass-governance-convergence-change-summary.md)
-6. [consultation-semantic-extraction-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/consultation-semantic-extraction-change-summary.md)
-7. [consultation-state-answerability-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/consultation-state-answerability-change-summary.md)
-8. [clinical-safety-semantic-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/clinical-safety-semantic-change-summary.md)
-9. [semantic-collaboration-dag-m04-scheduler-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m04-scheduler-change-summary.md)
-10. [semantic-collaboration-dag-m08-review-skill-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m08-review-skill-change-summary.md)
-11. [semantic-collaboration-dag-m09-repair-planner-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m09-repair-planner-change-summary.md)
-12. [semantic-collaboration-dag-m10-repair-skill-patch-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m10-repair-skill-patch-change-summary.md)
-12. [temporal-dev-environment-baseline.md](/home/vancer17/veterinary_agent/docs/deployment/temporal-dev-environment-baseline.md)
+2. [semantic-collaboration-dag-pre-m11-integration-test-design.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-pre-m11-integration-test-design.md)
+3. [semantic-collaboration-dag-pre-m11-integration-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-pre-m11-integration-change-summary.md)
+4. [semantic-collaboration-dag-pre-m11-semantic-validation-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-pre-m11-semantic-validation-summary.md)
+5. [semantic-collaboration-dag-m06-production-boundary-revision.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m06-production-boundary-revision.md)
+6. [agent-input-preprocessing-domain-extraction-migration-plan.md](/home/vancer17/veterinary_agent/docs/architecture/agent-input-preprocessing-domain-extraction-migration-plan.md)
+7. [input-preprocessing-v13-llm-first-structured-claim-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/input-preprocessing-v13-llm-first-structured-claim-change-summary.md)
+8. [input-preprocessing-v14-onepass-governance-convergence-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/input-preprocessing-v14-onepass-governance-convergence-change-summary.md)
+9. [consultation-semantic-extraction-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/consultation-semantic-extraction-change-summary.md)
+10. [consultation-state-answerability-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/consultation-state-answerability-change-summary.md)
+11. [clinical-safety-semantic-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/clinical-safety-semantic-change-summary.md)
+12. [semantic-collaboration-dag-m04-scheduler-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m04-scheduler-change-summary.md)
+13. [semantic-collaboration-dag-m08-review-skill-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m08-review-skill-change-summary.md)
+14. [semantic-collaboration-dag-m09-repair-planner-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m09-repair-planner-change-summary.md)
+15. [semantic-collaboration-dag-m10-repair-skill-patch-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m10-repair-skill-patch-change-summary.md)
+16. [temporal-dev-environment-baseline.md](/home/vancer17/veterinary_agent/docs/deployment/temporal-dev-environment-baseline.md)
