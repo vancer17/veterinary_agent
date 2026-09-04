@@ -65,6 +65,7 @@ class PlanTaskSelectionSource(StrEnum):
 
     PLAN_POLICY = "plan_policy"
     DETERMINISTIC_REVIEW_EXPANSION = "deterministic_review_expansion"
+    DETERMINISTIC_REPAIR_EXPANSION = "deterministic_repair_expansion"
 
 
 class PlanValidationFailureCode(StrEnum):

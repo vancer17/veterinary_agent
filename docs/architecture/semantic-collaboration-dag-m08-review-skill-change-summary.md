@@ -14,7 +14,7 @@
 
 # 受限语义协作 DAG M08 Review SKILL 变更总结
 
-> **文档状态**：M08 生产工程边界已实现；待 M04 任务执行器组合、M09 / M10
+> **文档状态**：M08 生产工程边界已实现；待 M04 任务执行器组合、M10
 > 修复链路、M11 Artifact Store 与真实外部服务联调后关闭
 
 ## 1. 当前状态
@@ -33,8 +33,8 @@
 | Coverage / Faithfulness disagreement 保留 | 已实现 |
 | M11 Review artifact 权威提交 | TODO 显式空壳 |
 | M04 SemanticTaskExecutor 生产组合 | 未接入 |
-| M09 Repair Planner | 未实现 |
-| M10 typed patch / applier | 未实现 |
+| M09 Repair Planner | 已在后续 M09 阶段实现 |
+| M10 typed patch / applier | 已在后续 M10 阶段实现 |
 | 真实 LiteLLM 冒烟 | 未执行 |
 | 真实 Temporal workflow 联调 | 未执行 |
 | VetOrchestrator 生产接入 | 未接入 |
@@ -457,8 +457,7 @@ review bundle digest
 
 | TODO | 当前行为 | 后续责任 | 启用条件 |
 |---|---|---|---|
-| M09 Repair Planner | M08 只输出 true dimensions 和路由状态 | M09 | 定义 dimension → 白名单 repair task 映射和预算 |
-| M10 Repair / Patch | M08 不输出 corrected proposition | M10 | 定义 typed patch、base version、patch verifier 和 applier |
+| M10 Repair / Patch | M08 不输出 corrected proposition；M09 只输出 accepted repair plan | M10 | 定义 typed patch、base version、patch verifier 和 applier |
 | M11 Review Artifact Store | 显式 Fail Fast，不返回 artifact reference | M11 | 定义 append-only、版本、lineage、stale 和幂等提交 |
 | M04 SemanticTaskExecutor 组合 | M08 Runner 未进入生产任务端口 | M04 | M06 / M07 / M08 / M11 消费时序与终态闭合 |
 | Clarification gap artifact | 仅存在结构化 proposal，无权威持久化 | M11 | clarification gap 随 review bundle 进入 artifact 状态机 |
@@ -713,3 +712,4 @@ M11 TODO Fail Fast
 2. [semantic-collaboration-dag-production-implementation-plan.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-production-implementation-plan.md)
 3. [semantic-collaboration-dag-m06-generation-skill-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m06-generation-skill-change-summary.md)
 4. [semantic-collaboration-dag-m04-scheduler-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m04-scheduler-change-summary.md)
+5. [semantic-collaboration-dag-m09-repair-planner-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m09-repair-planner-change-summary.md)

@@ -20,9 +20,10 @@ from pydantic import ValidationError
 from vet_agent.semantic_collaboration import (
     CLAIM_FAITHFULNESS_REVIEW_SPEC,
     CLAIM_INVENTORY_SPEC,
+    CLAIM_PROPOSITION_REPAIR_SPEC,
     DOMAIN_ISOLATED_CONTEXT_RESOURCES,
+    PATCH_APPLIER_SPEC,
     PRODUCTION_SEMANTIC_SKILL_SPECS,
-    SEMANTIC_REPAIR_SPEC,
     SkillCatalog,
     SkillCatalogError,
     SkillContractError,
@@ -64,7 +65,7 @@ def test_production_catalog_is_closed_and_frozen() -> None:
     catalog = build_production_skill_catalog()
 
     assert catalog.frozen is True
-    assert len(catalog.list_specs()) == len(PRODUCTION_SEMANTIC_SKILL_SPECS) == 6
+    assert len(catalog.list_specs()) == len(PRODUCTION_SEMANTIC_SKILL_SPECS) == 7
     assert catalog.require("turn_intent", "2.0.0").skill_id == "turn_intent"
     assert len(catalog.ownership_matrix().records) > 0
     assert (
@@ -94,12 +95,12 @@ def test_frozen_catalog_exposes_readonly_registry() -> None:
     registry = catalog.registry()
 
     assert isinstance(registry, SkillRegistry)
-    assert registry.require("semantic_repair", "1.0.0").task_kind.value == "repair"
-    assert registry.contract_digest() == catalog.contract_digest()
-    assert any(
-        record.mapping.repair_skill_id == "semantic_repair"
-        for record in registry.repair_mappings()
+    assert (
+        registry.require("claim_proposition_repair", "1.0.0").task_kind.value
+        == "repair"
     )
+    assert registry.contract_digest() == catalog.contract_digest()
+    assert registry.repair_mappings() == ()
 
     unfrozen = SkillCatalog(initial_specs=(CLAIM_INVENTORY_SPEC,))
     with pytest.raises(SkillCatalogError, match="requires a frozen catalog"):
@@ -137,10 +138,10 @@ def test_exact_and_parent_field_ownership_conflicts_are_blocked() -> None:
         },
     )
     parent_conflict = _variant(
-        SEMANTIC_REPAIR_SPEC,
+        PATCH_APPLIER_SPEC,
         {
             "skill_id": "parent_conflict",
-            "owns": [{"path": "repair"}],
+            "owns": [{"path": "artifact"}],
         },
     )
 
@@ -148,7 +149,7 @@ def test_exact_and_parent_field_ownership_conflicts_are_blocked() -> None:
     with pytest.raises(SkillCatalogError, match="field ownership conflict"):
         exact_catalog.register(exact_conflict)
 
-    parent_catalog = SkillCatalog(initial_specs=(SEMANTIC_REPAIR_SPEC,))
+    parent_catalog = SkillCatalog(initial_specs=(PATCH_APPLIER_SPEC,))
     with pytest.raises(SkillCatalogError, match="field ownership conflict"):
         parent_catalog.register(parent_conflict)
 
@@ -158,11 +159,11 @@ def test_parent_owned_and_forbidden_path_conflict_is_blocked() -> None:
 
     :return: 无返回值。
     """
-    payload = SEMANTIC_REPAIR_SPEC.model_dump(mode="json")
+    payload = PATCH_APPLIER_SPEC.model_dump(mode="json")
     payload["skill_id"] = "invalid_forbidden_scope"
-    payload["forbidden_output"] = [{"path": "repair"}]
+    payload["forbidden_output"] = [{"path": "artifact"}]
     metadata = replace(
-        projection_metadata_from_spec(SEMANTIC_REPAIR_SPEC),
+        projection_metadata_from_spec(PATCH_APPLIER_SPEC),
         skill_id=payload["skill_id"],
     )
     payload["prompt_projection"] = render_skill_projection(metadata).model_dump(
@@ -170,29 +171,16 @@ def test_parent_owned_and_forbidden_path_conflict_is_blocked() -> None:
     )
 
     with pytest.raises(SkillContractError, match="owned and forbidden"):
-        type(SEMANTIC_REPAIR_SPEC).model_validate(payload)
+        type(PATCH_APPLIER_SPEC).model_validate(payload)
 
 
-def test_unregistered_repair_target_fails_catalog_validation() -> None:
-    """验证修复映射必须在目录内闭合到 Repair SKILL。
+def test_generation_failures_do_not_bypass_m09_repair_planner() -> None:
+    """验证结构失败不会映射到绕过 M09 的直接修复任务。
 
     :return: 无返回值。
     """
-    payload = CLAIM_INVENTORY_SPEC.model_dump(mode="json")
-    payload["skill_id"] = "broken_repair_source"
-    payload["repair_mappings"][0]["repair_skill_version"] = "9.9.9"
-    metadata = replace(
-        projection_metadata_from_spec(CLAIM_INVENTORY_SPEC),
-        skill_id=payload["skill_id"],
-    )
-    payload["prompt_projection"] = render_skill_projection(metadata).model_dump(
-        mode="json"
-    )
-    broken = type(CLAIM_INVENTORY_SPEC).model_validate(payload)
-    catalog = SkillCatalog(initial_specs=(broken,))
-
-    with pytest.raises(SkillCatalogError, match="repair target is not registered"):
-        catalog.validate()
+    assert CLAIM_INVENTORY_SPEC.repair_mappings == ()
+    assert CLAIM_PROPOSITION_REPAIR_SPEC.repair_mappings == ()
 
 
 def test_missing_verifier_and_unknown_contract_values_are_blocked() -> None:
@@ -210,10 +198,6 @@ def test_missing_verifier_and_unknown_contract_values_are_blocked() -> None:
     with pytest.raises(ValidationError):
         type(CLAIM_INVENTORY_SPEC).model_validate(context_payload)
 
-    failure_payload = CLAIM_INVENTORY_SPEC.model_dump(mode="json")
-    failure_payload["repair_mappings"][0]["failure_code"] = "unknown_failure"
-    with pytest.raises(ValidationError):
-        type(CLAIM_INVENTORY_SPEC).model_validate(failure_payload)
 
 
 def test_skill_projection_missing_section_is_blocked() -> None:

@@ -832,17 +832,18 @@ Faithfulness Review 已实现
 
 **目标**
 
-根据 Faithfulness / Coverage 布尔矩阵中的具体 true 维度创建受限修复任务，并控制修复预算。
+根据 Faithfulness / Coverage 布尔矩阵中的具体 true 维度创建通用修复任务，并控制修复预算。
 
 **范围**
 
 ```text
 ReviewDimensionCatalog
-RepairMapping
+GenericRepairLaneRouter
 RepairPlanner
 RepairBudget
 ClarificationGapRouter
 HumanReviewRouter
+RepairPlanVerifier
 ```
 
 **上游依赖**
@@ -852,44 +853,70 @@ M01 SkillCatalog
 M08 ReviewArtifact
 ```
 
+**生产修复 lane**
+
+为避免按医学或语义维度过早实现专门规则，M09 只创建两个通用 lane：
+
+```text
+claim_inventory_repair
+claim_proposition_repair
+```
+
+Coverage 已知问题统一进入 inventory repair；Faithfulness 已知漂移 / 越权统一进入
+单 claim proposition repair。细粒度问题由 M10 Repair LLM 在受限上下文中生成 typed
+patch proposal，再由 deterministic verifier / applier 治理。
+
 **交付物**
 
 1. 固定 review dimension 目录。
-2. review dimension 到 Repair SKILL 的白名单映射。
+2. Coverage / Faithfulness 到两个通用修复 lane 的白名单路由。
 3. repair depth 控制。
 4. per-proposition / per-turn budget。
-5. repair dimension 到删除式修复 / 措辞修复的白名单映射。
-6. `clarification_required` gap 路由。
-7. `repair_unavailable` 与 `human_review_required` 状态。
+5. clarification gap 透传。
+6. disagreement / unclassified / budget exceeded 人工审查路由。
+7. inventory repair 优先级与 stale 记录。
+8. M11 base artifact binding TODO 端口。
+9. deterministic RepairPlanVerifier。
 
 **验收标准**
 
 ```text
 未知 review dimension 不动态匹配 repair
+Coverage 已知维度统一进入 claim_inventory_repair
+Faithfulness 已知漂移统一进入 claim_proposition_repair
 来源绑定缺失维度输出 clarification_required，不进入 repair
-医学推断或建议添加进入删除式局部 repair
-未分类维度输出 human_review_required
+医学推断或建议添加只进入删除 / 还原式 repair lane
+未分类覆盖问题输出 human_review_required
+未分类语义改变输出 human_review_required
+Coverage / Faithfulness disagreement 输出 human_review_required
 repair_depth 不超过 1
 不允许 repair of repair
 同一 proposition 最多一次修复
 可修复 true 维度超过上限输出 human_review_required
-budget 超限输出 repair_exhausted
+预算超限输出 human_review_required，不自动全局重写
+inventory repair 显式抑制并 stale 即将失效的 proposition repair
+M11 未实现时不伪造 base artifact binding
 ```
 
 ### M10：Repair SKILL 与 Patch
 
 **目标**
 
-用局部 typed patch 修复可恢复的自然语言 proposition 漂移，并删除模型引入的越权生成内容。
+用两个通用 Repair lane 和稀疏模型输出生成局部 typed patch，删除模型引入的越权生成内容，并保持未申报 claim 不变。
 
 **范围**
 
 ```text
-RepairSkill
-RepairPatchProposal
-PatchVerifier
-PatchApplier
-RepairLineage
+claim_inventory_repair SKILL
+claim_proposition_repair SKILL
+RepairRunner
+SparseRepairOutput
+SemanticPatchCompiler
+SemanticPatchVerifier
+SemanticPatchSetVerifier
+DeterministicPatchApplier
+RepairLineage payload
+M11 snapshot / patch store TODO ports
 ```
 
 **上游依赖**
@@ -900,27 +927,66 @@ M09 Repair Planner
 M11 ArtifactStore
 ```
 
+**模型输出契约**
+
+`claim_proposition_repair`：
+
+```json
+{
+  "proposition": "英短精神状态正常"
+}
+```
+
+`claim_inventory_repair`：
+
+```json
+{
+  "modified_claims": [
+    {
+      "target": "c0",
+      "propositions": [
+        "英短进食正常",
+        "英短饮水正常"
+      ]
+    }
+  ],
+  "added_claims": [
+    "英短没有血便"
+  ]
+}
+```
+
+模型不输出 `operation`、`after_claim_index`、`addresses_dimensions`、完整 claims、patch 身份、base version 或 artifact reference。
+
 **交付物**
 
-1. Repair SKILL 注册。
-2. review dimension 到 patch operation 的白名单。
-3. `remove_external_medical_inference` 删除式 patch 契约。
-4. base version 契约。
-5. patch verifier。
-6. deterministic applier。
-7. repair lineage。
+1. 两个 Repair SKILL 注册。
+2. 稀疏 delta 输出 schema。
+3. proposition 单值输出 schema。
+4. 局部 selector c0/c1/... 生成与解析。
+5. deterministic patch compiler。
+6. patch verifier 与 patch set verifier。
+7. deterministic applier preview。
+8. M11 target snapshot 与 patch store TODO。
+9. repair lineage payload。
 
 **验收标准**
 
 ```text
-patch path 越权 blocked
-未申报 review dimension 的 patch blocked
-医学推断 / 风险 / 建议 patch 只能删除或还原用户表述，不得生成新医学结论
+patch path / operation 越权 blocked
+patch 目标 selector 不存在 blocked
+claim digest 不匹配 blocked
+repair_dimensions 信封与 M09 task 不一致 blocked
 base_version 冲突 blocked
 forbidden field 不可修复
 schema 根本非法输出不可修复
-patch 应用后 artifact version + 1
-repair lineage 可追溯
+未申报 claim 保持不变
+完整 claims 输出不可通过 schema
+医学推断 / 风险 / 建议 patch 只能删除或还原用户表述，不得生成新医学结论
+多个 proposition patch 共享同一 base version 并原子应用
+patch 应用预览 version + 1
+repair lineage payload 可追溯
+M11 TODO 不伪造 snapshot / artifact reference
 ```
 
 **禁止事项**
@@ -928,10 +994,14 @@ repair lineage 可追溯
 ```text
 不自由重写完整 artifact
 不整轮重写 claim list
+不要求模型复述未修改 claim
+不输出 operation / after_claim_index / addresses_dimensions
 不补造无证据事实
 不自动消解指代、时间基准、否定范围或比较基线
 不判断医学推断是否正确
 不生成新的诊断、风险、就医或治疗建议
+不在 M10 内执行 M08 re-review
+不把 patch ready 标记为 verified
 ```
 
 ### M11：Artifact Store 与版本
@@ -1324,6 +1394,15 @@ review 失败不等于原任务通过
 **目标**
 
 交付局部修复、artifact 版本、证据门禁状态和人工审查过渡机制。
+
+**当前实现状态**
+
+```text
+M09 Repair Planner: 已实现；尚未接入 M04 生产任务执行器
+M10 Repair SKILL / typed patch: 已实现；尚未接入 M04 任务执行器
+M11 ArtifactStore: 未实现
+M14 repair metrics: 未完成
+```
 
 **交付**
 
@@ -1797,4 +1876,6 @@ DSPy 接入
 8. [clinical-safety-semantic-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/clinical-safety-semantic-change-summary.md)
 9. [semantic-collaboration-dag-m04-scheduler-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m04-scheduler-change-summary.md)
 10. [semantic-collaboration-dag-m08-review-skill-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m08-review-skill-change-summary.md)
-11. [temporal-dev-environment-baseline.md](/home/vancer17/veterinary_agent/docs/deployment/temporal-dev-environment-baseline.md)
+11. [semantic-collaboration-dag-m09-repair-planner-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m09-repair-planner-change-summary.md)
+12. [semantic-collaboration-dag-m10-repair-skill-patch-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m10-repair-skill-patch-change-summary.md)
+12. [temporal-dev-environment-baseline.md](/home/vancer17/veterinary_agent/docs/deployment/temporal-dev-environment-baseline.md)
