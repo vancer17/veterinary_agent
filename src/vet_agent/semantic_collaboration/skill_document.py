@@ -60,6 +60,10 @@ ALLOWED_SKILL_PROMPT_VARIABLES: tuple[str, ...] = (
     "trusted_pet_context",
     "generated_claims",
     "claim_proposition",
+    "claim_candidates",
+    "target_claim",
+    "repair_dimensions",
+    "repair_hints",
 )
 
 

@@ -1,9 +1,9 @@
 """
 =============================================================================
 文件：src/vet_agent/semantic_collaboration/prompt_renderer.py
-作用：实现受限语义协作 DAG M06 / M08 的标准化 SKILL 文档提示词渲染器。
-范围：覆盖渲染请求身份校验、生成与 Review 受限上下文投影、SKILL 文档绑定、
-      模型可见章节选择、受限 Jinja 变量替换、tag 冲突校验与 renderer 目录闭合。
+作用：实现受限语义协作 DAG M06 / M08 / M10 的标准化 SKILL 文档提示词渲染器。
+范围：覆盖渲染请求身份校验、生成 / Review / Repair 受限上下文投影、SKILL 文档
+      绑定、模型可见章节选择、受限 Jinja 变量替换、tag 冲突校验与目录闭合。
 说明：SKILL.md 文件头部元数据仅确定性代码可见；正文只有声明章节进入模型。
       本文件不调用模型、不做 evidence 绑定、不读取下游领域状态。
 =============================================================================
@@ -27,6 +27,7 @@ from .gateway_contracts import (
     SemanticChatMessage,
     SkillPromptProjection,
 )
+from .repair_contracts import ReviewRepairDimension
 from .scheduler_contracts import SemanticTaskExecutionRequest
 from .skill_document import SemanticSkillDocument, load_semantic_skill_document
 from .skill_template import RestrictedSkillTemplate
@@ -40,6 +41,10 @@ PROMPT_RESERVED_TAGS: tuple[str, ...] = (
     "trusted_pet_context",
     "generated_claims",
     "claim_proposition",
+    "claim_candidates",
+    "target_claim",
+    "repair_dimensions",
+    "repair_hints",
 )
 
 
@@ -76,7 +81,9 @@ class SkillPromptReviewContext(BaseModel):
             raise ValueError("skill review context must define exactly one subject")
         if self.generated_claims is not None:
             if len(self.generated_claims) > 8:
-                raise ValueError("generated claims review subject is empty or oversized")
+                raise ValueError(
+                    "generated claims review subject is empty or oversized"
+                )
             if any(
                 not claim.strip()
                 or claim != claim.strip()
@@ -120,6 +127,10 @@ class SkillPromptRenderRequest(BaseModel):
         default=None,
         description="M08 Review 专用任务内上下文；生成 SKILL 必须为空。",
     )
+    repair_context: SkillPromptRepairContext | None = Field(
+        default=None,
+        description="M10 Repair 专用任务内上下文；非 Repair SKILL 必须为空。",
+    )
 
     @model_validator(mode="after")
     def validate_renderer_identity(self) -> Self:
@@ -138,11 +149,79 @@ class SkillPromptRenderRequest(BaseModel):
             self.projection.turn_snapshot_digest,
         ):
             raise ValueError("skill prompt render request identity mismatch")
+        if self.review_context is not None and self.repair_context is not None:
+            raise ValueError("skill prompt cannot combine review and repair contexts")
+        return self
+
+
+class SkillPromptRepairContext(BaseModel):
+    """表示 M10 Repair SKILL 的确定性任务内上下文。
+
+    :return: 无返回值；该上下文不携带生成器、Reviewer 或下游领域审计信息。
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+        strict=True,
+        validate_assignment=True,
+    )
+
+    claim_candidates: tuple[str, ...] | None = Field(
+        default=None,
+        description="Inventory Repair 的任务内 c0/c1 claim 候选集合。",
+    )
+    target_claim: str | None = Field(
+        default=None,
+        description="Proposition Repair 的唯一待修复 proposition。",
+    )
+    repair_dimensions: tuple[ReviewRepairDimension, ...] = Field(
+        min_length=1,
+        description="M09 声明的修复维度，仅作为模型输入语义先验。",
+    )
+    repair_hints: tuple[str, ...] = Field(
+        default=(),
+        max_length=8,
+        description="Coverage 提供的非权威修复线索。",
+    )
+
+    @model_validator(mode="after")
+    def validate_repair_context(self) -> Self:
+        """校验 Repair 上下文一次只表达一种修复粒度。
+
+        :return: 返回可注入受限模板的 Repair 上下文。
+        :raises ValueError: 主体缺失、重复、超界或 hint 形态非法时抛出。
+        """
+        if (self.claim_candidates is None) == (self.target_claim is None):
+            raise ValueError("skill repair context must define exactly one subject")
+        if self.claim_candidates is not None:
+            if len(self.claim_candidates) > 8:
+                raise ValueError("claim candidates repair subject is oversized")
+            if any(
+                not claim.strip()
+                or claim != claim.strip()
+                or "\n" in claim
+                or "\r" in claim
+                for claim in self.claim_candidates
+            ):
+                raise ValueError("claim candidates repair subject is invalid")
+        if self.target_claim is not None and (
+            not self.target_claim.strip()
+            or self.target_claim != self.target_claim.strip()
+            or "\n" in self.target_claim
+            or "\r" in self.target_claim
+        ):
+            raise ValueError("target claim repair subject is invalid")
+        if any(
+            not hint.strip() or hint != hint.strip() or "\n" in hint or "\r" in hint
+            for hint in self.repair_hints
+        ):
+            raise ValueError("repair hint shape is invalid")
         return self
 
 
 class SkillPromptRenderer(Protocol):
-    """表示 M06 / M08 版本化提示词渲染端口。
+    """表示 M06 / M08 / M10 版本化提示词渲染端口。
 
     :return: 无返回值；实现只能读取受限投影并输出不可变提示词投影。
     """
@@ -234,8 +313,7 @@ def _question_lines(projection: TurnSnapshotProjection) -> str:
     if not questions:
         return "none"
     return "\n".join(
-        f"{index}. {question.text}"
-        for index, question in enumerate(questions, start=1)
+        f"{index}. {question.text}" for index, question in enumerate(questions, start=1)
     )
 
 
@@ -315,6 +393,62 @@ def _claim_proposition_text(context: SkillPromptReviewContext) -> str:
     return context.claim_proposition
 
 
+def _claim_candidate_lines(context: SkillPromptRepairContext) -> str:
+    """渲染 Inventory Repair 的任务内 claim 候选集合。
+
+    :param context: 当前 Repair 任务的受限任务内上下文。
+    :return: 返回带 c0/c1 局部选择符的候选 claim 文本。
+    :raises SemanticPromptRenderError: Repair 上下文缺失时抛出。
+    """
+    if context.claim_candidates is None:
+        raise SemanticPromptRenderError(
+            "inventory repair prompt context is missing claim candidates",
+        )
+    if not context.claim_candidates:
+        return "none"
+    return "\n".join(
+        f"c{index}: {claim}" for index, claim in enumerate(context.claim_candidates)
+    )
+
+
+def _target_claim_text(context: SkillPromptRepairContext) -> str:
+    """读取 Proposition Repair 的唯一目标 claim。
+
+    :param context: 当前 Repair 任务的受限任务内上下文。
+    :return: 返回待修复 proposition。
+    :raises SemanticPromptRenderError: Repair 上下文缺失时抛出。
+    """
+    if context.target_claim is None:
+        raise SemanticPromptRenderError(
+            "proposition repair prompt context is missing target claim",
+        )
+    return context.target_claim
+
+
+def _repair_dimension_lines(context: SkillPromptRepairContext) -> str:
+    """渲染 M09 声明的修复维度语义先验。
+
+    :param context: 当前 Repair 任务的受限任务内上下文。
+    :return: 返回逐行编号的修复维度文本。
+    """
+    return "\n".join(
+        f"{index}. {dimension.value}"
+        for index, dimension in enumerate(context.repair_dimensions, start=1)
+    )
+
+
+def _repair_hint_lines(context: SkillPromptRepairContext) -> str:
+    """渲染 Coverage Review 提供的非权威修复线索。
+
+    :param context: 当前 Repair 任务的受限任务内上下文。
+    :return: 返回带非权威标记的修复提示文本。
+    """
+    if not context.repair_hints:
+        return "none"
+    hints = "\n".join(f"- {hint}" for hint in context.repair_hints)
+    return f"hint_authority=non_authoritative\n{hints}"
+
+
 def _validate_projection_resources(request: SkillPromptRenderRequest) -> None:
     """校验受限投影覆盖 SkillSpec 声明的全部 TurnSnapshot 资源。
 
@@ -354,8 +488,15 @@ def _prompt_variables(
         "trusted_pet_context",
         "generated_claims",
         "claim_proposition",
+        "claim_candidates",
+        "target_claim",
+        "repair_dimensions",
+        "repair_hints",
     }
-    if "generated_claims" in allowed_variables or "claim_proposition" in allowed_variables:
+    if (
+        "generated_claims" in allowed_variables
+        or "claim_proposition" in allowed_variables
+    ):
         if request.review_context is None:
             raise SemanticPromptRenderError(
                 "review prompt variables require review context",
@@ -363,6 +504,21 @@ def _prompt_variables(
     elif request.review_context is not None:
         raise SemanticPromptRenderError(
             "review context is not allowed for non-review skill",
+        )
+    repair_variables = {
+        "claim_candidates",
+        "target_claim",
+        "repair_dimensions",
+        "repair_hints",
+    }
+    if repair_variables & set(allowed_variables):
+        if request.repair_context is None:
+            raise SemanticPromptRenderError(
+                "repair prompt variables require repair context",
+            )
+    elif request.repair_context is not None:
+        raise SemanticPromptRenderError(
+            "repair context is not allowed for non-repair skill",
         )
     unknown = set(allowed_variables) - known_variables
     if unknown:
@@ -383,6 +539,30 @@ def _prompt_variables(
                     "review prompt renderer requires review context",
                 )
             values[name] = _claim_proposition_text(request.review_context)
+        elif name == "claim_candidates":
+            if request.repair_context is None:
+                raise SemanticPromptRenderError(
+                    "repair prompt renderer requires repair context",
+                )
+            values[name] = _claim_candidate_lines(request.repair_context)
+        elif name == "target_claim":
+            if request.repair_context is None:
+                raise SemanticPromptRenderError(
+                    "repair prompt renderer requires repair context",
+                )
+            values[name] = _target_claim_text(request.repair_context)
+        elif name == "repair_dimensions":
+            if request.repair_context is None:
+                raise SemanticPromptRenderError(
+                    "repair prompt renderer requires repair context",
+                )
+            values[name] = _repair_dimension_lines(request.repair_context)
+        elif name == "repair_hints":
+            if request.repair_context is None:
+                raise SemanticPromptRenderError(
+                    "repair prompt renderer requires repair context",
+                )
+            values[name] = _repair_hint_lines(request.repair_context)
         elif name == "current_turn":
             values[name] = _current_turn_text(request.projection)
         elif name == "last_assistant_questions":
@@ -430,7 +610,7 @@ def _validate_rendered_tags(
 
 
 class StandardSkillPromptRenderer:
-    """表示基于标准化 SKILL.md 的 M06 / M08 提示词渲染器。
+    """表示基于标准化 SKILL.md 的 M06 / M08 / M10 提示词渲染器。
 
     :return: 无返回值；渲染器只消费启动期校验后的文档与受限投影。
     """
@@ -591,6 +771,34 @@ class ClaimFaithfulnessReviewPromptRenderer(StandardSkillPromptRenderer):
         super().__init__(load_semantic_skill_document("claim_faithfulness_review"))
 
 
+class ClaimInventoryRepairPromptRenderer(StandardSkillPromptRenderer):
+    """表示 Claim Inventory Repair standardized SKILL 渲染器。
+
+    :return: 无返回值；该渲染器只输出稀疏 delta 修复规则。
+    """
+
+    def __init__(self) -> None:
+        """加载生产包内的 Claim Inventory Repair SKILL.md。
+
+        :return: 无返回值。
+        """
+        super().__init__(load_semantic_skill_document("claim_inventory_repair"))
+
+
+class ClaimPropositionRepairPromptRenderer(StandardSkillPromptRenderer):
+    """表示 Claim Proposition Repair standardized SKILL 渲染器。
+
+    :return: 无返回值；该渲染器只输出单 proposition 修复规则。
+    """
+
+    def __init__(self) -> None:
+        """加载生产包内的 Claim Proposition Repair SKILL.md。
+
+        :return: 无返回值。
+        """
+        super().__init__(load_semantic_skill_document("claim_proposition_repair"))
+
+
 class SkillPromptRendererRegistry:
     """表示 M06 生产 renderer 的不可变注册目录。
 
@@ -660,6 +868,7 @@ class SkillPromptRendererRegistry:
             in {
                 SkillExecutionFamily.STRUCTURED_GENERATION,
                 SkillExecutionFamily.STRUCTURED_REVIEW,
+                SkillExecutionFamily.STRUCTURED_REPAIR,
             }
         }
         renderer_identities = set(self._renderers)
@@ -695,5 +904,7 @@ def build_production_prompt_renderer_registry() -> SkillPromptRendererRegistry:
             ClaimPropositionInventoryPromptRenderer(),
             ClaimCoverageReviewPromptRenderer(),
             ClaimFaithfulnessReviewPromptRenderer(),
+            ClaimInventoryRepairPromptRenderer(),
+            ClaimPropositionRepairPromptRenderer(),
         ),
     )

@@ -15,7 +15,9 @@ import pytest
 
 from tests.test_semantic_collaboration_generation import _execution, _snapshot
 from vet_agent.semantic_collaboration import (
+    CLAIM_INVENTORY_REPAIR_SPEC,
     CLAIM_INVENTORY_SPEC,
+    CLAIM_PROPOSITION_REPAIR_SPEC,
     TURN_INTENT_SPEC,
     ClaimPropositionInventoryPromptRenderer,
     RestrictedSkillTemplate,
@@ -38,9 +40,17 @@ def test_standard_skill_documents_match_authoritative_specs() -> None:
     """
     turn_document = load_semantic_skill_document("turn_intent")
     claim_document = load_semantic_skill_document("claim_inventory")
+    inventory_repair_document = load_semantic_skill_document(
+        "claim_inventory_repair",
+    )
+    proposition_repair_document = load_semantic_skill_document(
+        "claim_proposition_repair",
+    )
 
     turn_document.validate_against_spec(TURN_INTENT_SPEC)
     claim_document.validate_against_spec(CLAIM_INVENTORY_SPEC)
+    inventory_repair_document.validate_against_spec(CLAIM_INVENTORY_REPAIR_SPEC)
+    proposition_repair_document.validate_against_spec(CLAIM_PROPOSITION_REPAIR_SPEC)
 
     assert turn_document.metadata.prompt_version == "1.1.0"
     assert claim_document.metadata.prompt_version == "1.2.0"

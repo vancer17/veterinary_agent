@@ -38,7 +38,7 @@ from .plan_contracts import schema_reference_matches
 _GATEWAY_EXECUTION_FAMILIES: tuple[SkillExecutionFamily, ...] = (
     SkillExecutionFamily.STRUCTURED_GENERATION,
     SkillExecutionFamily.STRUCTURED_REVIEW,
-    SkillExecutionFamily.TYPED_REPAIR,
+    SkillExecutionFamily.STRUCTURED_REPAIR,
 )
 
 

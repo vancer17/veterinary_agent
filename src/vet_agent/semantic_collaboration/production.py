@@ -21,13 +21,11 @@ from .contracts import (
     ContextContract,
     FailurePolicy,
     FieldOwnershipPath,
-    RepairMapping,
     SchemaContract,
     SkillContextResource,
     SkillExecutionFamily,
     SkillFailureCode,
     SkillObservabilityContract,
-    SkillPatchType,
     SkillSpec,
     SkillTaskKind,
     SkillTraceKind,
@@ -62,9 +60,6 @@ def _leaf_schema(path: str) -> dict[str, Any]:
     :return: 返回不含医学语义的字段 schema 定义。
     """
     scalar_types: dict[str, str] = {
-        "repair.patch_type": "string",
-        "repair.base_version": "string",
-        "repair.proposal": "object",
         "artifact.version": "integer",
         "artifact.lineage": "string",
         "artifact.stale": "boolean",
@@ -304,6 +299,80 @@ def _claim_faithfulness_review_output_schema() -> SchemaContract:
     )
 
 
+def _claim_proposition_repair_output_schema() -> SchemaContract:
+    """构造单条 claim 修复 SKILL 的极薄输出契约。
+
+    :return: 返回只包含一个修复 proposition 的严格 schema。
+    """
+    return SchemaContract(
+        schema_id="semantic_collaboration.claim_proposition_repair.output",
+        schema_version="1.0.0",
+        json_schema={
+            "type": "object",
+            "description": "Single-proposition repair output without model self-attestation.",
+            "properties": {
+                "proposition": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240,
+                    "description": "Repaired self-contained Chinese proposition.",
+                },
+            },
+            "required": ["proposition"],
+            "additionalProperties": False,
+        },
+    )
+
+
+def _claim_inventory_repair_output_schema() -> SchemaContract:
+    """构造 Claim Inventory 修复 SKILL 的稀疏 delta 输出契约。
+
+    :return: 返回只允许局部修改和新增 claim 的严格 schema。
+    """
+    proposition = {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 240,
+    }
+    return SchemaContract(
+        schema_id="semantic_collaboration.claim_inventory_repair.output",
+        schema_version="1.0.0",
+        json_schema={
+            "type": "object",
+            "description": "Sparse claim inventory delta without full artifact rewrite.",
+            "properties": {
+                "modified_claims": {
+                    "type": "array",
+                    "maxItems": 2,
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "target": {
+                                "type": "string",
+                                "pattern": "^c[0-7]$",
+                            },
+                            "propositions": {
+                                "type": "array",
+                                "maxItems": 3,
+                                "items": proposition,
+                            },
+                        },
+                        "required": ["target", "propositions"],
+                        "additionalProperties": False,
+                    },
+                },
+                "added_claims": {
+                    "type": "array",
+                    "maxItems": 2,
+                    "items": proposition,
+                },
+            },
+            "required": ["modified_claims", "added_claims"],
+            "additionalProperties": False,
+        },
+    )
+
+
 def _input_schema(skill_id: str) -> SchemaContract:
     """构造 SKILL 输入契约。
 
@@ -367,24 +436,6 @@ def _verifier_binding(
     )
 
 
-def _repair_mapping(
-    failure_code: SkillFailureCode,
-    patch_type: SkillPatchType,
-) -> RepairMapping:
-    """构造白名单修复映射。
-
-    :param failure_code: 可修复的稳定失败码。
-    :param patch_type: 允许提议的 typed patch 类型。
-    :return: 返回修复映射契约。
-    """
-    return RepairMapping(
-        failure_code=failure_code,
-        repair_skill_id="semantic_repair",
-        repair_skill_version="1.0.0",
-        allowed_patch_types=(patch_type,),
-    )
-
-
 def _skill_spec(
     *,
     skill_id: str,
@@ -396,7 +447,6 @@ def _skill_spec(
     output_contract: SchemaContract,
     forbidden_output: tuple[FieldOwnershipPath, ...],
     required_context: tuple[SkillContextResource, ...],
-    repair_mappings: tuple[RepairMapping, ...] = (),
     retryable_failures: tuple[SkillFailureCode, ...] = (),
     max_attempts: int = 1,
 ) -> SkillSpec:
@@ -411,27 +461,22 @@ def _skill_spec(
     :param output_contract: 显式输出 schema 契约。
     :param forbidden_output: 禁止输出字段集合。
     :param required_context: 必需上下文资源集合。
-    :param repair_mappings: 白名单修复映射集合。
     :param retryable_failures: 允许有界重试的失败码集合。
     :param max_attempts: 最大执行尝试次数。
     :return: 返回可注册的 SkillSpec。
     """
-    mapped_failures = {mapping.failure_code for mapping in repair_mappings}
     retryable = set(retryable_failures)
-    terminal = tuple(
-        code
-        for code in SkillFailureCode
-        if code not in mapped_failures and code not in retryable
-    )
+    terminal = tuple(code for code in SkillFailureCode if code not in retryable)
     trace_kind = {
         SkillExecutionFamily.STRUCTURED_GENERATION: SkillTraceKind.GENERATION_SKILL,
         SkillExecutionFamily.STRUCTURED_REVIEW: SkillTraceKind.REVIEW_SKILL,
-        SkillExecutionFamily.TYPED_REPAIR: SkillTraceKind.REPAIR_SKILL,
+        SkillExecutionFamily.STRUCTURED_REPAIR: SkillTraceKind.REPAIR_SKILL,
         SkillExecutionFamily.DETERMINISTIC_PATCH_APPLY: SkillTraceKind.PATCH_APPLIER,
     }[execution_family]
     document_backed_families = {
         SkillExecutionFamily.STRUCTURED_GENERATION,
         SkillExecutionFamily.STRUCTURED_REVIEW,
+        SkillExecutionFamily.STRUCTURED_REPAIR,
     }
     skill_document = (
         load_semantic_skill_document(skill_id)
@@ -451,14 +496,7 @@ def _skill_spec(
             forbidden_output=forbidden_output,
             required_context=required_context,
             terminal_failures=terminal,
-            repair_mappings=tuple(
-                (
-                    mapping.failure_code.value,
-                    mapping.repair_skill_id,
-                    mapping.repair_skill_version,
-                )
-                for mapping in repair_mappings
-            ),
+            repair_mappings=(),
         )
         prompt_projection = render_skill_projection(projection_metadata)
     else:
@@ -481,7 +519,6 @@ def _skill_spec(
             retryable_on=retryable_failures,
             max_attempts=max_attempts,
         ),
-        repair_mappings=repair_mappings,
         prompt_projection=prompt_projection,
         observability=SkillObservabilityContract(trace_kind=trace_kind),
     )
@@ -513,12 +550,6 @@ TURN_INTENT_SPEC = _skill_spec(
         SkillContextResource.LAST_ASSISTANT_QUESTIONS,
         SkillContextResource.VERIFIED_PRIOR_FACT_SUMMARY,
     ),
-    repair_mappings=(
-        _repair_mapping(
-            SkillFailureCode.SCHEMA_INVALID,
-            SkillPatchType.INTENT_FIELD_PATCH,
-        ),
-    ),
     retryable_failures=(
         SkillFailureCode.MODEL_CALL_FAILED,
         SkillFailureCode.RESPONSE_PARSE_FAILED,
@@ -548,12 +579,6 @@ CLAIM_INVENTORY_SPEC = _skill_spec(
         SkillContextResource.LAST_ASSISTANT_QUESTIONS,
         SkillContextResource.VERIFIED_PRIOR_FACT_SUMMARY,
         SkillContextResource.TRUSTED_PET_CONTEXT,
-    ),
-    repair_mappings=(
-        _repair_mapping(
-            SkillFailureCode.SCHEMA_INVALID,
-            SkillPatchType.CLAIM_PROPOSITION_PATCH,
-        ),
     ),
     retryable_failures=(
         SkillFailureCode.MODEL_CALL_FAILED,
@@ -633,33 +658,70 @@ CLAIM_FAITHFULNESS_REVIEW_SPEC = _skill_spec(
 )
 
 
-SEMANTIC_REPAIR_SPEC = _skill_spec(
-    skill_id="semantic_repair",
+CLAIM_INVENTORY_REPAIR_SPEC = _skill_spec(
+    skill_id="claim_inventory_repair",
     skill_version="1.0.0",
     task_kind=SkillTaskKind.REPAIR,
-    execution_family=SkillExecutionFamily.TYPED_REPAIR,
-    verifier_id="semantic_repair_verifier",
-    owns=_paths(
-        "repair.patch_type",
-        "repair.base_version",
-        "repair.proposal",
+    execution_family=SkillExecutionFamily.STRUCTURED_REPAIR,
+    verifier_id="claim_inventory_repair_verifier",
+    owns=_paths("modified_claims", "added_claims"),
+    output_contract=_claim_inventory_repair_output_schema(),
+    forbidden_output=_paths(
+        "claims",
+        "operation",
+        "addresses_dimensions",
+        "reason",
+        "confidence",
+        "evidence",
+        "medical_decision",
     ),
-    output_contract=_nested_output_schema(
-        "semantic_collaboration.semantic_repair.output",
-        _paths(
-            "repair.patch_type",
-            "repair.base_version",
-            "repair.proposal",
-        ),
-    ),
-    forbidden_output=_paths("artifact", "medical_decision"),
     required_context=(
         SkillContextResource.TURN_SNAPSHOT_DIGEST,
         SkillContextResource.ORIGINAL_USER_TEXT,
-        SkillContextResource.VERIFIED_PEER_ARTIFACT,
-        SkillContextResource.VERIFIED_REVIEW_ARTIFACT,
-        SkillContextResource.ARTIFACT_BASE_VERSION,
+        SkillContextResource.LAST_ASSISTANT_QUESTIONS,
+        SkillContextResource.VERIFIED_PRIOR_FACT_SUMMARY,
+        SkillContextResource.TRUSTED_PET_CONTEXT,
     ),
+    retryable_failures=(
+        SkillFailureCode.MODEL_CALL_FAILED,
+        SkillFailureCode.RESPONSE_PARSE_FAILED,
+        SkillFailureCode.TIMEOUT,
+    ),
+    max_attempts=2,
+)
+
+
+CLAIM_PROPOSITION_REPAIR_SPEC = _skill_spec(
+    skill_id="claim_proposition_repair",
+    skill_version="1.0.0",
+    task_kind=SkillTaskKind.REPAIR,
+    execution_family=SkillExecutionFamily.STRUCTURED_REPAIR,
+    verifier_id="claim_proposition_repair_verifier",
+    owns=_paths("proposition"),
+    output_contract=_claim_proposition_repair_output_schema(),
+    forbidden_output=_paths(
+        "claims",
+        "operation",
+        "target",
+        "addresses_dimensions",
+        "reason",
+        "confidence",
+        "evidence",
+        "medical_decision",
+    ),
+    required_context=(
+        SkillContextResource.TURN_SNAPSHOT_DIGEST,
+        SkillContextResource.ORIGINAL_USER_TEXT,
+        SkillContextResource.LAST_ASSISTANT_QUESTIONS,
+        SkillContextResource.VERIFIED_PRIOR_FACT_SUMMARY,
+        SkillContextResource.TRUSTED_PET_CONTEXT,
+    ),
+    retryable_failures=(
+        SkillFailureCode.MODEL_CALL_FAILED,
+        SkillFailureCode.RESPONSE_PARSE_FAILED,
+        SkillFailureCode.TIMEOUT,
+    ),
+    max_attempts=2,
 )
 
 
@@ -696,7 +758,8 @@ PRODUCTION_SEMANTIC_SKILL_SPECS: tuple[SkillSpec, ...] = (
     CLAIM_INVENTORY_SPEC,
     CLAIM_COVERAGE_REVIEW_SPEC,
     CLAIM_FAITHFULNESS_REVIEW_SPEC,
-    SEMANTIC_REPAIR_SPEC,
+    CLAIM_INVENTORY_REPAIR_SPEC,
+    CLAIM_PROPOSITION_REPAIR_SPEC,
     PATCH_APPLIER_SPEC,
 )
 

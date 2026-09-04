@@ -48,7 +48,7 @@ class SkillExecutionFamily(StrEnum):
 
     STRUCTURED_GENERATION = "structured_generation"
     STRUCTURED_REVIEW = "structured_review"
-    TYPED_REPAIR = "typed_repair"
+    STRUCTURED_REPAIR = "structured_repair"
     DETERMINISTIC_PATCH_APPLY = "deterministic_patch_apply"
 
 
@@ -676,6 +676,11 @@ class SkillSpec(BaseModel):
             and self.observability.trace_kind != SkillTraceKind.REVIEW_SKILL
         ):
             raise SkillContractError("review skill has invalid trace kind")
+        if (
+            self.execution_family == SkillExecutionFamily.STRUCTURED_REPAIR
+            and self.observability.trace_kind != SkillTraceKind.REPAIR_SKILL
+        ):
+            raise SkillContractError("repair skill has invalid trace kind")
         if self.repair_mappings and self.task_kind == SkillTaskKind.REPAIR:
             raise SkillContractError("repair skill cannot recursively map repairs")
         for mapping in self.repair_mappings:

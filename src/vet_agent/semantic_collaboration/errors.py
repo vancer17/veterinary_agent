@@ -4,8 +4,8 @@
 作用：定义受限语义协作 DAG 的 Skill、TurnSnapshot、Plan 与调度错误类型。
 范围：覆盖 SkillSpec 校验、SkillCatalog 注册、投影一致性、快照构建、
       上下文预算、digest 校验、Plan 编译、M05 结构化模型网关、
-      M06 标准化 SKILL 文档、Prompt Renderer 与生成执行器、DAG 状态仓储访问
-      与任务执行端口失败。
+      M06 标准化 SKILL 文档、Prompt Renderer、M06 生成执行器、M08 Review、
+      M09 修复计划、M10 Repair / Patch、DAG 状态仓储访问与任务执行端口失败。
 说明：本文件只承载错误语义，不访问数据库、不调用模型、不提供任何回退路径。
 =============================================================================
 """
@@ -314,3 +314,21 @@ class SemanticReviewContractError(SemanticCollaborationError):
     """
 
     failure_code: ClassVar[str] = "semantic_review_contract_violation"
+
+
+class SemanticRepairPlanError(SemanticCollaborationError):
+    """表示 M09 修复计划输入、策略或目标契约失败。
+
+    :return: 无返回值；该错误不生成默认修复任务或伪 typed patch。
+    """
+
+    failure_code: ClassVar[str] = "semantic_repair_plan_contract_violation"
+
+
+class SemanticRepairExecutionError(SemanticCollaborationError):
+    """表示 M10 Repair SKILL 执行、编译或上下文契约失败。
+
+    :return: 无返回值；该错误不生成空 patch、不伪造 artifact 或回退路径。
+    """
+
+    failure_code: ClassVar[str] = "semantic_repair_execution_contract_violation"

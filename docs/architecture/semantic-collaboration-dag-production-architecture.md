@@ -159,8 +159,8 @@ Review SKILL 只能输出：
 
 ### 4.4 Repair 只做局部 patch
 
-Repair SKILL 只能针对注册过的 failure code 和白名单 patch path 输出
-`RepairPatchProposal`。
+Repair SKILL 只能消费 accepted M09 RepairPlan，在两个通用 lane 内输出极薄
+语义提案；系统编译为白名单 typed patch 后才形成 `RepairPatchProposal`。
 
 禁止：
 
@@ -970,33 +970,31 @@ Review 禁止：
 
 ### 11.1 Repair Planner
 
-Repair Planner 是 deterministic 组件，根据 Faithfulness / Coverage 布尔矩阵中为 true 的
-具体维度创建受限修复或 clarification gap 任务。禁止由 Review LLM 直接决定自由修复。
+Repair Planner 是 deterministic 组件，只根据 M08 布尔矩阵、derived dimensions、
+claim 身份和 clarification gaps 创建通用修复任务；禁止由 Review LLM 直接决定自由修复，
+也不在 Python 中按每个维度实现医学或语义修复规则。
 
-映射示例：
+生产修复面只拆成两个通用 lane：
 
-| review dimension | 路由 | 允许的 Repair / Gap SKILL |
+```text
+claim_inventory_repair
+claim_proposition_repair
+```
+
+| M09 输入类别 | 路由 | 目标 lane |
 |---|---|---|
-| `否定方向改变` | repair | `repair.claim.assertion_direction` |
-| `否定范围改变` | repair | `repair.claim.assertion_scope` |
-| `正常状态误写为否认` | repair | `repair.claim.normal_statement` |
-| `时间范围改变` | repair | `repair.claim.temporal_wording` |
-| `频率或数量改变` | repair | `repair.claim.frequency_or_quantity` |
-| `程度或强度改变` | repair | `repair.claim.degree_wording` |
-| `确定性改变` | repair | `repair.claim.certainty_wording` |
-| `因果关系改变` | repair | `repair.claim.causality_wording` |
-| `医学推断或建议添加` | repair | `repair.claim.remove_external_medical_inference` |
-| `命题不自包含` 且上下文可补全 | repair | `repair.claim.self_containment` |
-| `命题不自包含` 且上下文不可补全 | clarification | `clarification.claim.binding` |
-| `指代对象不明` | clarification | `clarification.claim.reference_target` |
-| `时间基准不明` | clarification / gap | `clarification.claim.temporal_anchor` |
-| `否定范围不明` | clarification | `clarification.claim.negation_scope` |
-| `比较基线不明` | clarification / gap | `clarification.claim.comparison_baseline` |
-| `存在多事实合并` / `存在shared scope拆分错误` | repair | `repair.claim_inventory.scope_split` |
-| `存在漏抽显式事实` | repair | `repair.claim_inventory.missing_claim` |
-| `未分类语义改变` | human review | 无自动修复 |
+| Coverage 已知维度：漏抽、合并、重复、原文不支持、非自包含、shared scope 拆分错误 | repair | `claim_inventory_repair` |
+| Coverage `未分类覆盖问题` | human review | 无自动修复 |
+| Faithfulness 已知模型漂移 / 越权 / 可由授权上下文补全的自包含性问题 | repair | `claim_proposition_repair` |
+| 来源绑定缺失：指代对象、时间基准、否定范围、比较基线不明 | clarification gap | 无 Repair LLM |
+| 同一 claim 同时存在可修复漂移与来源绑定缺失 | repair then clarification | proposition repair + gap |
+| Faithfulness `未分类语义改变` | human review | 无自动修复 |
+| Coverage / Faithfulness disagreement | human review | 无自动修复 |
 
-`医学推断或建议添加` 的修复只能是受限删除 / 还原：
+Coverage 的 `missing_claim_candidates` 只能作为 `repair_hints` 传给 M10，
+不得在 M09 中追加为权威 claim。
+
+`医学推断或建议添加` 交给通用 proposition repair lane，但修复语义只能是删除或还原：
 
 ```text
 删除模型添加的诊断、医学解释、风险判断、就医建议或治疗建议
@@ -1015,6 +1013,7 @@ forbidden field 出现
 schema 根本非法
 原文无证据且无法还原为 supported proposition
 来源绑定缺失：指代对象、时间基准、否定范围或比较基线不明
+Coverage / Faithfulness disagreement
 review 维度未分类
 结构 / ID 越权
 下游 adapter 未实现
@@ -1023,24 +1022,106 @@ review 维度未分类
 来源绑定缺失输出 `clarification_required`，不得由 Repair 猜测对象、时间基准、否定
 范围或比较基线。
 
-### 11.2 RepairPatchProposal
+M09 预算与 stale 规则：
 
-Repair SKILL 只能输出白名单 typed patch proposal：
+```text
+repair_depth = 1
+不允许 repair of repair
+同一 proposition 最多一次修复
+单目标最多 2 个 true repair dimensions
+单轮最多 2 个 proposition repair tasks
+单轮最多 2 个 repair tasks
+Coverage inventory repair 优先于即将 stale 的 proposition repair
+```
+
+若 Coverage inventory repair 存在，既有 Faithfulness 结果、claim 级修复目标和
+clarification gap 必须显式进入 stale 状态；旧 claim 的审查结论不得迁移到修复后的
+新 claim。预算超限进入 human review，不允许为了绕过预算合并成自由全局重写。
+
+### 11.2 Repair 模型输出与 RepairPatchProposal
+
+M10 使用两个通用 Repair lane：
+
+```text
+claim_inventory_repair
+claim_proposition_repair
+```
+
+`claim_proposition_repair` 的模型输出只有：
 
 ```json
 {
-  "patch_id": "string",
-  "repair_skill_id": "string",
-  "target_task_id": "string",
-  "target_artifact_id": "string",
-  "base_version": "number",
-  "review_dimension": "string",
-  "operations": "array",
-  "reason_code": "string"
+  "proposition": "英短精神状态正常"
 }
 ```
 
-禁止自由 JSON Patch、整轮重写或修复未申报维度。
+`claim_inventory_repair` 的模型输出是稀疏 delta：
+
+```json
+{
+  "modified_claims": [
+    {
+      "target": "c0",
+      "propositions": [
+        "英短进食正常",
+        "英短饮水正常"
+      ]
+    }
+  ],
+  "added_claims": [
+    "英短没有血便"
+  ]
+}
+```
+
+Prompt 中的 `c0/c1/...` 是任务内局部 selector，不是全局 claim id 或 digest。
+未出现在 `modified_claims` 中的 cX 由系统从 M11 base artifact 原样保留。
+
+模型不得输出：
+
+```text
+operation
+after_claim_index
+addresses_dimensions
+claims / corrected_claims
+patch_id
+repair_task_id
+run_id / task_id
+artifact_reference
+base_version
+claim_digest
+review_bundle_digest
+turn_snapshot_digest
+reason / confidence / verdict
+evidence
+```
+
+系统根据稀疏 delta 确定性推导 operation：
+
+```text
+target + propositions=[] → remove_claim
+target + propositions=[1] → replace_claim
+target + propositions=[2+] → replace_claim_with_claims
+added_claims → add_claim，并追加到末尾
+```
+
+系统随后附加：
+
+```text
+patch_id
+repair_plan_id / repair_task_id
+repair skill id / version
+claim index / base claim digest
+artifact reference / base version
+review bundle digest
+turn snapshot digest
+repair_dimensions
+```
+
+`repair_dimensions` 复制自 M09 task，仅作为 prompt 输入先验与系统信封字段；
+不由 Repair LLM 输出或自证。语义是否真正修复由后续 M08 re-review 判断。
+
+禁止自由 JSON Patch、整轮重写、完整 claims 输出或修复未申报目标。
 
 ### 11.3 Patch 应用校验
 
@@ -1050,12 +1131,13 @@ Patch Applier 必须校验：
 target artifact 存在
 base_version 一致
 repair skill 已注册
-review dimension 匹配
-patch path 在白名单
-patch value 符合 proposition schema
-未修改 forbidden path
+repair_dimensions 与 M09 task 完全一致
+operation 在 lane 白名单内
+proposition 符合 claim schema
+未列出的 base claim 保持不变
 无并行 patch 冲突
 repair budget 未超限
+patch 不产生 no-op 结果
 ```
 
 Evidence binding 不作为 Patch Applier 的语义判断条件；patch 后仍处于
@@ -1475,12 +1557,13 @@ proposition；claim 数量由 `claims.length` 派生，超过 schema 上限显�
 交付 Coverage Review、Faithfulness Review、review verifier、deterministic outcome
 derivation、repair / clarification router、typed patch、patch verifier 和 applier。
 
-验收：review 不直接修改 artifact；review 不输出 corrected value；repair 只能修改白名单
-path；修复预算和终态有效。
+验收：review 不直接修改 artifact；review 不输出 corrected value；repair 只能使用白名单
+operation；修复预算和终态有效。
 
-当前生产实现状态：Coverage Review、Faithfulness Review、review verifier 与 deterministic
-outcome derivation 已完成；repair / clarification router、typed patch、patch verifier 与
-applier 仍等待 M09 / M10，M08 结果仍需等待 M11 权威 artifact 提交。
+当前生产实现状态：Coverage Review、Faithfulness Review、review verifier、
+deterministic outcome derivation、M09 repair / clarification router、M10 typed patch、
+patch verifier 与 deterministic application preview 已完成；M08 / M10 结果仍需等待
+M11 权威 artifact 提交与 M07 / M08 re-review 闭环。
 
 ### 阶段 E：Artifact 与 Claim Graph
 
@@ -1565,4 +1648,6 @@ durable execution 边界
 8. [clinical-safety-semantic-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/clinical-safety-semantic-change-summary.md)
 9. [semantic-collaboration-dag-m04-scheduler-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m04-scheduler-change-summary.md)
 10. [semantic-collaboration-dag-m08-review-skill-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m08-review-skill-change-summary.md)
-11. [temporal-dev-environment-baseline.md](/home/vancer17/veterinary_agent/docs/deployment/temporal-dev-environment-baseline.md)
+11. [semantic-collaboration-dag-m09-repair-planner-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m09-repair-planner-change-summary.md)
+12. [semantic-collaboration-dag-m10-repair-skill-patch-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m10-repair-skill-patch-change-summary.md)
+12. [temporal-dev-environment-baseline.md](/home/vancer17/veterinary_agent/docs/deployment/temporal-dev-environment-baseline.md)

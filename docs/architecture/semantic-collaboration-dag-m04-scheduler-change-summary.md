@@ -561,7 +561,7 @@ finish_run
 | 最小结构 verifier | M07 | 不解释自然语言语义 | 校验 schema、任务身份、claim 形态、重复与数量上限 |
 | Artifact Store | M11 | 只传递 artifact reference | 提供 append-only artifact、版本、lineage 与 stale |
 | Review SKILL | M08 | M08 已实现；M04 不解释矩阵语义 | 组合 Coverage / Faithfulness outcome，并交给 M09 / M11 |
-| Repair Planner | M09 | 不规划修复 | 只根据白名单 failure code 生成修复任务 |
+| Repair Planner | M09 | 已实现；M04 不执行修复 | 只生成通用修复 lane、gap 与人工审查路由 |
 | Repair / Patch | M10 | 不修改输出 | 只输出和验证 typed patch |
 | Claim Graph | M12 | 不组装 graph | 只消费 verified artifact |
 | 领域投影 Adapter | M13 | 不写领域状态 | 问诊、临床安全、长期记忆分别通过 adapter 消费 graph |
@@ -656,9 +656,15 @@ M08 Coverage Review: 已实现
 M08 Faithfulness Review: 已实现
 M08 deterministic outcome: 已实现
 M08 artifact commit: 等待 M11
-M09 Repair Planner: 未实现
-M10 Repair / Patch: 未实现
+M09 Repair Planner: 已实现；尚未接入 M04 任务执行器
+M10 Repair / Patch: 已实现；尚未接入 M04 任务执行器
+M11 base snapshot / patch store: 未实现，M10 当前保持显式 Fail Fast
+M07 / M08 repair re-review 编排: 未接入
 ```
+
+M10 当前只能输出经过确定性验证的 patch set 与 application preview；该状态不是
+`verified`。M04 组合 M10 前必须先闭合 M11 snapshot、append-only commit、
+版本 / lineage / stale 与修复后 M07 / M08 re-review 时序。
 
 M04 后续组合边界：
 
@@ -814,4 +820,5 @@ long_term_memory_written = false
 2. [semantic-collaboration-dag-production-implementation-plan.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-production-implementation-plan.md)
 3. [semantic-collaboration-dag-m06-production-boundary-revision.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m06-production-boundary-revision.md)
 4. [semantic-collaboration-dag-m08-review-skill-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m08-review-skill-change-summary.md)
-5. [temporal-dev-environment-baseline.md](/home/vancer17/veterinary_agent/docs/deployment/temporal-dev-environment-baseline.md)
+5. [semantic-collaboration-dag-m09-repair-planner-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m09-repair-planner-change-summary.md)
+6. [temporal-dev-environment-baseline.md](/home/vancer17/veterinary_agent/docs/deployment/temporal-dev-environment-baseline.md)
