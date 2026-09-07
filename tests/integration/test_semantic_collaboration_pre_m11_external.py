@@ -67,8 +67,6 @@ from vet_agent.semantic_collaboration import (
     SemanticReviewBundle,
     SkillRegistry,
     TemporalSemanticDAGScheduler,
-    TODORepairPatchStore,
-    TODORepairTargetSnapshotResolver,
     TODOSemanticTaskExecutor,
     TODOTurnSnapshotReader,
     build_dag_task_policies,
@@ -873,10 +871,10 @@ def test_fix_003_real_inventory_repair_adds_missing_denial(
         _record_repair(record, result)
 
 
-def test_neg_010_todo_snapshot_and_m11_resolver_fail_fast(
+def test_neg_010_persistent_snapshot_reader_fail_fast(
     report_writer: SemanticIntegrationReportWriter,
 ) -> None:
-    """验证 Persistent snapshot 与 M11 snapshot TODO 端口显式 Fail Fast。
+    """验证 Persistent TurnSnapshot reader TODO 端口显式 Fail Fast。
 
     :param report_writer: 集成测试报告写入器。
     :return: 无返回值。
@@ -894,47 +892,6 @@ def test_neg_010_todo_snapshot_and_m11_resolver_fail_fast(
         )[0]
         with pytest.raises(NotImplementedError):
             asyncio.run(TODOTurnSnapshotReader().load(snapshot.context_digest))
-        with pytest.raises(NotImplementedError):
-            asyncio.run(
-                TODORepairTargetSnapshotResolver().load(
-                    "a" * 64,
-                    "b" * 64,
-                ),
-            )
-
-
-def test_neg_012_todo_patch_store_fails_fast(
-    report_writer: SemanticIntegrationReportWriter,
-    proposition_repair_context: tuple[
-        RepairTestCase,
-        SemanticRepairExecutionResult,
-    ],
-) -> None:
-    """验证 M11 patch store TODO 不生成伪 artifact。
-
-    :param report_writer: 集成测试报告写入器。
-    :param proposition_repair_context: 已生成 patch preview 的修复上下文。
-    :return: 无返回值。
-    """
-    if not _semantic_test_enabled():
-        pytest.skip("未开启 RUN_SEMANTIC_COLLABORATION_SEMANTIC_TEST")
-    with report_writer.case(
-        case_id="NEG-012",
-        lane="fail_fast",
-        priority="P0",
-    ):
-        _context, result = proposition_repair_context
-        if (
-            result.patch_set is not None
-            and result.preview is not None
-        ):
-            with pytest.raises(NotImplementedError):
-                asyncio.run(
-                    TODORepairPatchStore().commit(
-                        result.patch_set,
-                        result.preview,
-                    ),
-                )
 
 
 def test_neg_013_todo_semantic_task_executor_fails_fast(

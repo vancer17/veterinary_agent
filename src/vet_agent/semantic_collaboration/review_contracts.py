@@ -654,25 +654,6 @@ class ReviewArtifactStore(Protocol):
         """
 
 
-class TODOReviewArtifactStore:
-    """表示 M11 Artifact Store 未接入前的显式空壳。
-
-    :return: 无返回值；该占位始终 Fail Fast，不伪造 artifact 引用。
-    """
-
-    async def commit_review_bundle(
-        self,
-        bundle: SemanticReviewBundle,
-    ) -> str:
-        """阻断尚未实现的 M08 artifact 权威提交。
-
-        :param bundle: 当前 M08 审查聚合记录。
-        :raises NotImplementedError: M11 未实现时始终抛出。
-        :return: 无返回值。
-        """
-        raise NotImplementedError("M11 review artifact store is not implemented")
-
-
 def compute_claim_digest(claim_proposition: str) -> str:
     """计算单条 claim proposition 的 canonical SHA-256 身份。
 

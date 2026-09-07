@@ -4,7 +4,7 @@
 作用: 总结受限语义协作 DAG M08 Coverage / Faithfulness Review 的生产实现边界。
 范围: 覆盖 Review Skill 目录、标准化 SKILL 文档、固定布尔矩阵、M05 结构化
       模型网关、确定性验证与结果派生、clarification gap、动态审查任务边界、
-      M11 artifact TODO 与 M04 / M09 / M10 / M12 后续对接契约。
+      M11 artifact 对接与 M04 / M09 / M10 / M12 后续契约。
 说明: 本文只记录跨模块可依赖的稳定行为、状态和有意边界；不展开软件包内部
       类、函数、SQL DDL、测试替身、prompt 全文或 Temporal workflow 细节。
 维护: 当 Review 矩阵字段、任务展开策略、路由优先级、clarification gap、
@@ -15,7 +15,7 @@
 # 受限语义协作 DAG M08 Review SKILL 变更总结
 
 > **文档状态**：M08 生产工程边界已实现；待 M04 任务执行器组合、M10
-> 修复链路、M11 Artifact Store 与真实外部服务联调后关闭
+> 修复链路与真实外部服务联调后关闭；M11 已在后续阶段实现
 
 ## 1. 当前状态
 
@@ -31,7 +31,7 @@
 | clarification gap proposal | 已实现 |
 | `no_explicit_fact` / `suspicious_empty` 区分 | 已实现 |
 | Coverage / Faithfulness disagreement 保留 | 已实现 |
-| M11 Review artifact 权威提交 | TODO 显式空壳 |
+| M11 Review artifact 权威提交 | 已在后续 M11 实现 |
 | M04 SemanticTaskExecutor 生产组合 | 未接入 |
 | M09 Repair Planner | 已在后续 M09 阶段实现 |
 | M10 typed patch / applier | 已在后续 M10 阶段实现 |
@@ -458,9 +458,9 @@ review bundle digest
 | TODO | 当前行为 | 后续责任 | 启用条件 |
 |---|---|---|---|
 | M10 Repair / Patch | M08 不输出 corrected proposition；M09 只输出 accepted repair plan | M10 | 定义 typed patch、base version、patch verifier 和 applier |
-| M11 Review Artifact Store | 显式 Fail Fast，不返回 artifact reference | M11 | 定义 append-only、版本、lineage、stale 和幂等提交 |
+| M11 Review Artifact Store | 已在后续 M11 实现 | M11 | 回合级 append-only、版本、lineage、stale 与幂等提交 |
 | M04 SemanticTaskExecutor 组合 | M08 Runner 未进入生产任务端口 | M04 | M06 / M07 / M08 / M11 消费时序与终态闭合 |
-| Clarification gap artifact | 仅存在结构化 proposal，无权威持久化 | M11 | clarification gap 随 review bundle 进入 artifact 状态机 |
+| Clarification gap artifact | 已随 M11 review payload 持久化 | M11 | gap 以 review section 与派生索引保存 |
 | Claim envelope allocation | M08 后仍不能分配最终 claim envelope | M08 / M09 / M12 | claim 集合经过 coverage、faithfulness 与 repair 后稳定 |
 | 真实 LiteLLM 冒烟 | 未执行 | 集成验证 | 显式外部模型网关环境与模型 snapshot |
 | 真实 Temporal workflow 联调 | 未执行 | M04 / M15 | Temporal server、worker、task queue 和投影就绪 |
@@ -682,7 +682,7 @@ Coverage / Faithfulness disagreement
 Coverage 内部 contradiction
 extra / non-boolean schema 负例
 非法 Coverage schema Fail Fast
-M11 TODO Fail Fast
+M11 review artifact 提交
 ```
 
 上述验证使用进程内测试替身，不等于真实 LiteLLM、Temporal 或生产主路径结论。

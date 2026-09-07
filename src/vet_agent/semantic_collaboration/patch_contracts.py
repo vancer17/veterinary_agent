@@ -257,27 +257,6 @@ class RepairTargetSnapshotResolver(Protocol):
         """
 
 
-class TODORepairTargetSnapshotResolver:
-    """表示 M11 base artifact 快照读取尚未接入前的显式空壳。
-
-    :return: 无返回值；该占位始终 Fail Fast，不伪造 base claims。
-    """
-
-    async def load(
-        self,
-        source_proposal_digest: str,
-        review_bundle_digest: str,
-    ) -> RepairTargetArtifactSnapshot:
-        """阻断尚未实现的 M11 base artifact 快照读取。
-
-        :param source_proposal_digest: 被修复 Claim Inventory proposal 摘要。
-        :param review_bundle_digest: M08 Review Bundle 摘要。
-        :raises NotImplementedError: M11 未实现时始终抛出。
-        :return: 无返回值。
-        """
-        raise NotImplementedError("M11 repair target snapshot is not implemented")
-
-
 class SemanticPatchOperationType(StrEnum):
     """表示系统从稀疏 delta 确定性编译出的 typed operation 类型。
 
@@ -667,27 +646,6 @@ class RepairPatchStore(Protocol):
         """
 
 
-class TODORepairPatchStore:
-    """表示 M11 patch 权威提交尚未接入前的显式空壳。
-
-    :return: 无返回值；该占位始终 Fail Fast，不生成伪 artifact 引用。
-    """
-
-    async def commit(
-        self,
-        patch_set: SemanticPatchSet,
-        preview: PatchApplicationPreview,
-    ) -> str:
-        """阻断尚未实现的 M11 patch append-only 提交。
-
-        :param patch_set: 已验证的 typed patch 集合。
-        :param preview: 确定性应用预览。
-        :raises NotImplementedError: M11 未实现时始终抛出。
-        :return: 无返回值。
-        """
-        raise NotImplementedError("M11 repair patch store is not implemented")
-
-
 def build_blocked_repair_execution(
     *,
     repair_plan_id: str,
@@ -764,8 +722,6 @@ __all__ = [
     "SemanticPatchVerificationState",
     "SemanticRepairExecutionResult",
     "SemanticRepairExecutionState",
-    "TODORepairPatchStore",
-    "TODORepairTargetSnapshotResolver",
     "build_blocked_repair_execution",
     "compute_model_output_digest",
     "compute_patch_id",
