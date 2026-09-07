@@ -5,7 +5,8 @@
 范围：覆盖 SkillSpec 校验、SkillCatalog 注册、投影一致性、快照构建、
       上下文预算、digest 校验、Plan 编译、M05 结构化模型网关、
       M06 标准化 SKILL 文档、Prompt Renderer、M06 生成执行器、M08 Review、
-      M09 修复计划、M10 Repair / Patch、DAG 状态仓储访问与任务执行端口失败。
+      M09 修复计划、M10 Repair / Patch、M11 Artifact Store、DAG 状态仓储访问
+      与任务执行端口失败。
 说明：本文件只承载错误语义，不访问数据库、不调用模型、不提供任何回退路径。
 =============================================================================
 """
@@ -332,3 +333,12 @@ class SemanticRepairExecutionError(SemanticCollaborationError):
     """
 
     failure_code: ClassVar[str] = "semantic_repair_execution_contract_violation"
+
+
+class SemanticArtifactStoreError(SemanticCollaborationError):
+    """表示 M11 权威 artifact 版本、状态或幂等契约失败。
+
+    :return: 无返回值；该错误不覆盖旧 artifact，也不生成伪 verified 状态。
+    """
+
+    failure_code: ClassVar[str] = "semantic_artifact_store_contract_violation"

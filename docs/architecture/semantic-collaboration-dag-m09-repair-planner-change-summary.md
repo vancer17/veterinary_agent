@@ -400,14 +400,15 @@ base_version
 repair_depth
 ```
 
-当前 M11 未实现，M10 保留显式 TODO 空壳：
+当前 M11 已实现生产端口，M10 通过以下端口读取权威 base snapshot：
 
 ```text
 RepairTargetSnapshotResolver
-TODORepairTargetSnapshotResolver
+PostgresSemanticArtifactStore
 ```
 
-TODO resolver 始终 Fail Fast，不伪造 claims、artifact reference 或 base version。
+Store 读取失败、artifact 损坏或 repair depth 超限时显式失败，不伪造 claims、
+artifact reference 或 base version。
 
 ### 9.2 Artifact Store 与 stale marker
 
@@ -503,7 +504,7 @@ inventory repair 优先并生成 stale / suppressed 记录
 预算超限进入 human review
 RepairPlan 可确定性复算
 计划身份漂移与 payload 漂移 blocked
-M11 TODO 不伪造 base artifact snapshot
+M11 生产端口不伪造 base artifact snapshot
 ```
 
 ### 13.2 当前验证结果

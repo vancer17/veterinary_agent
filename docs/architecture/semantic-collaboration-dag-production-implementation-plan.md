@@ -895,7 +895,7 @@ repair_depth 不超过 1
 可修复 true 维度超过上限输出 human_review_required
 预算超限输出 human_review_required，不自动全局重写
 inventory repair 显式抑制并 stale 即将失效的 proposition repair
-M11 未实现时不伪造 base artifact binding
+M11 未接入部署时不伪造 base artifact binding
 ```
 
 ### M10：Repair SKILL 与 Patch
@@ -967,7 +967,7 @@ M11 ArtifactStore
 5. deterministic patch compiler。
 6. patch verifier 与 patch set verifier。
 7. deterministic applier preview。
-8. M11 target snapshot 与 patch store TODO。
+8. M11 target snapshot 与 patch store 生产端口。
 9. repair lineage payload。
 
 **验收标准**
@@ -986,7 +986,7 @@ schema 根本非法输出不可修复
 多个 proposition patch 共享同一 base version 并原子应用
 patch 应用预览 version + 1
 repair lineage payload 可追溯
-M11 TODO 不伪造 snapshot / artifact reference
+M11 生产端口不伪造 snapshot / artifact reference
 ```
 
 **禁止事项**
@@ -1008,47 +1008,96 @@ M11 TODO 不伪造 snapshot / artifact reference
 
 **目标**
 
-以 append-only 方式维护任务结果、版本、修复谱系、证据门禁状态和 stale 关系。
+以回合级 `SemanticTurnArtifact` 为权威粒度，维护不可变 payload、版本链、gate event、
+repair lineage、clarification gap 与 stale 关系。
+
+**轻量化结论**
+
+不按每条 claim、每条 Faithfulness Review 或每个 gap 建独立 artifact。权威对象是：
+
+```text
+semantic_turn_result artifact version
+```
+
+Claim records、review bundle、repair lineage 与 gaps 内嵌在版本 payload 中；
+claim review 与 gap 只保存可重建查询索引。
 
 **范围**
 
 ```text
-TaskArtifact
-ArtifactVersion
-EvidenceBindingStatus
-HumanReviewRecord
-ClarificationGapRecord
-ArtifactStore
-RepairLineage
+SemanticTurnArtifactPayload
+SemanticArtifactVersion
+ArtifactGateEvent
+ArtifactCommitRequest
 StaleMarker
-TerminalStateStore
+ClaimReviewIndex
+ClarificationGapIndex
+SystemReviewRecord
+PostgresSemanticArtifactRepository
+PostgresSemanticArtifactStore
 ```
 
-**实现顺序**
+**数据库表**
 
-Phase 1 先交付契约；Phase 4 与 repair 一起交付生产持久化。
+```text
+semantic_artifact_versions
+semantic_artifact_gate_events
+semantic_artifact_commit_requests
+semantic_artifact_stale_markers
+semantic_claim_review_index
+semantic_clarification_gap_index
+```
 
-**交付物**
+**提交边界**
 
-1. artifact schema。
-2. artifact version 状态。
-3. append-only 写入接口。
-4. repair lineage 存储。
-5. evidence binding / clarification gap / human review 状态存储。
-6. stale dependency 存储。
-7. terminal state 查询。
+```text
+M08 Review Bundle
+→ 回合级 artifact v1 / re-review 新版本
+
+M10 PatchSet + Preview
+→ 重新应用 patch 并校验 preview
+→ 修复后 artifact v+1
+→ repair_depth = 1
+→ base version stale
+
+M07 / M08 re-review
+→ 基于修复后 claims 生成新的 review 版本
+
+系统性人工审查
+→ gate event 审计
+→ 不逐条修改 claim
+→ 不批量标记 verified
+```
 
 **验收标准**
 
 ```text
-artifact 不可原地覆盖
-版本可追溯
-失败结果不会被成功结果覆盖
-repair lineage 完整
-semantic_review_supported 不被写成 verified
-evidence_binding_pending / clarification_required / human_review_required 可查询
-上游结构变化触发下游 stale
-历史 artifact 可审计
+artifact payload append-only
+同一 review digest 幂等重放返回同一引用
+同一 repair plan id 幂等重放返回同一新版本
+payload digest 读取时复算
+gate 由 event 派生
+semantic_review_supported 只进入 evidence_binding_pending
+M08 supported 不直接 verified
+M10 patch base version 冲突 blocked
+repair output 不允许再次 repair
+claim review / clarification gap 可从 payload 重建
+旧版本随 review / repair 新版本 stale
+旧 claim 审查不迁移到新 claim
+系统性人工审查不改变 verified gate
+业务层仅通过仓储访问数据库
+```
+
+**禁止事项**
+
+```text
+不 UPDATE / DELETE 权威 payload
+不为每条 claim 建独立 artifact
+不把派生索引当权威
+不人工逐条审核用户事实
+不人工批量标记 verified
+不将 gap 自动 resolve 或生成追问
+不在 M11 中执行医学判断
 ```
 
 ### M12：Claim Graph 与一致性门禁
@@ -1400,7 +1449,7 @@ review 失败不等于原任务通过
 ```text
 M09 Repair Planner: 已实现；尚未接入 M04 生产任务执行器
 M10 Repair SKILL / typed patch: 已实现；尚未接入 M04 任务执行器
-M11 ArtifactStore: 未实现
+M11 ArtifactStore: 已实现；尚未接入 M04 生产任务执行器
 M14 repair metrics: 未完成
 ```
 
@@ -1892,4 +1941,5 @@ DSPy 接入
 13. [semantic-collaboration-dag-m08-review-skill-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m08-review-skill-change-summary.md)
 14. [semantic-collaboration-dag-m09-repair-planner-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m09-repair-planner-change-summary.md)
 15. [semantic-collaboration-dag-m10-repair-skill-patch-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m10-repair-skill-patch-change-summary.md)
-16. [temporal-dev-environment-baseline.md](/home/vancer17/veterinary_agent/docs/deployment/temporal-dev-environment-baseline.md)
+16. [semantic-collaboration-dag-m11-artifact-store-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m11-artifact-store-change-summary.md)
+17. [temporal-dev-environment-baseline.md](/home/vancer17/veterinary_agent/docs/deployment/temporal-dev-environment-baseline.md)

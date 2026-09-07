@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from typing import Any, cast
+from typing import Any
 
 import pytest
 from pydantic import ValidationError
@@ -35,7 +35,6 @@ from vet_agent.semantic_collaboration import (
     SemanticGenerationModelRule,
     SemanticGenerationVerifier,
     SemanticModelProposal,
-    SemanticReviewBundle,
     SemanticReviewContractError,
     SemanticReviewOutcome,
     SkillPromptRenderRequest,
@@ -43,7 +42,6 @@ from vet_agent.semantic_collaboration import (
     StructuredLLMGateway,
     StructuredLLMSchemaError,
     StructuredReviewSkillRunner,
-    TODOReviewArtifactStore,
     TurnSnapshot,
     TurnSnapshotProjector,
     build_production_prompt_renderer_registry,
@@ -562,15 +560,3 @@ def test_review_matrix_rejects_extra_and_non_boolean_fields() -> None:
 
     with pytest.raises(ValidationError):
         ClaimFaithfulnessReviewOutput.model_validate(payload)
-
-
-def test_todo_review_artifact_store_fails_fast() -> None:
-    """验证 M11 未接入时不伪造权威 artifact 引用。
-
-    :return: 无返回值。
-    """
-    unavailable_bundle = cast(SemanticReviewBundle, None)
-    with pytest.raises(NotImplementedError, match="M11 review artifact store"):
-        asyncio.run(
-            TODOReviewArtifactStore().commit_review_bundle(unavailable_bundle),
-        )

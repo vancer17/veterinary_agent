@@ -1900,3 +1900,505 @@ class SemanticDAGTaskProjectionModel(Base):
         onupdate=func.now(),
         comment="任务投影最近更新时间。",
     )
+
+
+class SemanticArtifactVersionModel(Base):
+    """表示受限语义协作 DAG 的回合级权威 artifact 版本。"""
+
+    __tablename__ = "semantic_artifact_versions"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["base_artifact_id", "base_version"],
+            [
+                "semantic_artifact_versions.artifact_id",
+                "semantic_artifact_versions.version",
+            ],
+            name="fk_semantic_artifact_versions_base_version",
+        ),
+        UniqueConstraint(
+            "artifact_reference",
+            name="uq_semantic_artifact_versions_reference",
+        ),
+        UniqueConstraint(
+            "source_proposal_digest",
+            "review_bundle_digest",
+            name="uq_semantic_artifact_versions_source_review",
+        ),
+        CheckConstraint(
+            "artifact_kind IN ('semantic_turn_result')",
+            name="ck_semantic_artifact_versions_kind",
+        ),
+        CheckConstraint(
+            "version >= 1 AND repair_depth >= 0 AND repair_depth <= 1",
+            name="ck_semantic_artifact_versions_version_depth",
+        ),
+        CheckConstraint(
+            "(base_artifact_id IS NULL AND base_version IS NULL) OR "
+            "(base_artifact_id IS NOT NULL AND base_version IS NOT NULL)",
+            name="ck_semantic_artifact_versions_base_pair",
+        ),
+        Index(
+            "idx_semantic_artifact_versions_run_source_snapshot",
+            "run_id",
+            "source_task_id",
+            "turn_snapshot_digest",
+            "version",
+        ),
+        {
+            "comment": "受限语义协作回合级权威 artifact 版本表；payload 只允许追加新版本，不允许原地覆盖。",
+        },
+    )
+
+    artifact_id: Mapped[str] = mapped_column(
+        Text,
+        primary_key=True,
+        comment="同一回合语义结果链的稳定 SHA-256 artifact 身份。",
+    )
+    version: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        comment="回合语义结果链的不可变版本号，从 1 开始递增。",
+    )
+    artifact_kind: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="权威 artifact 类型；当前生产只允许 semantic_turn_result。",
+    )
+    artifact_reference: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="M11 稳定 artifact 引用，格式为 semantic-artifact://<id>/<version>。",
+    )
+    run_id: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="当前语义 artifact 所属的 DAG workflow 稳定标识。",
+    )
+    source_task_id: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="产生 Claim Inventory 的来源 PlanTask 稳定标识。",
+    )
+    turn_snapshot_digest: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="当前回合 TurnSnapshot canonical digest。",
+    )
+    source_proposal_digest: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="被审查或修复的 M06 Claim Inventory proposal digest。",
+    )
+    review_bundle_digest: Mapped[str | None] = mapped_column(
+        Text,
+        comment="产生当前版本的 M08 Review Bundle digest；修复版本可为空。",
+    )
+    payload: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        comment="回合级不可变权威 payload，内嵌 claims、review section 与 repair lineage。",
+    )
+    payload_digest: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="权威 payload canonical JSON 的 SHA-256 digest。",
+    )
+    base_artifact_id: Mapped[str | None] = mapped_column(
+        Text,
+        comment="当前版本基于的 base artifact 链身份。",
+    )
+    base_version: Mapped[int | None] = mapped_column(
+        Integer,
+        comment="当前版本基于的 base artifact 版本。",
+    )
+    repair_depth: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+        comment="修复深度；生产当前只允许 0 或 1，禁止 repair of repair。",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        comment="artifact version 创建时间。",
+    )
+
+
+class SemanticArtifactGateEventModel(Base):
+    """表示语义 artifact gate 状态的 append-only 演进事件。"""
+
+    __tablename__ = "semantic_artifact_gate_events"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["artifact_id", "version"],
+            [
+                "semantic_artifact_versions.artifact_id",
+                "semantic_artifact_versions.version",
+            ],
+            name="fk_semantic_artifact_gate_events_artifact_version",
+        ),
+        CheckConstraint(
+            "to_gate IN ('schema_valid', 'semantic_review_pending', "
+            "'semantic_review_supported', 'repair_required', "
+            "'clarification_required', 'repair_then_clarification_required', "
+            "'human_review_required', 'patch_applied', 'evidence_binding_pending', "
+            "'verified', 'repair_verified', 'disagreement', 'review_failed', 'blocked')",
+            name="ck_semantic_artifact_gate_events_to_gate",
+        ),
+        CheckConstraint(
+            "actor_type IN ('system', 'human_reviewer', 'evidence_binding')",
+            name="ck_semantic_artifact_gate_events_actor",
+        ),
+        Index(
+            "idx_semantic_artifact_gate_events_current",
+            "artifact_id",
+            "version",
+            "sequence",
+        ),
+        {
+            "comment": "语义 artifact gate 状态事件表；当前状态由最大 sequence 派得，不修改权威 payload。",
+        },
+    )
+
+    artifact_id: Mapped[str] = mapped_column(
+        Text,
+        primary_key=True,
+        comment="gate event 绑定的回合语义 artifact 链身份。",
+    )
+    version: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        comment="gate event 绑定的不可变 artifact 版本。",
+    )
+    sequence: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        comment="同一 artifact version 内的状态事件顺序，从 1 开始。",
+    )
+    from_gate: Mapped[str | None] = mapped_column(
+        Text,
+        comment="迁移前 gate 状态；初始事件可为空。",
+    )
+    to_gate: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="迁移后 gate 状态。",
+    )
+    reason_code: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="gate 迁移的稳定工程原因。",
+    )
+    actor_type: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="触发 gate 迁移的系统 actor 类型。",
+    )
+    decision_digest: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="结构化决策 canonical digest，用于幂等和审计。",
+    )
+    decision_json: Mapped[dict[str, Any]] = mapped_column(
+        "decision",
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+        comment="gate 迁移附带的不可变结构化决策；不保存完整用户原文或 prompt。",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        comment="gate event 创建时间。",
+    )
+
+
+class SemanticArtifactCommitRequestModel(Base):
+    """表示 M11 append-only 提交的幂等请求记录。"""
+
+    __tablename__ = "semantic_artifact_commit_requests"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["artifact_id", "version"],
+            [
+                "semantic_artifact_versions.artifact_id",
+                "semantic_artifact_versions.version",
+            ],
+            name="fk_semantic_artifact_commit_requests_artifact_version",
+        ),
+        CheckConstraint(
+            "request_kind IN ('review_bundle', 'repair_patch_set', 'gate_event')",
+            name="ck_semantic_artifact_commit_requests_kind",
+        ),
+        {
+            "comment": "M11 artifact 幂等提交请求表；同一 request key 重放返回既有结果，不同 payload 冲突。",
+        },
+    )
+
+    request_key: Mapped[str] = mapped_column(
+        Text,
+        primary_key=True,
+        comment="M11 提交幂等键，例如 review digest 或 repair plan id。",
+    )
+    request_kind: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="M11 提交请求类型。",
+    )
+    artifact_id: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="请求产生的回合语义 artifact 链身份。",
+    )
+    version: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        comment="请求产生的不可变 artifact 版本。",
+    )
+    payload_digest: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="请求绑定 payload 的 canonical digest。",
+    )
+    result_reference: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="幂等重放时返回的稳定 artifact 引用。",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        comment="幂等提交请求创建时间。",
+    )
+
+
+class SemanticArtifactStaleMarkerModel(Base):
+    """表示语义 artifact version 被新版本取代的 stale 记录。"""
+
+    __tablename__ = "semantic_artifact_stale_markers"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["artifact_id", "version"],
+            [
+                "semantic_artifact_versions.artifact_id",
+                "semantic_artifact_versions.version",
+            ],
+            name="fk_semantic_artifact_stale_markers_artifact_version",
+        ),
+        ForeignKeyConstraint(
+            ["replaced_by_artifact_id", "replaced_by_version"],
+            [
+                "semantic_artifact_versions.artifact_id",
+                "semantic_artifact_versions.version",
+            ],
+            name="fk_semantic_artifact_stale_markers_replaced_by",
+        ),
+        CheckConstraint(
+            "stale_reason IN ('superseded_by_review', 'superseded_by_repair')",
+            name="ck_semantic_artifact_stale_markers_reason",
+        ),
+        {
+            "comment": "语义 artifact stale 标记表；stale 只追加记录，不修改旧 payload，也不迁移旧审查结论。",
+        },
+    )
+
+    artifact_id: Mapped[str] = mapped_column(
+        Text,
+        primary_key=True,
+        comment="被取代的 artifact 链身份。",
+    )
+    version: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        comment="被取代的 artifact 版本。",
+    )
+    stale_reason: Mapped[str] = mapped_column(
+        Text,
+        primary_key=True,
+        comment="artifact 被取代的稳定原因。",
+    )
+    replaced_by_artifact_id: Mapped[str] = mapped_column(
+        Text,
+        primary_key=True,
+        comment="取代旧版本的新 artifact 链身份。",
+    )
+    replaced_by_version: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        comment="取代旧版本的新 artifact 版本。",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        comment="stale marker 创建时间。",
+    )
+
+
+class SemanticClaimReviewIndexModel(Base):
+    """表示从权威语义 payload 派生的 claim review 查询索引。"""
+
+    __tablename__ = "semantic_claim_review_index"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["artifact_id", "version"],
+            [
+                "semantic_artifact_versions.artifact_id",
+                "semantic_artifact_versions.version",
+            ],
+            name="fk_semantic_claim_review_index_artifact_version",
+        ),
+        CheckConstraint(
+            "review_status IN ('supported', 'repair_required', "
+            "'clarification_required', 'human_review_required', 'disagreement', "
+            "'repair_pending')",
+            name="ck_semantic_claim_review_index_status",
+        ),
+        Index(
+            "idx_semantic_claim_review_index_run_status",
+            "run_id",
+            "review_status",
+        ),
+        Index(
+            "idx_semantic_claim_review_index_dimension",
+            "run_id",
+            "claim_digest",
+        ),
+        {
+            "comment": "语义 claim review 派生索引表；仅服务查询统计，可由权威 artifact payload 重建。",
+        },
+    )
+
+    artifact_id: Mapped[str] = mapped_column(
+        Text,
+        primary_key=True,
+        comment="索引记录绑定的 artifact 链身份。",
+    )
+    version: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        comment="索引记录绑定的 artifact 版本。",
+    )
+    claim_index: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        comment="artifact payload 内的系统派生 claim 序号。",
+    )
+    run_id: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="索引记录所属 DAG workflow 标识。",
+    )
+    claim_digest: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="claim proposition canonical digest。",
+    )
+    proposition: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="自包含自然语言 claim proposition。",
+    )
+    review_status: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="该 claim 在当前版本中的派生审查状态。",
+    )
+    repair_dimensions: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=list,
+        server_default="[]",
+        comment="该 claim 需要修复的 M08 维度集合；仅用于查询统计。",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        comment="派生索引创建时间。",
+    )
+
+
+class SemanticClarificationGapIndexModel(Base):
+    """表示从权威 review payload 派生的 clarification gap 查询索引。"""
+
+    __tablename__ = "semantic_clarification_gap_index"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["artifact_id", "version"],
+            [
+                "semantic_artifact_versions.artifact_id",
+                "semantic_artifact_versions.version",
+            ],
+            name="fk_semantic_clarification_gap_index_artifact_version",
+        ),
+        CheckConstraint(
+            "status IN ('active', 'stale')",
+            name="ck_semantic_clarification_gap_index_status",
+        ),
+        Index(
+            "idx_semantic_clarification_gap_index_run_status",
+            "run_id",
+            "status",
+        ),
+        {
+            "comment": "语义 clarification gap 派生索引表；不是自动追问指令，也不是 verified 事实权威。",
+        },
+    )
+
+    artifact_id: Mapped[str] = mapped_column(
+        Text,
+        primary_key=True,
+        comment="gap 索引绑定的 artifact 链身份。",
+    )
+    version: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        comment="gap 索引绑定的 artifact 版本。",
+    )
+    gap_id: Mapped[str] = mapped_column(
+        Text,
+        primary_key=True,
+        comment="M08 生成的结构化 clarification gap 稳定标识。",
+    )
+    run_id: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="gap 所属 DAG workflow 标识。",
+    )
+    claim_index: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        comment="gap 绑定的 claim 序号。",
+    )
+    claim_digest: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="gap 绑定的 claim proposition digest。",
+    )
+    ambiguous_dimension: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="来源绑定缺失的 M08 维度。",
+    )
+    required_binding_type: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="后续需要消解的结构化绑定类型。",
+    )
+    status: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="gap 当前派生状态。",
+    )
+    created_at: Mapped[str] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        comment="gap 派生索引创建时间。",
+    )

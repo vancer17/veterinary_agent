@@ -50,8 +50,6 @@ from vet_agent.semantic_collaboration import (
     SemanticReviewBundle,
     StructuredLLMGateway,
     StructuredRepairSkillRunner,
-    TODORepairPatchStore,
-    TODORepairTargetSnapshotResolver,
     TurnSnapshot,
     TurnSnapshotProjector,
     apply_operations_to_claims,
@@ -626,16 +624,3 @@ def test_patch_compiler_rejects_missing_local_selector_target() -> None:
             ),
             model_metadata=object(),  # type: ignore[arg-type]
         )
-
-
-def test_todo_m11_repair_ports_fail_fast() -> None:
-    """验证 M11 未接入时不伪造 snapshot 或 artifact 引用。
-
-    :return: 无返回值。
-    """
-    with pytest.raises(NotImplementedError, match="M11 repair target snapshot"):
-        asyncio.run(
-            TODORepairTargetSnapshotResolver().load("0" * 64, "1" * 64),
-        )
-    with pytest.raises(NotImplementedError, match="M11 repair patch store"):
-        asyncio.run(TODORepairPatchStore().commit(None, None))  # type: ignore[arg-type]

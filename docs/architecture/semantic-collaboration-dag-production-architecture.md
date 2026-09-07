@@ -1347,6 +1347,50 @@ claim inventory 修复
 
 禁止把旧 claim 的审查或投影结果直接迁移到新 claim。
 
+### 12.7 回合级权威存储实现
+
+M11 的权威粒度是 `semantic_turn_result` artifact version，不是单条 claim、单条
+Faithfulness Review 或单个 gap。
+
+一个不可变 payload 内嵌：
+
+```text
+claim records
+review bundle
+repair lineage
+repair depth
+source proposal identity
+TurnSnapshot digest
+```
+
+数据库权威表：
+
+```text
+semantic_artifact_versions
+semantic_artifact_gate_events
+semantic_artifact_commit_requests
+semantic_artifact_stale_markers
+```
+
+查询索引：
+
+```text
+semantic_claim_review_index
+semantic_clarification_gap_index
+```
+
+索引可由 payload 重建，不是权威事实源。
+
+M08 提交 review bundle 后生成或推进回合版本；M10 patch 提交后生成：
+
+```text
+base_version + 1
+repair_depth = 1
+```
+
+并把 base version 标记 stale。修复后结果必须重新进入 M07 / M08，生成新的 review
+版本；旧 claim 的审查结论不得迁移到新 claim。
+
 ## 13. Claim Graph 与一致性门禁
 
 ### 13.1 组装
@@ -1652,4 +1696,5 @@ durable execution 边界
 12. [semantic-collaboration-dag-m08-review-skill-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m08-review-skill-change-summary.md)
 13. [semantic-collaboration-dag-m09-repair-planner-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m09-repair-planner-change-summary.md)
 14. [semantic-collaboration-dag-m10-repair-skill-patch-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m10-repair-skill-patch-change-summary.md)
-15. [temporal-dev-environment-baseline.md](/home/vancer17/veterinary_agent/docs/deployment/temporal-dev-environment-baseline.md)
+15. [semantic-collaboration-dag-m11-artifact-store-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m11-artifact-store-change-summary.md)
+16. [temporal-dev-environment-baseline.md](/home/vancer17/veterinary_agent/docs/deployment/temporal-dev-environment-baseline.md)

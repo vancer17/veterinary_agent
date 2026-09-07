@@ -14,11 +14,11 @@
 
 # 受限语义协作 DAG M10 Repair SKILL 与 Patch 对接基线
 
-> **文档状态**：M10 生产工程边界已实现；待 M11 Artifact Store、M04 任务执行器
+> **文档状态**：M10 生产工程边界已实现；待 M04 任务执行器
 > 组合与 M07 / M08 re-review 闭环联调
 >
 > **当前结论**：M10 可以在测试替身支撑下生成经过确定性验证的 patch set 和
-> application preview；但由于 M11 权威 artifact 存储尚未实现，M10 尚不能进入
+> application preview；M11 权威 artifact 存储已在后续阶段实现，但 M10 尚不能进入
 > 生产主路径，也不能宣称端到端 verified claim graph。
 
 ## 1. 当前状态
@@ -35,8 +35,8 @@
 | patch 验证 | 已实现 | 校验身份、目标、预算、digest、最终 claims 形态 |
 | patch set 验证 | 已实现 | 多个 proposition patch 共享同一 base version 并原子应用 |
 | application preview | 已实现 | 生成 next version 与应用后 claims 的确定性预览 |
-| M11 base snapshot 读取 | TODO | 显式 Fail Fast，不伪造 claims / version / artifact |
-| M11 append-only patch 提交 | TODO | 显式 Fail Fast，不生成伪 artifact reference |
+| M11 base snapshot 读取 | 已在后续 M11 实现 | 通过回合级 artifact version 读取 |
+| M11 append-only patch 提交 | 已在后续 M11 实现 | 通过 PostgresSemanticArtifactStore 提交 |
 | M04 任务执行器组合 | 未接入 | M10 尚未进入 SemanticTaskExecutor 生产链路 |
 | M07 re-verify | 未编排 | patch 后新 claims 仍需重新结构验证 |
 | M08 re-review | 未编排 | patch 是否语义有效必须由独立 review 判断 |
@@ -765,7 +765,7 @@ inventory runner 生成 split / add operations
 两个 proposition patch 原子应用
 snapshot 身份漂移 blocked
 重复 patch target blocked
-M11 TODO Fail Fast
+M11 base snapshot / patch commit 生产端口
 空 inventory 可新增首条 claim
 no-op proposition 替换 blocked
 ```

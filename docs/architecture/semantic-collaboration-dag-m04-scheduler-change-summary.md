@@ -699,7 +699,7 @@ true dimension
 clarification gap
 ```
 
-在 M11 未实现前，M08 的 `semantic_review_supported`、`repair_required`、
+在 M11 尚未接入 M04 执行器前，M08 的 `semantic_review_supported`、`repair_required`、
 `clarification_required`、`repair_then_clarification_required`、`disagreement` 与
 `review_failed` 都不能映射为 `verified`。M04 若尚未支持对应终态，必须在接入前显式
 扩展任务终态与 artifact payload 契约。
