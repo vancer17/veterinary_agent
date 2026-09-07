@@ -1391,47 +1391,50 @@ repair_depth = 1
 并把 base version 标记 stale。修复后结果必须重新进入 M07 / M08，生成新的 review
 版本；旧 claim 的审查结论不得迁移到新 claim。
 
-## 13. Claim Graph 与一致性门禁
+## 13. Claim Graph 与结构一致性门禁
 
 ### 13.1 组装
 
-当前 claim graph 的最小节点是：
+M12 从 M11 当前有效 `semantic_turn_result` artifact 重建领域无关 graph。最小节点是：
 
 ```text
 turn intent
 claim proposition
 coverage review outcome
 faithfulness review outcome
-repair outcome
-clarification gap status
-evidence binding status
-artifact version / lineage
+clarification gap
+repair lineage
+artifact gate / version
 ```
 
-LLM 不直接输出最终完整图。后续领域如需要 assertion enum、participant、temporal、
-measurement 或 canonical 绑定，必须通过独立领域投影或专门 resolver 立项，不得反向要求
-M06 输出这些字段。
+Graph 是 M11 artifact 的确定性投影，不是第二权威事实源。LLM 不输出最终 graph，M12 也不读取原始用户文本或 M06 proposal。
 
-### 13.2 Graph Consistency Gate
+M11 payload 必须内嵌权威 `turn_intent` section；缺失时 M12 blocked，不得回读生成 proposal 补 intent。
 
-优先 deterministic 检查：
+### 13.2 Graph 结构门禁
+
+M12 只执行确定性结构检查：
 
 ```text
-ID 引用存在
-依赖完整
-claim proposition 无重复
-intent 与 claim 集合身份一致
-review / repair / clarification / evidence 状态完整
-artifact version 与 lineage 一致
-field ownership 不冲突
+artifact reference / payload digest / latest version
+claim index / claim digest / 完全相同重复
+review bundle 与 claims 的结构覆盖
+gap claim index / digest 引用
+repair lineage base version / repair depth
+gate event sequence 与 current gate
+graph 内 scoped claim_ref / gap_ref 引用
+消费策略是否允许 empty / partial graph
 ```
 
-需要语义判断的冲突可交给受限 graph consistency reviewer，例如：
+M12 禁止：
 
 ```text
-intent 与 claim proposition 冲突
-多个 proposition 表达同一事实但语义相反
-repair 后 proposition 与 coverage 结果不一致
+判断语义重复
+判断语义冲突
+解释 intent 与 claim 的自然语言关系
+判断医学正确性
+判断 gap 是否应该追问
+判断修复后的语言质量
 ```
 
 图级终态：
@@ -1442,6 +1445,8 @@ graph_partial_with_gaps
 graph_disagreement
 graph_blocked
 ```
+
+`graph_disagreement` 只继承上游 disagreement 或显式结构字段 contract mismatch，不表示 M12 自行发现语义冲突。
 
 ## 14. 领域投影
 
@@ -1697,4 +1702,5 @@ durable execution 边界
 13. [semantic-collaboration-dag-m09-repair-planner-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m09-repair-planner-change-summary.md)
 14. [semantic-collaboration-dag-m10-repair-skill-patch-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m10-repair-skill-patch-change-summary.md)
 15. [semantic-collaboration-dag-m11-artifact-store-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m11-artifact-store-change-summary.md)
-16. [temporal-dev-environment-baseline.md](/home/vancer17/veterinary_agent/docs/deployment/temporal-dev-environment-baseline.md)
+16. [semantic-collaboration-dag-m12-claim-graph-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m12-claim-graph-change-summary.md)
+17. [temporal-dev-environment-baseline.md](/home/vancer17/veterinary_agent/docs/deployment/temporal-dev-environment-baseline.md)

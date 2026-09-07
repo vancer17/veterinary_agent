@@ -1100,51 +1100,65 @@ claim review / clarification gap 可从 payload 重建
 不在 M11 中执行医学判断
 ```
 
-### M12：Claim Graph 与一致性门禁
+### M12：Claim Graph 与结构一致性门禁
 
 **目标**
 
-将已通过语义审查和证据门禁的 proposition artifact，以及显式 clarification gap artifact，组装为可投影 proposition graph。
+将 M11 当前有效回合 artifact 投影为领域无关 proposition graph，并只执行结构、身份、引用、版本与状态机门禁。
+
+**语义边界**
+
+M12 不检查 claim 语义，不做语义重复 / 语义冲突 / 医学正确性 / gap 合理性 / 修复质量判断。相关语义结论必须来自 M08、M10 与 M08 re-review，并通过 M11 gate 传递。
 
 **范围**
 
 ```text
 ClaimGraphBuilder
-IntentClaimConsistencyGate
-ReviewStatusMerger
-ClarificationGapMerger
-EvidenceGateMerger
-GraphConsistencyGate
-GraphArtifact
+TurnIntentSection projection
+ClaimNode projection
+ClarificationGapNode projection
+RepairLineageNode projection
+GateNode projection
+GraphStructuralConsistencyGate
+GraphBuildPolicy
+GraphBuildResult
 ```
 
 **上游依赖**
 
 ```text
-M06～M11
+M11 SemanticTurnArtifactPayload
+M11 gate events
+M11 latest version / stale marker
 ```
 
 **交付物**
 
-1. proposition graph schema。
-2. turn intent 与 claim proposition 合并。
-3. coverage / faithfulness / repair 状态合并。
-4. clarification gap 状态合并。
-5. evidence binding 状态合并。
-6. ID 引用校验。
-7. 图级一致性门禁。
+1. graph schema。
+2. Turn Intent / claim / gap / repair / gate scoped nodes。
+3. 结构引用完整性校验。
+4. artifact 当前版本校验。
+5. gate 状态消费校验。
+6. 空 graph 结构语义。
+7. graph canonical digest / graph id。
 8. graph terminal state。
 
 **验收标准**
 
 ```text
-只消费完整门禁后的 verified / repair_verified artifact
-不消费 proposal
-引用缺失 blocked
-claim proposition 重复 blocked
-证据门禁或 clarification gap 未按契约处理时不得 graph_verified
-局部 gap 保留为 graph_partial_with_gaps
-图级冲突保留为 graph_disagreement
+只消费当前非 stale artifact
+只消费包含权威 Turn Intent section 的 artifact
+不直接读取 M06 proposal 或原始用户文本
+完全相同 claim digest / proposition 才视为结构重复
+review record 必须覆盖全部 claim indexes
+gap 必须引用当前 claim digest
+repair_depth=1 时必须有 repair lineage 和 re-review bundle
+patch_applied blocked
+evidence_binding_pending 不得 graph_verified
+只有 verified / repair_verified gate 可进入 graph_verified
+active gap 保留为 graph_partial_with_gaps
+上游 disagreement 继承为 graph_disagreement
+不做语义重复 / 语义冲突判断
 ```
 
 ### M13：领域投影 Adapter
@@ -1942,4 +1956,5 @@ DSPy 接入
 14. [semantic-collaboration-dag-m09-repair-planner-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m09-repair-planner-change-summary.md)
 15. [semantic-collaboration-dag-m10-repair-skill-patch-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m10-repair-skill-patch-change-summary.md)
 16. [semantic-collaboration-dag-m11-artifact-store-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m11-artifact-store-change-summary.md)
-17. [temporal-dev-environment-baseline.md](/home/vancer17/veterinary_agent/docs/deployment/temporal-dev-environment-baseline.md)
+17. [semantic-collaboration-dag-m12-claim-graph-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m12-claim-graph-change-summary.md)
+18. [temporal-dev-environment-baseline.md](/home/vancer17/veterinary_agent/docs/deployment/temporal-dev-environment-baseline.md)

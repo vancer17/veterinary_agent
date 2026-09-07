@@ -34,7 +34,7 @@
 | 系统性人工审查 gate event | 已实现 |
 | Alembic 0023 迁移 | 已实现 |
 | M04 生产执行器组合 | 未接入 |
-| M12 Claim Graph | 未实现 |
+| M12 Claim Graph | 已在后续 M12 阶段实现 |
 | 真实 PostgreSQL M11 迁移部署 | 未执行 |
 
 ## 2. 轻量化权威粒度
@@ -96,6 +96,9 @@ semantic_clarification_gap_index
 ```text
 artifact_id = sha256(run_id + source_task_id + turn_snapshot_digest)
 ```
+
+回合 payload 现在还内嵌权威 `turn_intent` section。M12 只能从 M11 读取该
+section，缺失时结构门禁 blocked，不得回读 M06 proposal 或原始用户文本。
 
 典型链路：
 
@@ -329,8 +332,8 @@ UPDATE / DELETE 权威 artifact payload
 ```text
 ruff check semantic_collaboration + M11 tests: PASS
 mypy src/vet_agent/semantic_collaboration: PASS
-pytest tests/test_semantic_collaboration_*.py: 105 passed
-pytest 全量默认测试: 323 passed, 84 skipped
+pytest tests/test_semantic_collaboration_*.py: 111 passed
+pytest 全量默认测试: 329 passed, 84 skipped
 ```
 
 新增测试覆盖：

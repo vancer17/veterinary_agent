@@ -13,6 +13,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from hashlib import sha256
 
+from pydantic import ValidationError
 from sqlalchemy.orm import Session, sessionmaker
 
 from .artifact_contracts import (
@@ -35,6 +36,7 @@ from .artifact_contracts import (
     SemanticClarificationGapStatus,
     SemanticSystemReviewRecord,
     SemanticTurnArtifactPayload,
+    SemanticTurnIntentSection,
     build_artifact_reference,
     canonical_artifact_json,
     compute_artifact_payload_digest,
@@ -44,6 +46,7 @@ from .artifact_contracts import (
 )
 from .artifact_repository import PostgresSemanticArtifactRepository
 from .errors import SemanticArtifactStoreError
+from .gateway_contracts import SemanticModelProposal
 from .patch_applier import DeterministicPatchApplier
 from .patch_contracts import (
     PatchApplicationPreview,
@@ -59,6 +62,7 @@ from .review_contracts import (
     SemanticReviewBundle,
     compute_claim_digest,
 )
+from .verifier import TurnIntentProposalShape
 
 
 def _now_text() -> str:
@@ -153,10 +157,12 @@ class PostgresSemanticArtifactStore(
     async def commit_review_bundle(
         self,
         bundle: SemanticReviewBundle,
+        turn_intent_proposal: SemanticModelProposal | None = None,
     ) -> str:
-        """以幂等方式提交 M08 Review Bundle 并生成回合级 artifact。
+        """以幂等方式提交 M08 Review Bundle 与可选 Turn Intent 权威结果。
 
         :param bundle: 已完成 M08 验证与确定性派生的审查聚合。
+        :param turn_intent_proposal: 可选 M07 accepted Turn Intent proposal。
         :return: 返回 M11 权威 artifact 引用。
         :raises SemanticArtifactStoreError: 身份冲突、claims 漂移或提交失败时抛出。
         """
@@ -170,6 +176,23 @@ class PostgresSemanticArtifactStore(
             ):
                 raise SemanticArtifactStoreError(
                     "semantic artifact commit request conflict",
+                )
+            existing_artifact = self.repository.get_artifact(
+                existing.result_reference,
+            )
+            requested_intent = (
+                None
+                if turn_intent_proposal is None
+                else self._turn_intent_section(
+                    bundle=bundle,
+                    proposal=turn_intent_proposal,
+                )
+            )
+            if existing_artifact is None or (
+                existing_artifact.payload.turn_intent != requested_intent
+            ):
+                raise SemanticArtifactStoreError(
+                    "semantic artifact turn intent replay mismatch",
                 )
             return existing.result_reference
         latest = self.repository.get_latest_artifact(
@@ -202,6 +225,14 @@ class PostgresSemanticArtifactStore(
             source_attempt_number=bundle.source_attempt_number,
             turn_snapshot_digest=bundle.turn_snapshot_digest,
             source_proposal_digest=bundle.source_proposal_digest,
+            turn_intent=(
+                self._turn_intent_section(
+                    bundle=bundle,
+                    proposal=turn_intent_proposal,
+                )
+                if turn_intent_proposal is not None
+                else (None if latest is None else latest.payload.turn_intent)
+            ),
             claims=_claim_records(bundle.claims),
             review_bundle=bundle,
             repair_lineage=(None if latest is None else latest.payload.repair_lineage),
@@ -267,6 +298,23 @@ class PostgresSemanticArtifactStore(
         )
         return self.repository.commit(commit_bundle).result_reference
 
+    async def commit_semantic_turn_result(
+        self,
+        *,
+        review_bundle: SemanticReviewBundle,
+        turn_intent_proposal: SemanticModelProposal,
+    ) -> str:
+        """提交包含 Turn Intent 的完整回合级权威结果。
+
+        :param review_bundle: 已完成 M08 确定性派生的审查聚合。
+        :param turn_intent_proposal: M07 accepted Turn Intent proposal。
+        :return: 返回包含 intent / claims / review 的 artifact 引用。
+        """
+        return await self.commit_review_bundle(
+            review_bundle,
+            turn_intent_proposal,
+        )
+
     async def commit(
         self,
         patch_set: SemanticPatchSet,
@@ -314,6 +362,7 @@ class PostgresSemanticArtifactStore(
             source_attempt_number=base.payload.source_attempt_number,
             turn_snapshot_digest=base.payload.turn_snapshot_digest,
             source_proposal_digest=base.payload.source_proposal_digest,
+            turn_intent=base.payload.turn_intent,
             claims=_claim_records(preview.claims),
             review_bundle=None,
             repair_lineage=SemanticArtifactRepairLineage(
@@ -455,6 +504,51 @@ class PostgresSemanticArtifactStore(
             or compute_artifact_payload_digest(record.payload) != record.payload_digest
         ):
             raise SemanticArtifactStoreError("semantic artifact record is corrupted")
+
+    def _turn_intent_section(
+        self,
+        *,
+        bundle: SemanticReviewBundle,
+        proposal: SemanticModelProposal | None,
+    ) -> SemanticTurnIntentSection | None:
+        """将 M07 accepted Turn Intent proposal 转换为回合内嵌 section。
+
+        :param bundle: 当前 Claim Inventory 的 M08 Review Bundle。
+        :param proposal: 可选 Turn Intent 模型 proposal。
+        :return: 返回身份闭合的 Turn Intent section。
+        :raises SemanticArtifactStoreError: proposal 身份或结构非法时抛出。
+        """
+        if proposal is None:
+            return None
+        if proposal.execution.task.skill_id != "turn_intent":
+            raise SemanticArtifactStoreError(
+                "semantic turn intent proposal skill is invalid",
+            )
+        if (
+            proposal.metadata.run_id != bundle.run_id
+            or proposal.metadata.turn_snapshot_digest != bundle.turn_snapshot_digest
+        ):
+            raise SemanticArtifactStoreError(
+                "semantic turn intent proposal identity mismatch",
+            )
+        try:
+            shape = TurnIntentProposalShape.model_validate(proposal.payload)
+        except ValidationError as error:
+            raise SemanticArtifactStoreError(
+                "semantic turn intent proposal shape is invalid",
+            ) from error
+        return SemanticTurnIntentSection(
+            source_task_id=proposal.metadata.task_id,
+            source_attempt_number=proposal.metadata.attempt_number,
+            source_proposal_digest=proposal.proposal_digest,
+            answer_now=shape.answer_now,
+            wants_triage=shape.wants_triage,
+            correction=shape.correction,
+            clarification_request=shape.clarification_request,
+            fact_statement_present=shape.fact_statement_present,
+            question_present=shape.question_present,
+            report_context_present=shape.report_context_present,
+        )
 
     def _validate_existing_request(
         self,

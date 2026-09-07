@@ -325,6 +325,34 @@ class PostgresSemanticArtifactRepository(SemanticArtifactRepository):
                 "semantic artifact gate read failed",
             ) from error
 
+    def is_artifact_stale(
+        self,
+        artifact_reference: str,
+    ) -> bool:
+        """判断 artifact version 是否已被显式 stale marker 取代。
+
+        :param artifact_reference: M11 稳定 artifact 引用。
+        :return: 存在 stale marker 时返回 True。
+        :raises SemanticArtifactStoreError: 引用或数据库访问失败时抛出。
+        """
+        try:
+            artifact_id, version = parse_artifact_reference(artifact_reference)
+        except ValueError as error:
+            raise SemanticArtifactStoreError(
+                "semantic artifact reference is invalid",
+            ) from error
+        statement = select(SemanticArtifactStaleMarkerModel).where(
+            SemanticArtifactStaleMarkerModel.artifact_id == artifact_id,
+            SemanticArtifactStaleMarkerModel.version == version,
+        )
+        try:
+            with self._session_factory() as session:
+                return session.scalars(statement).first() is not None
+        except SQLAlchemyError as error:
+            raise SemanticArtifactStoreError(
+                "semantic artifact stale marker read failed",
+            ) from error
+
     def commit(
         self,
         bundle: SemanticArtifactCommitBundle,

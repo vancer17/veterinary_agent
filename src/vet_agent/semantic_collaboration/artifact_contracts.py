@@ -135,6 +135,31 @@ class SemanticArtifactClaimRecord(BaseModel):
     proposition: str = Field(min_length=1, max_length=240)
 
 
+class SemanticTurnIntentSection(BaseModel):
+    """表示内嵌于回合 artifact 的 Turn Intent 权威结果。
+
+    :return: 无返回值；该 section 来自 M06/M07，不由 M12 重新推断。
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+        strict=True,
+        validate_assignment=True,
+    )
+
+    source_task_id: str = Field(min_length=1, max_length=360)
+    source_attempt_number: int = Field(ge=1)
+    source_proposal_digest: str = Field(pattern=r"^[a-f0-9]{64}$")
+    answer_now: bool
+    wants_triage: bool
+    correction: bool
+    clarification_request: bool
+    fact_statement_present: bool
+    question_present: bool
+    report_context_present: bool
+
+
 class SemanticArtifactRepairLineage(BaseModel):
     """表示产生当前 artifact version 的 M10 patch 谱系。
 
@@ -175,6 +200,7 @@ class SemanticTurnArtifactPayload(BaseModel):
     source_attempt_number: int = Field(ge=1)
     turn_snapshot_digest: str = Field(pattern=r"^[a-f0-9]{64}$")
     source_proposal_digest: str = Field(pattern=r"^[a-f0-9]{64}$")
+    turn_intent: SemanticTurnIntentSection | None = None
     claims: tuple[SemanticArtifactClaimRecord, ...] = Field(max_length=8)
     review_bundle: SemanticReviewBundle | None = None
     repair_lineage: SemanticArtifactRepairLineage | None = None
@@ -203,6 +229,11 @@ class SemanticTurnArtifactPayload(BaseModel):
             raise ValueError("repaired semantic artifact requires repair lineage")
         if self.repair_lineage is not None and self.repair_depth == 0:
             raise ValueError("repair lineage requires repair depth")
+        if self.turn_intent is not None and (
+            self.turn_intent.source_task_id == self.source_task_id
+            or self.turn_intent.source_proposal_digest == self.source_proposal_digest
+        ):
+            raise ValueError("semantic turn intent source identity is ambiguous")
         return self
 
 
@@ -462,6 +493,16 @@ class SemanticArtifactRepository(Protocol):
 
         :param artifact_reference: M11 稳定 artifact 引用。
         :return: 找到时返回最大 sequence 的 gate event。
+        """
+
+    def is_artifact_stale(
+        self,
+        artifact_reference: str,
+    ) -> bool:
+        """判断 artifact version 是否已被新版本取代。
+
+        :param artifact_reference: M11 稳定 artifact 引用。
+        :return: 存在 stale marker 时返回 True。
         """
 
     def commit(
