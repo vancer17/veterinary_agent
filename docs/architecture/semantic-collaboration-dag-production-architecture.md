@@ -64,7 +64,7 @@ contract-first
 ### 2.1 目标
 
 1. 将用户当前回合显式语义稳定转换为可审查的自包含自然语言 proposition，并在后续组装为可审计 claim graph。
-2. 在 proposition 中保留 normal、denied、uncertain、corrected、未观察和用户归因等语义差异；结构化 enum 映射后置到领域投影。
+2. 在 proposition 中保留 normal、denied、uncertain、corrected、未观察和用户归因等语义差异；结构化 enum 映射后置到各领域自身的 candidate-only 语义契约，不由 M13 用文本规则推断。
 3. 支持 shared scope、多事实陈述、多轮指代、用户纠正和控制意图。
 4. 保留上下文版本，并将 evidence binding 后置为独立治理状态；生成 SKILL 不自证 evidence。
 5. 通过正交 Review SKILL 发现 schema 无法判断的语义忠实性问题。
@@ -1450,29 +1450,37 @@ graph_blocked
 
 ## 14. 领域投影
 
+当前生产实现状态：问诊投影 Adapter 已实现；临床安全与长期记忆 Adapter 保留
+显式 TODO 空壳。M13 不新增权威持久化，投影结果绑定 M12 graph 身份并可由
+M14 记录 trace。
+
 ### 14.1 投影原则
 
-语义协作 DAG 只输出 verified graph 和显式 gap / disagreement。
+语义协作 DAG 只输出 graph build result 与显式 gap / disagreement 终态。
 
 下游消费必须通过 adapter：
 
 ```text
 ConsultationProjectionAdapter
-ClinicalSafetyProjectionAdapter
-LongTermMemoryProjectionAdapter
+TODOClinicalSafetyProjectionAdapter（待领域输入契约明确）
+TODOLongTermMemoryProjectionAdapter（待候选策略明确）
 ```
 
 每个 adapter 必须声明：
 
 ```text
-接受的 claim type
-忽略的 claim type
-normal / denied / uncertain 映射
-冲突处理策略
+接受的 graph terminal state
+忽略的 graph terminal state
+adapter contract version
+implementation state
 必需字段
 禁止字段
 失败状态
 ```
+
+问诊投影必须把 proposition 作为不透明自然语言事实透传。normal、denied、
+uncertain、unobserved 与 corrected 的结构化解释属于问诊领域自身的
+candidate-only 语义契约；M13 不得用关键词、正则、embedding 或医学规则代替。
 
 ### 14.2 问诊投影
 
@@ -1703,4 +1711,5 @@ durable execution 边界
 14. [semantic-collaboration-dag-m10-repair-skill-patch-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m10-repair-skill-patch-change-summary.md)
 15. [semantic-collaboration-dag-m11-artifact-store-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m11-artifact-store-change-summary.md)
 16. [semantic-collaboration-dag-m12-claim-graph-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m12-claim-graph-change-summary.md)
+17. [semantic-collaboration-dag-m13-domain-projection-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m13-domain-projection-change-summary.md)
 17. [temporal-dev-environment-baseline.md](/home/vancer17/veterinary_agent/docs/deployment/temporal-dev-environment-baseline.md)

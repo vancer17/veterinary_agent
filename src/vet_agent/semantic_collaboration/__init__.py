@@ -6,7 +6,7 @@
       M03 Plan IR、M04 Temporal-first DAG 调度、M05 结构化 LLM Gateway、
       M06 标准化 SKILL 文档、受限 Prompt Renderer、M06 生成执行器、
       M08 Review、M09 Repair Planner、M10 Repair SKILL / Patch、M11
-      Artifact Store / Version 与 M12 Claim Graph 相关公开 API。
+      Artifact Store / Version、M12 Claim Graph 与 M13 领域投影相关公开 API。
 说明：跨包调用不得深入内部模块；后续能力必须继续通过本入口
       显式暴露，避免形成隐式跨包依赖。
 =============================================================================
@@ -73,6 +73,14 @@ from .claim_graph_verifier import (
     SemanticGraphGateDecision,
     SemanticGraphStructuralConsistencyGate,
 )
+from .clinical_safety_projection import TODOClinicalSafetyProjectionAdapter
+from .consultation_projection import (
+    ConsultationClarificationGap,
+    ConsultationProjectedFact,
+    ConsultationProjection,
+    ConsultationProjectionAdapter,
+    ConsultationProjectionIntent,
+)
 from .contracts import (
     DOMAIN_ISOLATED_CONTEXT_RESOURCES,
     SKILL_DOC_REQUIRED_SECTIONS,
@@ -92,6 +100,19 @@ from .contracts import (
     SkillTaskKind,
     SkillTraceKind,
     VerifierBinding,
+)
+from .domain_projection_contracts import (
+    SemanticDomainProjectionAdapter,
+    SemanticProjectionAdapterKind,
+    SemanticProjectionContract,
+    SemanticProjectionExecutionState,
+    SemanticProjectionFailureCode,
+    SemanticProjectionImplementationState,
+    SemanticProjectionResult,
+    SemanticProjectionSource,
+    build_projected_projection_result,
+    build_rejected_projection_result,
+    compute_domain_projection_id,
 )
 from .errors import (
     DAGProjectionRepositoryError,
@@ -143,6 +164,7 @@ from .generation import (
     TurnSnapshotReader,
     validate_generation_configuration,
 )
+from .long_term_memory_projection import TODOLongTermMemoryProjectionAdapter
 from .patch_applier import (
     DeterministicPatchApplier,
     apply_operations_to_claims,
@@ -436,6 +458,11 @@ __all__ = [
     "ClaimPropositionRepairPromptRenderer",
     "ClarificationBindingType",
     "ClarificationGapProposal",
+    "ConsultationClarificationGap",
+    "ConsultationProjectedFact",
+    "ConsultationProjection",
+    "ConsultationProjectionAdapter",
+    "ConsultationProjectionIntent",
     "ContextContract",
     "DAGDependencyFailure",
     "DAGExecutionPolicy",
@@ -512,6 +539,7 @@ __all__ = [
     "SemanticCollaborationError",
     "SemanticDAGProjectionRepository",
     "SemanticDAGWorkflow",
+    "SemanticDomainProjectionAdapter",
     "SemanticGenerationContractError",
     "SemanticGenerationModelPolicy",
     "SemanticGenerationModelRule",
@@ -543,6 +571,13 @@ __all__ = [
     "SemanticPatchVerificationResult",
     "SemanticPatchVerificationState",
     "SemanticPatchVerifier",
+    "SemanticProjectionAdapterKind",
+    "SemanticProjectionContract",
+    "SemanticProjectionExecutionState",
+    "SemanticProjectionFailureCode",
+    "SemanticProjectionImplementationState",
+    "SemanticProjectionResult",
+    "SemanticProjectionSource",
     "SemanticPromptRenderError",
     "SemanticRepairExecutionError",
     "SemanticRepairExecutionResult",
@@ -612,6 +647,8 @@ __all__ = [
     "StructuredRepairSkillRunner",
     "StructuredReviewSkillRunner",
     "SuppressedClaimRepair",
+    "TODOClinicalSafetyProjectionAdapter",
+    "TODOLongTermMemoryProjectionAdapter",
     "TODOSemanticTaskExecutor",
     "TODOTurnSnapshotReader",
     "TemporalDAGActivityRuntime",
@@ -663,6 +700,8 @@ __all__ = [
     "build_production_plan_policy",
     "build_production_prompt_renderer_registry",
     "build_production_skill_catalog",
+    "build_projected_projection_result",
+    "build_rejected_projection_result",
     "build_temporal_semantic_dag_worker",
     "canonical_artifact_json",
     "canonical_claim_graph_json",
@@ -672,6 +711,7 @@ __all__ = [
     "compute_artifact_payload_digest",
     "compute_claim_digest",
     "compute_claim_graph_digest",
+    "compute_domain_projection_id",
     "compute_gateway_digest",
     "compute_model_output_digest",
     "compute_patch_id",

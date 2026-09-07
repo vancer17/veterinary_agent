@@ -1171,11 +1171,15 @@ active gap 保留为 graph_partial_with_gaps
 
 ```text
 ConsultationProjectionAdapter
-ClinicalSafetyProjectionAdapter
-LongTermMemoryProjectionAdapter
+TODOClinicalSafetyProjectionAdapter
+TODOLongTermMemoryProjectionAdapter
 ProjectionContract
 ProjectionResult
 ```
+
+当前生产实现状态：问诊投影 Adapter、通用 ProjectionContract 与统一
+ProjectionResult 已实现；临床安全与长期记忆保留 TODO 空壳并显式返回
+`adapter_not_implemented`。M13 不新增权威持久化，也不写任何领域状态。
 
 **实现顺序**
 
@@ -1521,6 +1525,9 @@ M13 ConsultationProjectionAdapter
 M14 graph metrics
 ```
 
+当前实现状态：M12 graph 与 M13 问诊投影 Adapter 已实现；M14 graph metrics
+与 M15 生产接入仍待后续阶段。
+
 **验收**
 
 ```text
@@ -1568,12 +1575,15 @@ DAG 失败显式暴露
 **交付**
 
 ```text
-M13 ClinicalSafetyProjectionAdapter
-M13 LongTermMemoryProjectionAdapter
+M13 TODOClinicalSafetyProjectionAdapter → 生产 ClinicalSafetyProjectionAdapter
+M13 TODOLongTermMemoryProjectionAdapter → 生产 LongTermMemoryProjectionAdapter
 M15 配置与回滚硬化
 M14 完整指标
 运维排障文档
 ```
+
+当前实现状态：临床安全与长期记忆仅提供显式失败的 TODO 空壳；待对应领域
+输入契约与候选策略明确后替换。
 
 **验收**
 
@@ -1957,4 +1967,5 @@ DSPy 接入
 15. [semantic-collaboration-dag-m10-repair-skill-patch-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m10-repair-skill-patch-change-summary.md)
 16. [semantic-collaboration-dag-m11-artifact-store-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m11-artifact-store-change-summary.md)
 17. [semantic-collaboration-dag-m12-claim-graph-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m12-claim-graph-change-summary.md)
-18. [temporal-dev-environment-baseline.md](/home/vancer17/veterinary_agent/docs/deployment/temporal-dev-environment-baseline.md)
+18. [semantic-collaboration-dag-m13-domain-projection-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m13-domain-projection-change-summary.md)
+19. [temporal-dev-environment-baseline.md](/home/vancer17/veterinary_agent/docs/deployment/temporal-dev-environment-baseline.md)
