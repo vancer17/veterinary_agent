@@ -13,8 +13,8 @@
 
 # 受限语义协作 DAG M12 Claim Graph 生产对接基线
 
-> **文档状态**：M12 生产工程边界已实现；待 M13 领域投影、M04 执行器组合与
-> M15 生产接入消费
+> **文档状态**：M12 生产工程边界已实现；M13 问诊投影已实现，临床安全与
+> 长期记忆仍为 TODO 空壳；待 M04 执行器组合与 M15 生产接入消费
 >
 > **文档定位**：本文面向后续 M13 / M15 实现者，描述可依赖的稳定边界和有意
 > 未完成项；不作为软件包内部实现说明。
@@ -77,7 +77,8 @@ M12 的“一致性”只表示：
 | graph canonical digest / graph id | 已实现 | 相同输入与策略可确定性重建 |
 | graph 终态 | 已实现 | verified / partial / disagreement / blocked |
 | graph 权威持久化 | 有意未实现 | graph 是可重建投影，不是第二权威事实源 |
-| M13 领域投影 | 未实现 | 后续按问诊、临床安全、长期记忆分别立项 |
+| M13 问诊投影 | 已实现 | 问诊领域消费 graph contract，不读取 M11 内部 payload |
+| M13 临床安全 / 长期记忆投影 | TODO 空壳 | 对应领域契约明确前显式失败 |
 | M04 执行器组合 | 未实现 | M12 尚未进入生产任务执行链 |
 | M15 VetOrchestrator 接入 | 未实现 | 生产主路径尚未切换 |
 
@@ -646,7 +647,7 @@ graph blocked 后回退旧问诊抽取器
 |---|---|---|---|
 | Production evidence binding | M08 supported 后停在 `evidence_binding_pending`，M12 不提升 verified | 独立证据门禁 / M11 gate event | 自动或人工证据绑定契约明确 |
 | M04 SemanticTaskExecutor 组合 | M12 未进入生产任务执行链 | M04 | M06～M11 消费时序闭合 |
-| M13 问诊投影 | TODO 空壳 | M13 | M12 graph contract 稳定 |
+| M13 临床安全投影 | TODO 空壳 | M13 | 临床安全输入契约明确 |
 | M13 临床安全投影 | TODO 空壳 | M13 | 临床安全输入契约明确 |
 | M13 长期记忆候选投影 | TODO 空壳 | M13 / 记忆领域 | 长期记忆候选策略明确 |
 | Graph 派生索引 | 不持久化 graph | M12 后续 / M14 | 查询或统计压力明确 |
@@ -726,3 +727,4 @@ graph 持久化策略调整
 1. [semantic-collaboration-dag-production-architecture.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-production-architecture.md)
 2. [semantic-collaboration-dag-production-implementation-plan.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-production-implementation-plan.md)
 3. [semantic-collaboration-dag-m11-artifact-store-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m11-artifact-store-change-summary.md)
+4. [semantic-collaboration-dag-m13-domain-projection-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m13-domain-projection-change-summary.md)
