@@ -5,8 +5,8 @@
 范围：暴露 M01 Skill 契约、目录、投影、生产组合根、M02 TurnSnapshot、
       M03 Plan IR、M04 Temporal-first DAG 调度、M05 结构化 LLM Gateway、
       M06 标准化 SKILL 文档、受限 Prompt Renderer、M06 生成执行器、
-      M08 Review、M09 Repair Planner、M10 Repair SKILL / Patch 与 M11
-      Artifact Store / Version 相关公开 API。
+      M08 Review、M09 Repair Planner、M10 Repair SKILL / Patch、M11
+      Artifact Store / Version 与 M12 Claim Graph 相关公开 API。
 说明：跨包调用不得深入内部模块；后续能力必须继续通过本入口
       显式暴露，避免形成隐式跨包依赖。
 =============================================================================
@@ -32,6 +32,7 @@ from .artifact_contracts import (
     SemanticHumanReviewStatus,
     SemanticSystemReviewRecord,
     SemanticTurnArtifactPayload,
+    SemanticTurnIntentSection,
     build_artifact_reference,
     canonical_artifact_json,
     compute_artifact_payload_digest,
@@ -50,6 +51,27 @@ from .catalog import (
     SkillOwnershipRecord,
     SkillRegistry,
     SkillRepairMappingRecord,
+)
+from .claim_graph_builder import SemanticClaimGraphBuilder
+from .claim_graph_contracts import (
+    SemanticClaimGraph,
+    SemanticGraphBuildPolicy,
+    SemanticGraphBuildResult,
+    SemanticGraphClaimNode,
+    SemanticGraphEmptyReason,
+    SemanticGraphFailureCode,
+    SemanticGraphGapNode,
+    SemanticGraphGateNode,
+    SemanticGraphIdentity,
+    SemanticGraphIntentNode,
+    SemanticGraphRepairNode,
+    SemanticGraphTerminalState,
+    canonical_claim_graph_json,
+    compute_claim_graph_digest,
+)
+from .claim_graph_verifier import (
+    SemanticGraphGateDecision,
+    SemanticGraphStructuralConsistencyGate,
 )
 from .contracts import (
     DOMAIN_ISOLATED_CONTEXT_RESOURCES,
@@ -483,6 +505,8 @@ __all__ = [
     "SemanticArtifactStoreError",
     "SemanticArtifactVersionRecord",
     "SemanticChatMessage",
+    "SemanticClaimGraph",
+    "SemanticClaimGraphBuilder",
     "SemanticClaimReviewIndexRecord",
     "SemanticClarificationGapIndexRecord",
     "SemanticCollaborationError",
@@ -493,6 +517,19 @@ __all__ = [
     "SemanticGenerationModelRule",
     "SemanticGenerationVerificationResult",
     "SemanticGenerationVerifier",
+    "SemanticGraphBuildPolicy",
+    "SemanticGraphBuildResult",
+    "SemanticGraphClaimNode",
+    "SemanticGraphEmptyReason",
+    "SemanticGraphFailureCode",
+    "SemanticGraphGapNode",
+    "SemanticGraphGateDecision",
+    "SemanticGraphGateNode",
+    "SemanticGraphIdentity",
+    "SemanticGraphIntentNode",
+    "SemanticGraphRepairNode",
+    "SemanticGraphStructuralConsistencyGate",
+    "SemanticGraphTerminalState",
     "SemanticHumanReviewStatus",
     "SemanticModelProposal",
     "SemanticPatchCompiler",
@@ -536,6 +573,7 @@ __all__ = [
     "SemanticTaskExecutionRequest",
     "SemanticTaskExecutor",
     "SemanticTurnArtifactPayload",
+    "SemanticTurnIntentSection",
     "SkillCatalog",
     "SkillCatalogError",
     "SkillContextResource",
@@ -627,11 +665,13 @@ __all__ = [
     "build_production_skill_catalog",
     "build_temporal_semantic_dag_worker",
     "canonical_artifact_json",
+    "canonical_claim_graph_json",
     "canonical_gateway_json",
     "canonical_plan_json",
     "canonical_turn_snapshot_json",
     "compute_artifact_payload_digest",
     "compute_claim_digest",
+    "compute_claim_graph_digest",
     "compute_gateway_digest",
     "compute_model_output_digest",
     "compute_patch_id",

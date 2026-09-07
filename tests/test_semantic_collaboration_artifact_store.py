@@ -14,9 +14,11 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
+from hashlib import sha256
 
 import pytest
 
+from tests.test_semantic_collaboration_generation import _execution
 from tests.test_semantic_collaboration_repair_planner import _bundle, _planner
 from tests.test_semantic_collaboration_repair_skill import (
     SequentialRepairTransport,
@@ -40,7 +42,9 @@ from vet_agent.semantic_collaboration import (
     SemanticArtifactStaleMarkerRecord,
     SemanticArtifactVersionRecord,
     SemanticHumanReviewStatus,
+    SemanticModelProposal,
     SemanticSystemReviewRecord,
+    StructuredLLMCallMetadata,
     StructuredLLMGateway,
     StructuredRepairSkillRunner,
     TurnSnapshotProjector,
@@ -48,6 +52,56 @@ from vet_agent.semantic_collaboration import (
     build_production_skill_catalog,
     compute_review_bundle_digest,
 )
+
+
+def _turn_intent_proposal(
+    bundle: object,
+    snapshot: object,
+) -> SemanticModelProposal:
+    """构造与 Review Bundle 身份闭合的 Turn Intent proposal 测试替身。
+
+    :param bundle: 当前 M08 Review Bundle。
+    :param snapshot: 当前回合 TurnSnapshot。
+    :return: 返回身份闭合的 M07 accepted Turn Intent proposal。
+    """
+    from vet_agent.semantic_collaboration import SemanticReviewBundle, TurnSnapshot
+
+    if not isinstance(bundle, SemanticReviewBundle) or not isinstance(
+        snapshot,
+        TurnSnapshot,
+    ):
+        raise TypeError("turn intent helper received invalid test objects")
+    execution = _execution(snapshot, skill_id="turn_intent")
+    payload: dict[str, object] = {
+        "answer_now": False,
+        "wants_triage": False,
+        "correction": False,
+        "clarification_request": False,
+        "fact_statement_present": True,
+        "question_present": False,
+        "report_context_present": False,
+    }
+    metadata = StructuredLLMCallMetadata(
+        run_id=bundle.run_id,
+        task_id=execution.task.task_id,
+        attempt_number=1,
+        skill_id=execution.task.skill_id,
+        skill_version=execution.task.skill_version,
+        turn_snapshot_digest=bundle.turn_snapshot_digest,
+        prompt_hash=sha256(b"turn-intent-prompt").hexdigest(),
+        skill_contract_digest=sha256(b"turn-intent-contract").hexdigest(),
+        output_schema_id="semantic_collaboration.turn_intent.output",
+        output_schema_version="2.0.0",
+        output_schema_digest=(execution.task.expected_output_schema.schema_digest),
+        requested_model="qwen-plus",
+        latency_ms=1.0,
+    )
+    return SemanticModelProposal(
+        execution=execution,
+        payload=payload,
+        proposal_digest=sha256(b"turn-intent-output").hexdigest(),
+        metadata=metadata,
+    )
 
 
 @dataclass
@@ -133,6 +187,22 @@ class FakeArtifactRepository(SemanticArtifactRepository):
         :return: 找到时返回 gate event。
         """
         return self.gates.get(artifact_reference)
+
+    def is_artifact_stale(
+        self,
+        artifact_reference: str,
+    ) -> bool:
+        """读取进程内 artifact stale 状态。
+
+        :param artifact_reference: M11 artifact 引用。
+        :return: 存在 stale marker 时返回 True。
+        """
+        artifact = self.artifacts.get(artifact_reference)
+        return artifact is not None and any(
+            marker.artifact_id == artifact.artifact_id
+            and marker.version == artifact.version
+            for marker in self.stale_markers
+        )
 
     def commit(
         self,
