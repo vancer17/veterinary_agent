@@ -28,6 +28,11 @@
 > deterministic auto-finalization；生产契约已实现，详见
 > [semantic-collaboration-dag-m11-auto-finalization-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m11-auto-finalization-change-summary.md)。
 >
+> **Pre-CDE 主链状态**：M02 当前回合快照、M04 `clarification_required`、
+> M06～M13 应用服务与修复后 re-review 已闭合；M14 显式后置，M15 仍等待问诊
+> 动态证据链路完成。详见
+> [semantic-collaboration-dag-pre-cde-closure-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-pre-cde-closure-change-summary.md)。
+>
 > **适用范围**：生产工程实现顺序、模块职责、模块依赖、交付物、验收标准、
 > 持久化边界、测试门禁、生产接入与回滚
 >
@@ -254,6 +259,10 @@ SKILL.md 缺少必需段 blocked
 
 ### M02：TurnSnapshot
 
+> **实施状态**：TurnSnapshot 构建、digest 校验、当前回合 append-only 存档与
+> Persistent Reader 已实现。首轮历史 / 已验证事实使用显式边界；多轮来源等待
+> 结构化追问与 proposition-preserving 记忆读模型，不读取旧问诊状态或旧结构化记忆。
+
 **目标**
 
 为所有生成、审查和修复任务提供同一不可变受限全局视图。
@@ -368,6 +377,10 @@ plan_id 与 canonical 内容不一致 blocked
 ```
 
 ### M04：DAG 调度器
+
+> **实施状态**：`clarification_required` 已加入任务终态并要求携带 artifact
+> reference。Pre-CDE 应用服务已闭合业务主链；Temporal 生产
+> `SemanticTaskExecutor` 与真实 workflow 联调仍未接入。
 
 > **集成环境状态**：远端开发环境 Temporal Server / Web UI / namespace 已就绪；
 > 环境地址、数据库边界与冒烟命令见
@@ -1440,12 +1453,14 @@ M06 Turn Intent / Claim Inventory: 已实现
 M07 最小结构 verifier: 已实现
 M08 Coverage / Faithfulness Review: 已实现
 M08 deterministic outcome derivation: 已实现
+Pre-CDE M06～M08 应用服务组合: 已实现
 M14 完整 task trace / metrics: 未完成
 真实 LiteLLM / Temporal 联调: Pre-M11 首个 semantic 集成切片已通过
 ```
 
-本阶段尚不能因 M08 已实现而关闭；关闭前还需补齐 M14 观测闭环，并通过显式外部服务
-集成验证。当前全部链路验证均使用进程内测试替身。
+按当前 Pre-CDE 决策，语义业务主链不以 M14 作为闭合前置；但完整生产阶段关闭
+仍需补齐 M14 观测闭环，并通过显式外部服务集成验证。当前 Pre-CDE 主链验证
+使用进程内测试替身。
 其中 Temporal 基础设施已就绪，但尚未执行真实 workflow / activity 联调。
 
 **验收**
@@ -1484,6 +1499,7 @@ M09 Repair Planner: 已实现；尚未接入 M04 生产任务执行器
 M10 Repair SKILL / typed patch: 已实现；尚未接入 M04 任务执行器
 M11 ArtifactStore: 已实现；尚未接入 M04 生产任务执行器
 M11 auto-finalization: 已实现；尚未接入 M04 生产任务执行器
+M10 后 M08 re-review 服务编排: 已实现
 M14 repair metrics: 未完成
 ```
 
@@ -1545,7 +1561,8 @@ M13 ConsultationProjectionAdapter
 M14 graph metrics
 ```
 
-当前实现状态：M12 graph 与 M13 问诊投影 Adapter 已实现；M14 graph metrics
+当前实现状态：M12 graph、M13 问诊投影 Adapter 与 Pre-CDE
+`SemanticConsultationPreprocessingService` 输出信封已实现；M14 graph metrics
 与 M15 生产接入仍待后续阶段。
 
 **验收**
@@ -1995,4 +2012,5 @@ DSPy 接入
 19. [semantic-collaboration-dag-m11-auto-finalization-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m11-auto-finalization-change-summary.md)
 20. [consultation-dynamic-evidence-architecture.md](/home/vancer17/veterinary_agent/docs/architecture/consultation-dynamic-evidence-architecture.md)
 21. [veterinary-rag-knowledge-graph-architecture.md](/home/vancer17/veterinary_agent/docs/architecture/veterinary-rag-knowledge-graph-architecture.md)
-22. [temporal-dev-environment-baseline.md](/home/vancer17/veterinary_agent/docs/deployment/temporal-dev-environment-baseline.md)
+22. [semantic-collaboration-dag-pre-cde-closure-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-pre-cde-closure-change-summary.md)
+23. [temporal-dev-environment-baseline.md](/home/vancer17/veterinary_agent/docs/deployment/temporal-dev-environment-baseline.md)

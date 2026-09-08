@@ -19,6 +19,11 @@
 > **边界修订说明**：M04 Temporal-first 边界不变。最新 M06 生产契约已收敛为
 > Turn Intent + 自然语言 Claim Proposition Inventory，任务执行门禁需同步纳入
 > M08 Coverage / Faithfulness Review。
+>
+> **Pre-CDE 修订**：`clarification_required` 已加入合法 artifact 终态；
+> `SemanticConsultationPreprocessingService` 已闭合 M06～M13 业务主链。
+> 该服务不是 Temporal activity 执行器；M04 生产 executor 组合与真实 workflow
+> 联调仍未完成。
 
 ## 1. 当前状态
 
@@ -35,15 +40,17 @@
 | M06 生成 SKILL | 已实现；可返回 Turn Intent 与自然语言 claims proposal |
 | M07 最小结构 verifier | 已实现；完整 M07 仍待硬化 |
 | M08 Coverage / Faithfulness Review | 已实现；尚未接入生产任务执行器 |
-| M11 Artifact Store | 未实现 |
+| M11 Artifact Store | 已实现；尚未接入生产任务执行器 |
+| `clarification_required` 任务终态 | 已实现；必须携带 artifact reference |
+| Pre-CDE 语义预处理应用服务 | 已实现；不等于 Temporal executor 接入 |
 | VetOrchestrator 生产切换 | 未接入 |
 
 当前可以确认的是：M04 已经按 Temporal-first 生产架构完成工程边界，不再包含
 自有数据库任务队列、租约、attempt 状态机或 worker 恢复协议。
 
-当前不能宣称的是：语义协作 DAG 已经可以端到端生成 verified claim graph。
-原因在于 M04 的 TODO 任务执行器尚未组合 M06 / M07 / M08 / M11，M11
-Artifact Store 也尚未实现。
+当前不能宣称的是：Temporal 生产任务执行器已完成组合。Pre-CDE 应用服务可以在
+进程内组合 M06 / M07 / M08 / M09 / M10 / M11 / M12 / M13，但 M04 的
+`TODOSemanticTaskExecutor` 仍未替换，真实 workflow / activity 也未执行该完整链路。
 
 Pre-M11 集成测试已在真实 Temporal `semantic-collaboration-dev` namespace 完成
 scheduler-only workflow / activity / projection 验证；该结果不改变生产执行器
@@ -668,11 +675,11 @@ Review / Repair / Patch 不得由 M04 代实现。
 M08 Coverage Review: 已实现
 M08 Faithfulness Review: 已实现
 M08 deterministic outcome: 已实现
-M08 artifact commit: 等待 M11
+M08 artifact commit: 已由 M11 实现
 M09 Repair Planner: 已实现；尚未接入 M04 任务执行器
 M10 Repair / Patch: 已实现；尚未接入 M04 任务执行器
-M11 base snapshot / patch store: 未实现，M10 当前保持显式 Fail Fast
-M07 / M08 repair re-review 编排: 未接入
+M11 base snapshot / patch store: 已实现
+M07 / M08 repair re-review 编排: 已在 Pre-CDE 应用服务实现；尚未接入 M04 executor
 ```
 
 M10 当前只能输出经过确定性验证的 patch set 与 application preview；该状态不是

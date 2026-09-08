@@ -112,6 +112,24 @@ class TurnSnapshotSourceUnavailableError(TurnSnapshotError):
         self.source_name = source_name
 
 
+class SemanticTurnSnapshotStoreError(TurnSnapshotError):
+    """表示 TurnSnapshot 持久化读取、校验或提交失败。
+
+    :return: 无返回值；该错误不允许用当前请求重建结果替代权威快照。
+    """
+
+    failure_code: ClassVar[str] = "turn_snapshot_store_failed"
+
+
+class SemanticTurnSnapshotConflictError(SemanticTurnSnapshotStoreError):
+    """表示同一 TurnSnapshot 身份出现不可覆盖冲突。
+
+    :return: 无返回值；快照是 append-only 上下文，不允许原地修复。
+    """
+
+    failure_code: ClassVar[str] = "turn_snapshot_identity_conflict"
+
+
 class TurnSnapshotContextPolicyViolationError(TurnSnapshotError):
     """表示 SkillSpec 声明了 TurnSnapshot 无法满足的上下文策略。
 

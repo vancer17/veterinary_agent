@@ -110,6 +110,7 @@ Dynamic Consultation Policy
 | 能力 | 当前状态 | 本文边界 |
 |---|---|---|
 | M13 ConsultationProjection | 已实现 | 上游输入契约，不因问诊重构修改 |
+| SemanticConsultationPreprocessingService | 已实现 | 输出 M13 投影与身份信封；M15 仍不接入 VetOrchestrator |
 | 旧核心槽位问诊链路 | 当前生产实现 | 仅作为兼容与回滚路径 |
 | TrustedPetFactBundle | 目标契约 | 待独立实现或保留 TODO 空壳 |
 | ConsultationSemanticProjectionConsumer | 目标契约 | 待实现，禁止硬转换旧契约 |

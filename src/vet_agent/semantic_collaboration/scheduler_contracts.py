@@ -52,6 +52,7 @@ class DAGTaskTerminalState(StrEnum):
 
     VERIFIED = "verified"
     REPAIR_VERIFIED = "repair_verified"
+    CLARIFICATION_REQUIRED = "clarification_required"
     NOT_APPLICABLE = "not_applicable"
     BLOCKED = "blocked"
     DISAGREEMENT = "disagreement"
@@ -74,13 +75,14 @@ class DAGTaskTerminalState(StrEnum):
         }
 
     def requires_artifact(self) -> bool:
-        """判断该终态是否必须携带已验证 artifact 引用。
+        """判断该终态是否必须携带可审计 artifact 引用。
 
-        :return: verified 或 repair_verified 返回 True。
+        :return: verified、repair_verified 或 clarification_required 返回 True。
         """
         return self in {
             DAGTaskTerminalState.VERIFIED,
             DAGTaskTerminalState.REPAIR_VERIFIED,
+            DAGTaskTerminalState.CLARIFICATION_REQUIRED,
         }
 
 
@@ -253,9 +255,9 @@ class DAGTaskExecutionResult(BaseModel):
         """
         if self.terminal_state.requires_artifact():
             if not self.artifact_reference:
-                raise ValueError("verified terminal state requires artifact")
+                raise ValueError("artifact terminal state requires artifact")
             if self.failure_code is not None or self.failure_message is not None:
-                raise ValueError("verified terminal state cannot carry failure")
+                raise ValueError("artifact terminal state cannot carry failure")
             return self
         if self.terminal_state.is_dependency_success():
             if self.artifact_reference is not None:

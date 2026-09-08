@@ -1724,6 +1724,90 @@ class IdempotencyRecordModel(Base):
     )
 
 
+class SemanticTurnSnapshotModel(Base):
+    """表示受限语义协作 DAG 的不可变 TurnSnapshot 存档。"""
+
+    __tablename__ = "semantic_turn_snapshots"
+    __table_args__ = (
+        UniqueConstraint(
+            "turn_id",
+            name="uq_semantic_turn_snapshots_turn_id",
+        ),
+        UniqueConstraint(
+            "user_id",
+            "session_id",
+            "pet_id",
+            "turn_index",
+            name="uq_semantic_turn_snapshots_scope_turn_index",
+        ),
+        CheckConstraint(
+            "turn_index >= 0",
+            name="ck_semantic_turn_snapshots_turn_index",
+        ),
+        CheckConstraint(
+            "snapshot_version = '1.0.0'",
+            name="ck_semantic_turn_snapshots_version",
+        ),
+        Index(
+            "idx_semantic_turn_snapshots_scope_turn",
+            "user_id",
+            "session_id",
+            "pet_id",
+            "turn_index",
+        ),
+        {
+            "comment": "受限语义协作 TurnSnapshot 不可变存档表；context digest 是读取身份，不保存模型输出或领域状态。",
+        },
+    )
+
+    context_digest: Mapped[str] = mapped_column(
+        Text,
+        primary_key=True,
+        comment="TurnSnapshot 权威字段的 canonical SHA-256 digest。",
+    )
+    turn_id: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="当前回合稳定标识；禁止同 turn_id 写入不同 snapshot。",
+    )
+    turn_index: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        comment="当前回合在会话中的零基序号。",
+    )
+    user_id: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="快照构建时的可信用户范围。",
+    )
+    session_id: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="快照构建时的可信会话范围。",
+    )
+    pet_id: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="快照构建时的可信宠物范围。",
+    )
+    snapshot_version: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="TurnSnapshot 契约精确版本。",
+    )
+    snapshot_json: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        comment="通过 strict Pydantic 校验的 TurnSnapshot canonical JSON；不包含 prompt 或模型输出。",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        comment="快照写入时间。",
+    )
+
+
 class SemanticDAGRunProjectionModel(Base):
     """表示受限语义协作 DAG workflow 的只读状态投影。"""
 
@@ -1838,7 +1922,7 @@ class SemanticDAGTaskProjectionModel(Base):
             ondelete="CASCADE",
         ),
         CheckConstraint(
-            "terminal_state IN ('verified', 'repair_verified', 'not_applicable', 'blocked', 'disagreement', 'repair_exhausted', 'repair_failed', 'dependency_failed', 'review_failed', 'context_budget_exceeded', 'timeout')",
+            "terminal_state IN ('verified', 'repair_verified', 'clarification_required', 'not_applicable', 'blocked', 'disagreement', 'repair_exhausted', 'repair_failed', 'dependency_failed', 'review_failed', 'context_budget_exceeded', 'timeout')",
             name="ck_semantic_dag_task_projections_terminal_state",
         ),
         {
