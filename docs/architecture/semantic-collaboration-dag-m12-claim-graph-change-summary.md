@@ -16,6 +16,10 @@
 > **文档状态**：M12 生产工程边界已实现；M13 问诊投影已实现，临床安全与
 > 长期记忆仍为 TODO 空壳；待 M04 执行器组合与 M15 生产接入消费
 >
+> **2026-09 M11 状态机修订**：M11 auto-finalization 目标契约已决策；M12 需同步
+> 调整 partial gate 消费矩阵；该消费策略已实现，详见
+> [semantic-collaboration-dag-m11-auto-finalization-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m11-auto-finalization-change-summary.md)。
+>
 > **文档定位**：本文面向后续 M13 / M15 实现者，描述可依赖的稳定边界和有意
 > 未完成项；不作为软件包内部实现说明。
 
@@ -76,6 +80,7 @@ M12 的“一致性”只表示：
 | 结构一致性门禁 | 已实现 | 只做结构判断，不做语义判断 |
 | graph canonical digest / graph id | 已实现 | 相同输入与策略可确定性重建 |
 | graph 终态 | 已实现 | verified / partial / disagreement / blocked |
+| M11 auto-finalization 消费矩阵 | 已实现 | clarification_required 按策略分类为 partial graph |
 | graph 权威持久化 | 有意未实现 | graph 是可重建投影，不是第二权威事实源 |
 | M13 问诊投影 | 已实现 | 问诊领域消费 graph contract，不读取 M11 内部 payload |
 | M13 临床安全 / 长期记忆投影 | TODO 空壳 | 对应领域契约明确前显式失败 |
@@ -362,7 +367,7 @@ M11 current gate = verified 或 repair_verified
 
 ```text
 结构上可消费
-上游语义审查与证据门禁已通过
+上游语义审查与 M11 auto-finalization 已通过
 ```
 
 不含义：
@@ -387,8 +392,9 @@ current gate=repair_verified
 
 ```text
 结构门禁通过
-M11 current gate = verified / repair_verified
+M11 current gate = clarification_required
 存在 active clarification gap
+repair lineage / re-review 结构闭合（针对 repaired artifact）
 消费策略显式允许 partial graph
 ```
 
@@ -407,6 +413,9 @@ gap 应该自动追问
 gap 已消解
 下游必须追问
 ```
+
+该分类不改变 M11 gate。M12 不得把 `clarification_required` 写成或解释为
+`verified`。
 
 ### 8.3 `graph_disagreement`
 
@@ -645,9 +654,8 @@ graph blocked 后回退旧问诊抽取器
 
 | TODO | 当前行为 | 后续责任 | 启用条件 |
 |---|---|---|---|
-| Production evidence binding | M08 supported 后停在 `evidence_binding_pending`，M12 不提升 verified | 独立证据门禁 / M11 gate event | 自动或人工证据绑定契约明确 |
+| M11 auto-finalization | 已实现；新提交自动 verified / repair_verified | 已关闭 | 历史 pending 仅兼容读取 |
 | M04 SemanticTaskExecutor 组合 | M12 未进入生产任务执行链 | M04 | M06～M11 消费时序闭合 |
-| M13 临床安全投影 | TODO 空壳 | M13 | 临床安全输入契约明确 |
 | M13 临床安全投影 | TODO 空壳 | M13 | 临床安全输入契约明确 |
 | M13 长期记忆候选投影 | TODO 空壳 | M13 / 记忆领域 | 长期记忆候选策略明确 |
 | Graph 派生索引 | 不持久化 graph | M12 后续 / M14 | 查询或统计压力明确 |
@@ -690,9 +698,10 @@ M12 对接 M13 / M15 前至少满足：
 Turn Intent 缺失 blocked
 旧版本 artifact blocked
 payload digest 漂移 blocked
-evidence pending 不产生 graph_verified
+历史 evidence_binding_pending 不产生 graph_verified
 verified gate 产生 graph_verified
-active gap 在显式策略下产生 graph_partial_with_gaps
+clarification_required + active gap 在显式策略下产生 graph_partial_with_gaps
+M12 不提升或改写 M11 gate
 上游 disagreement 继承为 graph_disagreement
 patch 后未 re-review blocked
 repair 后 re-review + repair_verified 可消费
@@ -728,3 +737,4 @@ graph 持久化策略调整
 2. [semantic-collaboration-dag-production-implementation-plan.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-production-implementation-plan.md)
 3. [semantic-collaboration-dag-m11-artifact-store-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m11-artifact-store-change-summary.md)
 4. [semantic-collaboration-dag-m13-domain-projection-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m13-domain-projection-change-summary.md)
+5. [semantic-collaboration-dag-m11-auto-finalization-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m11-auto-finalization-change-summary.md)

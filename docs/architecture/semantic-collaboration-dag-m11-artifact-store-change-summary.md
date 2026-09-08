@@ -4,16 +4,20 @@
 作用: 总结受限语义协作 DAG M11 回合级 Artifact Store 与版本生产实现。
 范围: 覆盖轻量权威粒度、SQLAlchemy 表结构、append-only 版本链、gate event、
       幂等提交、M08/M10 端口接入、派生索引、stale 治理与系统性人工审查。
-说明: 本文记录生产契约与验收状态，不宣称 M04 执行器、M12 Claim Graph 或
-      领域投影已经完成。
+说明: 本文记录生产契约与验收状态，不宣称 M04 执行器或真实部署联调已完成。
 维护: 当 artifact 粒度、gate 状态、索引、幂等键或 stale 语义调整时同步更新。
 =============================================================================
 -->
 
 # 受限语义协作 DAG M11 Artifact Store 变更总结
 
-> **文档状态**：M11 生产工程边界已实现；待 M04 任务执行器组合、真实 PostgreSQL
-> 迁移部署与 M12 Claim Graph 消费联调
+> **文档状态**：M11 生产工程边界已实现；待 M04 任务执行器组合与真实
+> PostgreSQL 迁移部署
+>
+> **2026-09 状态机修订**：独立 Evidence Binding 阶段已决策移除，目标行为改为
+> M11 deterministic auto-finalization；新生产提交不再写
+> `evidence_binding_pending`，详见
+> [semantic-collaboration-dag-m11-auto-finalization-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m11-auto-finalization-change-summary.md)。
 
 ## 1. 当前状态
 
@@ -32,6 +36,7 @@
 | M08 ReviewArtifactStore 端口 | 已实现 |
 | M10 snapshot / patch store 端口 | 已实现 |
 | 系统性人工审查 gate event | 已实现 |
+| M11 deterministic auto-finalization | 已实现 |
 | Alembic 0023 迁移 | 已实现 |
 | M04 生产执行器组合 | 未接入 |
 | M12 Claim Graph | 已在后续 M12 阶段实现 |
@@ -118,7 +123,7 @@ v2 不能再作为 M10 base snapshot
 v1 保留用于审计
 ```
 
-## 5. Gate event
+## 5. Gate event 与自动终态化修订
 
 Gate 不存储为 artifact payload 字段，而由：
 
@@ -128,18 +133,23 @@ semantic_artifact_gate_events
 
 以 append-only event 派生。
 
-M08 supported 初始事件：
+历史实现中，M08 supported 初始事件为：
 
 ```text
 semantic_review_supported
 → evidence_binding_pending
 ```
 
-不会直接：
+当前生产契约不再写入 `evidence_binding_pending`，而是在同一 M11 权威提交事务内执行
+确定性结构校验，并在通过后追加：
 
 ```text
-verified
+semantic_review_supported
+→ verified
 ```
+
+`clarification_required` 不伪装为 `verified`；M12 仅在显式策略下将其分类为
+`graph_partial_with_gaps`。
 
 M10 patch 后：
 
@@ -147,10 +157,16 @@ M10 patch 后：
 patch_applied
 ```
 
+patch 后必须等待 M07 / M08 re-review；re-review 支持且结构闭合时，M11 追加：
+
+```text
+repair_verified
+```
+
 系统性人工审查记录为 gate event，但 gate 保持：
 
 ```text
-evidence_binding_pending
+当前显式业务 gate
 ```
 
 人工审查不逐条修改 claim，也不批量标记 verified。
@@ -316,7 +332,8 @@ long_term_memory_written = false
 
 ```text
 UPDATE / DELETE 权威 artifact payload
-把 semantic_review_supported 写成 verified
+跳过 M11 结构终态化，把 semantic_review_supported 直接写成 verified
+批量提升历史 evidence_binding_pending
 人工批量 verified
 旧 claim review 迁移到新 claim
 自动 resolve clarification gap
@@ -332,8 +349,8 @@ UPDATE / DELETE 权威 artifact payload
 ```text
 ruff check semantic_collaboration + M11 tests: PASS
 mypy src/vet_agent/semantic_collaboration: PASS
-pytest tests/test_semantic_collaboration_*.py: 111 passed
-pytest 全量默认测试: 329 passed, 84 skipped
+pytest tests/test_semantic_collaboration_*.py: 120 passed
+pytest 全量默认测试: 338 passed, 84 skipped
 ```
 
 新增测试覆盖：
@@ -341,7 +358,10 @@ pytest 全量默认测试: 329 passed, 84 skipped
 ```text
 M08 review 内嵌回合 artifact
 review 幂等重放
-supported → evidence_binding_pending
+supported + Turn Intent + 结构闭合 → M11 system event 自动 verified
+clarification_required 保持显式 partial gate
+repair + re-review supported → repair_verified
+历史 evidence_binding_pending 不被 M12 提升或批量迁移
 clarification gap 派生索引
 M10 base snapshot
 M10 patch 后 v2
@@ -358,3 +378,4 @@ repair-of-repair blocked
 2. [semantic-collaboration-dag-production-implementation-plan.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-production-implementation-plan.md)
 3. [semantic-collaboration-dag-m10-repair-skill-patch-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m10-repair-skill-patch-change-summary.md)
 4. [semantic-collaboration-dag-pre-m11-integration-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-pre-m11-integration-change-summary.md)
+5. [semantic-collaboration-dag-m11-auto-finalization-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m11-auto-finalization-change-summary.md)

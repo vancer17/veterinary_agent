@@ -6,7 +6,7 @@
       Jinja 模板、版本化 Prompt Renderer、结构化 tag 输入、极薄 strict JSON
       输出、Generation Runner、精确模型策略、最小结构 verifier 与测试边界。
 说明: 本文记录已实现的生产工程边界；不接入 VetOrchestrator，不提交 artifact，
-      不执行语义 Review / Evidence Binding，不调用问诊、临床安全或长期记忆领域。
+      不执行语义 Review / M11 auto-finalization，不调用问诊、临床安全或长期记忆领域。
 维护: 当生成 SKILL 输出契约、Prompt Renderer、模型策略或 M06 / M07 接入状态
       调整时，必须同步更新本文。
 =============================================================================
@@ -16,6 +16,9 @@
 
 > **文档状态**：M06 生产契约与实现已完成；待 M08 Review、M11 Artifact Store、
 > `SemanticTaskExecutor` 组合和真实 LiteLLM / Temporal 联调后关闭
+>
+> **2026-09 后续修订**：M06 不输出 evidence 自证不变；独立 Evidence Binding
+> 已决策由 M11 deterministic auto-finalization 取代。
 
 ## 1. 当前状态
 
@@ -362,7 +365,7 @@ claim envelope 分配尚未实现，必须等 M08 审查与可能 repair 后的 
 | 持久化 TurnSnapshotReader | 显式 Fail Fast | M02 / M06 运行时接入 | 定义 snapshot 持久化、按 digest 读取与生命周期契约 |
 | Coverage Review | 已在后续 M08 实现 | M08 | 输入 current_turn 与 generated claims，输出固定布尔覆盖矩阵 |
 | Faithfulness Review | 已在后续 M08 实现 | M08 | 单 claim 输入，输出中文语义漂移布尔矩阵 |
-| Evidence Binding | 未实现，当前可人工审查 | 后置证据绑定 / 人工审查 | 独立 anchor 契约或人工审查记录契约明确；M08 不自证 evidence |
+| M11 auto-finalization | M06 不参与；不输出 evidence 自证 | M11 | deterministic 结构终态化与 gate event 契约实现 |
 | Claim Envelope Allocator | 未实现 | M09 / M12 | claim 列表通过 M08 审查与 M09/M10 修复后稳定；M08 不分配 envelope |
 | Artifact Store | 未实现 | M11 | append-only、版本、lineage、stale 与幂等提交契约明确 |
 | `SemanticTaskExecutor` 生产组合 | TODO executor 继续显式失败 | M04 / M06 / M07 / M11 | M07、M08、M11 的消费时序与失败终态闭合 |
@@ -552,3 +555,4 @@ SemanticTaskExecutor 组合完成
 1. [semantic-collaboration-dag-production-architecture.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-production-architecture.md)
 2. [semantic-collaboration-dag-production-implementation-plan.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-production-implementation-plan.md)
 3. [semantic-collaboration-dag-m08-review-skill-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m08-review-skill-change-summary.md)
+4. [semantic-collaboration-dag-m11-auto-finalization-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m11-auto-finalization-change-summary.md)

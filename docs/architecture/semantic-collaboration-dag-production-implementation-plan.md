@@ -24,6 +24,10 @@
 > [semantic-collaboration-dag-m06-production-boundary-revision.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m06-production-boundary-revision.md)
 > 收敛为自然语言 proposition 生成与固定布尔审查矩阵。
 >
+> **当前状态机修订**：独立 Evidence Binding 阶段已决策移除，改为 M11
+> deterministic auto-finalization；生产契约已实现，详见
+> [semantic-collaboration-dag-m11-auto-finalization-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m11-auto-finalization-change-summary.md)。
+>
 > **适用范围**：生产工程实现顺序、模块职责、模块依赖、交付物、验收标准、
 > 持久化边界、测试门禁、生产接入与回滚
 >
@@ -149,7 +153,7 @@ tests/test_semantic_collaboration*.py
 | M08 | Review SKILL | Coverage Review、Faithfulness Review、固定布尔矩阵 | Phase 3 |
 | M09 | Repair Planner | review dimension mapping、repair budget | Phase 4 |
 | M10 | Repair 与 Patch | typed patch、patch 校验与应用 | Phase 4 |
-| M11 | Artifact Store | append-only artifact、版本、lineage、stale | Phase 1 契约 / Phase 4 实现 |
+| M11 | Artifact Store | append-only artifact、版本、auto-finalization、lineage、stale | Phase 1 契约 / Phase 4 实现 |
 | M12 | Claim Graph | proposition graph assembly、一致性门禁 | Phase 5 |
 | M13 | 领域投影 Adapter | 问诊、临床安全、长期记忆投影契约 | Phase 5 / 7 |
 | M14 | 可观测性 | trace、metrics、failure attribution | 全阶段 |
@@ -1028,6 +1032,7 @@ claim review 与 gap 只保存可重建查询索引。
 SemanticTurnArtifactPayload
 SemanticArtifactVersion
 ArtifactGateEvent
+ArtifactAutoFinalizationPolicy
 ArtifactCommitRequest
 StaleMarker
 ClaimReviewIndex
@@ -1053,6 +1058,7 @@ semantic_clarification_gap_index
 ```text
 M08 Review Bundle
 → 回合级 artifact v1 / re-review 新版本
+→ M11 deterministic auto-finalization
 
 M10 PatchSet + Preview
 → 重新应用 patch 并校验 preview
@@ -1077,8 +1083,12 @@ artifact payload append-only
 同一 repair plan id 幂等重放返回同一新版本
 payload digest 读取时复算
 gate 由 event 派生
-semantic_review_supported 只进入 evidence_binding_pending
-M08 supported 不直接 verified
+M08 supported + Turn Intent + 结构闭合 → M11 system event 自动 verified
+合法 no_explicit_fact 空图可自动 verified
+clarification_required 保持显式 partial gate，不伪装 verified
+patch_applied 等待 re-review，不自动 repair_verified
+repair + re-review supported + 结构闭合 → repair_verified
+历史 evidence_binding_pending 仅读取兼容，不批量提升
 M10 patch base version 冲突 blocked
 repair output 不允许再次 repair
 claim review / clarification gap 可从 payload 重建
@@ -1154,9 +1164,11 @@ review record 必须覆盖全部 claim indexes
 gap 必须引用当前 claim digest
 repair_depth=1 时必须有 repair lineage 和 re-review bundle
 patch_applied blocked
-evidence_binding_pending 不得 graph_verified
 只有 verified / repair_verified gate 可进入 graph_verified
-active gap 保留为 graph_partial_with_gaps
+clarification_required 仅在 allow_partial_with_gaps 策略下输出 graph_partial_with_gaps
+repair 后 re-review 仍 clarification 时按显式策略输出 partial graph
+active gap 保留，不被自动 resolve
+M12 不提升 M11 gate，不写 gate event
 上游 disagreement 继承为 graph_disagreement
 不做语义重复 / 语义冲突判断
 ```
@@ -1180,6 +1192,9 @@ ProjectionResult
 当前生产实现状态：问诊投影 Adapter、通用 ProjectionContract 与统一
 ProjectionResult 已实现；临床安全与长期记忆保留 TODO 空壳并显式返回
 `adapter_not_implemented`。M13 不新增权威持久化，也不写任何领域状态。
+M13 之后的问诊动态证据重构由
+[consultation-dynamic-evidence-architecture.md](/home/vancer17/veterinary_agent/docs/architecture/consultation-dynamic-evidence-architecture.md)
+单独立项，不属于本计划的 M01～M15 语义协作 DAG 交付范围。
 
 **实现顺序**
 
@@ -1256,7 +1271,7 @@ artifact_id / version
 review_outcome
 review_matrix_digest
 clarification_gap_status
-evidence_binding_status
+auto_finalization_status
 failure_code
 repair_lineage
 latency
@@ -1456,11 +1471,11 @@ review 失败不等于原任务通过
 长期记忆
 ```
 
-### Phase 4：修复、版本与证据门禁
+### Phase 4：修复、版本与 M11 自动终态化
 
 **目标**
 
-交付局部修复、artifact 版本、证据门禁状态和人工审查过渡机制。
+交付局部修复、artifact 版本、M11 deterministic auto-finalization 和人工审查审计机制。
 
 **当前实现状态**
 
@@ -1468,6 +1483,7 @@ review 失败不等于原任务通过
 M09 Repair Planner: 已实现；尚未接入 M04 生产任务执行器
 M10 Repair SKILL / typed patch: 已实现；尚未接入 M04 任务执行器
 M11 ArtifactStore: 已实现；尚未接入 M04 生产任务执行器
+M11 auto-finalization: 已实现；尚未接入 M04 生产任务执行器
 M14 repair metrics: 未完成
 ```
 
@@ -1489,7 +1505,8 @@ M09 Repair Planner
 M10 Repair SKILL / typed patch
 M11 ArtifactStore 生产实现
 M08/M09 clarification_required 与 repair_then_clarification_required 状态
-M11 evidence_binding_pending / human_review_required 状态
+M11 deterministic auto-finalization
+M11 human_review_required 状态
 M11 stale marker
 M14 repair metrics
 ```
@@ -1505,7 +1522,10 @@ repair 不自由重写完整 artifact
 patch base version 校验有效
 repair budget 有效
 repair_exhausted 有效
-semantic_review_supported 不等于 verified
+M08 supported + 结构闭合自动 verified
+clarification_required 不伪装 verified
+patch_applied 不自动 repair_verified
+repair + re-review supported 自动 repair_verified
 人工审查显式记录 review_mode=human
 上游修复触发下游 stale
 ```
@@ -1531,7 +1551,9 @@ M14 graph metrics
 **验收**
 
 ```text
-graph 只消费完整门禁后的 verified artifact
+graph 只消费 M11 显式可消费 gate
+verified / repair_verified 输出 graph_verified
+clarification_required 在显式策略下输出 graph_partial_with_gaps
 局部 gap 不被抹除
 图级冲突显式保留
 问诊 adapter 不把 reported normal 映射为 denied
@@ -1848,7 +1870,7 @@ PR 10 Faithfulness Review 固定布尔矩阵
 PR 11 Coverage Review 与 missing hint 治理
 PR 12 deterministic review outcome derivation
 PR 13 Repair planner
-PR 14 Repair patch、artifact version 与证据门禁状态
+PR 14 Repair patch、artifact version 与 M11 auto-finalization
 PR 15 proposition claim graph
 PR 16 问诊投影 adapter
 PR 17 生产接入与配置
@@ -1918,15 +1940,17 @@ Review 生产代码时应检查：
 13. 医学推断 / 风险 / 建议添加只能被删除或还原为用户表述
 14. patch base version 校验有效
 15. repair budget 和 repair_exhausted 有效
-16. artifact 版本、lineage、clarification gap 与证据门禁状态可追溯
+16. artifact 版本、lineage、clarification gap 与 auto-finalization gate 可追溯
 17. 上游修复触发下游 stale
-18. claim graph 只消费完整门禁后的 verified artifact
-19. 领域只通过 adapter 消费
-20. preprocessing 不写问诊状态
-21. preprocessing 不触发临床安全 evaluator / OPA / required_context
-22. 失败不会变成空 facts
-23. 生产失败可显式回滚或止血
-24. trace / metrics 可定位任一任务
+18. claim graph 只消费 M11 显式可消费 gate
+19. M11 supported + 结构闭合自动 verified，clarification_required 不伪装 verified
+20. patch_applied 不自动 repair_verified，历史 evidence_binding_pending 不批量提升
+21. 领域只通过 adapter 消费
+22. preprocessing 不写问诊状态
+23. preprocessing 不触发临床安全 evaluator / OPA / required_context
+24. 失败不会变成空 facts
+25. 生产失败可显式回滚或止血
+26. trace / metrics 可定位任一任务
 ```
 
 ## 12. 明确不做事项
@@ -1968,4 +1992,7 @@ DSPy 接入
 16. [semantic-collaboration-dag-m11-artifact-store-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m11-artifact-store-change-summary.md)
 17. [semantic-collaboration-dag-m12-claim-graph-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m12-claim-graph-change-summary.md)
 18. [semantic-collaboration-dag-m13-domain-projection-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m13-domain-projection-change-summary.md)
-19. [temporal-dev-environment-baseline.md](/home/vancer17/veterinary_agent/docs/deployment/temporal-dev-environment-baseline.md)
+19. [semantic-collaboration-dag-m11-auto-finalization-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m11-auto-finalization-change-summary.md)
+20. [consultation-dynamic-evidence-architecture.md](/home/vancer17/veterinary_agent/docs/architecture/consultation-dynamic-evidence-architecture.md)
+21. [veterinary-rag-knowledge-graph-architecture.md](/home/vancer17/veterinary_agent/docs/architecture/veterinary-rag-knowledge-graph-architecture.md)
+22. [temporal-dev-environment-baseline.md](/home/vancer17/veterinary_agent/docs/deployment/temporal-dev-environment-baseline.md)

@@ -21,6 +21,10 @@
 > Inventory，详见
 > [semantic-collaboration-dag-m06-production-boundary-revision.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m06-production-boundary-revision.md)。
 >
+> **当前状态机修订**：独立 Evidence Binding 阶段已决策移除，改为 M11
+> deterministic auto-finalization；该生产契约已实现，详见
+> [semantic-collaboration-dag-m11-auto-finalization-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m11-auto-finalization-change-summary.md)。
+>
 > **适用范围**：输入前置语义协作、窄域语义生成、结构化审查、局部重写、
 > typed patch、claim graph 组装、质量门禁与领域投影契约
 >
@@ -66,7 +70,7 @@ contract-first
 1. 将用户当前回合显式语义稳定转换为可审查的自包含自然语言 proposition，并在后续组装为可审计 claim graph。
 2. 在 proposition 中保留 normal、denied、uncertain、corrected、未观察和用户归因等语义差异；结构化 enum 映射后置到各领域自身的 candidate-only 语义契约，不由 M13 用文本规则推断。
 3. 支持 shared scope、多事实陈述、多轮指代、用户纠正和控制意图。
-4. 保留上下文版本，并将 evidence binding 后置为独立治理状态；生成 SKILL 不自证 evidence。
+4. 保留上下文版本；M11 保存权威 provenance 并执行确定性 auto-finalization，生成 SKILL 不自证 evidence，也不要求 claim 回指用户原文。
 5. 通过正交 Review SKILL 发现 schema 无法判断的语义忠实性问题。
 6. 通过局部 typed patch 修复可恢复错误，而不是整轮自由重写。
 7. 让每个任务都有显式终态，失败不得表现为空事实。
@@ -1140,8 +1144,9 @@ repair budget 未超限
 patch 不产生 no-op 结果
 ```
 
-Evidence binding 不作为 Patch Applier 的语义判断条件；patch 后仍处于
-`evidence_binding_pending`，除非独立证据门禁已完成。
+Evidence binding 不作为 Patch Applier 的语义判断条件；patch 后必须保持
+`patch_applied` 并等待 M07 / M08 re-review。只有 re-review 支持且 M11 结构终态化
+通过时，才可进入 `repair_verified`。
 
 ### 11.4 修复与澄清边界
 
@@ -1214,7 +1219,7 @@ repair_depth = 1
 
 ## 12. Artifact 状态机与 DAG 闭环
 
-### 12.1 任务与证据门禁状态
+### 12.1 任务与终态化门禁状态
 
 每个任务必须有显式终态或门禁状态：
 
@@ -1224,7 +1229,6 @@ semantic_review_pending
 semantic_review_supported
 clarification_required
 repair_then_clarification_required
-evidence_binding_pending
 human_review_required
 verified
 repair_verified
@@ -1239,9 +1243,30 @@ context_budget_exceeded
 timeout
 ```
 
-`semantic_review_supported` 不等于 `verified`。在生产证据门禁完成前，artifact 必须保持
-`evidence_binding_pending`、`clarification_required`、`repair_then_clarification_required`
-或 `human_review_required`。
+`evidence_binding_pending` 仅作为历史 gate 保留读取兼容；新生产提交不得再写入该状态。
+
+`semantic_review_supported` 是 M08 的审查结论，不是 M11 gate 本身。M11 必须在
+commit 事务内完成确定性结构终态化：
+
+```text
+M08 supported + 非 empty / 合法 empty + 结构闭合
+且内嵌 Turn Intent
+→ verified
+
+M08 clarification_required
+→ clarification_required
+→ M12 仅在 allow_partial_with_gaps 策略下输出 graph_partial_with_gaps
+
+repair + re-review supported + 结构闭合
+→ repair_verified
+
+patch_applied 未 re-review
+→ blocked
+```
+
+`verified` / `repair_verified` 表示 M08 支持性结论、M11 provenance 与结构闭合、
+auto-finalization policy 共同授予的下游消费资格；不表示医学正确、人工事实认证或
+claim-to-original-text anchor。
 
 ### 12.2 空结果语义
 
@@ -1454,6 +1479,10 @@ graph_blocked
 显式 TODO 空壳。M13 不新增权威持久化，投影结果绑定 M12 graph 身份并可由
 M14 记录 trace。
 
+M13 之后的问诊领域动态证据目标架构由
+[consultation-dynamic-evidence-architecture.md](/home/vancer17/veterinary_agent/docs/architecture/consultation-dynamic-evidence-architecture.md)
+单独定义；本文只约束语义协作 DAG 到 M13 的输出边界。
+
 ### 14.1 投影原则
 
 语义协作 DAG 只输出 graph build result 与显式 gap / disagreement 终态。
@@ -1624,10 +1653,10 @@ M11 权威 artifact 提交与 M07 / M08 re-review 闭环。
 
 ### 阶段 E：Artifact 与 Claim Graph
 
-交付 artifact store、版本管理、repair lineage、stale 标记、graph assembly 和
-consistency gate。
+交付 artifact store、版本管理、M11 auto-finalization、repair lineage、stale 标记、
+graph assembly 和 consistency gate。
 
-验收：每个任务有终态；上游变化触发下游 stale；graph 只消费 verified artifact。
+验收：每个任务有终态；上游变化触发下游 stale；graph 只消费 M11 显式可消费 gate。
 
 ### 阶段 F：领域投影与生产接入
 
@@ -1660,6 +1689,10 @@ base version 冲突拒绝
 repair budget 耗尽终态
 上游修复后的下游 stale
 graph consistency 冲突
+M11 supported + 结构闭合自动 verified
+clarification_required 不伪装 verified
+patch_applied 不自动 repair_verified
+历史 evidence_binding_pending 不批量提升
 领域 adapter 隔离
 失败不得转换为空 facts
 ```
@@ -1712,4 +1745,7 @@ durable execution 边界
 15. [semantic-collaboration-dag-m11-artifact-store-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m11-artifact-store-change-summary.md)
 16. [semantic-collaboration-dag-m12-claim-graph-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m12-claim-graph-change-summary.md)
 17. [semantic-collaboration-dag-m13-domain-projection-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m13-domain-projection-change-summary.md)
-17. [temporal-dev-environment-baseline.md](/home/vancer17/veterinary_agent/docs/deployment/temporal-dev-environment-baseline.md)
+18. [semantic-collaboration-dag-m11-auto-finalization-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m11-auto-finalization-change-summary.md)
+19. [consultation-dynamic-evidence-architecture.md](/home/vancer17/veterinary_agent/docs/architecture/consultation-dynamic-evidence-architecture.md)
+20. [veterinary-rag-knowledge-graph-architecture.md](/home/vancer17/veterinary_agent/docs/architecture/veterinary-rag-knowledge-graph-architecture.md)
+21. [temporal-dev-environment-baseline.md](/home/vancer17/veterinary_agent/docs/deployment/temporal-dev-environment-baseline.md)

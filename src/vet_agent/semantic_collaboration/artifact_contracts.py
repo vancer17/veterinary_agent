@@ -6,7 +6,8 @@
       repair lineage、gate event、stale marker、派生索引、幂等提交请求、
       系统性人工审查记录与仓储端口。
 说明：本文件不调用模型、不做医学判断、不写问诊或临床安全领域，也不把
-      semantic_review_supported 伪装成 verified；权威粒度是回合级版本。
+      semantic_review_supported 跳过结构终态化直接伪装成 verified；
+      权威粒度是回合级版本。
 =============================================================================
 """
 
@@ -40,9 +41,10 @@ class SemanticArtifactKind(StrEnum):
 
 
 class SemanticArtifactGate(StrEnum):
-    """表示回合级语义 artifact 的证据与修复门禁状态。
+    """表示回合级语义 artifact 的结构终态化与修复门禁状态。
 
-    :return: 无返回值；gate 由 append-only event 派生，不是 payload 字段。
+    :return: 无返回值；gate 由 append-only event 派生；历史
+             evidence_binding_pending 仅保留兼容读取，新生产路径不再写入。
     """
 
     SCHEMA_VALID = "schema_valid"
@@ -64,7 +66,8 @@ class SemanticArtifactGate(StrEnum):
 class SemanticArtifactActorType(StrEnum):
     """表示触发 artifact gate event 的系统 actor 类型。
 
-    :return: 无返回值；该枚举不表示医学或领域决策者。
+    :return: 无返回值；evidence_binding 仅用于历史事件兼容，不表示医学
+             或领域决策者。
     """
 
     SYSTEM = "system"

@@ -100,20 +100,48 @@ class SemanticGraphStructuralConsistencyGate:
                 SemanticGraphFailureCode.REPAIR_VERIFICATION_PENDING,
                 "patch applied artifact awaits M07 and M08 re-review",
             )
-        if current_gate.to_gate not in {
+        consumable_gates = {
             SemanticArtifactGate.VERIFIED,
             SemanticArtifactGate.REPAIR_VERIFIED,
-        }:
+            SemanticArtifactGate.CLARIFICATION_REQUIRED,
+        }
+        if current_gate.to_gate not in consumable_gates:
             return self._blocked(
                 SemanticGraphFailureCode.GATE_NOT_CONSUMABLE,
                 "semantic artifact gate is not consumable as a claim graph",
             )
-        if artifact.payload.repair_depth == 1 and current_gate.to_gate is not (
-            SemanticArtifactGate.REPAIR_VERIFIED
-        ):
+        repaired_gate_closed = (
+            current_gate.to_gate
+            in {
+                SemanticArtifactGate.REPAIR_VERIFIED,
+                SemanticArtifactGate.CLARIFICATION_REQUIRED,
+            }
+            and artifact.payload.repair_lineage is not None
+        )
+        if artifact.payload.repair_depth == 1 and not repaired_gate_closed:
             return self._blocked(
                 SemanticGraphFailureCode.GATE_NOT_CONSUMABLE,
-                "repaired artifact requires repair_verified gate",
+                "repaired artifact requires repair_verified or reviewed clarification gate",
+            )
+        has_gaps = bool(artifact.payload.review_bundle.clarification_gaps)
+        if current_gate.to_gate is SemanticArtifactGate.CLARIFICATION_REQUIRED:
+            if not has_gaps:
+                return self._blocked(
+                    SemanticGraphFailureCode.STRUCTURE_INVALID,
+                    "clarification required artifact does not carry active gaps",
+                )
+            if not policy.allow_partial_with_gaps:
+                return self._blocked(
+                    SemanticGraphFailureCode.PARTIAL_GRAPH_NOT_ALLOWED,
+                    "semantic graph gaps are not allowed by policy",
+                )
+            return SemanticGraphGateDecision(
+                SemanticGraphTerminalState.GRAPH_PARTIAL_WITH_GAPS,
+            )
+        if has_gaps:
+            return self._blocked(
+                SemanticGraphFailureCode.GATE_NOT_CONSUMABLE,
+                "verified artifact cannot carry active clarification gaps",
             )
         coverage = artifact.payload.review_bundle.coverage_review.derived
         if not artifact.payload.claims:
@@ -129,17 +157,6 @@ class SemanticGraphStructuralConsistencyGate:
                 )
             return SemanticGraphGateDecision(
                 SemanticGraphTerminalState.GRAPH_VERIFIED,
-            )
-        if artifact.payload.review_bundle.clarification_gaps and not (
-            policy.allow_partial_with_gaps
-        ):
-            return self._blocked(
-                SemanticGraphFailureCode.PARTIAL_GRAPH_NOT_ALLOWED,
-                "semantic graph gaps are not allowed by policy",
-            )
-        if artifact.payload.review_bundle.clarification_gaps:
-            return SemanticGraphGateDecision(
-                SemanticGraphTerminalState.GRAPH_PARTIAL_WITH_GAPS,
             )
         return SemanticGraphGateDecision(SemanticGraphTerminalState.GRAPH_VERIFIED)
 

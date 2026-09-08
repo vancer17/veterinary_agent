@@ -14,6 +14,11 @@
 
 from __future__ import annotations
 
+from .artifact_auto_finalization import (
+    SEMANTIC_ARTIFACT_AUTO_FINALIZATION_POLICY_VERSION,
+    SemanticArtifactAutoFinalizationDecision,
+    SemanticArtifactAutoFinalizationPolicy,
+)
 from .artifact_contracts import (
     SemanticArtifactActorType,
     SemanticArtifactClaimRecord,
@@ -425,6 +430,7 @@ __all__ = [
     "PLAN_POLICY_VERSION",
     "PRODUCTION_PLAN_POLICY_ID",
     "PRODUCTION_SEMANTIC_SKILL_SPECS",
+    "SEMANTIC_ARTIFACT_AUTO_FINALIZATION_POLICY_VERSION",
     "SKILL_DOCUMENT_REQUIRED_MODEL_SECTIONS",
     "SKILL_DOCUMENT_SECTIONS",
     "SKILL_DOC_REQUIRED_SECTIONS",
@@ -519,6 +525,8 @@ __all__ = [
     "SchemaContract",
     "SchemaContractReference",
     "SemanticArtifactActorType",
+    "SemanticArtifactAutoFinalizationDecision",
+    "SemanticArtifactAutoFinalizationPolicy",
     "SemanticArtifactClaimRecord",
     "SemanticArtifactCommitBundle",
     "SemanticArtifactCommitRequestKind",
