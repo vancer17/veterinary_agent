@@ -81,6 +81,55 @@ class SemanticReviewOutcome(StrEnum):
     REVIEW_FAILED = "review_failed"
 
 
+class SemanticClaimReviewSource(BaseModel):
+    """表示 M08 可审查的 Claim Inventory 来源身份。
+
+    :return: 无返回值；修复后 re-review 复用原始 M06 任务与 proposal 身份，
+             但 claims 可以来自 M10 deterministic preview，不伪造成新的模型输出。
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+        strict=True,
+        validate_assignment=True,
+    )
+
+    execution: SemanticTaskExecutionRequest = Field(
+        description="原始 Claim Inventory 权威任务执行身份。",
+    )
+    source_proposal_digest: str = Field(
+        pattern=r"^[a-f0-9]{64}$",
+        description="原始 M06 Claim Inventory proposal digest。",
+    )
+
+    @model_validator(mode="after")
+    def validate_source_identity(self) -> Self:
+        """校验 Review 来源仍绑定 Claim Inventory 任务。
+
+        :return: 返回可用于 Coverage / Faithfulness Review 的来源身份。
+        :raises ValueError: 任务不是 Claim Inventory 时抛出。
+        """
+        if self.execution.task.skill_id != "claim_inventory":
+            raise ValueError("semantic claim review source is not claim inventory")
+        return self
+
+    @classmethod
+    def from_proposal(
+        cls,
+        proposal: SemanticModelProposal,
+    ) -> SemanticClaimReviewSource:
+        """从 M07 accepted proposal 构造 Review 来源身份。
+
+        :param proposal: M05 返回且通过 M07 验证的 Claim Inventory proposal。
+        :return: 返回原始任务与 proposal digest 闭合的来源身份。
+        """
+        return cls(
+            execution=proposal.execution,
+            source_proposal_digest=proposal.proposal_digest,
+        )
+
+
 class ReviewVerificationState(StrEnum):
     """表示单个 Review 模型 proposal 的结构验证结果。
 
@@ -686,7 +735,7 @@ def compute_review_task_hash(
 
 
 def build_claim_coverage_review_execution(
-    source: SemanticModelProposal,
+    source: SemanticModelProposal | SemanticClaimReviewSource,
     spec: SkillSpec,
 ) -> SemanticTaskExecutionRequest:
     """构造 Coverage Review 的确定性动态任务执行请求。
@@ -720,7 +769,7 @@ def build_claim_coverage_review_execution(
 
 
 def build_claim_faithfulness_review_execution(
-    source: SemanticModelProposal,
+    source: SemanticModelProposal | SemanticClaimReviewSource,
     spec: SkillSpec,
     *,
     claim_index: int,

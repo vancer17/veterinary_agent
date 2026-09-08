@@ -132,6 +132,8 @@ from .errors import (
     SemanticReviewContractError,
     SemanticSkillDocumentError,
     SemanticTaskExecutionError,
+    SemanticTurnSnapshotConflictError,
+    SemanticTurnSnapshotStoreError,
     SkillCatalogError,
     SkillContractError,
     SkillProjectionError,
@@ -232,6 +234,16 @@ from .plan_policy import (
     build_production_plan_policy,
 )
 from .plan_validator import PlanValidator
+from .preprocessing import (
+    SemanticConsultationPreprocessingService,
+    build_semantic_consultation_preprocessing_service,
+)
+from .preprocessing_contracts import (
+    SemanticConsultationPreprocessingRequest,
+    SemanticConsultationPreprocessingResult,
+    SemanticPreprocessingExecutionState,
+    SemanticPreprocessingFailureCode,
+)
 from .production import (
     CLAIM_COVERAGE_REVIEW_SPEC,
     CLAIM_FAITHFULNESS_REVIEW_SPEC,
@@ -307,6 +319,7 @@ from .review_contracts import (
     ClarificationGapProposal,
     ReviewArtifactStore,
     ReviewVerificationState,
+    SemanticClaimReviewSource,
     SemanticReviewBundle,
     SemanticReviewOutcome,
     build_claim_coverage_review_execution,
@@ -392,6 +405,12 @@ from .snapshot_contracts import (
     VerifiedPriorFactSummaryStatus,
     canonical_turn_snapshot_json,
     compute_turn_snapshot_digest,
+)
+from .snapshot_store import (
+    InMemorySemanticTurnSnapshotStore,
+    PersistentTurnSnapshotReader,
+    PostgresSemanticTurnSnapshotStore,
+    SemanticTurnSnapshotStore,
 )
 from .temporal_scheduler import (
     SemanticDAGWorkflow,
@@ -487,11 +506,13 @@ __all__ = [
     "FieldOwnershipPath",
     "GenerationVerificationState",
     "InMemorySemanticDAGProjectionRepository",
+    "InMemorySemanticTurnSnapshotStore",
     "ModifiedClaimUpdate",
     "OriginalTextExtractionPolicy",
     "OriginalUserText",
     "PatchApplicationPreview",
     "PatchApplicationState",
+    "PersistentTurnSnapshotReader",
     "PlanCompilationError",
     "PlanDependency",
     "PlanDependencyRule",
@@ -512,6 +533,7 @@ __all__ = [
     "PostgresSemanticArtifactRepository",
     "PostgresSemanticArtifactStore",
     "PostgresSemanticDAGProjectionRepository",
+    "PostgresSemanticTurnSnapshotStore",
     "RepairMapping",
     "RepairPatchStore",
     "RepairTargetArtifactSnapshot",
@@ -543,8 +565,12 @@ __all__ = [
     "SemanticClaimGraph",
     "SemanticClaimGraphBuilder",
     "SemanticClaimReviewIndexRecord",
+    "SemanticClaimReviewSource",
     "SemanticClarificationGapIndexRecord",
     "SemanticCollaborationError",
+    "SemanticConsultationPreprocessingRequest",
+    "SemanticConsultationPreprocessingResult",
+    "SemanticConsultationPreprocessingService",
     "SemanticDAGProjectionRepository",
     "SemanticDAGWorkflow",
     "SemanticDomainProjectionAdapter",
@@ -579,6 +605,8 @@ __all__ = [
     "SemanticPatchVerificationResult",
     "SemanticPatchVerificationState",
     "SemanticPatchVerifier",
+    "SemanticPreprocessingExecutionState",
+    "SemanticPreprocessingFailureCode",
     "SemanticProjectionAdapterKind",
     "SemanticProjectionContract",
     "SemanticProjectionExecutionState",
@@ -617,6 +645,9 @@ __all__ = [
     "SemanticTaskExecutor",
     "SemanticTurnArtifactPayload",
     "SemanticTurnIntentSection",
+    "SemanticTurnSnapshotConflictError",
+    "SemanticTurnSnapshotStore",
+    "SemanticTurnSnapshotStoreError",
     "SkillCatalog",
     "SkillCatalogError",
     "SkillContextResource",
@@ -710,6 +741,7 @@ __all__ = [
     "build_production_skill_catalog",
     "build_projected_projection_result",
     "build_rejected_projection_result",
+    "build_semantic_consultation_preprocessing_service",
     "build_temporal_semantic_dag_worker",
     "canonical_artifact_json",
     "canonical_claim_graph_json",

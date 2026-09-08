@@ -47,6 +47,7 @@ from vet_agent.semantic_collaboration import (
     StructuredLLMCallMetadata,
     StructuredLLMGateway,
     StructuredRepairSkillRunner,
+    TurnSnapshot,
     TurnSnapshotProjector,
     build_production_prompt_renderer_registry,
     build_production_skill_catalog,
@@ -278,7 +279,7 @@ class FakeArtifactRepository(SemanticArtifactRepository):
 
 def _repair_runner(
     store: PostgresSemanticArtifactStore,
-    snapshot: object,
+    snapshot: TurnSnapshot,
 ) -> StructuredRepairSkillRunner:
     """构造直接使用 M11 Store 的 M10 Runner。
 

@@ -43,6 +43,7 @@ from .review_contracts import (
     ClaimFaithfulnessExecutionState,
     ClaimFaithfulnessReviewRecord,
     ClaimFaithfulnessSkipReason,
+    SemanticClaimReviewSource,
     SemanticReviewBundle,
     SemanticReviewOutcome,
     build_claim_coverage_review_execution,
@@ -112,22 +113,58 @@ class StructuredReviewSkillRunner:
         :raises SemanticReviewContractError: 来源身份或上下文契约非法时抛出。
         """
         claims = self._validate_source(proposal, verification)
-        snapshot = await self.snapshot_reader.load(
-            proposal.execution.turn_snapshot_digest,
+        return await self._review_claims(
+            source=SemanticClaimReviewSource.from_proposal(proposal),
+            claims=claims,
         )
-        snapshot.verify_digest(proposal.execution.turn_snapshot_digest)
-        coverage_record = await self._run_coverage_review(proposal, claims)
+
+    async def review_claims(
+        self,
+        *,
+        source: SemanticClaimReviewSource,
+        claims: tuple[str, ...],
+    ) -> SemanticReviewBundle:
+        """审查一组系统持有的 Claim Inventory propositions。
+
+        :param source: 原始 Claim Inventory 任务与 proposal 身份。
+        :param claims: M10 preview 或 M06 proposal 产生的当前 claims。
+        :return: 返回包含 Coverage、Faithfulness 和确定性路由的审查聚合。
+        :raises SemanticReviewContractError: claims 形态或上下文契约非法时抛出。
+        """
+        self._validate_claim_shape(claims)
+        return await self._review_claims(
+            source=source,
+            claims=claims,
+        )
+
+    async def _review_claims(
+        self,
+        *,
+        source: SemanticClaimReviewSource,
+        claims: tuple[str, ...],
+    ) -> SemanticReviewBundle:
+        """执行 Coverage 与 Faithfulness Review 的共享组合路径。
+
+        :param source: 原始 Claim Inventory 来源身份。
+        :param claims: 当前待审查 claims。
+        :return: 返回 M08 审查聚合。
+        """
+        snapshot = await self.snapshot_reader.load(
+            source.execution.turn_snapshot_digest,
+        )
+        snapshot.verify_digest(source.execution.turn_snapshot_digest)
+        coverage_record = await self._run_coverage_review(source, claims)
         faithfulness_records = await self._run_faithfulness_reviews(
-            proposal,
+            source,
             claims,
             coverage_record,
         )
         preliminary = SemanticReviewBundle(
-            run_id=proposal.execution.run_id,
-            source_task_id=proposal.execution.task.task_id,
-            source_attempt_number=proposal.execution.attempt_number,
-            turn_snapshot_digest=proposal.execution.turn_snapshot_digest,
-            source_proposal_digest=proposal.proposal_digest,
+            run_id=source.execution.run_id,
+            source_task_id=source.execution.task.task_id,
+            source_attempt_number=source.execution.attempt_number,
+            turn_snapshot_digest=source.execution.turn_snapshot_digest,
+            source_proposal_digest=source.source_proposal_digest,
             claims=claims,
             coverage_review=coverage_record,
             faithfulness_reviews=faithfulness_records,
@@ -138,12 +175,12 @@ class StructuredReviewSkillRunner:
 
     async def _run_coverage_review(
         self,
-        proposal: SemanticModelProposal,
+        source: SemanticClaimReviewSource,
         claims: tuple[str, ...],
     ) -> ClaimCoverageReviewRecord:
         """执行一次回合级 Coverage Review 模型调用。
 
-        :param proposal: M07 accepted 的 Claim Inventory proposal。
+        :param source: 原始 Claim Inventory 来源身份。
         :param claims: 系统 append 的不可变 claim 元组。
         :return: 返回 Coverage Review 的验证与派生记录。
         """
@@ -151,7 +188,7 @@ class StructuredReviewSkillRunner:
             CLAIM_COVERAGE_REVIEW_SPEC.skill_id,
             CLAIM_COVERAGE_REVIEW_SPEC.skill_version,
         )
-        execution = build_claim_coverage_review_execution(proposal, spec)
+        execution = build_claim_coverage_review_execution(source, spec)
         review_proposal = await self._call_review_model(
             execution=execution,
             spec=spec,
@@ -175,7 +212,7 @@ class StructuredReviewSkillRunner:
             skill_id=spec.skill_id,
             skill_version=spec.skill_version,
             turn_snapshot_digest=execution.turn_snapshot_digest,
-            source_proposal_digest=proposal.proposal_digest,
+            source_proposal_digest=source.source_proposal_digest,
             verification=verification,
             derived=derived,
             metadata=review_proposal.metadata,
@@ -183,13 +220,13 @@ class StructuredReviewSkillRunner:
 
     async def _run_faithfulness_reviews(
         self,
-        proposal: SemanticModelProposal,
+        source: SemanticClaimReviewSource,
         claims: tuple[str, ...],
         coverage_record: ClaimCoverageReviewRecord,
     ) -> tuple[ClaimFaithfulnessReviewRecord, ...]:
         """按 Coverage 结果执行有界单 claim Faithfulness Review。
 
-        :param proposal: M07 accepted 的 Claim Inventory proposal。
+        :param source: 原始 Claim Inventory 来源身份。
         :param claims: 系统 append 的不可变 claim 元组。
         :param coverage_record: 已完成的 Coverage Review 记录。
         :return: 返回与 claim 索引一一对应的 Faithfulness 审查记录。
@@ -198,7 +235,7 @@ class StructuredReviewSkillRunner:
         if skip_reason is not None:
             return tuple(
                 self._skipped_faithfulness_record(
-                    proposal=proposal,
+                    source=source,
                     claim_index=claim_index,
                     claim=claim,
                     skip_reason=skip_reason,
@@ -209,7 +246,7 @@ class StructuredReviewSkillRunner:
         for claim_index, claim in enumerate(claims):
             records.append(
                 await self._run_faithfulness_review(
-                    proposal=proposal,
+                    source=source,
                     claim_index=claim_index,
                     claim=claim,
                 ),
@@ -249,14 +286,14 @@ class StructuredReviewSkillRunner:
     def _skipped_faithfulness_record(
         self,
         *,
-        proposal: SemanticModelProposal,
+        source: SemanticClaimReviewSource,
         claim_index: int,
         claim: str,
         skip_reason: ClaimFaithfulnessSkipReason,
     ) -> ClaimFaithfulnessReviewRecord:
         """构造未执行单 claim 审查的显式 skipped 记录。
 
-        :param proposal: M07 accepted 的 Claim Inventory proposal。
+        :param source: 原始 Claim Inventory 来源身份。
         :param claim_index: 当前 claim 的确定性数组序号。
         :param claim: 当前未执行 Faithfulness Review 的 proposition。
         :param skip_reason: 确定性跳过原因。
@@ -267,7 +304,7 @@ class StructuredReviewSkillRunner:
             CLAIM_FAITHFULNESS_REVIEW_SPEC.skill_version,
         )
         execution = build_claim_faithfulness_review_execution(
-            proposal,
+            source,
             spec,
             claim_index=claim_index,
             claim_proposition=claim,
@@ -277,7 +314,7 @@ class StructuredReviewSkillRunner:
             skill_id=spec.skill_id,
             skill_version=spec.skill_version,
             turn_snapshot_digest=execution.turn_snapshot_digest,
-            source_proposal_digest=proposal.proposal_digest,
+            source_proposal_digest=source.source_proposal_digest,
             claim_index=claim_index,
             claim_digest=compute_claim_digest(claim),
             claim_proposition=claim,
@@ -288,13 +325,13 @@ class StructuredReviewSkillRunner:
     async def _run_faithfulness_review(
         self,
         *,
-        proposal: SemanticModelProposal,
+        source: SemanticClaimReviewSource,
         claim_index: int,
         claim: str,
     ) -> ClaimFaithfulnessReviewRecord:
         """执行单条 claim 的 Faithfulness Review 模型调用。
 
-        :param proposal: M07 accepted 的 Claim Inventory proposal。
+        :param source: 原始 Claim Inventory 来源身份。
         :param claim_index: 当前 claim 的确定性数组序号。
         :param claim: 当前唯一待审查 proposition。
         :return: 返回单条 claim 的验证与派生记录。
@@ -304,7 +341,7 @@ class StructuredReviewSkillRunner:
             CLAIM_FAITHFULNESS_REVIEW_SPEC.skill_version,
         )
         execution = build_claim_faithfulness_review_execution(
-            proposal,
+            source,
             spec,
             claim_index=claim_index,
             claim_proposition=claim,
@@ -333,7 +370,7 @@ class StructuredReviewSkillRunner:
             skill_id=spec.skill_id,
             skill_version=spec.skill_version,
             turn_snapshot_digest=execution.turn_snapshot_digest,
-            source_proposal_digest=proposal.proposal_digest,
+            source_proposal_digest=source.source_proposal_digest,
             claim_index=claim_index,
             claim_digest=compute_claim_digest(claim),
             claim_proposition=claim,
@@ -435,6 +472,28 @@ class StructuredReviewSkillRunner:
                 "semantic review runner requires structured review skill",
             )
         return spec
+
+    def _validate_claim_shape(
+        self,
+        claims: tuple[str, ...],
+    ) -> None:
+        """校验 M08 可消费的 claim proposition 结构形态。
+
+        :param claims: M06 proposal 或 M10 deterministic preview 产生的 claims。
+        :return: 无返回值。
+        :raises SemanticReviewContractError: 数量、空白、换行或首尾空白非法时抛出。
+        """
+        if len(claims) > 8:
+            raise SemanticReviewContractError("semantic review claim count is invalid")
+        if any(
+            not claim.strip()
+            or claim != claim.strip()
+            or "\n" in claim
+            or "\r" in claim
+            or len(claim) > 240
+            for claim in claims
+        ):
+            raise SemanticReviewContractError("semantic review claim shape is invalid")
 
     def _validate_source(
         self,
