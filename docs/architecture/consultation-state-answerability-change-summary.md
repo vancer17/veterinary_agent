@@ -12,6 +12,10 @@
 
 > **文档状态**：迁移完成后的对齐基线
 >
+> **后续目标架构**：M13 之后的动态证据问诊重构以
+> [consultation-dynamic-evidence-architecture.md](/home/vancer17/veterinary_agent/docs/architecture/consultation-dynamic-evidence-architecture.md)
+> 为目标基线；本文继续描述当前核心槽位生产链路。
+>
 > **适用范围**：第 11 阶段“问诊状态与回答充分性”、活跃问诊状态存储、回答充分性策略裁决、追问/回答分流、单任务与多任务状态衔接、真实外部 API 集成测试
 >
 > **不适用范围**：问诊语义抽取内部提示词、RAG 检索与重排、追问问题生成策略、自然语言最终回答生成、长期记忆写入策略、管理后台目录治理、前端交互完整编排
