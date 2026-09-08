@@ -729,13 +729,20 @@ repair exhausted 是显式终态
 
 ### 9.5 M12～M13 对接
 
-Claim Graph 与领域投影只能消费 verified artifact。
+Claim Graph 与领域投影只能消费 M11 显式可消费 gate：
+
+```text
+verified / repair_verified → graph_verified
+clarification_required → 仅显式 partial policy 下 graph_partial_with_gaps
+```
 
 验收：
 
 ```text
 proposal 不进入 graph
 blocked artifact 不进入 graph
+clarification_required 不被伪装为 verified
+M12 不提升 M11 gate
 未实现 adapter 显式 Fail Fast
 问诊 / 临床安全 / 长期记忆职责不越界
 ```
@@ -836,4 +843,5 @@ long_term_memory_written = false
 5. [semantic-collaboration-dag-m09-repair-planner-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m09-repair-planner-change-summary.md)
 6. [semantic-collaboration-dag-pre-m11-integration-test-design.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-pre-m11-integration-test-design.md)
 7. [semantic-collaboration-dag-pre-m11-integration-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-pre-m11-integration-change-summary.md)
-8. [temporal-dev-environment-baseline.md](/home/vancer17/veterinary_agent/docs/deployment/temporal-dev-environment-baseline.md)
+8. [semantic-collaboration-dag-m11-auto-finalization-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m11-auto-finalization-change-summary.md)
+9. [temporal-dev-environment-baseline.md](/home/vancer17/veterinary_agent/docs/deployment/temporal-dev-environment-baseline.md)

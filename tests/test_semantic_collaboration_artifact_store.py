@@ -305,7 +305,7 @@ def _repair_runner(
 
 
 def test_review_bundle_creates_embedded_turn_artifact_and_idempotent_replay() -> None:
-    """验证 M08 review 以回合级内嵌 section 提交并可幂等重放。
+    """验证 M08 supported review 自动终态化并可幂等重放。
 
     :return: 无返回值。
     """
@@ -318,12 +318,23 @@ def test_review_bundle_creates_embedded_turn_artifact_and_idempotent_replay() ->
             _empty_faithfulness_payload(),
         )
     )
+    snapshot = _snapshot()
 
-    reference = asyncio.run(store.commit_review_bundle(bundle))
+    reference = asyncio.run(
+        store.commit_semantic_turn_result(
+            review_bundle=bundle,
+            turn_intent_proposal=_turn_intent_proposal(bundle, snapshot),
+        ),
+    )
     assert reference.startswith(
         "semantic-artifact://",
     )
-    replay_reference = asyncio.run(store.commit_review_bundle(bundle))
+    replay_reference = asyncio.run(
+        store.commit_semantic_turn_result(
+            review_bundle=bundle,
+            turn_intent_proposal=_turn_intent_proposal(bundle, snapshot),
+        ),
+    )
     artifact = repository.get_artifact(reference)
 
     assert reference == replay_reference
@@ -331,13 +342,44 @@ def test_review_bundle_creates_embedded_turn_artifact_and_idempotent_replay() ->
     assert artifact.version == 1
     assert artifact.payload.review_bundle == bundle
     assert artifact.payload.repair_depth == 0
-    assert repository.gates[reference].to_gate is (
-        SemanticArtifactGate.EVIDENCE_BINDING_PENDING
-    )
+    current_gate = repository.gates[reference]
+    assert current_gate.to_gate is SemanticArtifactGate.VERIFIED
+    assert current_gate.sequence == 2
+    assert current_gate.from_gate is SemanticArtifactGate.SEMANTIC_REVIEW_SUPPORTED
+    assert current_gate.reason_code == "m11_auto_verified_structural_lineage"
+    assert current_gate.actor_type.value == "system"
+    assert current_gate.decision["policy_version"] == "1.0.0"
+    assert current_gate.decision["claim_digests"] == [
+        artifact.payload.claims[0].claim_digest,
+    ]
     assert len(repository.commits) == 1
+    assert len(repository.commits[0].gate_events) == 2
     assert repository.commits[0].claim_review_index[0].review_status.value == (
         "supported"
     )
+
+
+def test_clarification_required_is_not_promoted_to_verified() -> None:
+    """验证来源绑定缺失保持 clarification gate 而不伪装 verified。
+
+    :return: 无返回值。
+    """
+    repository = FakeArtifactRepository()
+    store = PostgresSemanticArtifactStore(repository)
+    bundle = _bundle(
+        (
+            {"claims": ["它的精神状态不明"]},
+            _empty_coverage_payload(),
+            _faithfulness_payload(指代对象不明=True),
+        )
+    )
+
+    reference = asyncio.run(store.commit_review_bundle(bundle))
+
+    assert repository.gates[reference].to_gate is (
+        SemanticArtifactGate.CLARIFICATION_REQUIRED
+    )
+    assert len(repository.commits[0].gate_events) == 1
 
 
 def test_clarification_gaps_are_embedded_and_indexed() -> None:
@@ -379,10 +421,13 @@ def test_patch_commit_re_review_and_repair_of_repair_are_versioned() -> None:
             _faithfulness_payload(正常状态误写为否认=True),
         )
     )
-    assert asyncio.run(store.commit_review_bundle(bundle)).startswith(
-        "semantic-artifact://",
-    )
     turn_snapshot = _snapshot()
+    assert asyncio.run(
+        store.commit_semantic_turn_result(
+            review_bundle=bundle,
+            turn_intent_proposal=_turn_intent_proposal(bundle, turn_snapshot),
+        ),
+    ).startswith("semantic-artifact://")
     plan = _planner().plan(bundle)
     repair_result = asyncio.run(
         _repair_runner(store, turn_snapshot).repair(
@@ -430,8 +475,14 @@ def test_patch_commit_re_review_and_repair_of_repair_are_versioned() -> None:
     assert reviewed.payload.repair_depth == 1
     assert reviewed.payload.repair_lineage is not None
     assert repository.gates[reviewed_reference].to_gate is (
-        SemanticArtifactGate.EVIDENCE_BINDING_PENDING
+        SemanticArtifactGate.REPAIR_VERIFIED
     )
+    assert repository.gates[reviewed_reference].reason_code == (
+        "m11_auto_repair_verified_after_re_review"
+    )
+    assert repository.gates[reviewed_reference].decision[
+        "repair_base_version"
+    ] == latest.version - 1
 
     with pytest.raises(Exception, match="already repaired"):
         asyncio.run(
@@ -456,7 +507,13 @@ def test_system_human_review_does_not_promote_artifact_to_verified() -> None:
             _empty_faithfulness_payload(),
         )
     )
-    reference = asyncio.run(store.commit_review_bundle(bundle))
+    snapshot = _snapshot()
+    reference = asyncio.run(
+        store.commit_semantic_turn_result(
+            review_bundle=bundle,
+            turn_intent_proposal=_turn_intent_proposal(bundle, snapshot),
+        ),
+    )
     review = SemanticSystemReviewRecord(
         review_id="system-review-1",
         reviewer_role="semantic_engineering",
@@ -470,5 +527,5 @@ def test_system_human_review_does_not_promote_artifact_to_verified() -> None:
 
     assert result == reference
     assert gate is not None
-    assert gate.to_gate is SemanticArtifactGate.EVIDENCE_BINDING_PENDING
+    assert gate.to_gate is SemanticArtifactGate.VERIFIED
     assert gate.actor_type.value == "human_reviewer"

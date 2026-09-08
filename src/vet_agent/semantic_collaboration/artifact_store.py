@@ -5,7 +5,7 @@
 范围：覆盖 M08 Review Bundle 提交、M10 base snapshot 解析、M10 patch set
       原子提交、版本链与 gate event 生成、stale marker 与派生索引写入。
 说明：本文件不调用模型、不执行 M07/M08 re-review、不做医学判断、不生成
-      用户追问，也不把 semantic_review_supported 直接提升为 verified。
+      用户追问；supported 结果只能通过确定性结构终态化获得消费资格。
 """
 
 from __future__ import annotations
@@ -16,6 +16,10 @@ from hashlib import sha256
 from pydantic import ValidationError
 from sqlalchemy.orm import Session, sessionmaker
 
+from .artifact_auto_finalization import (
+    SemanticArtifactAutoFinalizationDecision,
+    SemanticArtifactAutoFinalizationPolicy,
+)
 from .artifact_contracts import (
     SemanticArtifactActorType,
     SemanticArtifactClaimRecord,
@@ -120,6 +124,7 @@ class PostgresSemanticArtifactStore(
         :return: 无返回值。
         """
         self.repository = repository
+        self.auto_finalization_policy = SemanticArtifactAutoFinalizationPolicy.production()
 
     async def load(
         self,
@@ -267,14 +272,15 @@ class PostgresSemanticArtifactStore(
                 bundle,
             ),
         ]
-        if gate is SemanticArtifactGate.SEMANTIC_REVIEW_SUPPORTED:
+        auto_finalization = self.auto_finalization_policy.finalize(
+            artifact=artifact,
+            bundle=bundle,
+        )
+        if auto_finalization is not None:
             events.append(
-                self._gate_event(
-                    artifact,
-                    2,
-                    SemanticArtifactGate.SEMANTIC_REVIEW_SUPPORTED,
-                    SemanticArtifactGate.EVIDENCE_BINDING_PENDING,
-                    bundle,
+                self._auto_finalization_event(
+                    artifact=artifact,
+                    decision=auto_finalization,
                 ),
             )
         commit_bundle = SemanticArtifactCommitBundle(
@@ -638,6 +644,36 @@ class PostgresSemanticArtifactStore(
             actor_type=SemanticArtifactActorType.SYSTEM,
             decision_digest=_decision_digest(decision),
             decision=dict(decision_object),
+            created_at=_now_text(),
+        )
+
+    def _auto_finalization_event(
+        self,
+        *,
+        artifact: SemanticArtifactVersionRecord,
+        decision: SemanticArtifactAutoFinalizationDecision,
+    ) -> SemanticArtifactGateEventRecord:
+        """构造 M11 deterministic auto-finalization gate event。
+
+        :param artifact: 当前新 artifact version。
+        :param decision: 通过结构闭合校验的系统终态化决策。
+        :return: 返回 append-only verified / repair_verified event。
+        """
+        reason_code = (
+            "m11_auto_verified_structural_lineage"
+            if decision.to_gate is SemanticArtifactGate.VERIFIED
+            else "m11_auto_repair_verified_after_re_review"
+        )
+        return SemanticArtifactGateEventRecord(
+            artifact_id=artifact.artifact_id,
+            version=artifact.version,
+            sequence=2,
+            from_gate=decision.from_gate,
+            to_gate=decision.to_gate,
+            reason_code=reason_code,
+            actor_type=SemanticArtifactActorType.SYSTEM,
+            decision_digest=_decision_digest(decision),
+            decision=decision.model_dump(mode="json"),
             created_at=_now_text(),
         )
 

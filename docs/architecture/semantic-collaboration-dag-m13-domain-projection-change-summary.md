@@ -236,6 +236,21 @@ Mem0
 任何记忆投影存储
 ```
 
+### 6.4 M11 auto-finalization 的透明性
+
+M11 从独立 Evidence Binding 改为 deterministic auto-finalization 时，M13 契约
+不变。M13 不读取、不解释、不迁移 M11 gate，也不感知 `verified` /
+`clarification_required` 的产生方式。
+
+M13 只依赖 M12 的稳定终态：
+
+```text
+graph_verified
+graph_partial_with_gaps
+```
+
+后续 M15 也不得以 M11 auto-finalization 为理由绕过 M12。
+
 ## 7. 失败码
 
 M13 当前稳定失败码：
@@ -317,3 +332,5 @@ rejected 结果不携带领域负载
 2. [semantic-collaboration-dag-production-implementation-plan.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-production-implementation-plan.md)
 3. [semantic-collaboration-dag-m12-claim-graph-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m12-claim-graph-change-summary.md)
 4. [semantic-collaboration-dag-m11-artifact-store-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m11-artifact-store-change-summary.md)
+5. [semantic-collaboration-dag-m11-auto-finalization-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m11-auto-finalization-change-summary.md)
+6. [consultation-dynamic-evidence-architecture.md](/home/vancer17/veterinary_agent/docs/architecture/consultation-dynamic-evidence-architecture.md)

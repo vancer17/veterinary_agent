@@ -98,7 +98,7 @@ M05 保持以下不变量：
 4. extra field、重复 JSON key、非 object 根节点、NaN 和 Infinity 均显式失败。
 5. usage 缺失保持 `None` 和 `usage_available=false`，不伪造零值。
 6. 调用 metadata 只记录摘要与快照，不记录完整 prompt、原始响应或密钥。
-7. 输出仅通过 SkillCatalog JSON Schema 校验；字段所有权和证据绑定留给 M07。
+7. 输出仅通过 SkillCatalog JSON Schema 校验；字段所有权与 claim 结构校验留给 M07，evidence 不由 M05/M06 自证，消费资格终态化留给 M11。
 
 ## 4. 运行时复用
 

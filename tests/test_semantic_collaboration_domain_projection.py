@@ -12,7 +12,6 @@
 from __future__ import annotations
 
 import asyncio
-from hashlib import sha256
 
 import pytest
 
@@ -30,9 +29,6 @@ from tests.test_semantic_collaboration_review import (
 from vet_agent.semantic_collaboration import (
     ConsultationProjectionAdapter,
     PostgresSemanticArtifactStore,
-    SemanticArtifactActorType,
-    SemanticArtifactGate,
-    SemanticArtifactGateEventRecord,
     SemanticClaimGraphBuilder,
     SemanticGraphBuildPolicy,
     SemanticGraphBuildResult,
@@ -49,45 +45,12 @@ from vet_agent.semantic_collaboration import (
 )
 
 
-def _verify_artifact(
-    repository: FakeArtifactRepository,
-    reference: str,
-) -> None:
-    """将测试 artifact 的证据门禁显式推进到 verified。
-
-    :param repository: 进程内 M11 仓储替身。
-    :param reference: M11 artifact 引用。
-    :return: 无返回值。
-    """
-    artifact = repository.get_artifact(reference)
-    current = repository.get_current_gate(reference)
-    if artifact is None or current is None:
-        raise AssertionError("domain projection artifact fixture is invalid")
-    event = SemanticArtifactGateEventRecord(
-        artifact_id=artifact.artifact_id,
-        version=artifact.version,
-        sequence=current.sequence + 1,
-        from_gate=current.to_gate,
-        to_gate=SemanticArtifactGate.VERIFIED,
-        reason_code="test_evidence_verified",
-        actor_type=SemanticArtifactActorType.EVIDENCE_BINDING,
-        decision_digest=sha256(b"m13-evidence").hexdigest(),
-        decision={"mode": "test"},
-        created_at=artifact.created_at,
-    )
-    repository.append_gate_event(
-        event,
-        request_key=f"m13-evidence:{event.decision_digest}",
-        payload_digest=event.decision_digest,
-    )
-
-
 def _build_verified_graph(
     *,
     claims: tuple[str, ...],
     faithfulness_payload: dict[str, object] | None = None,
 ) -> SemanticGraphBuildResult:
-    """构造已通过证据门禁的 M12 graph 测试输入。
+    """构造已通过 M11 自动终态化的 M12 graph 测试输入。
 
     :param claims: 自包含自然语言 proposition 集合。
     :param faithfulness_payload: 可选 Faithfulness 审查矩阵。
@@ -114,7 +77,6 @@ def _build_verified_graph(
             turn_intent_proposal=_turn_intent_proposal(bundle, snapshot),
         ),
     )
-    _verify_artifact(repository, reference)
     return builder.build(
         reference,
         SemanticGraphBuildPolicy(allow_empty_graph=not claims),
@@ -168,7 +130,6 @@ def test_consultation_projection_preserves_gap_without_followup_decision() -> No
             turn_intent_proposal=_turn_intent_proposal(bundle, snapshot),
         ),
     )
-    _verify_artifact(repository, reference)
     graph_result = builder.build(
         reference,
         SemanticGraphBuildPolicy(allow_partial_with_gaps=True),
@@ -219,7 +180,6 @@ def test_consultation_projection_rejects_blocked_graph() -> None:
     repository = FakeArtifactRepository()
     store = PostgresSemanticArtifactStore(repository)
     builder = SemanticClaimGraphBuilder(repository)
-    snapshot = _snapshot()
     bundle = _bundle(
         (
             {"claims": ["英短没有呕吐"]},
@@ -228,16 +188,13 @@ def test_consultation_projection_rejects_blocked_graph() -> None:
         ),
     )
     reference = asyncio.run(
-        store.commit_semantic_turn_result(
-            review_bundle=bundle,
-            turn_intent_proposal=_turn_intent_proposal(bundle, snapshot),
-        ),
+        store.commit_review_bundle(bundle),
     )
     blocked = builder.build(reference)
 
     projection = ConsultationProjectionAdapter().project(blocked)
 
-    assert blocked.failure_code is SemanticGraphFailureCode.GATE_NOT_CONSUMABLE
+    assert blocked.failure_code is SemanticGraphFailureCode.TURN_INTENT_MISSING
     assert projection.execution_state is SemanticProjectionExecutionState.REJECTED
     assert projection.failure_code is (
         SemanticProjectionFailureCode.TERMINAL_STATE_NOT_ALLOWED

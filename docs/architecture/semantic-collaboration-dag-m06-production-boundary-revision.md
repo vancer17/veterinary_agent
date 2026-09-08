@@ -22,6 +22,10 @@
 > 与
 > [semantic-collaboration-dag-production-implementation-plan.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-production-implementation-plan.md)
 > 中的 M06 / M08 生产契约。若后续实现与本文冲突，应先修订架构基线，不得在代码中保留双权威解释。
+>
+> **2026-09 后续修订**：M06 不输出 evidence 自证的结论不变；独立 Evidence
+> Binding 阶段已由 M11 deterministic auto-finalization 取代，详见
+> [semantic-collaboration-dag-m11-auto-finalization-change-summary.md](/home/vancer17/veterinary_agent/docs/architecture/semantic-collaboration-dag-m11-auto-finalization-change-summary.md)。
 
 ## 1. 修订结论
 
@@ -258,17 +262,20 @@ self-justification
 3. 复杂自证 schema 会分散模型注意力并加剧幻觉。
 4. 语义忠实性应由独立 Review 判断。
 
-Evidence binding 后置为独立状态：
+Evidence 相关终态后置到 M11：
 
 ```text
 clarification_required
 repair_then_clarification_required
-evidence_binding_pending
 human_review_required
 verified
 ```
 
-当前允许人工审查作为过渡，但必须记录：
+目标生产契约中不再写入 `evidence_binding_pending`；M08 supported 且 M11 结构
+闭合时，由 M11 auto-finalization 追加 `verified`。
+
+人工审查仅用于系统性缺陷与未分类问题治理，不承担 claim 级 evidence binding，
+也不批量授予消费资格；如需记录，必须包含：
 
 ```text
 review_mode=human
@@ -279,7 +286,7 @@ review time
 decision digest
 ```
 
-人工通过不得伪装成自动 verified。
+人工通过不得伪装成自动 verified，也不能绕过 M11 auto-finalization。
 
 ## 6. Review 契约
 
