@@ -2,17 +2,27 @@
 兽医智能体公共基础设施包。
 
 本包只承载跨语义子层复用的工程能力，不承载兽医语义真相。当前提交先落地
-``core.llm``、``core.prompts`` 与 ``core.review`` 的最小共享契约；配置、
-审计、编排等能力将在各自架构范围内继续演进。
+``core.llm``、``core.prompts``、``core.review`` 与 ``core.repair`` 的最小
+共享契约；配置、审计、编排等能力将在各自架构范围内继续演进。
 """
 
-from vet_agent.core import errors, execution, llm, prompts, review, schema, testing
+from vet_agent.core import (
+    errors,
+    execution,
+    llm,
+    prompts,
+    repair,
+    review,
+    schema,
+    testing,
+)
 
 __all__ = [
     "errors",
     "execution",
     "llm",
     "prompts",
+    "repair",
     "review",
     "schema",
     "testing",

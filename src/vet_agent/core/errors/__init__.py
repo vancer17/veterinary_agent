@@ -57,6 +57,27 @@ class CoreErrorCode(StrEnum):
     #: 合并后的 Review Delta 触发语义层声明的确定性冲突规则。
     REVIEW_CONFLICT = "review_conflict"
 
+    #: Targeted Repair 计划、任务绑定或渲染变量配置非法。
+    REPAIR_PLAN_INVALID = "repair_plan_invalid"
+
+    #: Targeted Repair 输出未通过严格 JSON 或 strict schema 校验。
+    REPAIR_SCHEMA_INVALID = "repair_schema_invalid"
+
+    #: Targeted Repair 输出未通过语义层确定性输出校验。
+    REPAIR_OUTPUT_INVALID = "repair_output_invalid"
+
+    #: Targeted Repair 输出试图影响未授权 target 或 selector。
+    REPAIR_UNAUTHORIZED_TARGET = "repair_unauthorized_target"
+
+    #: Targeted Repair 输出与授权 target 当前值完全相同。
+    REPAIR_NO_CHANGE = "repair_no_change"
+
+    #: Targeted Repair 任务数、attempt 或执行预算超限。
+    REPAIR_BUDGET_EXCEEDED = "repair_budget_exceeded"
+
+    #: Targeted Repair 执行失败或产生未分类异常。
+    REPAIR_FAILED = "repair_failed"
+
     #: 模型执行审计写入失败。
     LLM_AUDIT_FAILED = "llm_audit_failed"
 
@@ -149,6 +170,34 @@ class ReviewConflictError(CoreError):
     """同一 target 上的缺陷码触发显式冲突规则。"""
 
 
+class RepairPlanError(CoreError):
+    """Targeted Repair 计划或任务绑定非法。"""
+
+
+class RepairSchemaError(CoreError):
+    """Targeted Repair 输出未通过严格结构校验。"""
+
+
+class RepairOutputError(CoreError):
+    """Targeted Repair 输出未通过语义层确定性校验。"""
+
+
+class RepairUnauthorizedTargetError(CoreError):
+    """Targeted Repair 输出影响未授权 target 或 selector。"""
+
+
+class RepairNoChangeError(CoreError):
+    """Targeted Repair 输出未改变授权 target 当前值。"""
+
+
+class RepairBudgetExceededError(CoreError):
+    """Targeted Repair 任务或 attempt 预算超限。"""
+
+
+class RepairFailedError(CoreError):
+    """Targeted Repair 执行失败或出现未分类异常。"""
+
+
 class LLMAuditError(CoreError):
     """模型执行审计事件写入失败。"""
 
@@ -166,6 +215,13 @@ __all__ = [
     "LLMProtocolError",
     "LLMTransportError",
     "RateLimitError",
+    "RepairBudgetExceededError",
+    "RepairFailedError",
+    "RepairNoChangeError",
+    "RepairOutputError",
+    "RepairPlanError",
+    "RepairSchemaError",
+    "RepairUnauthorizedTargetError",
     "ReviewConflictError",
     "ReviewGroupSchemaError",
     "SchemaValidationError",
