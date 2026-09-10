@@ -51,6 +51,12 @@ class CoreErrorCode(StrEnum):
     #: 模型输出未通过严格 schema 校验。
     SCHEMA_INVALID = "schema_invalid"
 
+    #: Grouped Review 输出未通过 group 专属闭合校验。
+    REVIEW_GROUP_SCHEMA_INVALID = "review_group_schema_invalid"
+
+    #: 合并后的 Review Delta 触发语义层声明的确定性冲突规则。
+    REVIEW_CONFLICT = "review_conflict"
+
     #: 模型执行审计写入失败。
     LLM_AUDIT_FAILED = "llm_audit_failed"
 
@@ -135,6 +141,14 @@ class SchemaValidationError(CoreError):
     """模型输出未通过 strict Pydantic schema 校验。"""
 
 
+class ReviewGroupSchemaError(CoreError):
+    """Grouped Review 输出违反 group 专属协议。"""
+
+
+class ReviewConflictError(CoreError):
+    """同一 target 上的缺陷码触发显式冲突规则。"""
+
+
 class LLMAuditError(CoreError):
     """模型执行审计事件写入失败。"""
 
@@ -152,6 +166,8 @@ __all__ = [
     "LLMProtocolError",
     "LLMTransportError",
     "RateLimitError",
+    "ReviewConflictError",
+    "ReviewGroupSchemaError",
     "SchemaValidationError",
     "StrictJSONValidationError",
 ]
